@@ -158,6 +158,25 @@ class AuthorityHttp(ApiTestCase):
                                     "path": "/tmp/file"}, token=self.agent_key)
         self.assertEqual((status, result["decision"]), (200, "deny"))
 
+    def test_uncertain_deny_takes_precedence_over_matched_verify(self) -> None:
+        _, deny = self.call("POST", "/v1/rules/proposals", self.proposal(),
+                            token=self.agent_key)
+        self.call("POST", f"/v1/rules/{deny['rule']['rule_id']}/approve",
+                  {"host_id": HOST, "expected_revision": 1}, token=self.manage_key)
+        verify = self.proposal(rule_key="verify-all", kind="ACCEPTANCE",
+                               severity="NORMAL", enforcement="VERIFY", matcher={},
+                               content="Collect evidence for every tool action")
+        _, verify_result = self.call("POST", "/v1/rules/proposals", verify,
+                                      token=self.agent_key)
+        self.call("POST", f"/v1/rules/{verify_result['rule']['rule_id']}/approve",
+                  {"host_id": HOST, "expected_revision": 1}, token=self.manage_key)
+        status, result = self.call("POST", "/v1/guard/check",
+                                   {"task_id": self.task_id, "tool": "exec", "action": "write"},
+                                   token=self.agent_key)
+        self.assertEqual((status, result["decision"]), (200, "confirm"))
+        self.assertEqual(result["uncertain"][0]["rule_id"], deny["rule"]["rule_id"])
+        self.assertEqual(result["matched"][0]["rule_id"], verify_result["rule"]["rule_id"])
+
     def test_agent_admin_cannot_mint_human_key_or_manage(self) -> None:
         status, body = self.call("POST", "/v1/auth/keys", {"actor_id": ACTOR,
                              "label": "stolen", "scopes": ["authority:manage"]},

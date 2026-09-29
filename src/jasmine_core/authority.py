@@ -436,7 +436,10 @@ class AuthorityStore:
                 decision = rule["enforcement"].lower()
                 reason = f"matched {rule['rule_id']} version {rule['version']}"
                 break
-        if decision == "allow" and (uncertain or unresolved_context):
+        # A definite DENY is final. Otherwise missing context may hide a DENY
+        # or CONFIRM, and a broad VERIFY match must not take precedence over
+        # that unresolved restriction.
+        if decision != "deny" and (uncertain or unresolved_context):
             decision = "confirm"
             reason = "insufficient context to evaluate all applicable rules"
         return {"decision": decision, "reason": reason, "capability": "ADVISORY",
