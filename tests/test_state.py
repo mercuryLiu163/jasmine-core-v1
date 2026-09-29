@@ -114,6 +114,37 @@ class StateHttp(ApiTestCase):
         self.assertEqual(step["step"]["status"], "EXECUTED")
         self.assertEqual(step["step"]["revision"], 3)
 
+    def test_malformed_enums_and_hashes_are_400_without_truth_write(self) -> None:
+        conn = db.connect(self.db_path)
+        self.addCleanup(conn.close)
+        before_events = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        before_revision = conn.execute("SELECT revision FROM tasks WHERE task_id=?", (self.task,)).fetchone()[0]
+        for bad_requirement in (
+            {"key": "x", "kind": [], "required_result": "PASS"},
+            {"key": "x", "kind": "BUILD", "required_result": []},
+            {"key": "x", "kind": "BUILD", "required_result": "PASS", "command_sha256": "abc"},
+            {"key": "x", "kind": "BUILD", "required_result": "PASS", "artifact_sha256": ["a"]},
+        ):
+            status, refusal = self.create_step(criteria={"requirements": [bad_requirement]})
+            self.assertEqual((status, refusal["error"]["code"]), (400, "invalid_request"), refusal)
+        _, created = self.create_step()
+        sid = created["step"]["step_id"]
+        after_create_events = conn.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        after_create_revision = conn.execute("SELECT revision FROM tasks WHERE task_id=?", (self.task,)).fetchone()[0]
+        for bad_status in ([], {}):
+            status, refusal = self.call("POST", f"/v1/steps/{sid}/transition", {
+                "status": bad_status, "expected_revision": 1, "host_id": HOST}, token=self.agent_token)
+            self.assertEqual((status, refusal["error"]["code"]), (400, "invalid_request"), refusal)
+            status, refusal = self.call("POST", f"/v1/tasks/{self.task}/transition", {
+                "status": bad_status, "expected_revision": after_create_revision,
+                "host_id": HOST}, token=self.human_token)
+            self.assertEqual((status, refusal["error"]["code"]), (400, "invalid_request"), refusal)
+        self.assertEqual(after_create_events, before_events + 1)
+        self.assertEqual(after_create_revision, before_revision + 1)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM events").fetchone()[0], after_create_events)
+        self.assertEqual(conn.execute("SELECT revision FROM tasks WHERE task_id=?", (self.task,)).fetchone()[0], after_create_revision)
+        self.assertEqual(conn.execute("SELECT revision FROM steps WHERE step_id=?", (sid,)).fetchone()[0], 1)
+
     def test_accept_requires_real_step_and_real_evidence(self) -> None:
         status, refusal = self.call("POST", f"/v1/tasks/{self.task}/accept", {
             "expected_revision": 1, "host_id": HOST}, token=self.human_token)

@@ -7,6 +7,7 @@ binding. No default can attest evidence. See ADR 0006.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -53,11 +54,18 @@ def validate_criteria(value: Any) -> dict[str, Any]:
         if not isinstance(key, str) or not key or len(key) > 128 or key in seen:
             raise errors.InvalidRequest("requirement key must be unique and nonempty", field="acceptance_criteria.requirements.key")
         seen.add(key)
-        if kind not in EVIDENCE_KINDS or result not in ({"PASS", "INFO"} if kind == "USER_CONFIRMATION" else {"PASS"}):
+        if (not isinstance(kind, str) or not isinstance(result, str)
+                or kind not in EVIDENCE_KINDS
+                or result not in ({"PASS", "INFO"} if kind == "USER_CONFIRMATION" else {"PASS"})):
             raise errors.InvalidRequest("invalid Evidence kind or required_result", field="acceptance_criteria.requirements")
-        for name in ("tool_name", "command_sha256", "artifact_sha256"):
-            if name in item and (not isinstance(item[name], str) or not item[name]):
-                raise errors.InvalidRequest(f"{name} must be a nonempty string", field=name)
+        if "tool_name" in item and (not isinstance(item["tool_name"], str)
+                                    or not item["tool_name"] or len(item["tool_name"]) > 512):
+            raise errors.InvalidRequest("tool_name must be nonempty text of at most 512 characters",
+                                        field="tool_name")
+        for name in ("command_sha256", "artifact_sha256"):
+            if name in item and (not isinstance(item[name], str)
+                                 or re.fullmatch(r"[0-9a-f]{64}", item[name]) is None):
+                raise errors.InvalidRequest(f"{name} must be a lowercase SHA-256 hex digest", field=name)
     return value
 
 
@@ -305,7 +313,7 @@ class StateStore:
             step = self.step(step_id)
             task = self.task(step["task_id"])
             target = body.get("status")
-            if target not in STEP_STATES:
+            if not isinstance(target, str) or target not in STEP_STATES:
                 raise errors.InvalidRequest("invalid Step status", field="status")
             expected = body.get("expected_revision")
             reason = body.get("reason")
@@ -355,7 +363,7 @@ class StateStore:
         with db.translate_lock_errors(), db.transaction(self.conn):
             task = self.task(task_id)
             target = body.get("status")
-            if target not in TASK_EDGES:
+            if not isinstance(target, str) or target not in TASK_EDGES:
                 raise errors.InvalidRequest("invalid Task status", field="status")
             expected = body.get("expected_revision")
             reason = body.get("reason")
