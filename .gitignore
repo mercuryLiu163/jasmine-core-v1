@@ -227,3 +227,7 @@ validation-bundles/
 *.sqlite-*
 *.db
 *.db-*
+
+# Jasmine Core V1
+core.db
+*.db-journal

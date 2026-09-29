@@ -1,0 +1,74 @@
+"""Public ID generation and validation.
+
+See docs/adr/0001-public-id-schema-and-package-boundary.md. The format is
+frozen for every downstream stage: ``<prefix>_<26 Crockford base32 chars>``
+where the first 10 characters encode the 48-bit creation timestamp in
+milliseconds and the remaining 16 are random.
+"""
+
+from __future__ import annotations
+
+import re
+import secrets
+import time
+
+CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+_ENCODE = {c: i for i, c in enumerate(CROCKFORD)}
+ID_RE = re.compile(r"^([a-z]{3,4})_([0-9ABCDEFGHJKMNPQRSTVWXYZ]{26})$")
+
+TIMESTAMP_CHARS = 10
+RANDOM_CHARS = 16
+TOTAL_CHARS = TIMESTAMP_CHARS + RANDOM_CHARS
+
+#: prefix -> what the identifier names. `stp` and `evd` are reserved here so
+#: that P1 cannot introduce a different shape; the columns are not created yet.
+PREFIXES = frozenset({"prj", "tsk", "stp", "ses", "hst", "act", "evt", "evd", "aud", "key"})
+
+
+class IdError(ValueError):
+    """Raised when an identifier is malformed or uses an unknown prefix."""
+
+
+def _b32(value: int, width: int) -> str:
+    out = []
+    for _ in range(width):
+        out.append(CROCKFORD[value & 0x1F])
+        value >>= 5
+    return "".join(reversed(out))
+
+
+def new_id(prefix: str, *, now_ms: int | None = None) -> str:
+    """Return a new identifier such as ``evt_01K5S0Q8H4M9ABCD7FGH2JKMNP``."""
+    if prefix not in PREFIXES:
+        raise IdError(f"unknown id prefix: {prefix!r}")
+    ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
+    if not 0 <= ms < (1 << 48):
+        raise IdError("timestamp out of range for a 48-bit millisecond clock")
+    randomness = int.from_bytes(secrets.token_bytes(RANDOM_CHARS), "big")
+    return f"{prefix}_{_b32(ms, TIMESTAMP_CHARS)}{_b32(randomness, RANDOM_CHARS)}"
+
+
+def parse_id(value: str, *, expect_prefix: str | None = None) -> tuple[str, int]:
+    """Return ``(prefix, created_ms)``; raise :class:`IdError` when malformed."""
+    if not isinstance(value, str):
+        raise IdError("id must be a string")
+    match = ID_RE.match(value)
+    if match is None:
+        raise IdError(f"malformed id: {value!r}")
+    prefix, body = match.group(1), match.group(2)
+    if prefix not in PREFIXES:
+        raise IdError(f"unknown id prefix: {prefix!r}")
+    if expect_prefix is not None and prefix != expect_prefix:
+        raise IdError(f"expected a {expect_prefix}_ id, got {prefix}_")
+    ms = 0
+    for char in body[:TIMESTAMP_CHARS]:
+        ms = (ms << 5) | _ENCODE[char]
+    return prefix, ms
+
+
+def is_id(value: object, prefix: str | None = None) -> bool:
+    try:
+        parse_id(value, expect_prefix=prefix)  # type: ignore[arg-type]
+    except IdError:
+        return False
+    return True

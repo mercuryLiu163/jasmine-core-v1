@@ -1,0 +1,76 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  p0:
+    # P0 depends on nothing but the standard library, so a clean runner can
+    # reproduce the acceptance runs without installing anything (ADR 0001 §2.1).
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Show environment
+        run: |
+          python -VV
+          python -c "import sqlite3; print('sqlite3', sqlite3.sqlite_version)"
+
+      - name: Migration smoke run from an empty database
+        env:
+          PYTHONPATH: src
+        run: |
+          set -x
+          export JASMINE_CORE_DB="$RUNNER_TEMP/core.db"
+          python -m jasmine_core.cli migrate
+          python -m jasmine_core.cli migrate
+          python -m jasmine_core.cli schema
+
+      - name: Test suite
+        env:
+          PYTHON: python
+        run: ./scripts/run-tests.sh
+
+      - name: Verify no runtime data was committed
+        run: |
+          set -x
+          test -z "$(git ls-files | grep -E '\.(db|sqlite|token)$' || true)"
+
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Migration checksums are recorded in the repository, not recomputed
+        env:
+          PYTHONPATH: src
+        run: |
+          set -x
+          python - <<'PY'
+          from jasmine_core.migrations import discover
+          for migration in discover():
+              print(migration.version, migration.name, migration.checksum)
+          PY
