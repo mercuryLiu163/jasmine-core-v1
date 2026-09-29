@@ -4,8 +4,11 @@ Private repository for the Jasmine Core V1 implementation and validation.
 
 ## Status
 
-P0 Baseline is in progress. The table below lists only what has actually been
-implemented **and** exercised; anything not listed is not implemented.
+The table below lists only what has actually been implemented **and** exercised;
+anything not listed is not implemented. The P0 stage verdict comes from the
+latest commit-bound Validation Run linked from the [P0-03 PR](https://github.com/mercuryLiu163/jasmine-core-v1/pull/3),
+followed by final main-head validation after merge. A passing CI matrix alone
+does not establish the stage verdict.
 
 | Capability | P0 state |
 | --- | --- |
@@ -15,9 +18,9 @@ implemented **and** exercised; anything not listed is not implemented.
 | Core API, error and idempotency contract | implemented ([ADR 0003](docs/adr/0003-core-api-errors-and-idempotency.md), [API doc](docs/api/core-api-v1.md)) |
 | Raw text retention, bearer auth, append-only audit | implemented (ADR 0004) |
 | Immutable idempotent Event Store, project/task/session | implemented ([P0-02](docs/p0-02-event-store.md)) |
-| Codex `UserPromptSubmit` capture entry | implemented, but **not registered with Codex** — see below |
+| Codex `UserPromptSubmit` capture entry | implemented; project-local registration is described in [P0-03](docs/p0-03-api-and-capture.md), and runtime invocation is verified by P0-T07 evidence |
 | Minimal Validation Recorder and the P0 acceptance matrix | implemented ([P0-03](docs/p0-03-api-and-capture.md)) |
-| Real-conversation Gate (P0-T07) | **BLOCKED**: the capture entry is not installed in `~/.codex/hooks.json` |
+| Real-conversation Gate (P0-T07) | verdict comes from the latest commit-bound Validation Run linked from the [P0-03 PR](https://github.com/mercuryLiu163/jasmine-core-v1/pull/3) |
 
 Not implemented in P0 and not claimed anywhere in this repository: Rule/Guard,
 the full Task state machine, Evidence sufficiency, LLM Interpreter/Resolver,

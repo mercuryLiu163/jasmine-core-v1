@@ -1,6 +1,6 @@
 # Jasmine Core V1 第一阶段 P0 Baseline 实施与验证任务书
 
-状态：实施中，阶段 Gate 为 BLOCKED。P0 实现和本地验证证据正在独立 Review；P0-T07 仍待真实 Codex 对话与重启读回的证据，P0-01～03 的 PR 合并和最终 commit 验收也尚未完成。本文的 Review 与验收要求保持有效；不得将已有本地验证等同于阶段 PASS。
+状态以最新、与验收 commit 绑定的 Validation Run 为准；本文规定 Review 与验收要求，不充当实时状态记录。只有全部 T01～T07 通过、P0-01～03 的 PR 已合并且最终 commit 复验满足 §6 时，阶段才可标为 PASS。
 
 ## 1 目标和依据
 

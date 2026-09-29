@@ -108,10 +108,12 @@ record as advisory: it may be stale after a hook change. A same-turn invocation
 trace is required to prove that Codex actually ran the entry. Neither the
 installer nor the Gate writes a trust hash.
 
-## P0-T07 Gate and current status
+## P0-T07 Gate and verdict
 
-P0-T07 remains BLOCKED pending a real Codex conversation and Core restart
-readback. No real Gate run has been executed for this implementation. The Gate
+The Gate records PASS, FAIL, or BLOCKED for the exact source commit under test.
+Consult the latest Validation Run linked from the
+[P0-03 PR](https://github.com/mercuryLiu163/jasmine-core-v1/pull/3) for the
+current candidate verdict; after merge, use the final main-head run. The Gate
 distinguishes these conditions:
 
 | State | Verdict |
