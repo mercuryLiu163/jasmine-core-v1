@@ -1,8 +1,8 @@
 """Command line entry point.
 
-P0 ships `migrate`, `schema` and `serve`. Anything that needs a secret takes
-it from the environment, never from argv, so tokens do not land in shell
-history or in `ps` output.
+P0-01 ships `migrate` and `schema`; the HTTP `serve` command arrives with
+P0-03. Anything that needs a secret takes it from the environment, never from
+argv, so tokens do not land in shell history or in `ps` output.
 """
 
 from __future__ import annotations
@@ -12,11 +12,20 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from . import SCHEMA_VERSION, __version__, db, errors
-from .migrations import applied_migrations, check_version, current_version, migrate
+from .migrations import applied_migrations, check_version, current_version, migrate, verify_checksums
 
 DB_ENV_VAR = "JASMINE_CORE_DB"
+
+#: Error code -> process exit code, so a script can tell "refused" (3) from
+#: "the database is busy" (4) from a crash (1).
+EXIT_CODES = {
+    "schema_version_unsupported": 3,
+    "migration_conflict": 3,
+    "database_busy": 4,
+}
 
 
 def _log(message: str) -> None:
@@ -36,12 +45,15 @@ def cmd_migrate(args: argparse.Namespace) -> int:
     conn = db.connect(path)
     try:
         applied = migrate(conn, log=_log)
-    except errors.SchemaVersionUnsupported as exc:
-        _log(f"error: {exc.message}")
-        return 3
+        # Report what is on disk, not what this build happens to declare.
+        on_disk = current_version(conn)
     finally:
         conn.close()
-    print(json.dumps({"db": str(path), "applied": applied, "schema_version": SCHEMA_VERSION}, ensure_ascii=False))
+    print(json.dumps(
+        {"db": str(path), "applied": applied, "schema_version": on_disk,
+         "core_schema_version": SCHEMA_VERSION},
+        ensure_ascii=False,
+    ))
     return 0
 
 
@@ -49,21 +61,22 @@ def cmd_schema(args: argparse.Namespace) -> int:
     path = _resolve_db(args.db)
     conn = db.connect(path)
     try:
-        try:
-            check_version(conn)
-        except errors.SchemaVersionUnsupported as exc:
-            _log(f"error: {exc.message}")
-            return 3
-        payload = {
+        check_version(conn)
+        drift = verify_checksums(conn)
+        payload: dict[str, Any] = {
             "db": str(path),
             "schema_version": current_version(conn),
             "expected_schema_version": SCHEMA_VERSION,
             "core_version": __version__,
             "migrations": applied_migrations(conn),
+            "drift": drift,
         }
     finally:
         conn.close()
     print(json.dumps(payload, ensure_ascii=False, indent=2))
+    if drift:
+        _log("error: migration drift detected; the database was written by a different build")
+        return 3
     return 0
 
 
@@ -92,7 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    return int(args.func(args))
+    try:
+        return int(args.func(args))
+    except errors.CoreError as exc:
+        # Refusals are a normal outcome, not a crash: one clean line, no traceback.
+        _log(f"error: {exc.code}: {exc.message}")
+        return EXIT_CODES.get(exc.code, 3)
 
 
 if __name__ == "__main__":

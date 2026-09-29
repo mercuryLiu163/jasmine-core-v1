@@ -26,22 +26,25 @@
 
 ### 2.2 ID 格式
 
-所有公共 ID 形如 `<prefix>_<26 位 Crockford Base32 大写字符>`，共 27 字符：
+所有公共 ID 形如 `<prefix>_<26 位 Crockford Base32 大写字符>`，共 30 字符（3 字符前缀 + `_` + 26 字符）：
 
 ```
-prj_01K5S0Q8H4M9ABCD7FGH2JKMNP
-tsk_01K5S0QAB2E5WXYZ01QRST3VWX6
-ses_01K5S0QAC7Z8CVBNM0LKJHGFDE2
-evt_01K5S0QAD3D4ERFGH5TYUIOPAS8
-hst_01K5S0QAE9F1GHJKL2ZXCVBNMQ4
-act_01K5S0QAF5T6HJKLM3NCVZXWQER7
-evd_01K5S0QAG8R7JKLMN4QWERTYUIO
-aud_01K5S0QAJ1S2D3FGH4ZXCVBNMQWE
-key_01K5S0QAK6P9QWERTY0ASDFGHJK
+prj_01K742SG000Z61XPMPFJBYH7RY
+tsk_01K742SG00YPWF74TSXEKA3254
+ses_01K742SG00CN4E98TXMDE6TBEP
+evt_01K742SG00KSNSRN81BXC5ZAZC
+hst_01K742SG00BMSDET9BTP151RAR
+act_01K742SG00CBKP25A9ETPBTRMJ
+evd_01K742SG007EH67N4JY4SB8J90
+aud_01K742SG00PBN861DD9SV5YN49
+key_01K742SG00B7GYRYEY5KC27M41
 ```
 
-- 前 10 位为 base32 编码的 48 位 Unix 毫秒时间戳（最高有效位在前），后 16 位为 `secrets.token_bytes(10)` 的随机值。**ID 按字典序即时间序**，便于分页与调试。
+（以上示例由 `jasmine_core.ids` 生成并被 `tests/test_ids.py` 断言全部合法。）
+
+- 前 10 位为 base32 编码的 48 位 Unix 毫秒时间戳（最高有效位在前），后 16 位为 `secrets.token_bytes(10)` 的 80 位随机值。**ID 按字典序即时间序**，便于分页与调试。
 - ID 不携带主机、用户、路径、标题等可推断信息；随机部分不可由时间推算。
+- Base32 字母表排除 `I`、`L`、`O`、`U`，避免与 `1`、`0` 混淆。
 
 | 前缀 | 对象 | 生成者 | 引用规则 |
 | --- | --- | --- | --- |
@@ -56,17 +59,17 @@ key_01K5S0QAK6P9QWERTY0ASDFGHJK
 | `aud_` | audit record | Core 服务端 | 只追加，不可改 |
 | `key_` | API key | Core 服务端 | 只存哈希，明文仅在创建时返回一次 |
 
-唯一性由数据库主键强制，而非仅靠生成器的概率保证。生成器在插入冲突时最多重试 8 次（`IntegrityError`），超过则报错，不做静默降级。
+唯一性由数据库主键强制，而非仅靠生成器的概率保证。生成器在插入冲突时最多重试 8 次（`IntegrityError`），超过则报错，不做静默降级。**该重试策略由 P0-02 的 Event Store 实现，P0-01 只冻结约定，尚未落地。**
 
 客户端**不得**自行构造 `prj_/tsk_/ses_/evt_` 之外的 ID。客户端可自带 `event_id`（仅在需要幂等重试时），但必须是合法 `evt_` ID，且 Core 校验其未与他人抢占；见 ADR 0003。
 
 ### 2.3 Schema 版本
 
 - 版本是一个单调递增整数 `schema_version`，存于 `core_meta` 表的 `schema_version` 键。当前值：**1**。
-- 迁移是**只进**的、有序的、带内容校验和的 Python 模块（`jasmine_core.migrations.mNNNN_*`）。每个已发布迁移的 SQL 一经合入 `main` 不得修改；修正必须新增迁移。
-- 启动时 Core 读取 `schema_version`：低于代码期望 → 依次执行缺失迁移；高于代码期望 → **拒绝启动**（防止旧二进制打开新 Schema 造成静默损坏），退出码非 0。
-- 迁移在单个 `BEGIN IMMEDIATE` 事务内执行；同一数据库上的迁移由 `core_meta` 中的 `migration_lock` 行串行化。
-- 已记录迁移的校验和与代码不一致 → 拒绝启动，报 `migration_drift`。
+- 迁移是**只进**的、有序的、带内容校验和的 Python 模块（`jasmine_core.migrations.mNNNN_*`）。每个已发布迁移的 SQL 一经合入 `main` 不得修改；修正必须新增迁移。P0-01 的 `m0001_baseline` 在合入 `main` 前仍可修正，合入后即冻结。
+- 启动时 Core 读取 `schema_version`：低于代码期望 → 依次执行缺失迁移；高于代码期望 → **拒绝启动**（防止旧二进制打开新 Schema 造成静默损坏）。`migrate` 与 `schema` 两条命令都执行该检查，退出码非 0。
+- 迁移在单个 `BEGIN IMMEDIATE` 事务内执行；该写锁本身就是跨进程互斥，`core_meta` 中的 `migration_lock` 行只是可观测标记。
+- 已记录迁移的校验和与代码不一致 → 拒绝启动，报 `schema_version_unsupported`（含 `migration drift` 字样）。`jasmine-core schema` 同样会复核校验和，并以退出码 3 报告漂移。
 
 ## 3 V0 / V1 边界（明确不做的事）
 

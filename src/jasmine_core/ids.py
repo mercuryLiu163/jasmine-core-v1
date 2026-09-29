@@ -14,15 +14,21 @@ import time
 
 CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 _ENCODE = {c: i for i, c in enumerate(CROCKFORD)}
-ID_RE = re.compile(r"^([a-z]{3,4})_([0-9ABCDEFGHJKMNPQRSTVWXYZ]{26})$")
 
 TIMESTAMP_CHARS = 10
 RANDOM_CHARS = 16
 TOTAL_CHARS = TIMESTAMP_CHARS + RANDOM_CHARS
+RANDOM_BITS = RANDOM_CHARS * 5
+#: 10 bytes is exactly the 80 bits the 16 random characters carry.
+RANDOM_BYTES = RANDOM_BITS // 8
 
 #: prefix -> what the identifier names. `stp` and `evd` are reserved here so
 #: that P1 cannot introduce a different shape; the columns are not created yet.
 PREFIXES = frozenset({"prj", "tsk", "stp", "ses", "hst", "act", "evt", "evd", "aud", "key"})
+
+#: Every shipped prefix is three characters; the pattern is exact rather than a
+#: 3-4 character range so a future one cannot slip in unnoticed.
+ID_RE = re.compile(r"^([a-z]{3})_([0-9ABCDEFGHJKMNPQRSTVWXYZ]{26})$")
 
 
 class IdError(ValueError):
@@ -44,7 +50,7 @@ def new_id(prefix: str, *, now_ms: int | None = None) -> str:
     ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
     if not 0 <= ms < (1 << 48):
         raise IdError("timestamp out of range for a 48-bit millisecond clock")
-    randomness = int.from_bytes(secrets.token_bytes(RANDOM_CHARS), "big")
+    randomness = int.from_bytes(secrets.token_bytes(RANDOM_BYTES), "big")
     return f"{prefix}_{_b32(ms, TIMESTAMP_CHARS)}{_b32(randomness, RANDOM_CHARS)}"
 
 

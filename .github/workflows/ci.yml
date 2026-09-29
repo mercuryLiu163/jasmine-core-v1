@@ -57,20 +57,44 @@ jobs:
           set -x
           test -z "$(git ls-files | grep -E '\.(db|sqlite|token)$' || true)"
 
-  drift:
+  hygiene:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Migration checksums are recorded in the repository, not recomputed
+      - name: No runtime database, token or credential is tracked
+        run: |
+          set -x
+          leaked="$(git ls-files \
+            | grep -E '\.(db|db3|sqlite|sqlite3|token|env|pem|key|p12|pfx)$' \
+            | grep -vE '\.(py|md)$' || true)"
+          if [ -n "$leaked" ]; then
+            echo "::error::tracked runtime/credential files: $leaked"
+            exit 1
+          fi
+      - name: Migration checksums match what the code ships
         env:
           PYTHONPATH: src
         run: |
           set -x
+          # Fails if a released migration was edited in place, or if the
+          # recorded checksum and the shipped SQL have diverged.
+          db="$RUNNER_TEMP/checksum.db"
+          rm -f "$db"*
+          JASMINE_CORE_DB="$db" python -m jasmine_core.cli migrate
+          JASMINE_CORE_DB="$db" python -m jasmine_core.cli schema
           python - <<'PY'
+          import json, os, sqlite3
           from jasmine_core.migrations import discover
-          for migration in discover():
-              print(migration.version, migration.name, migration.checksum)
+          recorded = {
+              row[0]: row[1]
+              for row in sqlite3.connect(os.environ["JASMINE_CORE_DB"]).execute(
+                  "SELECT name, checksum FROM schema_migrations"
+              )
+          }
+          shipped = {m.name: m.checksum for m in discover()}
+          assert recorded == shipped, f"checksum mismatch: {recorded} != {shipped}"
+          print(json.dumps(shipped, indent=2))
           PY

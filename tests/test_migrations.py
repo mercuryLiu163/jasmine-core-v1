@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 import unittest
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from jasmine_core.migrations import (  # noqa: E402
     discover,
     expected_version,
     migrate,
+    verify_checksums,
 )
 
 EXPECTED_TABLES = {
@@ -58,12 +60,13 @@ class MigrationFromEmptyDatabase(DbTestCase):
         self.assertEqual(current_version(self.conn), expected_version())
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
 
-    def test_migrate_enables_the_frozen_pragma_set(self) -> None:
+    def test_migrate_does_not_change_the_connection_pragma_set(self) -> None:
+        # The pragma set belongs to db.connect(), not to migrate(); this asserts
+        # migrate() does not silently reset it.
         migrate(self.conn)
-        self.assertEqual(self.conn.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
         self.assertEqual(self.conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+        self.assertEqual(self.conn.execute("PRAGMA recursive_triggers").fetchone()[0], 1)
         self.assertEqual(self.conn.execute("PRAGMA synchronous").fetchone()[0], 2)
-        self.assertEqual(int(self.conn.execute("PRAGMA busy_timeout").fetchone()[0]), 5000)
 
     def test_migrate_installs_the_immutability_and_uniqueness_guards(self) -> None:
         migrate(self.conn)
@@ -80,6 +83,27 @@ class MigrationFromEmptyDatabase(DbTestCase):
         for row in recorded:
             self.assertEqual(len(row["checksum"]), 64)
             self.assertTrue(row["applied_at"].endswith("Z"), row["applied_at"])
+
+
+class ConnectionPragmas(DbTestCase):
+    def test_connect_applies_the_frozen_pragma_set(self) -> None:
+        self.assertEqual(self.conn.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
+        self.assertEqual(self.conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+        self.assertEqual(self.conn.execute("PRAGMA synchronous").fetchone()[0], 2)
+        self.assertEqual(self.conn.execute("PRAGMA recursive_triggers").fetchone()[0], 1)
+        self.assertEqual(int(self.conn.execute("PRAGMA busy_timeout").fetchone()[0]), 5000)
+
+    def test_connections_are_in_autocommit_mode(self) -> None:
+        # db.transaction() issues BEGIN/COMMIT itself; leaving Python to manage
+        # transactions would break the IMMEDIATE discipline.
+        self.assertIsNone(self.conn.isolation_level)
+        self.assertFalse(self.conn.in_transaction)
+
+    def test_a_second_connection_gets_the_same_pragmas(self) -> None:
+        other = db.connect(self.db_path)
+        self.addCleanup(other.close)
+        self.assertEqual(other.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+        self.assertEqual(other.execute("PRAGMA journal_mode").fetchone()[0].lower(), "wal")
 
 
 class MigrationIsReplayable(DbTestCase):
@@ -124,6 +148,20 @@ class MigrationIsReplayable(DbTestCase):
             migrate(self.conn)
         self.assertIn("drift", ctx.exception.message)
 
+    def test_migrate_refuses_a_database_from_a_newer_build(self) -> None:
+        db.set_meta(self.conn, "schema_version", SCHEMA_VERSION + 1)
+        with self.assertRaises(errors.SchemaVersionUnsupported):
+            migrate(self.conn)
+        self.assertEqual(len(applied_migrations(self.conn)), SCHEMA_VERSION)
+
+    def test_verify_checksums_reports_a_tampered_record(self) -> None:
+        self.assertEqual(verify_checksums(self.conn), [])
+        with self.conn:
+            self.conn.execute("UPDATE schema_migrations SET checksum = ? WHERE name = 'm0001_baseline'",
+                              ("0" * 64,))
+        problems = verify_checksums(self.conn)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("m0001_baseline", problems[0])
 
 class TransactionDiscipline(DbTestCase):
     def test_rollback_discards_every_statement_in_the_block(self) -> None:
@@ -150,6 +188,26 @@ class TransactionDiscipline(DbTestCase):
         self.assertIsNotNone(
             self.conn.execute("SELECT 1 FROM actors WHERE actor_id = 'act_committed'").fetchone()
         )
+
+
+class LockContentionIsTyped(DbTestCase):
+    def test_raw_lock_errors_become_database_busy(self) -> None:
+        with self.assertRaises(errors.DatabaseBusy) as ctx:
+            with db.translate_lock_errors():
+                raise sqlite3.OperationalError("database is locked")
+        self.assertEqual(ctx.exception.status, 503)
+        self.assertEqual(ctx.exception.code, "database_busy")
+        self.assertEqual(ctx.exception.details["busy_timeout_ms"], db.BUSY_TIMEOUT_MS)
+
+    def test_other_sqlite_errors_are_not_translated(self) -> None:
+        with self.assertRaises(sqlite3.OperationalError):
+            with db.translate_lock_errors():
+                raise sqlite3.OperationalError("no such table: events")
+
+    def test_is_locked_distinguishes_contention_from_data_errors(self) -> None:
+        self.assertTrue(db.is_locked(sqlite3.OperationalError("database is locked")))
+        self.assertFalse(db.is_locked(sqlite3.OperationalError("no such table: events")))
+        self.assertFalse(db.is_locked(ValueError("database is locked")))
 
 
 if __name__ == "__main__":

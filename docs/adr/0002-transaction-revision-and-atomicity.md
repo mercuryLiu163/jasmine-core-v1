@@ -16,7 +16,8 @@
   - `PRAGMA journal_mode=WAL` —— 读写不互相阻塞，满足"多设备/多客户端"方向的并发读需求。
   - `PRAGMA foreign_keys=ON` —— 引用完整性由数据库强制。
   - `PRAGMA synchronous=FULL` —— P0 每次提交都 fsync。WAL + NORMAL 更快但崩溃时可能丢最近提交；P0 优先可恢复性。性能调优属 P7。
-  - `PRAGMA busy_timeout=5000` —— 写锁竞争时等待而非立刻报错。
+  - `PRAGMA recursive_triggers=ON` —— **不可省略**：SQLite 默认关闭，此时 `INSERT OR REPLACE` 在解决冲突时不会触发 DELETE 触发器，`events` 的不可改保证会被绕过。
+  - `PRAGMA busy_timeout=5000` —— 写锁竞争时等待而非立刻报错；超时后由调用方映射为 `database_busy`。
 - 连接使用 `isolation_level=None`（autocommit），事务由 `jasmine_core.db.transaction()` 显式控制：
 
 ```python
@@ -27,7 +28,8 @@ with transaction(conn):          # BEGIN IMMEDIATE
 ```
 
 - `BEGIN IMMEDIATE` 在事务开始即取写锁，避免"读完再升级写锁"造成的 `SQLITE_BUSY` 中途失败。
-- **顺序固定为 Event 先、projection 后。** projection 的 `source_event_id` 外键指向 Event，因此顺序是 schema 强制的，不是约定。
+- **回滚覆盖 COMMIT 本身。** 本 Schema 把 Event → 对象的外键设为延迟检查，引用违规只在提交时才报；若 COMMIT 失败不回滚，半写的 Event 与 projection 会留在库里，并且连接会卡在"事务中"状态，后续请求全部失败。
+- **顺序固定为 Event 先、projection 后。** projection 的 `source_event_id` 外键指向 Event 且**未**设为延迟，因此顺序是 schema 强制的，不是约定。
 
 ### 2.2 Event 与 projection 的原子性
 
@@ -44,7 +46,7 @@ P0 注入失败点（用于 P0-T05）：Event 写入后、projection 写入前�
   - 命中 0 行 → `409 revision_conflict`，返回当前 `revision` 与当前对象快照。
   - 命中 1 行 → 新 `revision = expected + 1`。
 - `expected_revision` 缺失 → `400 missing_expected_revision`（对已存在对象的更新）。创建请求不接受 `expected_revision`；若创建时传了 → `400 unexpected_expected_revision`。
-- **P0 只创建与查询，不实现状态迁移**，因此 P0 不开放任何更新端点。`revision` 列与上述规则在此 ADR 冻结并由 P0 的测试覆盖（直接调用存储层做一次乐观锁更新，断言 409 语义），P1 的 State Agent 依此实现而不重新设计。
+- **P0 只创建与查询，不实现状态迁移**，因此 P0 不开放任何更新端点。`revision` 列在此 ADR 冻结，由 P0 的 Schema 测试覆盖其约束（`revision >= 1`、每次成功变更 +1 的语义在 P0-02 的存储层落地）。P1 的 State Agent 依此实现而不重新设计。P0 **未**覆盖 `expected_revision` 的乐观锁更新路径——该路径随 P1 的更新端点一并实现并验收。
 
 ### 2.4 没有 Task 的 Raw Event 如何追加
 

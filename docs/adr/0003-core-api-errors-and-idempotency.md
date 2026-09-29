@@ -70,13 +70,15 @@
 | 413 | `payload_too_large` | 请求体超过 1 MiB |
 | 415 | `unsupported_media_type` | 非 JSON |
 | 500 | `internal_error` | 未预期异常；`details` 不含堆栈或原文 |
-| 503 | `schema_version_unsupported` | DB 版本高于/低于代码期望且无法迁移 |
+| 503 | `database_busy` | 写锁竞争超过 `busy_timeout`；未写入任何 Truth |
+| 503 | `schema_version_unsupported` | DB 版本高于/低于代码期望且无法迁移，或检测到迁移漂移 |
+| 503 | `migration_conflict` | 迁移无法由本进程推进（例如被其他进程占用） |
 
 **鉴权与校验失败绝不写入 Truth**（`events` 与对象表），但**一定写入审计**（`audit_log`），失败也在自己的独立事务里落盘——审计失败不能反过来阻断业务事务，两者分开提交。
 
 ### 1.5 Event 不可变
 
-`events` 与 `audit_log` 上建 `BEFORE UPDATE` / `BEFORE DELETE` 触发器，`RAISE(ABORT, 'events are append-only')`。绕过 API 直接 `UPDATE`/`DELETE` 会被数据库拒绝（见 P0-T05）。P0 无删除端点；保留/归档属 P7，届时须先提变更 PR 定义导出流程，不能就地删除真源。
+`events` 与 `audit_log` 上建 `BEFORE UPDATE` / `BEFORE DELETE` 触发器，`RAISE(ABORT, 'events are append-only')`；`events` 另有 `BEFORE INSERT ... WHEN EXISTS` 触发器拒绝复用 `event_id`。只建 UPDATE/DELETE 触发器是不够的：SQLite 在 `recursive_triggers` 关闭时（默认值）不会为 `INSERT OR REPLACE` 触发删除触发器，因此该 INSERT 触发器与 `PRAGMA recursive_triggers=ON` 缺一不可。绕过 API 直接 `UPDATE`/`DELETE`/`REPLACE` 会被数据库拒绝（见 P0-T05）。P0 无删除端点；保留/归档属 P7，届时须先提变更 PR 定义导出流程，不能就地删除真源。
 
 ## 2 后果
 

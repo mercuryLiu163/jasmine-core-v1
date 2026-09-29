@@ -38,28 +38,51 @@ class Redaction(unittest.TestCase):
         self.assertEqual(out["nested"]["authorization"], canonical.REDACTED)
         self.assertEqual(out["prompt"], "hello")
 
-    def test_bearer_tokens_and_api_keys_in_free_text_are_masked(self) -> None:
-        cases = [
-            "Authorization: Bearer sk_live_abcdefghijklmnop",
-            "export OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz",
-            "password: hunter2 please",
-            "my token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijkl",
-        ]
-        for text in cases:
+    # Shapes the first implementation of redact_text let through verbatim.
+    # Each of these leaked a credential; the P0-01 review reproduced all of them.
+    LEAKY_SHAPES = [
+        '{"password": "hunter2"}',
+        'bearer_token=eyJhbGciOiJIUzI1NiJ9abcdefghijkl',
+        'client_secret=shhhhh',
+        'token: "abc def"',
+        'Authorization: Basic dXNlcjpiYXNz',
+        '-----BEGIN RSA PRIVATE KEY----- MIIE',
+        'AKIAIOSFODNN7EXAMPLE',
+        'ghp_1234567890abcdefghijklmnopqrstuvwxyz',
+        'sk-abc',
+        'x-api-key: abc123def456',
+        'AIzaSyA1234567890abcdef',
+    ]
+
+    def test_credential_shapes_are_masked(self) -> None:
+        for text in self.LEAKY_SHAPES:
             masked = canonical.redact_text(text)
             self.assertIn(canonical.REDACTED, masked, text)
-            for leak in ("sk_live_abcdefghijklmnop", "abcdefghijklmnopqrstuvwxyz", "hunter2",
-                         "eyJhbGciOiJIUzI1NiJ9"):
-                self.assertNotIn(leak, masked, text)
 
     def test_ordinary_text_is_untouched(self) -> None:
-        text = "请把 task 状态改成 done"
-        self.assertEqual(canonical.redact_text(text), text)
+        for text in ["请把 task 状态改成 done", "session_id=abc123", "revision=7",
+                     "project prj_01K742SG000Z61XPMPFJBYH7RY updated"]:
+            self.assertEqual(canonical.redact_text(text), text)
+
+    def test_redacting_a_json_line_leaves_it_parseable(self) -> None:
+        import json
+
+        line = canonical.redact_text('{"password": "hunter2", "prompt": "hello"}')
+        self.assertEqual(json.loads(line)["password"], canonical.REDACTED)
+        self.assertEqual(json.loads(line)["prompt"], "hello")
 
     def test_redaction_never_drops_structure(self) -> None:
         out = canonical.redact({"events": [{"prompt": "hello", "token": "x"}]})
         self.assertEqual(out["events"][0]["prompt"], "hello")
         self.assertEqual(out["events"][0]["token"], canonical.REDACTED)
+
+    def test_private_key_material_is_removed(self) -> None:
+        pem = ("-----BEGIN RSA PRIVATE KEY-----\n"
+               "MIIEowIBAAKCAQEAx1234567890abcdefGHIJKLMNOP\n"
+               "-----END RSA PRIVATE KEY-----")
+        masked = canonical.redact_text(f"found in log: {pem}")
+        self.assertNotIn("MIIEowIBAAKCAQEAx1234567890abcdef", masked)
+        self.assertIn(canonical.REDACTED, masked)
 
 
 if __name__ == "__main__":

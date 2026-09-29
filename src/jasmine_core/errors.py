@@ -99,3 +99,17 @@ class UnsupportedMediaType(CoreError):
 class SchemaVersionUnsupported(CoreError):
     status = 503
     code = "schema_version_unsupported"
+
+
+class MigrationConflict(CoreError):
+    """The schema cannot be advanced by this process right now."""
+
+    status = 503
+    code = "migration_conflict"
+
+
+class DatabaseBusy(CoreError):
+    """Another writer held the SQLite write lock past ``busy_timeout``."""
+
+    status = 503
+    code = "database_busy"

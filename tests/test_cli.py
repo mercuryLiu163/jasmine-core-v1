@@ -30,17 +30,17 @@ class MigrateCommand(unittest.TestCase):
         else:
             os.environ["JASMINE_CORE_DB"] = self._previous
 
-    def _run(self, argv: list[str]) -> tuple[int, str]:
-        import io
+    def _run(self, argv: list[str]) -> tuple[int, str, str]:
         import contextlib
+        import io
 
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = cli.main(argv)
-        return code, buffer.getvalue()
+        return code, out.getvalue(), err.getvalue()
 
     def test_migrate_creates_the_database_and_reports_the_version(self) -> None:
-        code, output = self._run(["migrate"])
+        code, output, _ = self._run(["migrate"])
         self.assertEqual(code, 0)
         payload = json.loads(output)
         self.assertEqual(payload["applied"], ["m0001_baseline"])
@@ -49,28 +49,64 @@ class MigrateCommand(unittest.TestCase):
 
     def test_migrate_is_idempotent_from_the_command_line(self) -> None:
         self._run(["migrate"])
-        code, output = self._run(["migrate"])
+        code, output, _ = self._run(["migrate"])
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(output)["applied"], [])
 
     def test_schema_reports_the_applied_migrations(self) -> None:
         self._run(["migrate"])
-        code, output = self._run(["schema"])
+        code, output, _ = self._run(["schema"])
         self.assertEqual(code, 0)
         payload = json.loads(output)
         self.assertEqual(payload["schema_version"], SCHEMA_VERSION)
         self.assertEqual(payload["migrations"][0]["name"], "m0001_baseline")
         self.assertEqual(len(payload["migrations"][0]["checksum"]), 64)
+        self.assertEqual(payload["drift"], [])
+
+    def _force_schema_version(self, value: str) -> None:
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("UPDATE core_meta SET value = ? WHERE key = 'schema_version'", (value,))
+        conn.commit()
+        conn.close()
 
     def test_schema_refuses_a_database_from_the_future(self) -> None:
         self._run(["migrate"])
+        self._force_schema_version(str(SCHEMA_VERSION + 5))
+        code, out, err = self._run(["schema"])
+        self.assertEqual(code, 3)
+        self.assertEqual(out, "")
+        self.assertIn("newer than this build supports", err)
+        self.assertNotIn("Traceback", err)
+
+    def test_migrate_also_refuses_a_database_from_the_future(self) -> None:
+        # Regression: migrate skipped the version guard, exited 0, and reported
+        # this build's SCHEMA_VERSION for a database that was not on it.
+        self._run(["migrate"])
+        self._force_schema_version("99")
+        code, out, err = self._run(["migrate"])
+        self.assertEqual(code, 3)
+        self.assertEqual(out, "")
+        self.assertIn("newer than this build supports", err)
+
+    def test_migrate_reports_the_on_disk_version_not_the_build_constant(self) -> None:
+        self._run(["migrate"])
+        code, out, _ = self._run(["migrate"])
+        self.assertEqual(code, 0)
+        payload = json.loads(out)
+        self.assertEqual(payload["schema_version"], SCHEMA_VERSION)
+        self.assertEqual(payload["core_schema_version"], SCHEMA_VERSION)
+
+    def test_schema_flags_a_tampered_checksum(self) -> None:
+        self._run(["migrate"])
         conn = sqlite3.connect(self.db_path)
-        conn.execute("UPDATE core_meta SET value = ? WHERE key = 'schema_version'",
-                     (str(SCHEMA_VERSION + 5),))
+        conn.execute("UPDATE schema_migrations SET checksum = ? WHERE name = 'm0001_baseline'",
+                     ("0" * 64,))
         conn.commit()
         conn.close()
-        code, _ = self._run(["schema"])
+        code, out, err = self._run(["schema"])
         self.assertEqual(code, 3)
+        self.assertTrue(json.loads(out)["drift"])
+        self.assertIn("drift", err)
 
     def test_database_file_is_created_in_wal_mode(self) -> None:
         self._run(["migrate"])

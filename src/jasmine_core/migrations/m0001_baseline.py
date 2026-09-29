@@ -101,6 +101,19 @@ STATEMENTS: tuple[str, ...] = (
         SELECT RAISE(ABORT, 'events are append-only: DELETE is denied');
     END
     """,
+    # Without this guard, `INSERT OR REPLACE` on an existing event_id would
+    # rewrite the stored Raw Event. The UPDATE/DELETE triggers above do not stop
+    # it: SQLite only fires delete triggers during REPLACE resolution when
+    # recursive_triggers is on, which db.PRAGMAS also sets. This trigger closes
+    # the hole independently of connection settings.
+    """
+    CREATE TRIGGER trg_events_no_replace
+    BEFORE INSERT ON events
+    WHEN EXISTS (SELECT 1 FROM events WHERE event_id = NEW.event_id)
+    BEGIN
+        SELECT RAISE(ABORT, 'events are append-only: event_id already exists');
+    END
+    """,
     """
     CREATE TABLE projects (
         project_id      TEXT PRIMARY KEY,
