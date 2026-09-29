@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -91,8 +92,10 @@ class HookScripts(unittest.TestCase):
         self.assertEqual(data["hooks"]["UserPromptSubmit"][0], other)
         self.assertEqual(data["hooks"]["Stop"], [other])
         command = data["hooks"]["UserPromptSubmit"][1]["hooks"][0]["command"]
-        self.assertIn("--python", command)
-        self.assertIn(f"python{sys.version_info.major}.{sys.version_info.minor}" if PYTHON == sys.executable else Path(PYTHON).name, command)
+        argv = shlex.split(command)
+        self.assertIn("--python", argv)
+        expected_python = run([PYTHON, "-c", "import sys; print(sys.executable)"]).stdout.strip()
+        self.assertEqual(argv[argv.index("--python") + 1], expected_python)
         self.assertIn(str(self.wrapper), command)
         self.assertNotIn(self.token.read_text(), self.hooks.read_text())
         self.assertEqual(self.install().returncode, 0)
