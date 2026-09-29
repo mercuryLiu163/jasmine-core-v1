@@ -14,7 +14,7 @@ implemented **and** exercised; anything not listed is not implemented.
 | Transaction / `revision` / atomicity contract | implemented (ADR 0002) |
 | Core API error and idempotency contract | specified in ADR 0003; HTTP layer lands in P0-03 |
 | Raw text retention, authn and audit contract | specified in ADR 0004; key/audit tables land in P0-03 |
-| Immutable idempotent Event Store, project/task/session | P0-02 |
+| Immutable idempotent Event Store, project/task/session | implemented ([P0-02](docs/p0-02-event-store.md)) |
 | Core API server, Codex UserPromptSubmit capture, Validation Recorder | P0-03 |
 
 Not implemented in P0 and not claimed anywhere in this repository: Rule/Guard,
