@@ -34,7 +34,9 @@ class RealGateRunner(unittest.TestCase):
                                     cwd=ROOT, capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 2, result.stderr)
             report = json.loads((out / "p1-t10-prepare.json").read_text())
-            self.assertEqual((report["verdict"], report["phase"]), ("BLOCKED", "prepared"))
+            self.assertEqual((report["verdict"], report["phase"]), ("BLOCKED", "prepared"),
+                             f"prepare report: {report.get('reason')}; stdout: {result.stdout}; "
+                             f"api log: {(out / 'api.log').read_text(errors='replace')[-2000:] if (out / 'api.log').exists() else 'absent'}")
             manifest = json.loads((out / "manifest.json").read_text())
             binding = json.loads((out / "binding.json").read_text())
             self.assertNotIn(binding["run_nonce"], (out / "p1-t10-prepare.json").read_text())
@@ -163,6 +165,10 @@ class RealGateRunner(unittest.TestCase):
                                        "--project-root", str(ROOT)], capture_output=True,
                                       text=True, timeout=30)
             self.assertEqual(prepared.returncode, 2, prepared.stderr)
+            report = json.loads((out / "p1-t10-prepare.json").read_text())
+            self.assertEqual(report["phase"], "prepared",
+                             f"prepare report: {report.get('reason')}; stdout: {prepared.stdout}; "
+                             f"api log: {(out / 'api.log').read_text(errors='replace')[-2000:] if (out / 'api.log').exists() else 'absent'}")
             manifest = json.loads((out / "manifest.json").read_text())
             core = gate._start_core(Path(manifest["db"]), Path(manifest["workspace"]),
                                     manifest["port"], out)
