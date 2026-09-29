@@ -44,6 +44,8 @@ class Auth:
         self._conn = conn
 
     def issue_key(self, *, actor_id: str, label: str, scopes: list[str]) -> dict[str, Any]:
+        if not isinstance(scopes, list) or not all(isinstance(scope, str) for scope in scopes):
+            raise errors.InvalidRequest("scopes must be an array of strings", field="scopes")
         unknown = sorted(set(scopes) - set(SCOPES))
         if unknown:
             raise errors.InvalidRequest(

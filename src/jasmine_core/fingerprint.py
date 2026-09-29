@@ -2,7 +2,7 @@
 
 The workspace root is operator configuration, not a caller-supplied path. Git
 workspaces hash tracked and non-ignored untracked files. Plain directories hash
-their regular files. A limit, unreadable file, or symlink makes the snapshot
+only operator-declared inputs. A limit, unreadable file, or symlink makes the snapshot
 partial; two partial snapshots can never compare SAME.
 """
 
@@ -23,7 +23,7 @@ MAX_FILES = 20_000
 MAX_BYTES = 1024 * 1024 * 1024
 ALGORITHM = "jasmine-workspace-sha256-v1"
 GIT_COVERAGE = "tracked-plus-nonignored-untracked-and-project-hook-binding"
-PLAIN_COVERAGE = "regular-files-except-root-runtime-and-history"
+PLAIN_COVERAGE = "operator-declared-paths-and-project-hook-binding"
 EXCLUDED_DIRS = frozenset({".git", ".codex", ".jasmine", "evidence", "artifacts", "_archive"})
 EXCLUDED_NAMES = frozenset({"auth.json", "capture-token", "core.db"})
 
@@ -62,18 +62,6 @@ def configured_root() -> Path:
     return resolved
 
 
-def _hash_file(path: Path, remaining_bytes: int) -> tuple[str, int]:
-    digest = hashlib.sha256()
-    total = 0
-    with path.open("rb") as stream:
-        while chunk := stream.read(1024 * 1024):
-            if total + len(chunk) > remaining_bytes:
-                raise ValueError("byte limit")
-            digest.update(chunk)
-            total += len(chunk)
-    return digest.hexdigest(), total
-
-
 def hash_workspace_file(root: Path, relative: str, remaining_bytes: int = MAX_BYTES) -> tuple[str, int]:
     """Open each path component with O_NOFOLLOW; never hash a symlink target.
 
@@ -83,7 +71,9 @@ def hash_workspace_file(root: Path, relative: str, remaining_bytes: int = MAX_BY
     parts = Path(relative).parts
     if not parts or any(part in (".", "..", "") for part in parts) or Path(relative).is_absolute():
         raise ValueError("invalid workspace-relative path")
-    flags = os.O_RDONLY | os.O_NOFOLLOW
+    # O_NONBLOCK prevents a malicious FIFO from blocking before fstat can
+    # reject it. It has no effect on ordinary regular-file reads.
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
     directory = os.open(root, flags | os.O_DIRECTORY)
     try:
         for part in parts[:-1]:
@@ -139,20 +129,10 @@ def capture(root: Path | None = None) -> dict[str, Any]:
             candidates = sorted(set(os.fsdecode(item) for item in listed.split(b"\0")
                                     if item and _relevant(os.fsdecode(item))))
     else:
-        try:
-            def onerror(_error: OSError) -> None:
-                partial_reasons.append("directory listing failed")
-            for directory, dirs, files in os.walk(root, followlinks=False, onerror=onerror):
-                dirs[:] = sorted(d for d in dirs if directory != str(root) or d not in EXCLUDED_DIRS)
-                for name in sorted(files):
-                    relative = (Path(directory) / name).relative_to(root).as_posix()
-                    if _relevant(relative):
-                        candidates.append(relative)
-                for name in dirs:
-                    if (Path(directory) / name).is_symlink():
-                        partial_reasons.append("symlink directory")
-        except OSError:
-            partial_reasons.append("directory listing failed")
+        # A non-Git directory has no reliable ignored-file boundary. Scanning
+        # it would read arbitrary credentials, so only explicit operator paths
+        # (below) are eligible.
+        pass
     # This exact project-local binding affects whether the hook gate exists.
     # Include it even when .codex is ignored, without scanning private state.
     hook_binding = root / ".codex" / "hooks.json"
@@ -168,6 +148,8 @@ def capture(root: Path | None = None) -> dict[str, Any]:
             if not parts or Path(relative).is_absolute() or any(part in (".", "..") for part in parts):
                 raise ValueError("extra path must be workspace-relative")
         candidates = sorted(set(candidates) | set(extra))
+        if not is_git and not extra:
+            partial_reasons.append("plain workspace has no declared input paths")
     except (ValueError, TypeError):
         extra = []
         partial_reasons.append("invalid extra path configuration")

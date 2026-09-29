@@ -210,4 +210,63 @@ Every write takes `host_id` and a positive integer `expected_revision` (except
 replay. A Step transition body uses `status` and, when required, `reason`.
 The response includes the new Step revision and `task_revision`. A rejected
 write leaves Truth unchanged. `VERIFIED` and `ACCEPTED` return
-`422 missing_evidence` until a real Evidence validator is available.
+`422 missing_evidence` when the P1-03 validator finds an unsatisfied current requirement.
+
+## P1-03 Evidence and workspace extension
+
+See [ADR 0007](../adr/0007-p1-evidence-fingerprint-and-codex-hook.md). The server
+must be started with an operator-owned `JASMINE_CORE_WORKSPACE_ROOT`; no request
+body may select or claim a workspace fingerprint. New `evd_` IDs identify
+immutable Evidence. All Evidence writes keep source and command Events distinct.
+
+| Method | Path | Scope and Registry actor | Purpose |
+| --- | --- | --- | --- |
+| POST | `/v1/tool-results` | `evidence:write`, system | Tool call/result Raw Events and Evidence in one transaction |
+| POST | `/v1/evidence/confirm` | `evidence:confirm`, human | Explicit confirmation with genuine current human prompt source |
+| GET | `/v1/evidence/{evidence_id}` | `evidence:read` | Evidence plus current reference status |
+| GET | `/v1/tasks/{task_id}/evidence` | `evidence:read` | Task Evidence list |
+| POST | `/v1/workspaces/fingerprint` | `fingerprint:scan`, system | Server scan; persist invalidated VERIFIED Steps as STALE |
+| POST | `/v1/workspaces/compare` | `fingerprint:read` | Compare two stored fingerprint SHA-256 IDs |
+
+`POST /v1/tool-results` accepts exact fields `task_id`, optional `step_id`,
+`host_id`, optional Core `session_id`, `codex_session_id`, `turn_id`,
+`tool_use_id`, `tool_name`, `tool_input` (object), `tool_response` (value),
+optional `kind` (default `COMMAND_RESULT`), and optional `artifact_uri` of the
+form `workspace:/relative/path`. The source Event IDs derive from the Codex
+session/turn/tool-use triple. The same delivery returns the original projection
+with `replayed: true`. An explicit integer zero exit code gives PASS; nonzero
+or `is_error: true` gives FAIL; absent exit code gives INFO. A specialized kind
+requires a matching private operator producer mapping as described in ADR 0007.
+`reference_status` is rechecked on GET and validation: `NONE`, `OK` or
+`BROKEN_REFERENCE`. `BROKEN_REFERENCE` cannot satisfy criteria.
+
+`POST /v1/evidence/confirm` takes `task_id`, optional `step_id`, `host_id`,
+`origin_event_id`, positive integer `expected_revision`, optional `event_id`,
+and optional paired `confirmed_rule_id`/`confirmed_rule_version`. The origin
+must be a same-task human `user.prompt` Event from the authenticated actor,
+after the relevant current State Event; a Step confirmation also requires the
+prompt payload to name that Step. The command Event carries the actor's
+structured confirmation, exact revision, fingerprint and optional Rule version.
+A human may replay an identical `event_id` to get its original Evidence; old
+prompts cannot be reused for a later revision. Agent keys cannot carry
+`evidence:confirm` or `evidence:write`.
+
+`POST /v1/workspaces/fingerprint` takes only `project_id` and `host_id`; the
+response includes `fingerprint_sha256`, server `snapshot`, and `staled_steps`.
+`POST /v1/workspaces/compare` takes exact lowercase 64-hex `left_sha256` and
+`right_sha256`; it returns `SAME`, `MISMATCH` or `UNKNOWN`. Partial scans never
+return SAME. GET endpoints do not perform stale writes.
+
+Authority proposal and same-scope supersede bodies now accept optional
+`verification_requirements` with the exact `acceptance_criteria` structure
+from ADR 0006. The mapping is immutable content of the new Rule version, is
+included in its idempotency digest, and appears in Rule GET/history. ACTIVE
+ACCEPTANCE/VERIFY Rules without a mapping fail `VERIFIED`/`ACCEPTED` with
+`422 missing_evidence`; they must be superseded by an authorized new version.
+
+The P1 Codex hook installer adds only project-local entries. Its bound
+PreToolUse supports simple canonical Bash actions only and emits the official
+native deny response for Guard DENY/CONFIRM and unresolved calls; VERIFY lets
+the tool execute but does not mark the Step VERIFIED. Unbound sessions receive
+advisory `{}`. Hook trust and real-tool coverage are decided by the separate
+P1-T10 Gate, never inferred from a successful API call or synthetic test.

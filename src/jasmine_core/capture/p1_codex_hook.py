@@ -30,12 +30,12 @@ SHELL_OPERATORS = frozenset(";&|><`$\n\r")
 
 
 def _private_file(path: Path) -> bytes:
-    if not path.is_absolute():
+    if not path.is_absolute() or path != path.resolve(strict=True):
         raise ValueError("runtime file must be an absolute regular path")
     parent = path.parent.stat()
     if parent.st_uid != os.getuid() or parent.st_mode & 0o077:
         raise ValueError("runtime file directory must be owner-only")
-    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     try:
         metadata = os.fstat(descriptor)
         if not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or metadata.st_mode & 0o077:

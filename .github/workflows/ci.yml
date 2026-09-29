@@ -109,6 +109,52 @@ jobs:
           path: ${{ runner.temp }}/acceptance/
           if-no-files-found: warn
 
+      - name: P1 component acceptance T01 through T09
+        env:
+          PYTHONPATH: src
+        run: |
+          python3 scripts/p1-acceptance.py \
+            --out "$RUNNER_TEMP/p1-components" --work "$RUNNER_TEMP/p1-work"
+          python3 - <<'PY'
+          import glob, json, os
+          path = glob.glob(os.environ['RUNNER_TEMP'] + '/p1-components/p1-components-*.json')
+          assert len(path) == 1, path
+          run = json.load(open(path[0]))
+          assert run['verdict'] == 'PASS', run
+          assert {c['case_id']: c['verdict'] for c in run['cases']} == {
+              f'P1-T{i:02d}': 'PASS' for i in range(1, 10)}, run
+          assert run['coverage']['real_hook_and_user_conversation'] == 'P1-T10_not_run_here'
+          PY
+
+      - name: P1 real Codex Gate is explicitly BLOCKED in CI
+        env:
+          PYTHONPATH: src
+        run: |
+          mkdir -p "$RUNNER_TEMP/p1-real"
+          set +e
+          python3 scripts/p1-real-conversation.py --run --out "$RUNNER_TEMP/p1-real"
+          code=$?
+          set -e
+          test "$code" = 2
+          python3 - <<'PY'
+          import glob, json, os
+          paths = glob.glob(os.environ['RUNNER_TEMP'] + '/p1-real/p1-t10-run-*.json')
+          assert len(paths) == 1, paths
+          run = json.load(open(paths[0]))
+          assert run['case_id'] == 'P1-T10' and run['verdict'] == 'BLOCKED', run
+          assert run['phase'] == 'preflight', run
+          PY
+
+      - name: Preserve P1 acceptance records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1-acceptance-${{ matrix.os }}-py${{ matrix.python }}
+          path: |
+            ${{ runner.temp }}/p1-components/
+            ${{ runner.temp }}/p1-real/
+          if-no-files-found: warn
+
       - name: Verify no runtime data was committed
         run: |
           set -x

@@ -22,7 +22,9 @@ class EvidenceHttp(ApiTestCase):
         self.addCleanup(self.workspace.cleanup)
         self.root = Path(self.workspace.name)
         (self.root / "source.txt").write_text("initial\n")
-        self.root_patch = patch.dict(os.environ, {"JASMINE_CORE_WORKSPACE_ROOT": str(self.root)})
+        self.root_patch = patch.dict(os.environ, {
+            "JASMINE_CORE_WORKSPACE_ROOT": str(self.root),
+            "JASMINE_CORE_FINGERPRINT_EXTRA_PATHS": '["source.txt"]'})
         self.root_patch.start()
         self.addCleanup(self.root_patch.stop)
         conn = db.connect(self.db_path)
@@ -88,7 +90,7 @@ class EvidenceHttp(ApiTestCase):
         self.transition("IN_PROGRESS", 1)
         code, refused = self.tool("echo-as-test", kind="TEST")
         self.assertEqual((code, refused["error"]["code"]), (400, "invalid_request"))
-        mapping = Path(self._tmp.name) / "producer.json"
+        mapping = Path(self._tmp.name).resolve() / "producer.json"
         mapping.write_text(json.dumps([{"kind": "BUILD", "tool_name": "Bash",
             "command_sha256": hashlib.sha256(b"true").hexdigest()}]))
         mapping.chmod(0o600)

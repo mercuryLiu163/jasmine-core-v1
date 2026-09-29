@@ -5,6 +5,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -53,7 +54,7 @@ class P1Hooks(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory(prefix="p1-hook-test-")
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name)
+        self.root = Path(self.tmp.name).resolve()
         self.nonce = "n" * 40
         self.binding = self.root / "binding.json"
         self.system_token = self.root / "system.token"
@@ -88,6 +89,17 @@ class P1Hooks(unittest.TestCase):
         return {"hook_event_name": "PreToolUse", "session_id": self.session,
                 "turn_id": "turn-1", "tool_use_id": "use-1", "tool_name": "Bash",
                 "tool_input": {"command": command}}
+
+    def test_private_fifo_is_rejected_without_waiting_for_writer(self) -> None:
+        fifo = self.root / "runtime.fifo"
+        os.mkfifo(fifo)
+        code = ("import sys; from pathlib import Path; "
+                "from jasmine_core.capture.p1_codex_hook import _private_file; "
+                "_private_file(Path(sys.argv[1]))")
+        result = subprocess.run([sys.executable, "-c", code, str(fifo)],
+                                capture_output=True, text=True, timeout=3, check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("runtime file must be owned by this user and private", result.stderr)
 
     def test_first_real_prompt_claims_lease_and_wrong_session_is_unbound(self) -> None:
         self.assertEqual(hook.handle(self.pre(), self.binding)["hookSpecificOutput"]
@@ -150,8 +162,8 @@ class P1Hooks(unittest.TestCase):
             "command": "P0 jasmine-capture-hook.sh"}]}]}}
         target.write_text(json.dumps(p0) + "\n")
         installer = Path(__file__).resolve().parents[1] / "scripts" / "p1-codex-hook-install.py"
-        args = ["/opt/homebrew/bin/python3.13", str(installer), "--binding", str(self.binding),
-                "--project-root", str(repo), "--python", "/opt/homebrew/bin/python3.13"]
+        args = [sys.executable, str(installer), "--binding", str(self.binding),
+                "--project-root", str(repo), "--python", sys.executable]
         before = target.read_bytes()
         dry = subprocess.run([*args, "--dry-run"], capture_output=True, text=True)
         self.assertEqual(dry.returncode, 0, dry.stderr)

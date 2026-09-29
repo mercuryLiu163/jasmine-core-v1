@@ -113,9 +113,13 @@ def _producer_kind(kind: str, tool_name: str, command_sha256: str | None) -> str
         raise errors.InvalidRequest("specialized Evidence kind has no trusted producer mapping")
     try:
         path = Path(config_path)
-        if not path.is_absolute() or path.is_symlink() or path.resolve().is_relative_to(fingerprint.configured_root()):
+        if (not path.is_absolute() or path != path.resolve(strict=True) or
+                path.resolve().is_relative_to(fingerprint.configured_root())):
             raise ValueError("producer mapping must be outside the workspace")
-        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        parent = path.parent.stat()
+        if parent.st_uid != os.getuid() or parent.st_mode & 0o077:
+            raise ValueError("producer mapping directory must be owner-only")
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         try:
             metadata = os.fstat(descriptor)
             if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or
@@ -250,6 +254,16 @@ class EvidenceStore:
                         self._reference_status(evidence) == "BROKEN_REFERENCE"):
                     invalid = True
                     break
+                if evidence["kind"] not in ("COMMAND_RESULT", "USER_CONFIRMATION"):
+                    try:
+                        mapped_sha = _producer_kind(evidence["kind"], evidence["tool_name"],
+                                                    evidence["command_sha256"])
+                    except (errors.InvalidRequest, errors.FingerprintUnavailable):
+                        invalid = True
+                        break
+                    if evidence["producer_config_sha256"] != mapped_sha:
+                        invalid = True
+                        break
             for version in references.get("rule_versions", []):
                 active = self.conn.execute(
                     "SELECT 1 FROM rules WHERE rule_id=? AND current_version=? AND status='ACTIVE'",
