@@ -1,13 +1,13 @@
 # Jasmine Core V1 多阶段 PR 计划
 
-状态：规划稿。目标仓库已创建；本文只拆解工作，不代表功能已实现、测试已通过或 P0–P7 PR 已创建。
+状态：阶段计划。P0 的 PR #1–#3 已合并，基线为 `46cf99f`；P1 正在实施，P2–P7 尚为规划。P0 验收证据见 `validation-runs/p0-resume-20260929T143554Z/main-46cf99f-real-acceptance/run-20260929T162925Z.json`（本机保留）。下表描述各阶段目标，不代表未完成阶段已通过。
 
 ## 依据与边界
 
 - 《Jasmine-Core-V1-实施与验证任务书》§1–3、§7–10 给出 P0–P7 顺序、WS-A–J、真实对话验收和发布门禁。
 - 《Jasmine-Core-V1-详细设计书》§2–15 与《Jasmine-Core-V1-模块设计书》§1–20 给出权威边界、20 个模块及依赖。
 - 文档没有规定 PR 数量、PR 边界或“四线并行”的具体分组。下列 PR、分工和合并次序是本次建议。文档中的操作文字作为设计要求阅读，不作为本次立即实施或改变环境的命令。
-- 目标仓库已确定为私有的 [mercuryLiu163/jasmine-core-v1](https://github.com/mercuryLiu163/jasmine-core-v1)，默认分支为 `main`。当前 Jasmine Mesh 工作目录仍不是该仓库的 Git checkout。正式创建 P0 PR 前须准备干净 checkout，并确定现有 `jasmine_memory` V0 代码的迁移/共存边界；不能把本计划算作已创建的 PR。
+- 目标仓库已确定为私有的 [mercuryLiu163/jasmine-core-v1](https://github.com/mercuryLiu163/jasmine-core-v1)，默认分支为 `main`。Jasmine Mesh 父目录不是 Git 仓库，实际 checkout 是其下的 `jasmine-core-v1/`。V0 已归档退役，旧全局 hook、MCP 与自启动服务已移除；V1 不复用其运行状态。
 
 ## 所有阶段共用的协作与合并规则
 
@@ -52,8 +52,8 @@
 5. P7 综合长任务须满足任务书 §9 的时长、工具调用、compact/Agent 或设备切换、真实 FAIL、HARD Rules 与 Memory Recall 条件。发布时核对 §10 G1–G8；其中 G5 的 Critical 场景范围需在 Validation 计划中明定。
 6. Codex Adapter 按阶段增量交付：P0 UserPromptSubmit 原文捕获，P1 PreToolUse/PostToolUse 与最小 Rule/State 读取，P3 SessionStart/PreCompact/Stop 和实际 Context Pack 注入；P5 才扩展完整 lifecycle、多客户端、多设备和离线同步。每阶段的能力声明只覆盖已实现且实测的 hook；没有原生阻断能力时不能声称 Guard 已 ENFORCED。
 
-## 尚待项目方确认的实施输入
+## 实施输入与后续门禁
 
-- 当前非 Git 工作目录如何与新仓库建立干净 checkout，以及 V0 `jasmine_memory` 与 V1 Core 的共存或迁移路径。新仓库的初始 README/`.gitignore` 只提供可比较的 `main` 基线，不算 P0-01 实现。
-- P0-01 契约决策：无 Task 的 Raw Event 与 `expected_revision` 的关系、API 请求/响应和错误码、Raw Event 原文与敏感内容处理边界。后续阶段另定 Resolver 的 source×impact×scope 策略矩阵。
-- 真实 Codex 对话的测试入口、被测设备和验收环境。若没有真实入口，P0 的真实对话 Gate 保持 BLOCKED，不能用合成请求冒充。
+- checkout 与 V0 边界已确定，见本文依据与边界。P1 从已合并的 P0 基线开发。
+- P0-01 契约已在 ADR 0001–0004 冻结；P1 扩展须通过新 ADR 和前向迁移。Resolver 的 source×impact×scope 策略矩阵仍由 P2 定义。
+- P0 的真实 Codex 捕获 Gate 已完成。P1 新增 PreToolUse/PostToolUse 的实际阻断与证据链仍须独立验证；现有 UserPromptSubmit 信任不能替代新增 hook 的审查信任。缺少入口或用户信任时记录 BLOCKED，不能用合成请求冒充。

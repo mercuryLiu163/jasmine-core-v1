@@ -22,8 +22,10 @@ does not establish the stage verdict.
 | Minimal Validation Recorder and the P0 acceptance matrix | implemented ([P0-03](docs/p0-03-api-and-capture.md)) |
 | Real-conversation Gate (P0-T07) | verdict comes from the latest commit-bound Validation Run linked from the [P0-03 PR](https://github.com/mercuryLiu163/jasmine-core-v1/pull/3) |
 
-Not implemented in P0 and not claimed anywhere in this repository: Rule/Guard,
-the full Task state machine, Evidence sufficiency, LLM Interpreter/Resolver,
+P1-01 adds versioned Rule proposal/approval and an advisory deterministic Guard
+API ([ADR 0005](docs/adr/0005-p1-authority-and-guard.md)); the P1 real-tool
+Guard Gate has not been run by this change. The full Task state machine,
+Evidence sufficiency, LLM Interpreter/Resolver,
 Context Pack/Hindsight, the full Agent lifecycle adapter, offline sync,
 Dashboard, and the 30-scenario acceptance suite.
 
@@ -41,6 +43,7 @@ features.
 - [ADR 0002 — transactions, revision, atomicity](docs/adr/0002-transaction-revision-and-atomicity.md)
 - [ADR 0003 — Core API, errors, idempotency](docs/adr/0003-core-api-errors-and-idempotency.md)
 - [ADR 0004 — raw text, authn, audit](docs/adr/0004-raw-text-authn-and-audit.md)
+- [ADR 0005 — Authority and Guard](docs/adr/0005-p1-authority-and-guard.md)
 
 ## Getting started
 

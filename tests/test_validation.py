@@ -13,6 +13,7 @@ import unittest
 from pathlib import Path
 
 from support import SRC  # noqa: F401  (path setup)
+from jasmine_core import SCHEMA_VERSION  # noqa: E402
 
 from jasmine_core.validation.recorder import (  # noqa: E402
     NOT_IMPLEMENTED,
@@ -94,7 +95,7 @@ class RunVerdict(unittest.TestCase):
     def test_the_run_binds_a_commit_and_a_schema_version(self) -> None:
         recorder = self.build("PASS")
         self.assertEqual(len(recorder.run.commit), 40)
-        self.assertEqual(recorder.run.schema_version, 2)
+        self.assertEqual(recorder.run.schema_version, SCHEMA_VERSION)
         self.assertIn("python", recorder.run.environment)
         self.assertIn("sqlite3", recorder.run.environment)
 

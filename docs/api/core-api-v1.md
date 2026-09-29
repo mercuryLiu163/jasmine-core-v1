@@ -154,3 +154,33 @@ That audit row holds metadata and lengths only. `path`, the caller's
 `X-Request-Id` and any `details` value are all passed through redaction before
 they are stored, so a client that puts a token in a URL cannot land it on disk.
 Field values are length-clipped, so an audit row cannot grow with the body.
+
+## P1-01 Authority extension
+
+See [ADR 0005](../adr/0005-p1-authority-and-guard.md) for version, scope,
+permission, Guard and idempotency semantics. These paths extend the P0 API;
+the P0 endpoints and error codes above remain valid.
+
+| Method | Path | Scope | Result |
+| --- | --- | --- | --- |
+| GET | `/v1/rules/active?project_id=&task_id=` | `authority:read` | ACTIVE rules applicable to context |
+| GET | `/v1/rules/{rule_id}` | `authority:read` | Current Rule projection and content |
+| GET | `/v1/rules/{rule_id}/history` | `authority:read` | Lifecycle snapshots by revision |
+| POST | `/v1/rules/proposals` | `authority:propose` | New PROPOSED Rule; 201, or 200 replay |
+| POST | `/v1/rules/{rule_id}/approve` | `authority:manage` plus human/system | Activate proposal; 200 |
+| POST | `/v1/rules/{rule_id}/supersede` | `authority:manage` plus human/system | Same-scope new version; 200 |
+| POST | `/v1/rules/{rule_id}/retire` | `authority:manage` plus human/system | Retire active Rule; 200 |
+| POST | `/v1/guard/check` | `guard:check` | Advisory `allow/deny/confirm/verify`; 200 |
+
+Proposal body: `rule_key`, `kind`, `severity`, `enforcement`, `content`,
+`matcher`, `scope`, `origin_event_id`, `host_id`, optional `event_id`.
+Approve/retire body: `host_id`, positive integer `expected_revision`, optional
+`event_id`. Supersede also carries replacement `kind/severity/enforcement/content/matcher`,
+the *same* `scope`, and `origin_event_id`. Guard body may carry `project_id`,
+`task_id`, `tool`, `action`, `path`; omitted context can produce `confirm`.
+
+New errors: `403 forbidden_actor_kind`, `409 rule_key_conflict`; existing
+`revision_conflict` and `event_id_conflict` apply. The `replayed` response flag
+means the original command Event and Rule snapshot were returned without a new
+Authority write. Guard HTTP 200 does not authorize a tool action by itself;
+inspect `decision` and `capability`.

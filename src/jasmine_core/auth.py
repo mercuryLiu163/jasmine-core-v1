@@ -17,7 +17,8 @@ from . import clock, db, errors, ids
 from .canonical import canonical_json, sha256_hex
 
 TOKEN_BYTES = 32
-SCOPES = ("admin", "objects:read", "objects:write", "events:read", "events:write")
+SCOPES = ("admin", "objects:read", "objects:write", "events:read", "events:write",
+          "authority:read", "authority:propose", "authority:manage", "guard:check")
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,9 @@ class Auth:
             raise errors.InvalidRequest("at least one scope is required", field="scopes")
         if self._conn.execute("SELECT 1 FROM actors WHERE actor_id = ?", (actor_id,)).fetchone() is None:
             raise errors.NotFound("actor", actor_id)
+        kind = self._conn.execute("SELECT kind FROM actors WHERE actor_id = ?", (actor_id,)).fetchone()["kind"]
+        if kind == "agent" and "authority:manage" in scopes:
+            raise errors.ForbiddenActorKind("agent keys cannot carry authority:manage")
         key_id = ids.new_id("key")
         token = secrets.token_urlsafe(TOKEN_BYTES)
         with db.translate_lock_errors(), db.transaction(self._conn):

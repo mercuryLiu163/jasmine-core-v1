@@ -17,7 +17,7 @@ import sqlite3
 from typing import Any
 
 from . import clock, db, errors, ids
-from .canonical import canonical_json, redact, redact_text
+from .canonical import canonical_json, redact, redact_text, sha256_hex
 
 _INSERT = """
 INSERT INTO audit_log (audit_id, seq, at, request_id, actor_id, method, path, decision,
@@ -46,7 +46,12 @@ class AuditLog:
         # mistakenly passes it". A caller-supplied `X-Request-Id`, a path
         # segment, or an echoed `details.value` are exactly the channels through
         # which a bearer token would otherwise reach the table.
-        safe_detail = _clip(canonical_json(redact(detail or {})))
+        safe_detail = canonical_json(redact(detail or {}))
+        if len(safe_detail) > MAX_FIELD_CHARS:
+            # Clipping serialized JSON can make it invalid and lose the audit
+            # row entirely. Preserve a bounded, valid metadata summary.
+            safe_detail = canonical_json({"truncated": True,
+                                          "detail_sha256": sha256_hex(safe_detail)})
         row_values = (
             audit_id, _clip(str(request_id)), _clip(str(method)), _safe_path(path),
             _clip(str(decision)), _clip(str(actor_id)) if actor_id else None, scope,
@@ -119,11 +124,11 @@ def _clip(value: str, limit: int = MAX_FIELD_CHARS) -> str:
 def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
     """The only error information allowed out of the request path.
 
-    `CoreError.details` can carry caller-supplied values, so it is redacted and
-    clipped; the code is frozen by the ADR and the message is written by us.
+    `CoreError.details` can carry a full current Rule on revision conflict.
+    The audit stores only metadata, never the values of those details.
     """
     return {
         "code": exc.code,
         "message": _clip(exc.message),
-        "details": redact(_clip(canonical_json(exc.details), MAX_DETAIL_CHARS)),
+        "detail_keys": sorted(exc.details),
     }

@@ -131,7 +131,7 @@ class HealthAndSchema(ApiTestCase):
         status, body = self.call("GET", "/v1/meta/schema")
         self.assertEqual(status, 200)
         self.assertEqual([m["name"] for m in body["migrations"]],
-                         ["m0001_baseline", "m0002_api_auth_audit"])
+                         ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority"])
         self.assertEqual(body["schema_version"], SCHEMA_VERSION)
 
     def test_an_unknown_route_is_404(self) -> None:

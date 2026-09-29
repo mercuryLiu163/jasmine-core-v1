@@ -36,6 +36,7 @@ evt_01K742SG00KSNSRN81BXC5ZAZC
 hst_01K742SG00BMSDET9BTP151RAR
 act_01K742SG00CBKP25A9ETPBTRMJ
 evd_01K742SG007EH67N4JY4SB8J90
+rul_01K742SG007EH67N4JY4SB8J90
 aud_01K742SG00PBN861DD9SV5YN49
 key_01K742SG00B7GYRYEY5KC27M41
 ```
@@ -57,6 +58,7 @@ key_01K742SG00B7GYRYEY5KC27M41
 | `act_` | actor | Core 服务端 | 全局唯一主键；`actor_id` 标识人或 Agent 身份 |
 | `evt_` | event | Core 服务端或幂等重试客户端 | 全局唯一主键；**Raw Event 身份**；正文不承诺时间信息或排序 |
 | `evd_` | evidence | Core 服务端（P1 起启用） | 全局唯一主键；P0 只冻结格式 |
+| `rul_` | rule | Core 服务端（P1-01 起启用） | 全局唯一稳定 Rule ID；内容以 `(rule_id, version)` 标识，见 ADR 0005 |
 | `aud_` | audit record | Core 服务端 | 只追加，不可改 |
 | `key_` | API key | Core 服务端 | 只存哈希，明文仅在创建时返回一次 |
 
@@ -68,7 +70,7 @@ key_01K742SG00B7GYRYEY5KC27M41
 
 ### 2.3 Schema 版本
 
-- 版本是一个单调递增整数 `schema_version`，存于 `core_meta` 表的 `schema_version` 键。当前值：**1**。
+- 版本是一个单调递增整数 `schema_version`，存于 `core_meta` 表的 `schema_version` 键。P0 发布后 P1-01 新增 m0003；当前值：**3**。
 - 迁移是**只进**的、有序的、带内容校验和的 Python 模块（`jasmine_core.migrations.mNNNN_*`）。每个已发布迁移的 SQL 一经合入 `main` 不得修改；修正必须新增迁移。P0-01 的 `m0001_baseline` 在合入 `main` 前仍可修正，合入后即冻结。
 - 启动时 Core 读取 `schema_version`：低于代码期望 → 依次执行缺失迁移；高于代码期望 → **拒绝启动**（防止旧二进制打开新 Schema 造成静默损坏）。`migrate` 与 `schema` 两条命令都执行该检查，退出码非 0。
 - 迁移在单个 `BEGIN IMMEDIATE` 事务内执行；该写锁本身就是跨进程互斥，`core_meta` 中的 `migration_lock` 行只是可观测标记。
