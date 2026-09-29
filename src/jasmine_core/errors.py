@@ -62,6 +62,11 @@ class ActorMismatch(CoreError):
     code = "actor_mismatch"
 
 
+class ForbiddenActorKind(CoreError):
+    status = 403
+    code = "forbidden_actor_kind"
+
+
 class NotFound(CoreError):
     status = 404
     code = "not_found"
@@ -84,6 +89,11 @@ class SourceEventDuplicate(CoreError):
 class RevisionConflict(CoreError):
     status = 409
     code = "revision_conflict"
+
+
+class RuleKeyConflict(CoreError):
+    status = 409
+    code = "rule_key_conflict"
 
 
 class MethodNotAllowed(CoreError):

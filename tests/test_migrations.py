@@ -30,6 +30,9 @@ EXPECTED_TABLES = {
     "events",
     "api_keys",
     "audit_log",
+    "rules",
+    "rule_versions",
+    "rule_changes",
 }
 
 
@@ -57,7 +60,7 @@ class MigrationFromEmptyDatabase(DbTestCase):
 
     def test_migrate_creates_the_full_baseline_schema(self) -> None:
         applied = migrate(self.conn)
-        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit"])
+        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority"])
         self.assertEqual(_tables(self.conn), EXPECTED_TABLES)
         self.assertEqual(current_version(self.conn), expected_version())
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
@@ -82,7 +85,7 @@ class MigrationFromEmptyDatabase(DbTestCase):
     def test_migration_record_carries_a_checksum_and_timestamp(self) -> None:
         migrate(self.conn)
         recorded = applied_migrations(self.conn)
-        self.assertEqual([row["version"] for row in recorded], [1, 2])
+        self.assertEqual([row["version"] for row in recorded], [1, 2, 3])
         for row in recorded:
             self.assertEqual(len(row["checksum"]), 64)
             self.assertTrue(row["applied_at"].endswith("Z"), row["applied_at"])

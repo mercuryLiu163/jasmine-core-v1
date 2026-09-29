@@ -53,6 +53,22 @@ def dispatch(core: Core, request: Request) -> Response:
         status = response.status
         error_code = None
         target = _target_of(response)
+        if request.path == "/v1/guard/check" and isinstance(response.body, dict):
+            guard_decision = response.body.get("decision")
+            # A 200 Guard response can still withhold a tool action. Keep that
+            # distinction in the append-only audit without storing tool args.
+            decision = "allow" if guard_decision == "allow" else "deny"
+            hits = response.body.get("matched", [])
+            audit_detail = {
+                "guard_decision": guard_decision,
+                "capability": response.body.get("capability"),
+                "request_sha256": response.body.get("request_sha256"),
+                "hits": [{"rule_id": hit["rule_id"], "version": hit["version"],
+                          "origin_event_id": hit["origin_event_id"]} for hit in hits[:20]],
+                "hit_count": len(hits),
+            }
+            if hits:
+                target = hits[0]["rule_id"]
     except errors.CoreError as exc:
         status = exc.status
         error_code = exc.code

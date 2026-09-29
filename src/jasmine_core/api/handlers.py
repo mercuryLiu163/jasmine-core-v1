@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .. import SCHEMA_VERSION, __version__, audit, auth, db, errors, ids, objects, registry
+from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, ids, objects, registry
 from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from .request import Request, Response
@@ -39,6 +39,7 @@ class Core:
         self.registry = registry.Registry(conn)
         self.auth = auth.Auth(conn)
         self.audit = audit.AuditLog(conn)
+        self.authority = authority.AuthorityStore(conn, schema_version=self.schema_version)
 
     def actor_kind(self, actor_id: str) -> str:
         return self.registry.require_actor(actor_id)["kind"]
@@ -79,6 +80,14 @@ def _base_routes() -> list[Route]:
         Route("POST", re.compile(r"^/v1/events$"), create_event, "events:write"),
         Route("GET", re.compile(r"^/v1/events$"), list_events, "events:read"),
         Route("GET", re.compile(r"^/v1/events/([^/]+)$"), get_event, "events:read"),
+        Route("GET", re.compile(r"^/v1/rules/active$"), list_active_rules, "authority:read"),
+        Route("GET", re.compile(r"^/v1/rules/([^/]+)$"), get_rule, "authority:read"),
+        Route("GET", re.compile(r"^/v1/rules/([^/]+)/history$"), get_rule_history, "authority:read"),
+        Route("POST", re.compile(r"^/v1/rules/proposals$"), propose_rule, "authority:propose"),
+        Route("POST", re.compile(r"^/v1/rules/([^/]+)/approve$"), approve_rule, "authority:manage"),
+        Route("POST", re.compile(r"^/v1/rules/([^/]+)/supersede$"), supersede_rule, "authority:manage"),
+        Route("POST", re.compile(r"^/v1/rules/([^/]+)/retire$"), retire_rule, "authority:manage"),
+        Route("POST", re.compile(r"^/v1/guard/check$"), guard_check, "guard:check"),
     ]
 
 
@@ -205,6 +214,71 @@ def get_event(request: Request, core: Core, principal: auth.Principal,
     if event is None:
         raise errors.NotFound("event", event_id)
     return Response(200, {"event": event})
+
+
+def list_active_rules(request: Request, core: Core, principal: auth.Principal,
+                      match: re.Match[str]) -> Response:
+    project_id = _optional_param(request, "project_id")
+    task_id = _optional_param(request, "task_id")
+    if project_id is not None:
+        _require_id(project_id, "prj", "project_id")
+    if task_id is not None:
+        _require_id(task_id, "tsk", "task_id")
+    rules = core.authority.list_active(project_id=project_id, task_id=task_id)
+    return Response(200, {"rules": rules, "count": len(rules)})
+
+
+def get_rule(request: Request, core: Core, principal: auth.Principal,
+             match: re.Match[str]) -> Response:
+    rule_id = match.group(1)
+    _require_id(rule_id, "rul", "rule_id")
+    return Response(200, {"rule": core.authority.get(rule_id)})
+
+
+def get_rule_history(request: Request, core: Core, principal: auth.Principal,
+                     match: re.Match[str]) -> Response:
+    rule_id = match.group(1)
+    _require_id(rule_id, "rul", "rule_id")
+    return Response(200, {"history": core.authority.history(rule_id)})
+
+
+def propose_rule(request: Request, core: Core, principal: auth.Principal,
+                 match: re.Match[str]) -> Response:
+    assert principal is not None
+    result = core.authority.propose(request.json_body(), actor_id=principal.actor_id)
+    return Response(200 if result["replayed"] else 201, result)
+
+
+def _rule_transition(request: Request, core: Core, principal: auth.Principal,
+                     match: re.Match[str], action: str) -> Response:
+    assert principal is not None
+    rule_id = match.group(1)
+    _require_id(rule_id, "rul", "rule_id")
+    if core.actor_kind(principal.actor_id) not in ("human", "system"):
+        raise errors.ForbiddenActorKind("only human or trusted system actors may manage Authority")
+    result = core.authority.transition(rule_id, action, request.json_body(),
+                                       actor_id=principal.actor_id)
+    return Response(200, result)
+
+
+def approve_rule(request: Request, core: Core, principal: auth.Principal,
+                 match: re.Match[str]) -> Response:
+    return _rule_transition(request, core, principal, match, "approve")
+
+
+def supersede_rule(request: Request, core: Core, principal: auth.Principal,
+                   match: re.Match[str]) -> Response:
+    return _rule_transition(request, core, principal, match, "supersede")
+
+
+def retire_rule(request: Request, core: Core, principal: auth.Principal,
+                match: re.Match[str]) -> Response:
+    return _rule_transition(request, core, principal, match, "retire")
+
+
+def guard_check(request: Request, core: Core, principal: auth.Principal,
+                match: re.Match[str]) -> Response:
+    return Response(200, core.authority.guard(request.json_body()))
 
 
 def list_hosts(request: Request, core: Core, principal: auth.Principal,

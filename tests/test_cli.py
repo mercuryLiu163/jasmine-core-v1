@@ -43,7 +43,7 @@ class MigrateCommand(unittest.TestCase):
         code, output, _ = self._run(["migrate"])
         self.assertEqual(code, 0)
         payload = json.loads(output)
-        self.assertEqual(payload["applied"], ["m0001_baseline", "m0002_api_auth_audit"])
+        self.assertEqual(payload["applied"], ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority"])
         self.assertEqual(payload["schema_version"], SCHEMA_VERSION)
         self.assertTrue(self.db_path.exists())
 

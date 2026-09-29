@@ -38,6 +38,10 @@ EVENT_TYPES = frozenset({
     "project.created",
     "task.created",
     "project.notes",
+    "rule.proposed",
+    "rule.approved",
+    "rule.superseded",
+    "rule.retired",
 })
 
 MAX_TEXT_BYTES = 256 * 1024
