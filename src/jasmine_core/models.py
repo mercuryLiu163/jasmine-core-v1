@@ -115,7 +115,7 @@ class NewEvent:
 
     @classmethod
     def from_request(cls, body: dict[str, Any], *, actor_id: str, actor_kind: str) -> "NewEvent":
-        from .clock import parse_rfc3339
+        from .clock import now, parse_rfc3339
 
         allowed = set(EVENT_HASH_FIELDS) | {"event_id"}
         unknown = sorted(set(body) - allowed)
@@ -137,19 +137,26 @@ class NewEvent:
         require_text(payload)
 
         occurred_at_raw = body.get("occurred_at")
-        if occurred_at_raw is None:
-            raise errors.InvalidRequest("occurred_at is required", field="occurred_at")
-        try:
-            occurred_at = parse_rfc3339(occurred_at_raw)
-        except ValueError as exc:
-            raise errors.InvalidRequest(f"occurred_at must be RFC 3339: {exc}", field="occurred_at") from exc
+        occurred_at: datetime | None = None
+        if occurred_at_raw is not None:
+            try:
+                occurred_at = parse_rfc3339(occurred_at_raw)
+            except ValueError as exc:
+                raise errors.InvalidRequest(
+                    f"occurred_at must be RFC 3339: {exc}", field="occurred_at"
+                ) from exc
+        # `occurred_at` is optional on purpose. A source that has no timestamp of
+        # its own -- the Codex UserPromptSubmit hook, for example -- omits it, the
+        # Core records its own acceptance time, and the omission keeps the field
+        # out of the idempotency hash so a retried delivery of the same source
+        # event is recognised as a replay rather than a conflict (ADR 0003 §1.3).
 
         event_id = optional_id(body, "event_id", "evt")
-        return cls(
+        return NewEvent(
             event_type=event_type,
             source_system=source_system,
             source_event_id=optional(body, "source_event_id"),
-            occurred_at=occurred_at,
+            occurred_at=occurred_at or now(),
             actor_id=actor_id,
             actor_kind=actor_kind,
             host_id=require_id(body, "host_id", "hst"),

@@ -86,6 +86,11 @@ class RevisionConflict(CoreError):
     code = "revision_conflict"
 
 
+class MethodNotAllowed(CoreError):
+    status = 405
+    code = "method_not_allowed"
+
+
 class PayloadTooLarge(CoreError):
     status = 413
     code = "payload_too_large"

@@ -1,0 +1,196 @@
+"""Codex `UserPromptSubmit` capture entry (P0-T07).
+
+Scope, stated exactly: this translates ONE Codex hook event into one Raw Event.
+It is not an Agent adapter, it does not interpret the text, it does not touch
+Task state, and it must not be described as any of those. The complete adapter
+lands in P5.
+
+Contract with Codex, derived from the V0 hook's observed payload:
+  stdin  <- {"hook_event_name": "UserPromptSubmit", "session_id", "cwd",
+             "prompt", "turn_id", ...}
+  stdout -> a JSON object. An empty object means "no context to add"; the P0
+            entry never injects context, so it normally prints {}.
+
+Design constraints that come from ADR 0004:
+  * the original prompt text is sent verbatim; the Event is the truth,
+  * a Codex turn must never be blocked by a Core that is down, so every failure
+    is logged locally and swallowed, and the hook always exits 0,
+  * the token comes from the environment, never from argv or the payload,
+  * `event_id` is derived deterministically from the source identity, so a Codex
+    retry of the same turn is idempotent at the Core instead of duplicating the
+    user's message.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from urllib.error import URLError
+from pathlib import Path
+from typing import Any
+
+from ..api.client import ApiError, CoreClient
+
+EVENT_TYPE = "user.prompt"
+SOURCE_SYSTEM = "codex"
+DEFAULT_BASE_URL = "http://127.0.0.1:8787"
+STATE_DIR_ENV = "JASMINE_CORE_STATE_DIR"
+TOKEN_ENV = "JASMINE_CORE_TOKEN"
+HOST_ENV = "JASMINE_CORE_HOST_ID"
+LOG_NAME = "capture.log"
+
+
+def _log(state_dir: Path | None, message: str) -> None:
+    """Append a redacted, local-only line. Never raises."""
+    try:
+        target = (state_dir or Path.home() / ".local/share/jasmine-core") / LOG_NAME
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(target.parent, 0o700)
+        from ..canonical import redact_text
+
+        line = redact_text(message).replace("\n", " ")[:500]
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, (line + "\n").encode("utf-8"))
+        finally:
+            os.close(fd)
+    except OSError:
+        # A capture hook must never fail the conversation, not even to log.
+        pass
+
+
+def derive_event_id(session_id: str, turn_id: str) -> str:
+    """A stable `evt_` id for a Codex turn.
+
+    Deterministic, so a retried hook is recognised as a replay by the Core's
+    `event_id` idempotency instead of writing the user's message twice, and
+    scoped to the source identity so two devices cannot silently collide on the
+    same conversation.
+
+    A client-supplied id carries no timestamp component. That is deliberate:
+    the client cannot know the Core's clock, and ordering comes from
+    `events.seq`, which the Core assigns. The 26-character Crockford body is
+    still enforced by `ids.parse_id`.
+    """
+    import hashlib
+
+    from ..ids import CROCKFORD
+
+    raw = hashlib.sha256(f"{SOURCE_SYSTEM}\x1f{session_id}\x1f{turn_id}".encode("utf-8")).digest()
+    out = []
+    for index in range(26):
+        # 16 bytes is 128 bits; 26 characters need 130, so reuse the first two
+        # bits of the digest for the last character rather than shortening the id.
+        bit = (index * 5) % 128
+        byte = raw[bit // 8]
+        out.append(CROCKFORD[(byte >> (3 - (bit % 8))) & 0x1F] if bit % 8 <= 3
+                   else CROCKFORD[(byte << (bit % 8 - 3)) & 0x1F])
+    return "evt_" + "".join(out)
+
+
+def build_event_body(payload: dict[str, Any], *, host_id: str) -> dict[str, Any]:
+    """Translate a Codex hook payload into a Core `/v1/events` request body.
+
+    The prompt is sent verbatim: the Event is the truth, and masking it here
+    would make the later interpretation and audit work on a different sentence
+    than the user actually typed. Redaction belongs on the derived surfaces.
+
+    `occurred_at` is deliberately NOT sent. The Codex hook payload carries no
+    timestamp, so any value here would be invented, and inventing a fresh one on
+    every delivery would turn a retried turn into an `event_id_conflict` instead
+    of the replay it is. The Core records its own acceptance time.
+    """
+    session_id = payload.get("session_id")
+    turn_id = payload.get("turn_id")
+    if not isinstance(session_id, str) or not session_id:
+        raise ValueError("hook payload has no session_id")
+    prompt = payload.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise ValueError("hook payload has an empty prompt")
+    return {
+        "event_type": EVENT_TYPE,
+        "source_system": SOURCE_SYSTEM,
+        "source_event_id": f"{session_id}:{turn_id}" if isinstance(turn_id, str) and turn_id else None,
+        "host_id": host_id,
+        "event_id": derive_event_id(session_id, str(turn_id or "")),
+        "payload": {
+            "text": prompt,
+            "turn_id": turn_id if isinstance(turn_id, str) else None,
+            "cwd": payload.get("cwd"),
+            "source_session_id": session_id,
+        },
+    }
+
+
+def handle(payload: dict[str, Any], client: CoreClient, *, host_id: str,
+           state_dir: Path | None = None) -> dict[str, Any]:
+    """Return a result record for the caller. Never raises."""
+    try:
+        if payload.get("hook_event_name") != "UserPromptSubmit":
+            return {"captured": False, "reason": "not a UserPromptSubmit event"}
+        body = build_event_body(payload, host_id=host_id)
+        result = client.post("/v1/events", body)
+        event = result["event"]
+        return {"captured": True, "event_id": event["event_id"], "seq": event["seq"],
+                "source_event_id": event["source_event_id"], "replayed": result["replayed"],
+                "actor_id": event["actor_id"], "host_id": event["host_id"],
+                "occurred_at": event["occurred_at"], "recorded_at": event["recorded_at"]}
+    except ApiError as exc:
+        _log(state_dir, f"capture refused: HTTP {exc.status} {exc.code}")
+        return {"captured": False, "reason": f"core refused: {exc.status} {exc.code}"}
+    except URLError as exc:
+        _log(state_dir, f"core unreachable: {type(exc.reason).__name__}: {exc.reason}")
+        return {"captured": False, "reason": "core unreachable"}
+    except (ValueError, OSError) as exc:
+        _log(state_dir, f"capture skipped: {type(exc).__name__}: {exc}")
+        return {"captured": False, "reason": f"skipped: {type(exc).__name__}"}
+    except Exception as exc:  # noqa: BLE001 - a hook must never break the turn
+        _log(state_dir, f"capture failed: {type(exc).__name__}: {str(exc)[:180]}")
+        return {"captured": False, "reason": f"failed: {type(exc).__name__}"}
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Read the hook payload on stdin, print the Codex context object.
+
+    stdout is the channel Codex reads as model-visible context, so it is always
+    the context object and nothing else. P0 adds no context, so the normal
+    output is `{}`. Every diagnostic goes to stderr, which Codex logs but does
+    not inject. The exit code is always 0: a Core that is down must not cost the
+    user their turn.
+    """
+    state_dir_env = os.environ.get(STATE_DIR_ENV)
+    state_dir = Path(state_dir_env) if state_dir_env else None
+    try:
+        raw = sys.stdin.read()
+        payload = json.loads(raw) if raw.strip() else {}
+    except (json.JSONDecodeError, OSError) as exc:
+        _log(state_dir, f"unreadable hook payload: {type(exc).__name__}")
+        _report({"captured": False, "reason": "unreadable payload"})
+        return 0
+
+    if not isinstance(payload, dict):
+        _report({"captured": False, "reason": "payload is not an object"})
+        return 0
+
+    token = os.environ.get(TOKEN_ENV)
+    if not token:
+        _log(state_dir, f"{TOKEN_ENV} is not set; prompt not captured")
+        _report({"captured": False, "reason": f"{TOKEN_ENV} is not set"})
+        return 0
+
+    client = CoreClient(os.environ.get("JASMINE_CORE_URL", DEFAULT_BASE_URL), token)
+    result = handle(payload, client,
+                    host_id=os.environ.get(HOST_ENV, ""),
+                    state_dir=state_dir)
+    _report(result)
+    return 0
+
+
+def _report(result: dict[str, Any]) -> None:
+    print(json.dumps({}))
+    sys.stderr.write(json.dumps(result, ensure_ascii=False) + "\n")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
