@@ -81,6 +81,11 @@ class Fixture:
         self.workspace = self.root / "workspace"
         self.workspace.mkdir()
         (self.workspace / "source.txt").write_text("v1", encoding="utf-8")
+        for command in (["git", "init", "-q", str(self.workspace)],
+                        ["git", "-C", str(self.workspace), "add", "source.txt"],
+                        ["git", "-C", str(self.workspace), "-c", "user.name=P1 Fixture",
+                         "-c", "user.email=p1-fixture@local.invalid", "commit", "-qm", "initial"]):
+            subprocess.run(command, check=True, capture_output=True, timeout=15)
         self.db_path = self.root / "core.db"
         self.host = ids.new_id("hst")
         self.human = ids.new_id("act")
@@ -376,6 +381,11 @@ def case_t05(f: Fixture) -> None:
     task = f.task(criteria=criteria)
     sid = f.step(task, criteria)
     f.executed(sid)
+    before_evidence = f.sql_count("evidence")
+    expect(f.tool(task, sid, kind="TEST", command="fixture-build",
+                  tool_use_id="forged-build-as-test"), 400, "invalid_request")
+    check(f.sql_count("evidence") == before_evidence,
+          "forged TEST classification wrote Evidence")
     expect(f.call("POST", "/v1/events", {"event_type": "assistant.message",
         "source_system": "agent-claim", "host_id": f.host, "project_id": f.project_id,
         "task_id": task, "payload": {"text": "all tests passed"}}, role="agent"), 201)
