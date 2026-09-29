@@ -26,6 +26,14 @@ class ApiError(Exception):
         super().__init__(f"HTTP {status} {code}".strip())
 
     @property
+    def request_id(self) -> str | None:
+        """The Core's request id, so a refusal can be joined to the audit log."""
+        if isinstance(self.payload, dict) and isinstance(self.payload.get("error"), dict):
+            value = self.payload["error"].get("request_id")
+            return str(value) if value else None
+        return None
+
+    @property
     def code(self) -> str:
         if isinstance(self.payload, dict) and isinstance(self.payload.get("error"), dict):
             return str(self.payload["error"].get("code", ""))

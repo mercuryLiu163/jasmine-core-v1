@@ -66,14 +66,57 @@ triggers, the rollback, the registry-sourced `actor_kind`, the
 FAIL. A case that crashes is recorded as FAIL with the exception and the bundle
 is still written; the runner exits 0 / 1 / 2 for PASS / FAIL / BLOCKED.
 
+## Wiring the capture entry into Codex
+
+```bash
+scripts/p0-codex-hook-install.sh --dry-run     # validate and preview
+scripts/p0-codex-hook-install.sh              # write <repo>/.codex/hooks.json
+```
+
+The entry is **project-local on purpose**. `UserPromptSubmit` has no tool to
+match on, so Codex ignores a `matcher` on that event: a *globally* installed
+entry runs on every prompt in every project on the machine. Scoping comes from
+where the hooks file lives, and the installer writes only
+`<repo>/.codex/hooks.json` — it reads `~/.codex/hooks.json` to show what is
+there and never modifies it. A stale entry is reported and held rather than
+silently replaced, the file is backed up, and re-running is a no-op.
+
+The command it writes names **paths only**: no token, no interpreter path, no
+`PYTHONPATH`. Those are resolved at run time by
+`scripts/jasmine-capture-hook.sh`, so the token stays in a 0600 file, never in a
+hooks file and never in this repository. The installer validates the interpreter
+*version* (not just its existence — macOS ships 3.9, below the 3.11 floor), that
+the capture module imports from this checkout, that the database and a host
+exist, and that a token is readable, before it writes anything.
+
+### Trust is the operator's
+
+Codex runs a hook command only once it has recorded a `trusted_hash` for it in
+`~/.codex/config.toml`. An untrusted entry is skipped **silently**, and
+`codex exec` cannot create the hash non-interactively. This work did not forge a
+hash, did not pass `--dangerously-bypass-hook-trust`, and did not touch
+`~/.codex/config.toml`. Review the command in the Codex UI and accept it.
+
 ## P0-T07 is BLOCKED, and that is the correct verdict
 
-Codex only runs a hook command whose `trusted_hash` it has recorded in
-`~/.codex/config.toml`. An entry added to `~/.codex/hooks.json` without one is
-silently skipped, and `codex exec` has no non-interactive way to create it. The
-trust decision — may this command run automatically on every prompt — belongs to
-the operator, so this work did not forge a hash and did not pass
-`--dangerously-bypass-hook-trust`, and a synthetic payload was not substituted
-for a real conversation. What is demonstrated is that the Gate detects this
-accurately: it ran a real `codex exec` turn, found zero captured events, and
-reported BLOCKED rather than PASS or FAIL.
+The Gate tells three states apart, and BLOCKED is not a single one:
+
+| State | Verdict |
+| --- | --- |
+| no entry in the hooks file | BLOCKED — not wired up |
+| entry present, no `trusted_hash` in `config.toml` | BLOCKED — registered, not trusted |
+| entry trusted, but the entry's own invocation trace gained no line | BLOCKED — never invoked |
+| the entry ran and did not capture | **FAIL** — the product |
+| the entry ran, captured, and the text reads back after a restart | **PASS** |
+
+The third row is why the capture entry writes a line to
+`$JASMINE_CORE_STATE_DIR/hook-invocations.log` on *every* path, with no prompt
+text. Without it, "Codex never ran us" and "the Core was down" look identical,
+and the Gate would blame the product for a setup problem. A `FAIL` is only
+reachable once the entry is demonstrably running.
+
+What is demonstrated here: the entry is installed and trusted-state is read
+correctly, the wiring captures a real-shaped payload end to end when invoked the
+way Codex invokes it, and the Gate reports BLOCKED — naming the exact
+`trusted_hash` key that is missing — rather than PASS or FAIL. No synthetic
+payload was ever substituted for a real conversation.

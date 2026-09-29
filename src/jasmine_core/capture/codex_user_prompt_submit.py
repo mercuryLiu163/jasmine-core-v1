@@ -39,24 +39,69 @@ STATE_DIR_ENV = "JASMINE_CORE_STATE_DIR"
 TOKEN_ENV = "JASMINE_CORE_TOKEN"
 HOST_ENV = "JASMINE_CORE_HOST_ID"
 LOG_NAME = "capture.log"
+TRACE_NAME = "hook-invocations.log"
+
+
+def _append(target: Path, message: str) -> None:
+    """Append one redacted, local-only line. Never raises."""
+    from ..canonical import redact_text
+
+    line = redact_text(message).replace("\n", " ")[:500]
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        os.write(fd, (line + "\n").encode("utf-8"))
+    finally:
+        os.close(fd)
+
+
+def _state_dir() -> Path:
+    configured = os.environ.get(STATE_DIR_ENV)
+    return Path(configured) if configured else Path.home() / ".local/share/jasmine-core"
 
 
 def _log(state_dir: Path | None, message: str) -> None:
-    """Append a redacted, local-only line. Never raises."""
     try:
-        target = (state_dir or Path.home() / ".local/share/jasmine-core") / LOG_NAME
+        target = (state_dir or _state_dir()) / LOG_NAME
         target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(target.parent, 0o700)
-        from ..canonical import redact_text
-
-        line = redact_text(message).replace("\n", " ")[:500]
-        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
-        try:
-            os.write(fd, (line + "\n").encode("utf-8"))
-        finally:
-            os.close(fd)
+        _append(target, message)
     except OSError:
         # A capture hook must never fail the conversation, not even to log.
+        pass
+
+
+def _trace(state_dir: Path | None, outcome: dict) -> None:
+    """Leave evidence that the entry ran at all, with no prompt text.
+
+    This is what makes "Codex never invoked the entry" distinguishable from "the
+    entry ran and the capture failed". Without it, the only evidence of a skipped
+    hook is the absence of an event, which is also exactly what a Core outage
+    looks like. The event id is a hash of the prompt, so the trace records *which*
+    turn was seen without recording the turn.
+    """
+    from .. import ids
+    from ..clock import now_rfc3339
+
+    try:
+        target = (state_dir or _state_dir()) / TRACE_NAME
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(target.parent, 0o700)
+        fields = {
+            "at": now_rfc3339(),
+            "request_id": outcome.get("request_id") or ids.new_id("aud"),
+            "captured": bool(outcome.get("captured")),
+            "event_id": outcome.get("event_id"),
+            "replayed": outcome.get("replayed"),
+            "reason": outcome.get("reason"),
+            "hook_event_name": outcome.get("hook_event_name"),
+            # A hash of (source, session, turn), so the Gate can confirm which
+            # turn the entry saw without the prompt text being written down.
+            "source_turn_sha256": outcome.get("source_turn_sha256"),
+            "host_id_configured": bool(os.environ.get(HOST_ENV)),
+            "token_configured": bool(os.environ.get(TOKEN_ENV)),
+        }
+        _append(target, json.dumps(fields, ensure_ascii=False, sort_keys=True))
+    except (OSError, TypeError, ValueError):
         pass
 
 
@@ -147,7 +192,8 @@ def handle(payload: dict[str, Any], client: CoreClient, *, host_id: str,
                 "occurred_at": event["occurred_at"], "recorded_at": event["recorded_at"]}
     except ApiError as exc:
         _log(state_dir, f"capture refused: HTTP {exc.status} {exc.code}")
-        return {"captured": False, "reason": f"core refused: {exc.status} {exc.code}"}
+        return {"captured": False, "reason": f"core refused: {exc.status} {exc.code}",
+                "request_id": exc.request_id}
     except URLError as exc:
         _log(state_dir, f"core unreachable: {type(exc.reason).__name__}: {exc.reason}")
         return {"captured": False, "reason": "core unreachable"}
@@ -167,6 +213,9 @@ def main(argv: list[str] | None = None) -> int:
     output is `{}`. Every diagnostic goes to stderr, which Codex logs but does
     not inject. The exit code is always 0: a Core that is down must not cost the
     user their turn.
+
+    Every path leaves a trace line, so "Codex never ran this" and "this ran and
+    could not capture" are distinguishable after the fact.
     """
     state_dir_env = os.environ.get(STATE_DIR_ENV)
     state_dir = Path(state_dir_env) if state_dir_env else None
@@ -175,25 +224,52 @@ def main(argv: list[str] | None = None) -> int:
         payload = json.loads(raw) if raw.strip() else {}
     except (json.JSONDecodeError, OSError) as exc:
         _log(state_dir, f"unreadable hook payload: {type(exc).__name__}")
+        _trace(state_dir, {"captured": False, "reason": "unreadable payload"})
         _report({"captured": False, "reason": "unreadable payload"})
         return 0
 
     if not isinstance(payload, dict):
+        _trace(state_dir, {"captured": False, "reason": "payload is not an object"})
         _report({"captured": False, "reason": "payload is not an object"})
         return 0
+
+    outcome: dict[str, Any] = {
+        "hook_event_name": payload.get("hook_event_name"),
+        "source_turn_sha256": _turn_digest(payload),
+    }
 
     token = os.environ.get(TOKEN_ENV)
     if not token:
         _log(state_dir, f"{TOKEN_ENV} is not set; prompt not captured")
-        _report({"captured": False, "reason": f"{TOKEN_ENV} is not set"})
+        outcome["reason"] = f"{TOKEN_ENV} is not set"
+        _trace(state_dir, outcome)
+        _report({"captured": False, "reason": outcome["reason"]})
         return 0
 
     client = CoreClient(os.environ.get("JASMINE_CORE_URL", DEFAULT_BASE_URL), token)
-    result = handle(payload, client,
-                    host_id=os.environ.get(HOST_ENV, ""),
-                    state_dir=state_dir)
+    result = handle(payload, client, host_id=os.environ.get(HOST_ENV, ""), state_dir=state_dir)
+    outcome.update(result)
+    _trace(state_dir, outcome)
     _report(result)
     return 0
+
+
+def _turn_digest(payload: dict[str, Any]) -> str | None:
+    """A stable digest of the turn identity, with no prompt text in it.
+
+    `derive_event_id` already hashes (host, session, turn, prompt) into the event
+    id, so when a capture succeeded the event id itself identifies the turn.
+    This covers the case where nothing was captured, letting the Gate confirm the
+    entry saw the turn it was looking for.
+    """
+    import hashlib
+
+    session_id = payload.get("session_id")
+    turn_id = payload.get("turn_id")
+    if not isinstance(session_id, str) or not session_id:
+        return None
+    material = "\x1f".join((SOURCE_SYSTEM, str(session_id), str(turn_id or "")))
+    return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
 
 
 def _report(result: dict[str, Any]) -> None:

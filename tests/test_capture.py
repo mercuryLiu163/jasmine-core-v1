@@ -347,5 +347,108 @@ class CaptureAsASubprocess(DbTestCase):
         self.assertEqual(json.loads(result.stdout), {})
 
 
+class InvocationTrace(DbTestCase):
+    """The trace is what tells "Codex never ran us" from "the Core was down"."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._tmp = tempfile.TemporaryDirectory(prefix="jasmine-core-trace-")
+        self.addCleanup(self._tmp.cleanup)
+        self.state = Path(self._tmp.name)
+        self.token = "x" * 40
+        self.payload = codex_payload(session_id="trace-session", turn_id="trace-1")
+
+    def run_entry(self, payload: dict | str, *, token: str | None = None,
+                  host: str = HOST,
+                  env_extra: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+        # token=None means the real (fake) token; pass "" to test the unset case.
+        env = dict(os.environ)
+        env.update({
+            "PYTHONPATH": REPO_SRC,
+            "JASMINE_CORE_TOKEN": self.token if token is None else token,
+            "JASMINE_CORE_HOST_ID": host,
+            "JASMINE_CORE_STATE_DIR": str(self.state),
+            "JASMINE_CORE_URL": "http://127.0.0.1:1",
+        })
+        env.update(env_extra or {})
+        raw = payload if isinstance(payload, str) else json.dumps(payload)
+        return subprocess.run(
+            [sys.executable, "-m", "jasmine_core.capture.codex_user_prompt_submit"],
+            input=raw, capture_output=True, text=True, env=env, timeout=30,
+        )
+
+    def trace_lines(self) -> list[dict]:
+        path = self.state / capture.TRACE_NAME
+        if not path.is_file():
+            return []
+        return [json.loads(line) for line in
+                path.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+    def test_a_successful_capture_leaves_a_trace_with_no_prompt_text(self) -> None:
+        result = self.run_entry(self.payload, env_extra={
+            "JASMINE_CORE_URL": "http://127.0.0.1:1"})
+        self.assertEqual(json.loads(result.stdout), {})
+        lines = self.trace_lines()
+        self.assertEqual(len(lines), 1)
+        self.assertFalse(lines[0]["captured"])
+        self.assertEqual(lines[0]["hook_event_name"], "UserPromptSubmit")
+        self.assertTrue(lines[0]["request_id"].startswith("aud_"))
+        self.assertTrue(lines[0]["host_id_configured"])
+        self.assertTrue(lines[0]["token_configured"])
+        raw = (self.state / capture.TRACE_NAME).read_text(encoding="utf-8")
+        self.assertNotIn(PROMPT, raw)
+
+    def test_every_failure_path_also_leaves_a_trace(self) -> None:
+        for label, kwargs in (
+            ("unreadable payload", {"payload": "not json"}),
+            ("payload is not an object", {"payload": "[1, 2, 3]"}),
+            ("no token", {"payload": self.payload, "token": ""}),
+            ("no host", {"payload": self.payload, "host": ""}),
+            ("empty prompt", {"payload": codex_payload(prompt="   ")}),
+            ("no session", {"payload": {"hook_event_name": "UserPromptSubmit", "prompt": "x"}}),
+        ):
+            with self.subTest(label=label):
+                self.run_entry(kwargs["payload"], token=kwargs.get("token", ""),
+                               host=kwargs.get("host", HOST))
+                self.assertTrue(self.trace_lines(), f"{label} left no trace")
+                (self.state / capture.TRACE_NAME).unlink()
+
+    def test_the_trace_records_the_turn_digest_so_the_gate_can_match_it(self) -> None:
+        self.run_entry(self.payload)
+        line = self.trace_lines()[0]
+        self.assertEqual(len(line["source_turn_sha256"]), 32)
+        # Same turn, same digest; a different turn, a different one.
+        self.run_entry(codex_payload(session_id="trace-session", turn_id="trace-2"))
+        self.assertNotEqual(self.trace_lines()[0]["source_turn_sha256"],
+                            self.trace_lines()[1]["source_turn_sha256"])
+
+    def test_a_capture_against_a_live_core_records_the_event_id(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", free_port()), _Handler)
+        server.app = Application(self.db_path)
+        server.daemon_threads = True
+        port = server.server_address[1]
+        threading.Thread(target=server.serve_forever,
+                         kwargs={"poll_interval": 0.02}, daemon=True).start()
+        self.addCleanup(server.server_close)
+        from jasmine_core import auth, registry
+
+        reg = registry.Registry(self.conn)
+        with db.transaction(self.conn):
+            reg.upsert_host(HOST)
+            reg.upsert_actor(ACTOR, kind="human", home_host_id=HOST)
+        real_token = auth.Auth(self.conn).issue_key(
+            actor_id=ACTOR, label="trace", scopes=["events:write"])["token"]
+        result = self.run_entry(self.payload, token=real_token,
+                                env_extra={"JASMINE_CORE_URL": f"http://127.0.0.1:{port}"})
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout), {})
+        line = self.trace_lines()[0]
+        self.assertTrue(line["captured"], line)
+        self.assertTrue(line["event_id"].startswith("evt_"))
+        self.assertIsNone(line["reason"])
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) AS n FROM events").fetchone()["n"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
