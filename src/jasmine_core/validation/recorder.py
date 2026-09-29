@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import platform
+import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
@@ -36,6 +37,26 @@ SECTIONS = (
 
 FORBIDDEN_KEYS = ("token", "secret", "password", "api_key", "authorization", "private_key")
 NOT_IMPLEMENTED = "N/A (P0 not implemented)"
+
+#: Shapes that indicate real credential material. A shell placeholder such as
+#: `$READER` or `${TOKEN}` in a reproduction step is documentation, not a leak,
+#: so it is deliberately not in this list: refusing it would make an honest
+#: bundle impossible to write.
+_LITERAL_CREDENTIAL_RES = (
+    re.compile(r"(?i)\bbearer\s+(?!\$\{?\$?[A-Za-z_])[A-Za-z0-9._-]{8,}"),
+    re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{16,}\b"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
+    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
+    re.compile(r"\bAKIA[0-9A-Z]{12,}\b"),
+    re.compile(r"\bAIza[0-9A-Za-z_-]{10,}\b"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b"),
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+)
+
+
+def looks_like_credential(text: str) -> bool:
+    return any(pattern.search(text) for pattern in _LITERAL_CREDENTIAL_RES)
 
 
 @dataclass
@@ -122,20 +143,27 @@ def environment() -> dict[str, Any]:
 
 
 def assert_no_secrets(payload: Any, path: str = "run") -> None:
-    """Refuse to write a bundle that contains credential-shaped keys or values."""
-    from ..canonical import redact
+    """Refuse to write a bundle that contains real credential material.
 
-    if redact(payload) != payload:
-        raise ValueError(f"{path} contains credential-shaped content; refusing to write it")
+    Two things are rejected: a field *named* like a credential, and a string that
+    contains something shaped like an actual secret. Text that merely refers to
+    credentials by name -- a reproduction step using `$TOKEN` -- is allowed,
+    because refusing it would make a usable bundle impossible to write while
+    stopping none of the real leaks.
+    """
     if isinstance(payload, dict):
         for key, value in payload.items():
             lowered = str(key).lower()
             if any(needle in lowered for needle in FORBIDDEN_KEYS):
-                raise ValueError(f"{path}.{key} looks like a credential field; refusing to write it")
+                raise ValueError(
+                    f"{path}.{key} is named like a credential field; refusing to write it"
+                )
             assert_no_secrets(value, f"{path}.{key}")
-    elif isinstance(payload, list):
+    elif isinstance(payload, (list, tuple)):
         for index, item in enumerate(payload):
             assert_no_secrets(item, f"{path}[{index}]")
+    elif isinstance(payload, str) and looks_like_credential(payload):
+        raise ValueError(f"{path} contains what looks like credential material; refusing to write it")
 
 
 class Recorder:

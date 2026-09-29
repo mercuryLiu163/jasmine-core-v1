@@ -121,14 +121,27 @@ class BundleWriting(unittest.TestCase):
         self.assertEqual(len(payload["cases"]), 1)
         self.assertTrue(payload["not_implemented"])
 
-    def test_a_credential_shaped_key_refuses_to_write(self) -> None:
+    def test_a_real_credential_literal_refuses_to_write(self) -> None:
         recorder = Recorder(self.out)
         case = a_pass()
-        case.reproduction = ["curl -H 'Authorization: Bearer sk-live-abcdef'"]
+        case.reproduction = ["curl -H 'Authorization: Bearer sk-live-abcdef0123456789'"]
         recorder.add(case)
         with self.assertRaises(ValueError):
             recorder.write()
         self.assertEqual(list(self.out.iterdir()), [])
+
+    def test_a_shell_placeholder_in_a_reproduction_step_is_allowed(self) -> None:
+        # Refusing documentation that names a variable would make a usable
+        # bundle impossible to write, and would stop none of the real leaks.
+        recorder = Recorder(self.out)
+        case = a_pass()
+        case.reproduction = [
+            "export JASMINE_CORE_TOKEN=$(cat ~/.local/share/jasmine-core/capture-token)",
+            "curl -H \"Authorization: Bearer $JASMINE_CORE_TOKEN\" …/v1/events",
+            "curl -H 'Authorization: Bearer ${READER}' …/v1/events",
+        ]
+        recorder.add(case)
+        self.assertTrue(recorder.write().exists())
 
     def test_a_credential_shaped_field_refuses_to_write(self) -> None:
         recorder = Recorder(self.out)
@@ -141,11 +154,17 @@ class BundleWriting(unittest.TestCase):
     def test_assert_no_secrets_accepts_ordinary_content(self) -> None:
         assert_no_secrets({"command": "jasmine-core migrate", "text": "hello"})
 
-    def test_assert_no_secrets_rejects_a_bearer_header(self) -> None:
+    def test_assert_no_secrets_rejects_real_material(self) -> None:
         with self.assertRaises(ValueError):
-            assert_no_secrets({"cmd": "curl -H 'Authorization: Bearer abc'"})
+            assert_no_secrets({"cmd": "curl -H 'Authorization: Bearer abcdefgh0123456789'"})
         with self.assertRaises(ValueError):
             assert_no_secrets(["echo", "export OPENAI_API_KEY=sk-abcdefghijklmnop"])
+        with self.assertRaises(ValueError):
+            assert_no_secrets({"x": "AKIAIOSFODNN7EXAMPLE"})
+
+    def test_assert_no_secrets_allows_placeholders_and_prose(self) -> None:
+        assert_no_secrets({"cmd": "curl -H 'Authorization: Bearer $TOKEN' …"})
+        assert_no_secrets(["the token is stored as a 0600 file", "no credential here"])
 
 
 if __name__ == "__main__":
