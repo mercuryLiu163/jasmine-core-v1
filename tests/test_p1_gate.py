@@ -26,6 +26,23 @@ def module():
 
 
 class RealGateRunner(unittest.TestCase):
+    def test_acceptance_requires_current_rule_refs_in_result_and_event(self) -> None:
+        gate = module()
+        rule = {"rule_id": "rul_current", "version": 2}
+        result = {"rule_versions": [{"rule_id": "rul_current", "version": 2}],
+                  "evidence_ids": ["evd_tool", "evd_confirm"]}
+        result["event"] = {"payload": {"rule_versions": list(result["rule_versions"]),
+                                       "evidence_ids": list(result["evidence_ids"])}}
+        gate._assert_rule_refs(result, rule, "Task ACCEPTED")
+        old = copy.deepcopy(result)
+        old["rule_versions"][0]["version"] = 1
+        with self.assertRaises(gate.Failed):
+            gate._assert_rule_refs(old, rule, "Task ACCEPTED")
+        missing_event = copy.deepcopy(result)
+        missing_event["event"]["payload"]["rule_versions"] = []
+        with self.assertRaises(gate.Failed):
+            gate._assert_rule_refs(missing_event, rule, "Step ACCEPTED")
+
     def test_prepare_bootstraps_private_fixture_and_exits_blocked(self) -> None:
         with tempfile.TemporaryDirectory(prefix="p1-gate-prepare-") as temp:
             out = Path(temp) / "gate"

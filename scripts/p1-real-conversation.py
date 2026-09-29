@@ -560,6 +560,16 @@ def _evidence(client: CoreClient, evidence_ids: list[str], manifest: dict) -> li
     return values
 
 
+def _assert_rule_refs(result: dict[str, Any], rule: dict[str, Any], phase: str) -> None:
+    expected = {"rule_id": rule["rule_id"], "version": rule["version"]}
+    versions = result.get("rule_versions")
+    payload = result.get("event", {}).get("payload", {})
+    if (not isinstance(versions, list) or expected not in versions or
+            payload.get("rule_versions") != versions or
+            payload.get("evidence_ids") != result.get("evidence_ids")):
+        raise Failed(f"{phase} did not persist the current VERIFY Rule and Evidence references")
+
+
 def _captured_tool_event(client: CoreClient, manifest: dict[str, Any],
                          turn: dict[str, Any], command: str,
                          allowed_decisions: set[str]) -> dict[str, Any]:
@@ -721,8 +731,7 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
         refs = _evidence(human, verified["evidence_ids"], manifest)
         if not any(item.get("source_event_id") == first_tool_event["event_id"] for item in refs):
             raise Failed("VERIFIED did not cite actual PostToolUse Evidence")
-        if {"rule_id": manifest["rules"][1]["rule_id"], "version": 1} not in verified["rule_versions"]:
-            raise Failed("VERIFIED did not consume the active VERIFY Rule version")
+        _assert_rule_refs(verified, manifest["rules"][1], "first VERIFIED")
         _, step = _state(human, manifest["task_id"], manifest["step_id"])
         session, _ = _real_turn(args, out, manifest, "03-stale", PROMPT_VERIFIED.format(stale_command=manifest["stale_command"]),
                                 session, nonce, report,
@@ -744,6 +753,7 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
         rerun_refs = _evidence(human, verified_again["evidence_ids"], manifest)
         if not any(item.get("source_event_id") == rerun_event["event_id"] for item in rerun_refs):
             raise Failed("second VERIFIED did not cite the actual rerun PostToolUse")
+        _assert_rule_refs(verified_again, manifest["rules"][1], "second VERIFIED")
         _, step = _state(human, manifest["task_id"], manifest["step_id"])
         session, step_origin = _real_turn(args, out, manifest, "05-step-confirm", PROMPT_STEP_CONFIRM,
                                           session, nonce, report,
@@ -756,6 +766,7 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
         accepted_step = _transition(human, manifest, "ACCEPTED")
         if step_confirmation["evidence"]["evidence_id"] not in accepted_step["evidence_ids"]:
             raise Failed("Step ACCEPTED did not cite the genuine current-revision confirmation")
+        _assert_rule_refs(accepted_step, manifest["rules"][1], "Step ACCEPTED")
         task, _ = _state(human, manifest["task_id"], manifest["step_id"])
         session, task_origin = _real_turn(args, out, manifest, "06-task-confirm", PROMPT_TASK_CONFIRM,
                                           session, nonce, report,
@@ -768,6 +779,7 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
                              {"host_id": manifest["host_id"], "expected_revision": task["revision"]})
         if task_confirmation["evidence"]["evidence_id"] not in accepted_task["evidence_ids"]:
             raise Failed("Task ACCEPTED did not cite the genuine later Task confirmation")
+        _assert_rule_refs(accepted_task, manifest["rules"][1], "Task ACCEPTED")
         history = _api(human, "GET", f"/v1/steps/{manifest['step_id']}/history")["events"]
         for state_result in (verified, verified_again, accepted_step):
             if not any(event["event_id"] == state_result["event"]["event_id"] and
