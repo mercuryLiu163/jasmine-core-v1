@@ -690,9 +690,15 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
             raise Failed("native DENY had a side effect or allowed Bash tool did not run")
         denied_input_sha = hashlib.sha256(canonical_json(
             {"command": manifest["denied_command"]}).encode()).hexdigest()
+        prompt_turns = [t.get("turn_id") for t in traces if
+                        t.get("hook_event_name") == "UserPromptSubmit" and
+                        t.get("result") == "captured" and t.get("session_id") == session]
+        if len(prompt_turns) != 1 or not prompt_turns[0]:
+            raise Failed("first real turn has no unique captured prompt turn ID")
         denied_traces = [t for t in traces if t.get("result") == "guard:deny" and
                          t.get("tool_input_sha256") == denied_input_sha and
-                         t.get("session_id") == session and t.get("turn_id") and t.get("tool_use_id")]
+                         t.get("session_id") == session and
+                         t.get("turn_id") == prompt_turns[0] and t.get("tool_use_id")]
         if len(denied_traces) != 1:
             raise Failed("real DENY trace is not one prepared denied Bash call")
         denied_trace = denied_traces[0]
