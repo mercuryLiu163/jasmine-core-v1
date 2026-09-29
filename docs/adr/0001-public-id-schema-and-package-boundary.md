@@ -1,6 +1,6 @@
 # ADR 0001 — 公共 ID、Schema 版本与包边界
 
-- 状态：Accepted（P0-01 冻结）
+- 状态：Accepted（P0 预发布修订：`evt_` 为不透明 ID，其余前缀保持时间戳格式）
 - 日期：2026-09-29
 - 影响范围：P0–P7 全部阶段。下游阶段不得私造 `project/task/step/session/host/event/evidence` 字段或 ID 格式；需要变更时先提版本化变更 PR 并更新本 ADR。
 
@@ -42,8 +42,9 @@ key_01K742SG00B7GYRYEY5KC27M41
 
 （以上示例由 `jasmine_core.ids` 生成并被 `tests/test_ids.py` 断言全部合法。）
 
-- 前 10 位为 base32 编码的 48 位 Unix 毫秒时间戳（最高有效位在前），后 16 位为 `secrets.token_bytes(10)` 的 80 位随机值。**ID 按字典序即时间序**，便于分页与调试。
-- ID 不携带主机、用户、路径、标题等可推断信息；随机部分不可由时间推算。
+- `evt_` 后的 26 位是**不透明的 130 位 Crockford Base32 值**。Core 省略 `event_id` 时生成时间戳加随机值形状的 ID；采集客户端可从来源身份确定性地产生 26 位值，供同一事件重试使用。任何调用方都不得从 `evt_` 解码时间，也不得依赖其字典序排序。Event 的持久化顺序以 Core 分配的 `seq` 为准；`recorded_at` 是受理时间，不替代 `seq`。
+- 其他前缀的前 10 位为 base32 编码的 48 位 Unix 毫秒时间戳（最高有效位在前），后 16 位为 `secrets.token_bytes(10)` 的 80 位随机值。前 10 位虽占 50 个编码位，**高 2 位必须为零**；解析时拒绝超过 `2^48 - 1` 的值。同一前缀下，不同毫秒的 ID 按字典序排列。
+- 非 `evt_` ID 不编码主机、用户、路径、标题等信息；由 Core 生成的随机部分不可由时间推算。确定性 `evt_` ID 可以由已知的来源输入重新计算，因此不提供保密性；其不透明性仅表示消费者不能从 ID 格式解析时间或其他字段。
 - Base32 字母表排除 `I`、`L`、`O`、`U`，避免与 `1`、`0` 混淆。
 
 | 前缀 | 对象 | 生成者 | 引用规则 |
@@ -54,7 +55,7 @@ key_01K742SG00B7GYRYEY5KC27M41
 | `ses_` | session | Core 服务端 | 全局唯一主键；可无 task（Raw Event 仍可入链） |
 | `hst_` | host | Core 服务端 | 全局唯一主键；`host_id` 标识采集设备 |
 | `act_` | actor | Core 服务端 | 全局唯一主键；`actor_id` 标识人或 Agent 身份 |
-| `evt_` | event | Core 服务端 | 全局唯一主键；**Raw Event 身份** |
+| `evt_` | event | Core 服务端或幂等重试客户端 | 全局唯一主键；**Raw Event 身份**；正文不承诺时间信息或排序 |
 | `evd_` | evidence | Core 服务端（P1 起启用） | 全局唯一主键；P0 只冻结格式 |
 | `aud_` | audit record | Core 服务端 | 只追加，不可改 |
 | `key_` | API key | Core 服务端 | 只存哈希，明文仅在创建时返回一次 |
@@ -62,6 +63,8 @@ key_01K742SG00B7GYRYEY5KC27M41
 唯一性由数据库主键强制，而非仅靠生成器的概率保证。生成器在插入冲突时最多重试 8 次（`IntegrityError`），超过则报错，不做静默降级。**该重试策略由 P0-02 的 Event Store 实现，P0-01 只冻结约定，尚未落地。**
 
 客户端**不得**自行构造 `prj_/tsk_/ses_/evt_` 之外的 ID。客户端可自带 `event_id`（仅在需要幂等重试时），但必须是合法 `evt_` ID，且 Core 校验其未与他人抢占；见 ADR 0003。
+
+本段是 P0 尚未发布前的契约修订，用于允许 P0-03 的确定性采集 ID，同时修正此前解析器把 10 位时间字段当作 50 位接受的错误。它改变应用层的 ID 校验和解析语义，不改变已定义的 SQLite 列、索引或迁移 SQL；无需为本次修订单独增加 schema migration。
 
 ### 2.3 Schema 版本
 
