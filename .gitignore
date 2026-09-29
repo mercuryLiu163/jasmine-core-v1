@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Jasmine runtime, credentials, and local validation data
+.DS_Store
+evidence/
+artifacts/
+validation-runs/
+validation-bundles/
+*.token
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
