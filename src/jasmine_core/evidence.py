@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sqlite3
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -81,6 +83,9 @@ def _requirement_set(value: Any) -> dict[str, Any]:
         for name in ("tool_name", "command_sha256", "artifact_sha256"):
             if name in item:
                 _text(item[name], name)
+                if name.endswith("_sha256") and (len(item[name]) != 64 or
+                        any(char not in "0123456789abcdef" for char in item[name])):
+                    raise errors.InvalidRequest(f"{name} must be lowercase SHA-256 hex")
     return value
 
 
@@ -98,6 +103,37 @@ def _tool_result(raw: Any) -> tuple[str, dict[str, Any]]:
     else:
         status = "PASS"
     return status, {"exit_code": exit_code, "is_error": is_error if type(is_error) is bool else None}
+
+
+def _producer_kind(kind: str, tool_name: str, command_sha256: str | None) -> str | None:
+    if kind == "COMMAND_RESULT":
+        return None
+    config_path = os.environ.get("JASMINE_CORE_EVIDENCE_PRODUCERS")
+    if not config_path:
+        raise errors.InvalidRequest("specialized Evidence kind has no trusted producer mapping")
+    try:
+        path = Path(config_path)
+        if not path.is_absolute() or path.is_symlink() or path.resolve().is_relative_to(fingerprint.configured_root()):
+            raise ValueError("producer mapping must be outside the workspace")
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            metadata = os.fstat(descriptor)
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_uid != os.getuid() or
+                    metadata.st_mode & 0o077 or metadata.st_size > 64 * 1024):
+                raise ValueError("producer mapping must be a private regular file")
+            with os.fdopen(descriptor, encoding="utf-8", closefd=False) as stream:
+                raw = stream.read(64 * 1024 + 1)
+        finally:
+            os.close(descriptor)
+        mappings = json.loads(raw)
+    except (OSError, ValueError, UnicodeError) as exc:
+        raise errors.FingerprintUnavailable("trusted Evidence producer config is unavailable") from exc
+    if not isinstance(mappings, list) or not all(isinstance(item, dict) for item in mappings):
+        raise errors.FingerprintUnavailable("trusted Evidence producer config is invalid")
+    if not any(item.get("kind") == kind and item.get("tool_name") == tool_name and
+               item.get("command_sha256") == command_sha256 for item in mappings):
+        raise errors.InvalidRequest("tool result is not mapped to this Evidence kind")
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 class EvidenceStore:
@@ -131,6 +167,8 @@ class EvidenceStore:
     @staticmethod
     def _snapshot_identity(project_id: str, snapshot: dict[str, Any]) -> str:
         return body_hash({"project_id": project_id, "root": snapshot["root"],
+                              "algorithm": snapshot["algorithm"], "coverage": snapshot["coverage"],
+                              "extra_paths": snapshot["extra_paths"],
                               "git_head": snapshot["git_head"],
                               "manifest_sha256": snapshot["manifest_sha256"],
                               "complete": snapshot["complete"]})
@@ -157,6 +195,8 @@ class EvidenceStore:
             if self.conn.execute("SELECT 1 FROM projects WHERE project_id=?", (project_id,)).fetchone() is None:
                 raise errors.NotFound("project", project_id)
             actor_kind = self._actor_host(actor_id, host_id)
+            if actor_kind != "system":
+                raise errors.ForbiddenActorKind("only a trusted system actor may refresh a workspace")
             snapshot = fingerprint.capture()
             digest = self._snapshot_identity(project_id, snapshot)
             row = self.conn.execute("SELECT source_event_id FROM workspace_fingerprints "
@@ -169,7 +209,72 @@ class EvidenceStore:
                     payload={"text": "", "fingerprint_sha256": digest,
                              "complete": snapshot["complete"]}, client_occurred_at=None))
                 self._snapshot(project_id, event["event_id"], snapshot)
-        return {"fingerprint_sha256": digest, "snapshot": snapshot}
+            staled = self._stale_verified(project_id, snapshot, actor_id=actor_id,
+                                          actor_kind=actor_kind, host_id=host_id)
+        return {"fingerprint_sha256": digest, "snapshot": snapshot, "staled_steps": staled}
+
+    def _stale_verified(self, project_id: str, current: dict[str, Any], *, actor_id: str,
+                        actor_kind: str, host_id: str) -> list[str]:
+        """Persist invalidation after an explicit trusted refresh, Event first."""
+        staled: list[str] = []
+        rows = self.conn.execute(
+            "SELECT s.*,t.project_id,t.revision AS task_revision FROM steps s "
+            "JOIN tasks t ON t.task_id=s.task_id WHERE t.project_id=? "
+            "AND s.status='VERIFIED' ORDER BY s.step_id", (project_id,),
+        ).fetchall()
+        for row in rows:
+            step = dict(row)
+            state_event = self.conn.execute(
+                "SELECT payload_json FROM events WHERE task_id=? AND event_type='step.transitioned' "
+                "AND json_extract(payload_json,'$.step_id')=? "
+                "AND json_extract(payload_json,'$.to')='VERIFIED' ORDER BY seq DESC LIMIT 1",
+                (step["task_id"], step["step_id"]),
+            ).fetchone()
+            references = json.loads(state_event["payload_json"]) if state_event else {}
+            evidence_ids = references.get("evidence_ids", [])
+            invalid = not current["complete"] or not evidence_ids
+            for evidence_id in evidence_ids:
+                evidence_row = self.conn.execute(
+                    "SELECT * FROM evidence WHERE evidence_id=? AND task_id=? AND step_id=?",
+                    (evidence_id, step["task_id"], step["step_id"]),
+                ).fetchone()
+                if evidence_row is None:
+                    invalid = True
+                    break
+                evidence = dict(evidence_row)
+                stored = self.conn.execute(
+                    "SELECT snapshot_json FROM workspace_fingerprints WHERE fingerprint_sha256=?",
+                    (evidence["fingerprint_sha256"],),
+                ).fetchone()
+                if (stored is None or fingerprint.compare(json.loads(stored["snapshot_json"]), current) != "SAME" or
+                        self._reference_status(evidence) == "BROKEN_REFERENCE"):
+                    invalid = True
+                    break
+            for version in references.get("rule_versions", []):
+                active = self.conn.execute(
+                    "SELECT 1 FROM rules WHERE rule_id=? AND current_version=? AND status='ACTIVE'",
+                    (version.get("rule_id"), version.get("version")),
+                ).fetchone()
+                if active is None:
+                    invalid = True
+            if not invalid:
+                continue
+            task = {"task_id": step["task_id"], "project_id": project_id}
+            event, _ = self._event(
+                event_type="step.staled", actor_id=actor_id, actor_kind=actor_kind,
+                host_id=host_id, task=task,
+                payload={"step_id": step["step_id"], "from": "VERIFIED", "to": "STALE",
+                         "previous_revision": step["revision"],
+                         "previous_evidence_ids": evidence_ids,
+                         "current_fingerprint_sha256": self._snapshot_identity(project_id, current)},
+            )
+            now = event["recorded_at"]
+            self.conn.execute("UPDATE steps SET status='STALE',revision=revision+1,updated_at=? "
+                              "WHERE step_id=? AND status='VERIFIED'", (now, step["step_id"]))
+            self.conn.execute("UPDATE tasks SET revision=revision+1,updated_at=? WHERE task_id=?",
+                              (now, step["task_id"]))
+            staled.append(step["step_id"])
+        return staled
 
     def compare(self, left_sha256: str, right_sha256: str) -> dict[str, Any]:
         rows = []
@@ -215,16 +320,9 @@ class EvidenceStore:
             return "BROKEN_REFERENCE"
         relative = uri.removeprefix("workspace:/")
         root = fingerprint.configured_root()
-        path = root / relative
         try:
-            if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):
-                return "BROKEN_REFERENCE"
-            digest_hash = hashlib.sha256()
-            with path.open("rb") as stream:
-                while chunk := stream.read(1024 * 1024):
-                    digest_hash.update(chunk)
-            digest = digest_hash.hexdigest()
-        except OSError:
+            digest, _ = fingerprint.hash_workspace_file(root, relative)
+        except (OSError, ValueError):
             return "BROKEN_REFERENCE"
         return "OK" if digest == item["artifact_sha256"] else "BROKEN_REFERENCE"
 
@@ -246,16 +344,10 @@ class EvidenceStore:
         if not relative or ".." in Path(relative).parts or Path(relative).is_absolute():
             raise errors.InvalidRequest("artifact_uri must name a workspace-relative file")
         root = fingerprint.configured_root()
-        path = root / relative
         try:
-            if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):
-                return uri, None
-            digest = hashlib.sha256()
-            with path.open("rb") as stream:
-                while chunk := stream.read(1024 * 1024):
-                    digest.update(chunk)
-            return uri, digest.hexdigest()
-        except OSError:
+            digest, _ = fingerprint.hash_workspace_file(root, relative)
+            return uri, digest
+        except (OSError, ValueError):
             return uri, None
 
     def _insert(self, *, evidence_id: str, task: dict[str, Any], step: dict[str, Any] | None,
@@ -264,18 +356,19 @@ class EvidenceStore:
                 artifact_sha256: str | None, actor_id: str, host_id: str,
                 session_id: str | None = None, turn_id: str | None = None,
                 tool_use_id: str | None = None, tool_name: str | None = None,
-                command_sha256: str | None = None, confirmed_rule_id: str | None = None,
+                command_sha256: str | None = None, producer_config_sha256: str | None = None,
+                confirmed_rule_id: str | None = None,
                 confirmed_rule_version: int | None = None) -> dict[str, Any]:
         self.conn.execute(
             "INSERT INTO evidence (evidence_id,task_id,step_id,kind,status,result_json,"
             "source_event_id,change_event_id,fingerprint_sha256,artifact_uri,artifact_sha256,"
-            "actor_id,host_id,session_id,turn_id,tool_use_id,tool_name,command_sha256,"
+            "actor_id,host_id,session_id,turn_id,tool_use_id,tool_name,command_sha256,producer_config_sha256,"
             "confirmed_rule_id,confirmed_rule_version,task_revision,step_revision,created_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (evidence_id, task["task_id"], step["step_id"] if step else None,
              kind, status, canonical_json(result), source_event_id, change_event_id,
              fingerprint_sha256, artifact_uri, artifact_sha256, actor_id, host_id,
-             session_id, turn_id, tool_use_id, tool_name, command_sha256,
+             session_id, turn_id, tool_use_id, tool_name, command_sha256, producer_config_sha256,
              confirmed_rule_id, confirmed_rule_version, task["revision"],
              step["revision"] if step else None, clock.now_rfc3339()),
         )
@@ -300,8 +393,9 @@ class EvidenceStore:
         if not isinstance(kind, str) or kind not in TOOL_KINDS:
             raise errors.InvalidRequest("kind must be a tool Evidence kind")
         status, parsed = _tool_result(tool_response)
-        command = tool_input.get("command")
+        command = tool_input.get("cmd", tool_input.get("command"))
         command_sha256 = hashlib.sha256(command.encode("utf-8")).hexdigest() if isinstance(command, str) else None
+        producer_config_sha256 = _producer_kind(kind, tool_name, command_sha256)
         seed = ("codex-posttool-v1", codex_session_id, turn_id, tool_use_id)
         with db.translate_lock_errors(), db.transaction(self.conn):
             task, step = self._task_step(task_id, step_id)
@@ -318,7 +412,7 @@ class EvidenceStore:
             call_event, call_replay = self._event(
                 event_type="tool.call", actor_id=actor_id, actor_kind=actor_kind,
                 host_id=host_id, task=task, session_id=session_id,
-                source_system="codex-posttool", source_event_id="|".join((*seed, "call")),
+                source_system="codex-posttool", source_event_id=canonical_json([*seed, "call"]),
                 event_id=_deterministic_event_id(*seed, "call"),
                 payload={"codex_session_id": codex_session_id, "turn_id": turn_id,
                          "tool_use_id": tool_use_id, "tool_name": tool_name,
@@ -326,7 +420,7 @@ class EvidenceStore:
             result_event, result_replay = self._event(
                 event_type="tool.result", actor_id=actor_id, actor_kind=actor_kind,
                 host_id=host_id, task=task, session_id=session_id,
-                source_system="codex-posttool", source_event_id="|".join((*seed, "result")),
+                source_system="codex-posttool", source_event_id=canonical_json([*seed, "result"]),
                 event_id=_deterministic_event_id(*seed, "result"),
                 payload={"codex_session_id": codex_session_id, "turn_id": turn_id,
                          "tool_use_id": tool_use_id, "tool_name": tool_name,
@@ -347,7 +441,7 @@ class EvidenceStore:
             evidence_event, _ = self._event(
                 event_type="evidence.recorded", actor_id=actor_id, actor_kind=actor_kind,
                 host_id=host_id, task=task, session_id=session_id,
-                source_system="codex-posttool", source_event_id="|".join((*seed, "evidence")),
+                source_system="codex-posttool", source_event_id=canonical_json([*seed, "evidence"]),
                 event_id=_deterministic_event_id(*seed, "evidence"),
                 payload={"evidence_id": evidence_id, "source_event_id": result_event["event_id"],
                          "kind": kind, "status": status, "step_id": step_id,
@@ -365,7 +459,8 @@ class EvidenceStore:
                                   artifact_sha256=artifact_sha, actor_id=actor_id, host_id=host_id,
                                   session_id=session_id, turn_id=turn_id,
                                   tool_use_id=tool_use_id, tool_name=tool_name,
-                                  command_sha256=command_sha256)
+                                  command_sha256=command_sha256,
+                                  producer_config_sha256=producer_config_sha256)
             return {"evidence": record, "call_event": call_event,
                     "result_event": result_event, "replayed": False}
 
@@ -402,6 +497,24 @@ class EvidenceStore:
                     origin["actor_kind"] != "human" or origin["project_id"] != task["project_id"] or
                     origin["task_id"] != task_id):
                 raise errors.InvalidRequest("origin must be this human's same-task user.prompt Event")
+            if step_id is not None and origin["payload"].get("step_id") != step_id:
+                raise errors.InvalidRequest("origin user.prompt does not name this Step")
+            if step is not None:
+                revision_source = self.conn.execute(
+                    "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE task_id=? "
+                    "AND event_type IN ('step.created','step.transitioned','step.criteria_updated',"
+                    "'step.staled') AND json_extract(payload_json,'$.step_id')=?",
+                    (task_id, step_id),
+                ).fetchone()["seq"]
+            else:
+                revision_source = self.conn.execute(
+                    "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE task_id=? "
+                    "AND event_type IN ('task.created','task.transitioned','task.criteria_updated',"
+                    "'step.created','step.transitioned','step.criteria_updated','step.staled')",
+                    (task_id,),
+                ).fetchone()["seq"]
+            if origin["seq"] <= revision_source:
+                raise errors.InvalidRequest("origin user.prompt predates the current State revision")
             snapshot = fingerprint.capture()
             fp_sha = self._snapshot_identity(task["project_id"], snapshot)
             payload = {"origin_event_id": origin_id, "step_id": step_id,
@@ -478,22 +591,23 @@ class CurrentEvidenceValidator:
         return source_status == row["status"]
 
     def _fresh(self, row: dict[str, Any], current: dict[str, Any], project_id: str,
-               expected_revision: int, step_id: str | None, restart_seq: int) -> bool:
+               expected_revision: int, task_revision: int,
+               step_id: str | None, restart_seq: int) -> bool:
         stored = self.conn.execute("SELECT snapshot_json,project_id FROM workspace_fingerprints "
                                    "WHERE fingerprint_sha256=?", (row["fingerprint_sha256"],)).fetchone()
         if stored is None or stored["project_id"] != project_id:
             return False
         if fingerprint.compare(json.loads(stored["snapshot_json"]), current) != "SAME":
             return False
-        if row["task_revision"] > expected_revision:
+        if row["task_revision"] > (task_revision if step_id is not None else expected_revision):
             return False
         if step_id is not None:
             if row["step_id"] != step_id or row["step_revision"] > expected_revision:
                 return False
-            source_seq = self.conn.execute("SELECT seq FROM events WHERE event_id=?",
-                                           (row["change_event_id"],)).fetchone()
-            if source_seq is None or source_seq["seq"] <= restart_seq:
-                return False
+        source_seq = self.conn.execute("SELECT seq FROM events WHERE event_id=?",
+                                       (row["change_event_id"],)).fetchone()
+        if source_seq is None or source_seq["seq"] <= restart_seq:
+            return False
         if row["kind"] == "USER_CONFIRMATION":
             if step_id is not None and row["step_revision"] != expected_revision:
                 return False
@@ -501,6 +615,14 @@ class CurrentEvidenceValidator:
                 return False
         if self.store._reference_status(row) == "BROKEN_REFERENCE":
             return False
+        if row["kind"] not in ("COMMAND_RESULT", "USER_CONFIRMATION"):
+            try:
+                current_producer = _producer_kind(row["kind"], row["tool_name"],
+                                                  row["command_sha256"])
+            except (errors.InvalidRequest, errors.FingerprintUnavailable):
+                return False
+            if row["producer_config_sha256"] != current_producer:
+                return False
         return self._source_valid(row, project_id)
 
     def _match(self, requirement: dict[str, Any], row: dict[str, Any],
@@ -551,22 +673,35 @@ class CurrentEvidenceValidator:
 
         task, step = request.task, request.step
         task_id, step_id = task["task_id"], step["step_id"] if step else None
-        current = fingerprint.capture()
+        try:
+            current = fingerprint.capture()
+        except errors.FingerprintUnavailable as exc:
+            raise errors.MissingEvidence("current workspace fingerprint is unavailable") from exc
         if not current["complete"]:
             raise errors.MissingEvidence("current workspace fingerprint is partial or unknown")
-        restart_seq = 0
-        if step_id is not None:
-            row = self.conn.execute(
-                "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE task_id=? "
-                "AND event_type='step.transitioned' "
-                "AND json_extract(payload_json,'$.step_id')=? "
-                "AND json_extract(payload_json,'$.to')='IN_PROGRESS'",
-                (task_id, step_id),
-            ).fetchone()
-            restart_seq = int(row["seq"])
+        def cycle_cutoff(row: dict[str, Any]) -> int:
+            owner_step = step_id or row["step_id"]
+            if owner_step is not None:
+                return int(self.conn.execute(
+                    "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE task_id=? "
+                    "AND json_extract(payload_json,'$.step_id')=? "
+                    "AND (event_type='step.criteria_updated' OR "
+                    "(event_type='step.transitioned' AND "
+                    "json_extract(payload_json,'$.to')='IN_PROGRESS'))",
+                    (task_id, owner_step),
+                ).fetchone()["seq"])
+            # Task-scoped Evidence cannot predate a changed Task criterion or a
+            # later Step execution cycle. Step Evidence uses its own cycle.
+            return int(self.conn.execute(
+                "SELECT COALESCE(MAX(seq),0) AS seq FROM events WHERE task_id=? AND "
+                "(event_type='task.criteria_updated' OR (event_type='step.transitioned' "
+                "AND json_extract(payload_json,'$.to')='IN_PROGRESS'))",
+                (task_id,),
+            ).fetchone()["seq"])
         candidates = [row for row in self._rows(task_id, step_id)
                       if self._fresh(row, current, task["project_id"],
-                                     request.expected_revision, step_id, restart_seq)]
+                                     request.expected_revision, task["revision"],
+                                     step_id, cycle_cutoff(row))]
         used: set[str] = set()
 
         def satisfy(criteria: dict[str, Any], *, rule_id: str | None = None,

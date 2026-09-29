@@ -9,6 +9,7 @@ partial; two partial snapshots can never compare SAME.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import stat
 import subprocess
@@ -20,6 +21,9 @@ from .canonical import body_hash
 
 MAX_FILES = 20_000
 MAX_BYTES = 1024 * 1024 * 1024
+ALGORITHM = "jasmine-workspace-sha256-v1"
+GIT_COVERAGE = "tracked-plus-nonignored-untracked-and-project-hook-binding"
+PLAIN_COVERAGE = "regular-files-except-root-runtime-and-history"
 EXCLUDED_DIRS = frozenset({".git", ".codex", ".jasmine", "evidence", "artifacts", "_archive"})
 EXCLUDED_NAMES = frozenset({"auth.json", "capture-token", "core.db"})
 
@@ -27,7 +31,11 @@ EXCLUDED_NAMES = frozenset({"auth.json", "capture-token", "core.db"})
 def _relevant(relative: str) -> bool:
     parts = Path(relative).parts
     name = parts[-1] if parts else ""
-    return (bool(parts) and not any(part in EXCLUDED_DIRS for part in parts[:-1])
+    if parts == (".codex", "hooks.json"):
+        return True
+    # Runtime and historical directories are excluded only at the configured
+    # root; a source file under src/evidence remains part of the fingerprint.
+    return (bool(parts) and (len(parts) == 1 or parts[0] not in EXCLUDED_DIRS)
             and name not in EXCLUDED_NAMES and not name.endswith((".sqlite", ".db", "-wal", "-shm")))
 
 
@@ -54,22 +62,72 @@ def configured_root() -> Path:
     return resolved
 
 
-def _hash_file(path: Path) -> tuple[str, int]:
+def _hash_file(path: Path, remaining_bytes: int) -> tuple[str, int]:
     digest = hashlib.sha256()
     total = 0
     with path.open("rb") as stream:
         while chunk := stream.read(1024 * 1024):
+            if total + len(chunk) > remaining_bytes:
+                raise ValueError("byte limit")
             digest.update(chunk)
             total += len(chunk)
     return digest.hexdigest(), total
+
+
+def hash_workspace_file(root: Path, relative: str, remaining_bytes: int = MAX_BYTES) -> tuple[str, int]:
+    """Open each path component with O_NOFOLLOW; never hash a symlink target.
+
+    Descriptor-relative opens also prevent a parent-directory symlink swap
+    between a pathname check and the file read.
+    """
+    parts = Path(relative).parts
+    if not parts or any(part in (".", "..", "") for part in parts) or Path(relative).is_absolute():
+        raise ValueError("invalid workspace-relative path")
+    flags = os.O_RDONLY | os.O_NOFOLLOW
+    directory = os.open(root, flags | os.O_DIRECTORY)
+    try:
+        for part in parts[:-1]:
+            next_directory = os.open(part, flags | os.O_DIRECTORY, dir_fd=directory)
+            os.close(directory)
+            directory = next_directory
+        file_descriptor = os.open(parts[-1], flags, dir_fd=directory)
+        try:
+            metadata = os.fstat(file_descriptor)
+            if not stat.S_ISREG(metadata.st_mode):
+                raise ValueError("non-regular file")
+            if metadata.st_size > remaining_bytes:
+                raise ValueError("byte limit")
+            digest = hashlib.sha256()
+            total = 0
+            while chunk := os.read(file_descriptor, min(1024 * 1024, remaining_bytes - total + 1)):
+                if total + len(chunk) > remaining_bytes:
+                    raise ValueError("byte limit")
+                digest.update(chunk)
+                total += len(chunk)
+            return digest.hexdigest(), total
+        finally:
+            os.close(file_descriptor)
+    finally:
+        os.close(directory)
 
 
 def capture(root: Path | None = None) -> dict[str, Any]:
     root = configured_root() if root is None else root.resolve(strict=True)
     if not root.is_dir():
         raise errors.FingerprintUnavailable("workspace root is not a directory")
+    git_marker = (root / ".git").exists() or (root / ".git").is_file()
     top = _git(root, "rev-parse", "--show-toplevel")
     is_git = top is not None and Path(os.fsdecode(top.strip())).resolve() == root
+    if git_marker and not is_git:
+        # A broken or unavailable Git command cannot turn ignored credentials
+        # into plain-directory candidates.
+        return {"root": str(root), "git_head": None, "is_git": True,
+                "algorithm": ALGORITHM, "coverage": GIT_COVERAGE,
+                "extra_paths": [],
+                "dirty": None, "changed_paths": [], "selected_hashes": {},
+                "manifest_sha256": body_hash({}), "complete": False,
+                "partial_reasons": ["git metadata unavailable"], "file_count": 0,
+                "captured_at": clock.now_rfc3339()}
     git_head = os.fsdecode((_git(root, "rev-parse", "HEAD") or b"").strip()) if is_git else None
     candidates: list[str] = []
     partial_reasons: list[str] = []
@@ -82,8 +140,10 @@ def capture(root: Path | None = None) -> dict[str, Any]:
                                     if item and _relevant(os.fsdecode(item))))
     else:
         try:
-            for directory, dirs, files in os.walk(root, followlinks=False):
-                dirs[:] = sorted(d for d in dirs if d not in EXCLUDED_DIRS)
+            def onerror(_error: OSError) -> None:
+                partial_reasons.append("directory listing failed")
+            for directory, dirs, files in os.walk(root, followlinks=False, onerror=onerror):
+                dirs[:] = sorted(d for d in dirs if directory != str(root) or d not in EXCLUDED_DIRS)
                 for name in sorted(files):
                     relative = (Path(directory) / name).relative_to(root).as_posix()
                     if _relevant(relative):
@@ -93,6 +153,24 @@ def capture(root: Path | None = None) -> dict[str, Any]:
                         partial_reasons.append("symlink directory")
         except OSError:
             partial_reasons.append("directory listing failed")
+    # This exact project-local binding affects whether the hook gate exists.
+    # Include it even when .codex is ignored, without scanning private state.
+    hook_binding = root / ".codex" / "hooks.json"
+    if hook_binding.exists() or hook_binding.is_symlink():
+        candidates = sorted(set(candidates) | {".codex/hooks.json"})
+    extra_raw = os.environ.get("JASMINE_CORE_FINGERPRINT_EXTRA_PATHS", "[]")
+    try:
+        extra = json.loads(extra_raw)
+        if not isinstance(extra, list) or not all(isinstance(item, str) for item in extra):
+            raise ValueError("extra paths must be a JSON array of strings")
+        for relative in extra:
+            parts = Path(relative).parts
+            if not parts or Path(relative).is_absolute() or any(part in (".", "..") for part in parts):
+                raise ValueError("extra path must be workspace-relative")
+        candidates = sorted(set(candidates) | set(extra))
+    except (ValueError, TypeError):
+        extra = []
+        partial_reasons.append("invalid extra path configuration")
     if len(candidates) > MAX_FILES:
         partial_reasons.append("file count limit")
         candidates = candidates[:MAX_FILES]
@@ -101,17 +179,16 @@ def capture(root: Path | None = None) -> dict[str, Any]:
     for relative in candidates:
         candidate = root / relative
         try:
-            mode = candidate.lstat().st_mode
-            if not stat.S_ISREG(mode):
-                partial_reasons.append("non-regular file")
-                continue
-            digest, length = _hash_file(candidate)
+            digest, length = hash_workspace_file(root, relative, MAX_BYTES - total_bytes)
             total_bytes += length
             if total_bytes > MAX_BYTES:
                 partial_reasons.append("byte limit")
                 break
             hashes[relative] = digest
-        except (OSError, ValueError):
+        except ValueError:
+            partial_reasons.append("byte limit")
+            break
+        except OSError:
             partial_reasons.append("unreadable file")
     if is_git:
         changed = _git(root, "status", "--porcelain", "-z", "--untracked-files=all")
@@ -126,6 +203,8 @@ def capture(root: Path | None = None) -> dict[str, Any]:
     else:
         changed_paths = []
     return {"root": str(root), "git_head": git_head or None, "is_git": is_git,
+            "algorithm": ALGORITHM, "coverage": GIT_COVERAGE if is_git else PLAIN_COVERAGE,
+            "extra_paths": sorted(extra),
             "dirty": bool(changed_paths) if is_git else None,
             "changed_paths": changed_paths, "selected_hashes": hashes,
             "manifest_sha256": body_hash(hashes), "complete": not partial_reasons,
@@ -135,6 +214,10 @@ def capture(root: Path | None = None) -> dict[str, Any]:
 
 def compare(left: dict[str, Any], right: dict[str, Any]) -> str:
     if not left.get("complete") or not right.get("complete"):
+        return "UNKNOWN"
+    if (left.get("algorithm") != ALGORITHM or right.get("algorithm") != ALGORITHM or
+            left.get("coverage") != right.get("coverage") or
+            left.get("extra_paths") != right.get("extra_paths")):
         return "UNKNOWN"
     if left.get("root") != right.get("root") or left.get("is_git") != right.get("is_git"):
         return "MISMATCH"

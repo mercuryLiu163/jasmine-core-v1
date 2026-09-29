@@ -47,7 +47,7 @@ P1-01 的首个评审点是提交短 ADR/API 修订和前向迁移设计；以�
 | P1-T09 | 权限不足、跨 project 引用、非法证据与凭据形状输入负例；Truth 不变，审计与 Validation 记录不泄露凭据，Event 原文遵循 P0 ADR 0004。普通无敏感测试原话可完整保留。 | 错误码、审计、前后查询、若有 redaction 则记位置。 |
 | **P1-T10 真实对话 Gate** | 在获授权的真实 Codex 对话中，先经结构化 API 配置 task-scoped HARD DENY 和 Step 验收要求；Agent 尝试一个被禁工具动作，PreToolUse 实际阻断，工具无执行结果；再做一个允许的真实工具动作，PostToolUse 产生 Evidence；验证只有 EXECUTED、证据齐备后 VERIFIED、条件齐备且有明确验收后 ACCEPTED。 | 真实对话、Rule/State before/after、真实 PreToolUse 决策与工具未执行证明、PostToolUse 原始结果、Evidence/fingerprint、Event/审计链、commit 与设备/adapter 能力。 |
 
-T01–T09 可用自动化和临时测试库，T10 必须是真实用户–Agent–工具交互。合成 hook payload、模拟请求或单元测试只能证明组件行为，不能替代 T10。Codex PreToolUse 的 deny 能力必须在实际所用工具类型上实测；PostToolUse 无法撤销已发生的副作用。项目 hook 的信任由用户在 Codex 中审查并完成；在此前可完成代码、独立 Review、模拟验证与具体安装候选。若实际 hook 未被信任、被测工具不支持 PreTool 阻断、真实入口不可用，或用户尚未完成 folder trust，T10 标 `BLOCKED`，记具体原因和已完成部分；不得自动确认用户 trust、换用未授权 hook、改全局 hook 配置，或把 `ADVISORY` 写成 `ENFORCED`。已运行却违反断言的是 `FAIL`，不能改标 `BLOCKED`。
+T01–T09 可用自动化和临时测试库。T06 的组件部分可用明确标记为 `component_simulation` 的模拟输入检查解析、幂等和失败处理；真实 PostToolUse 来源必须由 T10 Gate 另行验收，组件通过不能替代这一证据。T10 必须是真实用户–Agent–工具交互。合成 hook payload、模拟请求或单元测试只能证明组件行为，不能替代 T10。Codex PreToolUse 的 deny 能力必须在实际所用工具类型上实测；PostToolUse 无法撤销已发生的副作用。项目 hook 的信任由用户在 Codex 中审查并完成；在此前可完成代码、独立 Review、模拟验证与具体安装候选。若实际 hook 未被信任、被测工具不支持 PreTool 阻断、真实入口不可用，或用户尚未完成 folder trust，T10 标 `BLOCKED`，记具体原因和已完成部分；不得自动确认用户 trust、换用未授权 hook、改全局 hook 配置，或把 `ADVISORY` 写成 `ENFORCED`。已运行却违反断言的是 `FAIL`，不能改标 `BLOCKED`。
 
 ## 5. Validation Run 与阶段判定
 

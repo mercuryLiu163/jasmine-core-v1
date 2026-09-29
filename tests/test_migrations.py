@@ -34,6 +34,9 @@ EXPECTED_TABLES = {
     "rule_versions",
     "rule_changes",
     "steps",
+    "evidence",
+    "workspace_fingerprints",
+    "rule_verification_requirements",
 }
 
 
@@ -61,7 +64,7 @@ class MigrationFromEmptyDatabase(DbTestCase):
 
     def test_migrate_creates_the_full_baseline_schema(self) -> None:
         applied = migrate(self.conn)
-        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority", "m0004_task_step_state"])
+        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority", "m0004_task_step_state", "m0005_evidence_fingerprint"])
         self.assertEqual(_tables(self.conn), EXPECTED_TABLES)
         self.assertEqual(current_version(self.conn), expected_version())
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
@@ -86,7 +89,7 @@ class MigrationFromEmptyDatabase(DbTestCase):
     def test_migration_record_carries_a_checksum_and_timestamp(self) -> None:
         migrate(self.conn)
         recorded = applied_migrations(self.conn)
-        self.assertEqual([row["version"] for row in recorded], [1, 2, 3, 4])
+        self.assertEqual([row["version"] for row in recorded], [1, 2, 3, 4, 5])
         for row in recorded:
             self.assertEqual(len(row["checksum"]), 64)
             self.assertTrue(row["applied_at"].endswith("Z"), row["applied_at"])

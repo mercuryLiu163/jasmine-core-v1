@@ -38,6 +38,7 @@ STATEMENTS = (
         tool_use_id TEXT,
         tool_name TEXT,
         command_sha256 TEXT,
+        producer_config_sha256 TEXT,
         confirmed_rule_id TEXT REFERENCES rules(rule_id),
         confirmed_rule_version INTEGER,
         task_revision INTEGER NOT NULL CHECK(task_revision>=1),

@@ -138,3 +138,7 @@ class InvalidStateTransition(CoreError):
 class MissingEvidence(CoreError):
     status = 422
     code = "missing_evidence"
+
+
+class FingerprintUnavailable(MissingEvidence):
+    code = "fingerprint_unavailable"
