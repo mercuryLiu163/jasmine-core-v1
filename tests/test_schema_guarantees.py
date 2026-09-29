@@ -23,7 +23,7 @@ _EVENT_INSERT = (
     "INSERT INTO events (event_id, seq, schema_version, event_type, source_system, source_event_id,"
     " occurred_at, recorded_at, actor_id, actor_kind, host_id, session_id, project_id, task_id,"
     " payload_json, body_sha256)"
-    " VALUES (?, 1, 1, 'user.prompt', 'test', NULL, '2026-09-29T00:00:00.000000Z',"
+    " VALUES (?, 1, 1, 'session.started', 'test', NULL, '2026-09-29T00:00:00.000000Z',"
     " '2026-09-29T00:00:00.000000Z', ?, 'human', ?, NULL, NULL, NULL, ?, ?)"
 )
 

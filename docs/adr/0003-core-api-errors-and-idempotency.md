@@ -44,7 +44,17 @@
 - Event：`event_type`、`payload`、`actor_id`、`host_id`、`source_system`、`source_event_id`、`session_id`、`project_id`、`task_id`、`occurred_at`
 - 对象创建：以上 Event 字段 + `name`/`title`/`description` 等对象字段
 
-**不参与哈希：** `event_id` 自身、`recorded_at`（服务端生成）、`request_id`、鉴权主体标识（同 `event_id` 重放允许由不同 key 发起，审计仍逐次记录）。
+**不参与哈希：** `event_id` 自身、`recorded_at`（服务端生成）、`request_id`，以及**创建类请求中由服务端分配的 `object_id`**（重放时以已存 Event 中的 `object_id` 为准）。
+
+**`actor_id` / `host_id` 参与哈希。** 这与鉴权身份是两件事：token 的持有者可以从不同的 key 重放同一个 `event_id`（key 本身不在哈希里），但如果请求正文声明的 `actor_id` 或 `host_id` 与已存 Event 不同，那是**不同的写入内容**，返回 `409 event_id_conflict`，而不是重放。
+
+**`occurred_at` 仅在客户端显式声明时参与哈希。** 对象创建未显式声明时由服务端补录受理时刻，若纳入哈希，任何重试都会被判为"内容不同"而永远无法命中重放。时间戳先归一化为 UTC 再计算哈希，因此 `Z`、`+00:00`、等价偏移量与不同小数精度表示同一时刻时都能识别为重放。
+
+### 1.3.1 错误码补充
+
+- `403 actor_mismatch`：正文声明的 `actor_id` 与 token 绑定的 actor 不一致。
+- `404 host_not_found` / `404 actor_not_found`：请求引用的 host 或 actor 尚未注册。Core 不会猜测或自动注册。
+- `400 invalid_request`：payload 含 `NaN` / `Infinity`（Python 的 JSON 扩展，`json_valid` 检查会拒绝），以保证错误是 400 而不是 COMMIT 时的原始 `IntegrityError`。
 
 **`source_event_id` 幂等：** `events` 上有唯一索引 `(source_system, source_event_id)`（`source_event_id` 非空时）。同一来源系统重复上报同一 `source_event_id` → `409 source_event_duplicate`，无论 `event_id` 是否相同。这防止采集端重试把一条用户消息写成两条 Event。
 
@@ -64,6 +74,7 @@
 | 401 | `unauthenticated` | 缺失/非法/吊销的 `Authorization: Bearer` |
 | 403 | `forbidden_scope` | scope 不足 |
 | 404 | `project_not_found` / `task_not_found` / `session_not_found` / `event_not_found` | 引用或查询目标不存在 |
+| 404 | `host_not_found` / `actor_not_found` | 请求引用的 host 或 actor 未注册 |
 | 409 | `event_id_conflict` | 同 `event_id` 不同内容 |
 | 409 | `source_event_duplicate` | 同 `(source_system, source_event_id)` 重复 |
 | 409 | `revision_conflict` | `expected_revision` 不匹配（P1 起生效） |

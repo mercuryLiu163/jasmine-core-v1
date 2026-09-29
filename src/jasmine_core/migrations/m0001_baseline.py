@@ -164,4 +164,33 @@ STATEMENTS: tuple[str, ...] = (
     """
     CREATE INDEX ix_sessions_project ON sessions(project_id, started_at)
     """,
+    # `source_event_id UNIQUE` is declared per table, so on its own it only stops
+    # two objects *of the same kind* from sharing an Event. These triggers close
+    # the cross-kind case: each projection may only reference the Event type that
+    # creates it, and an Event has exactly one type, so at most one object of any
+    # kind can ever claim a given Event.
+    """
+    CREATE TRIGGER trg_projects_source_event_kind
+    BEFORE INSERT ON projects
+    WHEN (SELECT event_type FROM events WHERE event_id = NEW.source_event_id) IS NOT 'project.created'
+    BEGIN
+        SELECT RAISE(ABORT, 'a project must reference a project.created event');
+    END
+    """,
+    """
+    CREATE TRIGGER trg_tasks_source_event_kind
+    BEFORE INSERT ON tasks
+    WHEN (SELECT event_type FROM events WHERE event_id = NEW.source_event_id) IS NOT 'task.created'
+    BEGIN
+        SELECT RAISE(ABORT, 'a task must reference a task.created event');
+    END
+    """,
+    """
+    CREATE TRIGGER trg_sessions_source_event_kind
+    BEFORE INSERT ON sessions
+    WHEN (SELECT event_type FROM events WHERE event_id = NEW.source_event_id) IS NOT 'session.started'
+    BEGIN
+        SELECT RAISE(ABORT, 'a session must reference a session.started event');
+    END
+    """,
 )
