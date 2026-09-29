@@ -8,6 +8,7 @@ exist.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -417,6 +418,13 @@ class InvocationTrace(DbTestCase):
         self.run_entry(self.payload)
         line = self.trace_lines()[0]
         self.assertEqual(len(line["source_turn_sha256"]), 32)
+        self.assertEqual(line["source_session_sha256"],
+                         hashlib.sha256(self.payload["session_id"].encode()).hexdigest())
+        self.assertEqual(line["turn_sha256"],
+                         hashlib.sha256(self.payload["turn_id"].encode()).hexdigest())
+        self.assertEqual(line["prompt_sha256"],
+                         hashlib.sha256(self.payload["prompt"].encode()).hexdigest())
+        self.assertEqual(line["core_url"], "http://127.0.0.1:1")
         # Same turn, same digest; a different turn, a different one.
         self.run_entry(codex_payload(session_id="trace-session", turn_id="trace-2"))
         self.assertNotEqual(self.trace_lines()[0]["source_turn_sha256"],

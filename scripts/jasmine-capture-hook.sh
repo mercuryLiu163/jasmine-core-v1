@@ -2,8 +2,8 @@
 # The command Codex runs for a Jasmine Core UserPromptSubmit hook.
 #
 # It exists so that a hooks.json entry can contain nothing but paths: no token, no
-# interpreter path that might not exist on another machine, no PYTHONPATH. Those
-# are resolved here, at run time, from this script's own location.
+# token or PYTHONPATH. The installer pins a validated interpreter path and
+# this wrapper resolves the module from its own checkout at run time.
 #
 # stdin  : the Codex hook payload (JSON)
 # stdout : the Codex context object; P0 injects none, so it is always {}
@@ -14,6 +14,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 
 HOST_ID=""
+PYTHON=""
 DB=""
 STATE_DIR=""
 TIMEOUT="${JASMINE_CORE_TIMEOUT:-5}"
@@ -21,6 +22,7 @@ TIMEOUT="${JASMINE_CORE_TIMEOUT:-5}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --host) HOST_ID="$2"; shift 2 ;;
+    --python) PYTHON="$2"; shift 2 ;;
     --db) DB="$2"; shift 2 ;;
     --state-dir) STATE_DIR="$2"; shift 2 ;;
     --timeout) TIMEOUT="$2"; shift 2 ;;
@@ -41,7 +43,12 @@ usable_python() {
   "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null
 }
 
-PYTHON="${JASMINE_PYTHON:-}"
+if [ -n "$PYTHON" ] && ! usable_python "$PYTHON"; then
+  printf '{}\n'
+  echo '{"captured": false, "reason": "configured --python is unavailable or below 3.11"}' >&2
+  exit 0
+fi
+PYTHON="${PYTHON:-${JASMINE_PYTHON:-}}"
 if ! usable_python "$PYTHON"; then
   PYTHON=""
   for candidate in /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 \
@@ -65,9 +72,6 @@ fi
 # and the Gate relies on that trace to tell "Codex never ran the entry" from
 # "the entry ran and could not capture".
 TOKEN_FILE="$STATE_DIR/capture-token"
-if [ ! -r "$TOKEN_FILE" ]; then
-  TOKEN_FILE="$(ls "$STATE_DIR"/*.token 2>/dev/null | head -1)"
-fi
 if [ -z "$TOKEN_FILE" ] || [ ! -r "$TOKEN_FILE" ]; then
   unset JASMINE_CORE_TOKEN
 else

@@ -912,7 +912,7 @@ def case_t06(core: LiveCore) -> Case:
     )
 
 
-def case_t07(work: Path) -> Case:
+def case_t07(work: Path, candidate_commit: str, checkout_clean: bool) -> Case:
     """The real-conversation Gate, driven by scripts/p0-t07-real-conversation.sh."""
     marker = work / T07_MARKER
     if not marker.exists():
@@ -924,13 +924,68 @@ def case_t07(work: Path) -> Case:
             "trusted_hash in ~/.codex/config.toml before it will run; that trust decision is "
             "reserved for the operator and was not made here, so a synthetic payload was not "
             "substituted for a real one.",
-            [f"python3 scripts/p0-t07-real-conversation.sh --out {work} "
-             f"--db {work}/t07.db"],
+            [f"scripts/p0-t07-real-conversation.sh --out {work} "
+             f"--db <existing-capture-core.db> --state-dir <capture-state>",
+             f"python3 scripts/p0-acceptance.py --work {work} --out <bundle> "
+             "--db <fresh-separate-scratch.db>"],
         )
-    result = json.loads(marker.read_text(encoding="utf-8"))
+    try:
+        result = json.loads(marker.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return blocked("P0-T07", "Real Codex UserPromptSubmit capture and read-back",
+                       f"Gate result marker is unreadable: {exc}", [str(marker)])
+    if not isinstance(result, dict) or result.get("gate") != "P0-T07":
+        return blocked("P0-T07", "Real Codex UserPromptSubmit capture and read-back",
+                       "Gate result marker has an invalid schema", [str(marker)])
+    if (result.get("code_commit") != candidate_commit or result.get("code_dirty") is not False
+            or not checkout_clean):
+        return blocked("P0-T07", "Real Codex UserPromptSubmit capture and read-back",
+                       "Gate result is not bound to this clean candidate commit", [str(marker)])
+    if result.get("schema_version") != SCHEMA_VERSION or not isinstance(result.get("runtime"), dict):
+        return blocked("P0-T07", "Real Codex UserPromptSubmit capture and read-back",
+                       "Gate result has missing or mismatched schema/runtime provenance", [str(marker)])
+    outcome = result.get("outcome")
+    if outcome not in ("PASS", "FAIL", "BLOCKED"):
+        return blocked("P0-T07", "Real Codex UserPromptSubmit capture and read-back",
+                       "Gate result has no valid outcome", [str(marker)])
+    if outcome == "PASS":
+        before = result.get("event_before_restart")
+        after = result.get("readback_after_restart")
+        traces = result.get("matching_invocation_trace")
+        payload = before.get("payload") if isinstance(before, dict) else None
+        if (not isinstance(before, dict) or before != after or
+                not isinstance(payload, dict) or
+                not isinstance(traces, list) or len(traces) != 1 or
+                not isinstance(traces[0], dict) or not traces[0].get("captured") or
+                traces[0].get("replayed") or
+                traces[0].get("event_id") != before.get("event_id") or
+                traces[0].get("source_session_sha256") !=
+                    hashlib.sha256(str(result.get("source_session_id", "")).encode()).hexdigest() or
+                traces[0].get("prompt_sha256") !=
+                    hashlib.sha256(str(result.get("prompt", "")).encode()).hexdigest() or
+                not result.get("source_session_id") or
+                payload.get("source_session_id") != result.get("source_session_id") or
+                before.get("actor_id") != result.get("actor_id") or
+                before.get("host_id") != result.get("host_id") or
+                payload.get("text") != result.get("prompt") or
+                not isinstance(result.get("baseline_seq"), int) or
+                not isinstance(before.get("seq"), int) or
+                before["seq"] <= result["baseline_seq"] or
+                not result.get("core_first_pid") or not result.get("core_second_pid") or
+                result["core_first_pid"] == result["core_second_pid"] or
+                result.get("blocked") or not result.get("captured") or result.get("problems")):
+            return blocked("P0-T07", "Real Codex UserPromptSubmit capture and read-back",
+                           "Gate PASS marker lacks valid same-turn event and restart evidence",
+                           [str(marker)])
+    elif outcome == "FAIL" and not result.get("problems"):
+        return blocked("P0-T07", "Real Codex UserPromptSubmit capture and read-back",
+                       "Gate FAIL marker lacks failure details", [str(marker)])
+    elif outcome == "BLOCKED" and not result.get("reason"):
+        return blocked("P0-T07", "Real Codex UserPromptSubmit capture and read-back",
+                       "Gate BLOCKED marker lacks a reason", [str(marker)])
     # An environment condition and a product failure are different claims and
     # must not collapse into one verdict.
-    if result.get("blocked"):
+    if outcome == "BLOCKED":
         return Case(
             case_id="P0-T07",
             name="Real Codex conversation captured as a Raw Event and read back after a restart",
@@ -951,7 +1006,7 @@ def case_t07(work: Path) -> Case:
     return Case(
         case_id="P0-T07",
         name="Real Codex conversation captured as a Raw Event and read back after a restart",
-        verdict="FAIL" if problems else ("PASS" if result.get("captured") else "BLOCKED"),
+        verdict=outcome,
         user_raw=result.get("prompt"),
         agent_response=result.get("agent_response", NOT_IMPLEMENTED),
         tools=result.get("tools", []),
@@ -1056,7 +1111,9 @@ def main() -> int:
     for suffix in ("", "-wal", "-shm"):
         path = Path(str(db_path) + suffix)
         if path.exists():
-            path.unlink()
+            print(f"BLOCKED: acceptance scratch database path already exists: {path}; "
+                  "choose a fresh --db path", file=sys.stderr)
+            return 2
 
     core = LiveCore(db_path, work)
     previous: dict = {}
@@ -1116,8 +1173,12 @@ def main() -> int:
     finally:
         core.stop()
 
+    checkout_status = subprocess.run(
+        ["git", "-C", str(ROOT), "status", "--porcelain"],
+        capture_output=True, text=True, timeout=10)
+    checkout_clean = checkout_status.returncode == 0 and not checkout_status.stdout.strip()
     run_case(recorder, "P0-T07", "Real Codex UserPromptSubmit capture and read-back",
-             case_t07, work)
+             case_t07, work, recorder.run.commit, checkout_clean)
     return _finish(recorder)
 
 

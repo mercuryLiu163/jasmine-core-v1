@@ -1,268 +1,210 @@
 #!/usr/bin/env bash
-# Register the Jasmine Core capture entry with Codex.
-#
-# Scope: PROJECT-LOCAL by default. The entry is written to
-# <repo>/.codex/hooks.json, never to ~/.codex/hooks.json, because
-# UserPromptSubmit has no tool to match on -- Codex ignores `matcher` for that
-# event -- so a globally installed entry runs on every prompt in every project
-# on the machine. Scoping comes from where the file lives, not from a matcher.
-# Your existing global ~/.codex/hooks.json is read to show what is there and is
-# never modified.
-#
-# This script will NOT:
-#   * write or edit ~/.codex/config.toml
-#   * compute, guess or inject a trusted_hash
-#   * put the API token in any hooks file
-# Trusting the entry is a decision about "may this command run automatically on
-# every prompt I type in this repository", and it is yours to make in the Codex
-# UI. Until you do, P0-T07 is BLOCKED -- which is the correct, honest verdict,
-# not a workaround.
-#
-# Usage
-#   scripts/p0-codex-hook-install.sh [options]
-#
-#     --dry-run          validate and print the change; write nothing
-#     --global           write ~/.codex/hooks.json instead (asks first)
-#     --hooks-json PATH  target a specific file
-#     --python PATH      interpreter to use (default: auto-detected 3.11+)
-#     --db PATH          core.db (default: $JASMINE_CORE_DB or the state dir)
-#     --force            rewrite the entry even if an identical one is present
-#     -h, --help         this text
-#
-# Everything is validated before anything is written, the file is backed up, and
-# re-running is a no-op.
+# Install the P0 UserPromptSubmit capture hook in this checkout only.
+# Trust remains an operator action in Codex; this script never edits config.toml.
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE_DIR="${JASMINE_CORE_STATE_DIR:-$HOME/.local/share/jasmine-core}"
-DB="${JASMINE_CORE_DB:-$STATE_DIR/core.db}"
+DB="${JASMINE_CORE_DB:-}"
 PYTHON="${JASMINE_PYTHON:-}"
 HOOKS_JSON="$ROOT/.codex/hooks.json"
-GLOBAL_HOOKS="$HOME/.codex/hooks.json"
 DRY_RUN=0
 FORCE=0
-GLOBAL=0
 
+fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
+usage() {
+  cat <<'EOF'
+Usage: p0-codex-hook-install.sh [--dry-run] [--force] [--hooks-json PATH]
+       [--python PATH] [--db PATH] [--state-dir DIR]
+  --dry-run          validate and report; write nothing
+  --force            replace a changed Jasmine capture entry
+  --hooks-json PATH  alternate file inside this checkout's .codex directory
+  --global           unsupported: P0 capture is project-scoped
+EOF
+}
 while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) DRY_RUN=1; shift ;;
     --force) FORCE=1; shift ;;
-    --global) GLOBAL=1; shift ;;
-    --hooks-json) HOOKS_JSON="$2"; shift 2 ;;
-    --python) PYTHON="$2"; shift 2 ;;
-    --db) DB="$2"; shift 2 ;;
-    --state-dir) STATE_DIR="$2"; shift 2 ;;
-    -h|--help) sed -n '2,36p' "$0"; exit 0 ;;
-    *) echo "unknown argument: $1" >&2; exit 64 ;;
+    --global) fail "--global is unsupported: P0 capture must be project-local" ;;
+    --hooks-json|--python|--db|--state-dir)
+      [ $# -ge 2 ] || fail "$1 requires a value"
+      case "$1" in
+        --hooks-json) HOOKS_JSON="$2" ;;
+        --python) PYTHON="$2" ;;
+        --db) DB="$2" ;;
+        --state-dir) STATE_DIR="$2" ;;
+      esac
+      shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1" ;;
   esac
 done
+DB="${DB:-$STATE_DIR/core.db}"
+export PYTHONDONTWRITEBYTECODE=1
 
-say()  { printf '%s\n' "$*"; }
-step() { printf '\n== %s\n' "$*"; }
-fail() { printf 'error: %s\n' "$*" >&2; exit 1; }
+# A custom destination may be useful for local validation, but cannot expand
+# the hook's scope beyond this checkout. Do not follow target symlinks.
+[ "$HOOKS_JSON" != "$HOME/.codex/hooks.json" ] || fail "global hooks.json is outside P0 project scope"
+[ ! -L "$ROOT/.codex" ] || fail "refusing a symlinked project .codex directory: $ROOT/.codex"
+[ ! -L "$HOOKS_JSON" ] || fail "refusing a symlink target: $HOOKS_JSON"
+[ -x "$ROOT/scripts/jasmine-capture-hook.sh" ] || fail "capture wrapper is missing or not executable"
 
-# --- 1. interpreter ------------------------------------------------------------
-# Existence is not enough and a wrong one fails confusingly. The system python3
-# on macOS is 3.9, below this project's 3.11 floor, and a hook that cannot import
-# the capture module is indistinguishable from a hook that captured nothing.
-step "Checking the Python interpreter"
 if [ -z "$PYTHON" ]; then
   for candidate in /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 \
                    /opt/homebrew/bin/python3.11 /usr/local/bin/python3 python3; do
     if command -v "$candidate" >/dev/null 2>&1 &&
-       "$candidate" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)' 2>/dev/null; then
+       "$candidate" -c 'import sys; raise SystemExit(sys.version_info < (3, 11))' 2>/dev/null; then
       PYTHON="$(command -v "$candidate")"
       break
     fi
   done
 fi
-[ -n "$PYTHON" ] || fail "no Python 3.11+ interpreter found; pass --python /path/to/python3.11+"
-PYTHON="$("$PYTHON" -c 'import sys; print(sys.executable)')"
-say "   interpreter : $PYTHON ($("$PYTHON" -V 2>&1))"
-
-# --- 2. the capture module must import from this checkout ---------------------
-step "Checking the capture entry imports from this checkout"
-HOOK_SCRIPT="$ROOT/scripts/jasmine-capture-hook.sh"
-[ -x "$HOOK_SCRIPT" ] || chmod +x "$HOOK_SCRIPT" 2>/dev/null
-[ -r "$HOOK_SCRIPT" ] || fail "missing $HOOK_SCRIPT"
+[ -n "$PYTHON" ] || fail "no Python 3.11+ interpreter found; pass --python PATH"
+PYTHON="$("$PYTHON" -c 'import sys; assert sys.version_info >= (3, 11); print(sys.executable)' 2>/dev/null)" \
+  || fail "--python must be a working Python 3.11+ interpreter"
 PYTHONPATH="$ROOT/src" "$PYTHON" -c 'import jasmine_core.capture.codex_user_prompt_submit as m; assert m.EVENT_TYPE' \
-  || fail "jasmine_core does not import from $ROOT/src"
-say "   module      : jasmine_core.capture.codex_user_prompt_submit (from $ROOT/src)"
+  || fail "capture module does not import from $ROOT/src"
+[ -f "$DB" ] || fail "no core.db at $DB; run jasmine-core bootstrap first"
+[ -s "$STATE_DIR/capture-token" ] && [ -r "$STATE_DIR/capture-token" ] \
+  || fail "no capture token at $STATE_DIR/capture-token; run jasmine-core bootstrap first"
 
-# --- 3. the database and its host ---------------------------------------------
-step "Checking the Core database"
-[ -f "$DB" ] || fail "no core.db at $DB; run: JASMINE_CORE_DB=$DB PYTHONPATH=$ROOT/src $PYTHON -m jasmine_core.cli bootstrap"
-HOST_ID="$(PYTHONPATH="$ROOT/src" JASMINE_CORE_DB="$DB" "$PYTHON" -m jasmine_core.cli schema 2>/dev/null \
-  | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["schema_version"])' 2>/dev/null)" \
-  || fail "cannot read the schema of $DB"
-say "   database    : $DB (schema v$HOST_ID)"
-
-HOST_ID="$(PYTHONPATH="$ROOT/src" "$PYTHON" - "$DB" <<'PY'
-import sqlite3, sys
-# A plain sqlite3 connection has no row factory, so index the row positionally.
-con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
-row = con.execute("SELECT host_id FROM hosts ORDER BY first_seen_at LIMIT 1").fetchone()
-print(row[0] if row else "")
-PY
-)"
-[ -n "$HOST_ID" ] || fail "no host is registered in $DB; run jasmine-core bootstrap"
-say "   host_id     : $HOST_ID"
-
-# --- 4. the token --------------------------------------------------------------
-# The entry reads the token at run time from this 0600 file. The token is
-# therefore never written into a hooks.json, and never into this repository.
-step "Checking the capture token"
-TOKEN_FILE="$STATE_DIR/capture-token"
-if [ ! -r "$TOKEN_FILE" ]; then
-  TOKEN_FILE="$(ls "$STATE_DIR"/*.token 2>/dev/null | head -1)"
-fi
-[ -n "$TOKEN_FILE" ] && [ -r "$TOKEN_FILE" ] || fail "no capture token under $STATE_DIR; run jasmine-core bootstrap"
-[ -s "$TOKEN_FILE" ] || fail "the token file is empty: $TOKEN_FILE"
-TOKEN="$(cat "$TOKEN_FILE")"
-[ -n "$TOKEN" ] || fail "the token file is empty: $TOKEN_FILE"
-say "   token file  : $TOKEN_FILE ($(wc -c < "$TOKEN_FILE" | tr -d ' ') bytes, read at run time, never written to a hooks file)"
-
-# --- 5. what is already installed ---------------------------------------------
-step "Reporting the current hook configuration"
-if [ -f "$GLOBAL_HOOKS" ]; then
-  say "   global      : $GLOBAL_HOOKS"
-  "$PYTHON" - "$GLOBAL_HOOKS" <<'PY'
-import json, sys
+# All database inspection is read-only. In particular, dry run must never call
+# the schema CLI, whose normal connection may create journal sidecars.
+CHECK="$(PYTHONPATH="$ROOT/src" "$PYTHON" - "$DB" "$HOOKS_JSON" "$ROOT/.codex" <<'PY'
+import json, sqlite3, sys
 from pathlib import Path
-path = Path(sys.argv[1])
+from jasmine_core import SCHEMA_VERSION
+from jasmine_core.migrations import check_version, verify_checksums
+
+path, target, allowed = map(Path, sys.argv[1:])
+if allowed.is_symlink() or allowed.resolve() != allowed.parent.resolve() / allowed.name:
+    raise SystemExit('project .codex directory must resolve inside this checkout')
+wal = Path(str(path) + '-wal')
+if wal.exists() and wal.stat().st_size:
+    raise SystemExit('database has an active WAL; stop Core and checkpoint it before installing')
+if target.parent.resolve() != allowed.resolve() or target.name in ('', '.', '..'):
+    raise SystemExit('hooks target must be in this checkout .codex directory')
+if target.exists() and not target.is_file():
+    raise SystemExit('hooks target must be a regular file')
+con = sqlite3.connect(f'file:{path.resolve().as_posix()}?mode=ro&immutable=1', uri=True)
+con.row_factory = sqlite3.Row
 try:
-    config = json.loads(path.read_text(encoding="utf-8"))
-except Exception as exc:
-    print(f"                 (unreadable: {exc})"); raise SystemExit
-for event, entries in (config.get("hooks") or {}).items():
-    for index, entry in enumerate(entries or []):
-        for hook in (entry or {}).get("hooks") or []:
-            print(f"                 {event}[{index}]: {str(hook.get('command'))[:88]}")
+    version = check_version(con)
+    if version != SCHEMA_VERSION or verify_checksums(con):
+        raise SystemExit('database schema does not match this checkout')
+    row = con.execute('SELECT host_id FROM hosts ORDER BY first_seen_at LIMIT 1').fetchone()
+    if not row:
+        raise SystemExit('no registered host in database')
+    print(json.dumps({'schema_version': version, 'host_id': row[0]}))
+finally:
+    con.close()
 PY
-  say "                 ^ left untouched by this script."
-else
-  say "   global      : $GLOBAL_HOOKS (absent)"
-fi
+)" || fail "cannot validate database or hooks target"
+HOST_ID="$(printf '%s' "$CHECK" | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["host_id"])')"
+printf 'interpreter: %s\ndatabase: %s\nhost_id: %s\ntoken file: %s\n' \
+  "$PYTHON" "$DB" "$HOST_ID" "$STATE_DIR/capture-token"
 
-# --- 6. the entry ---------------------------------------------------------------
-# The command names paths only. No token, no environment secret, nothing that
-# would become a leaked secret if the hooks file were ever committed.
-#
-# Every path is single-quoted because Codex runs the command through a shell and
-# this checkout's path contains a space. An unquoted path fails at the hook, which
-# looks exactly like a hook that captured nothing.
+# The command contains only paths and public host ID. The token is read by the
+# wrapper at execution time and never enters argv, hooks.json, or installer logs.
 quote() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
-COMMAND="$(quote "$HOOK_SCRIPT") --host $(quote "$HOST_ID") --db $(quote "$DB") --state-dir $(quote "$STATE_DIR")"
-step "Building the entry"
-say "   command     : $COMMAND"
-say "   target      : $HOOKS_JSON"
+COMMAND="$(quote "$ROOT/scripts/jasmine-capture-hook.sh") --python $(quote "$PYTHON") --host $(quote "$HOST_ID") --db $(quote "$DB") --state-dir $(quote "$STATE_DIR")"
+printf 'target: %s\ncommand: %s\n' "$HOOKS_JSON" "$COMMAND"
 
-CHANGES="$("$PYTHON" - "$HOOKS_JSON" "$COMMAND" "$FORCE" "$DRY_RUN" <<'PY'
-import json, sys
+RESULT="$("$PYTHON" - "$HOOKS_JSON" "$COMMAND" "$FORCE" "$DRY_RUN" <<'PY'
+import json, os, shutil, sys, tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
-path, command, force, dry = Path(sys.argv[1]), sys.argv[2], sys.argv[3] == "1", sys.argv[4] == "1"
-entry = {"hooks": [{"type": "command", "command": command, "timeout": 8,
-                    "additionalContextLimit": 1500}]}
-
-if path.is_file():
+path, command = Path(sys.argv[1]), sys.argv[2]
+force, dry = sys.argv[3] == '1', sys.argv[4] == '1'
+if path.parent.is_symlink():
+    raise SystemExit('refusing a symlinked hooks directory')
+entry = {'hooks': [{'type': 'command', 'command': command, 'timeout': 8,
+                    'additionalContextLimit': 1500}]}
+old = None
+if path.exists():
+    old = path.read_bytes()
     try:
-        config = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        print(json.dumps({"status": "refused", "reason": f"{path} is not valid JSON: {exc}"}))
-        raise SystemExit
+        config = json.loads(old)
+    except (UnicodeError, ValueError) as exc:
+        raise SystemExit(f'refusing invalid hooks JSON: {exc}')
+    if not isinstance(config, dict):
+        raise SystemExit('refusing hooks JSON that is not an object')
 else:
-    config = {"description": "Jasmine Core capture entry (project-local)",
-              "hooks": {"SessionStart": [], "UserPromptSubmit": [], "Stop": [],
-                        "PostToolUse": []}}
+    config = {'description': 'Jasmine Core capture entry (project-local)', 'hooks': {}}
+hooks = config.setdefault('hooks', {})
+if not isinstance(hooks, dict):
+    raise SystemExit('refusing hooks field that is not an object')
+existing = hooks.get('UserPromptSubmit', [])
+if not isinstance(existing, list):
+    raise SystemExit('refusing UserPromptSubmit field that is not an array')
 
-hooks = config.setdefault("hooks", {})
-existing = list(hooks.get("UserPromptSubmit") or [])
-mine = [e for e in existing
-        if any("jasmine-capture-hook.sh" in str(h.get("command", ""))
-               for h in (e or {}).get("hooks") or [])]
+def owned_hook(hook):
+    return isinstance(hook, dict) and 'jasmine-capture-hook.sh' in str(hook.get('command', ''))
 
+def owned(item):
+    return (isinstance(item, dict) and isinstance(item.get('hooks'), list)
+            and any(owned_hook(hook) for hook in item['hooks']))
+
+mine = [item for item in existing if owned(item)]
 if mine and not force:
-    same = all(h.get("command") == command for e in mine for h in (e or {}).get("hooks") or [])
-    print(json.dumps({
-        "status": "unchanged" if same else "update",
-        "reason": "an entry from this installer is already present"
-                  + (" with the same command" if same else " with a different command; --force will replace it"),
-        "index": existing.index(mine[0]),
-        "command": command,
-    }))
-    raise SystemExit
-
-kept = [e for e in existing if e not in mine]
-hooks["UserPromptSubmit"] = kept + [entry]
-config["description"] = config.get("description") or "Jasmine Core capture entry (project-local)"
+    if len(mine) == 1 and mine[0] == entry:
+        print('unchanged'); raise SystemExit
+    raise SystemExit('capture entry changed or duplicated; rerun with --force')
+kept = []
+for item in existing:
+    if not owned(item):
+        kept.append(item)
+        continue
+    # A shared event entry can contain other commands. Preserve those exactly.
+    remaining = [hook for hook in item['hooks'] if not owned_hook(hook)]
+    if remaining:
+        kept.append({**item, 'hooks': remaining})
+hooks['UserPromptSubmit'] = kept + [entry]
+config.setdefault('description', 'Jasmine Core capture entry (project-local)')
+new = (json.dumps(config, indent=2, ensure_ascii=False) + '\n').encode()
+if old == new:
+    print('unchanged'); raise SystemExit
 if dry:
-    print(json.dumps({"status": "would-write", "command": command,
-                      "preserved_entries": len(kept), "path": str(path)}))
-    raise SystemExit
-
+    print('would-write'); raise SystemExit
 path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
-print(json.dumps({"status": "written", "command": command, "path": str(path),
-                  "preserved_entries": len(kept)}))
+if old is not None:
+    # Exclusive name prevents a repeated install from overwriting a backup.
+    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
+    backup = path.with_name(f'{path.name}.bak.{stamp}')
+    with backup.open('xb') as handle:
+        handle.write(old)
+        handle.flush()
+        os.fsync(handle.fileno())
+    shutil.copymode(path, backup)
+    print(f'backup: {backup}', file=sys.stderr)
+fd, temporary = tempfile.mkstemp(prefix=f'.{path.name}.', dir=path.parent)
+try:
+    with os.fdopen(fd, 'wb') as handle:
+        handle.write(new)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.chmod(temporary, path.stat().st_mode & 0o777 if old is not None else 0o600)
+    os.replace(temporary, path)
+    directory = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+finally:
+    if os.path.exists(temporary):
+        os.unlink(temporary)
+print('written')
 PY
-)"
-STATUS="$(echo "$CHANGES" | "$PYTHON" -c 'import json,sys; print(json.load(sys.stdin)["status"])')"
-REASON="$(echo "$CHANGES" | "$PYTHON" -c 'import json,sys; d=json.load(sys.stdin); print(d.get("reason",""))')"
-say "   result      : $STATUS${REASON:+ ($REASON)}"
-
-if [ "$DRY_RUN" = "1" ]; then
-  step "Dry run: nothing was written"
-  say "   To apply: scripts/p0-codex-hook-install.sh"
-  exit 0
-fi
-
-case "$STATUS" in
-  written)
-    step "Backing up and reviewing"
-    if [ -f "$HOOKS_JSON" ]; then
-      BACKUP="$HOOKS_JSON.bak.$(date +%Y%m%dT%H%M%SZ)"
-      cp -p "$HOOKS_JSON" "$BACKUP"
-      say "   backup      : $BACKUP"
-    fi
-    say "   the file now reads:"
-    sed 's/^/                 /' "$HOOKS_JSON"
-    ;;
-  unchanged)
-    step "Nothing to do"
-    say "   the entry is already installed with the same command"
-    ;;
-  update)
-    # Never silent: an out-of-date entry left in place is exactly the state that
-    # makes the Gate report a product failure for a setup problem.
-    fail "$REASON -- re-run with --force to replace it"
-    ;;
-  refused)
-    fail "$REASON"
-    ;;
-  *)
-    fail "unexpected installer status: $STATUS"
-    ;;
-esac
-
-# --- 7. trust is the operator's ------------------------------------------------
-step "Next: trust the entry (this script will not do it for you)"
-cat <<EOF
-  Codex only runs a hook command whose trusted_hash it has recorded in
-  ~/.codex/config.toml. An untrusted entry is skipped silently, and
-  'codex exec' cannot create the hash non-interactively, so P0-T07 stays
-  BLOCKED until you do this in the Codex UI:
-
-    1. Open this repository in Codex.
-    2. Accept the prompt to review and trust the new hook command
-       (it names only paths -- no token is in it).
-    3. Confirm a trusted_hash now exists for:
-         $HOOKS_JSON:user_prompt_submit:<index>
-
-  Then run the gate:
-
-    scripts/p0-t07-real-conversation.sh --out /tmp/p0-t07 --db $DB
-
-  This script did not modify ~/.codex/hooks.json, ~/.codex/config.toml, or
-  your global V0 entry.
+)" || fail "hook entry not changed"
+printf 'result: %s\n' "$RESULT"
+if [ "$DRY_RUN" = 1 ]; then
+  printf 'Dry run: nothing was written.\n'
+elif [ "$RESULT" = written ]; then
+  cat <<EOF
+Trust the new hook command in the Codex UI for this checkout. This installer
+will NOT compute, guess or inject a trusted_hash in ~/.codex/config.toml.
+Trusting the entry is a decision for the operator. Until trusted, P0-T07 is BLOCKED.
 EOF
+fi

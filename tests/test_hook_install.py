@@ -1,11 +1,4 @@
-"""The two operator-facing scripts: the hook installer and the hook wrapper.
-
-These are the scripts a person runs, so they are tested for the things that would
-silently produce a wrong result: writing a token into a hooks file, quoting a
-path badly, claiming to be idempotent while rewriting, or touching the global
-configuration.
-"""
-
+"""Installer and wrapper contract tests using only throwaway checkout/state."""
 from __future__ import annotations
 
 import json
@@ -17,274 +10,189 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from support import SRC  # noqa: F401  (path setup)
+from support import SRC  # noqa: F401
 
 REPO = Path(__file__).resolve().parents[1]
-INSTALLER = REPO / "scripts" / "p0-codex-hook-install.sh"
-WRAPPER = REPO / "scripts" / "jasmine-capture-hook.sh"
+PYTHON = (sys.executable if sys.version_info >= (3, 11) else
+          next(str(p) for p in (Path("/opt/homebrew/bin/python3.13"),
+                                Path("/opt/homebrew/bin/python3.12"),
+                                Path("/opt/homebrew/bin/python3.11")) if p.exists()))
 
 
-def run(cmd, **kwargs) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=120, **kwargs)
+def run(command, **kwargs):
+    return subprocess.run(command, capture_output=True, text=True, timeout=60, **kwargs)
 
 
-class ScriptShape(unittest.TestCase):
-    def test_both_scripts_exist_and_are_executable(self) -> None:
-        for script in (INSTALLER, WRAPPER):
-            with self.subTest(script=script.name):
-                self.assertTrue(script.is_file(), script)
-                self.assertTrue(os.access(script, os.X_OK), f"{script} is not executable")
+class HookScripts(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="jasmine-hook-tests-")
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.repo = self.base / "checkout with space"
+        (self.repo / "scripts").mkdir(parents=True)
+        (self.repo / ".codex").mkdir()
+        shutil.copytree(REPO / "src", self.repo / "src")
+        for name in ("p0-codex-hook-install.sh", "jasmine-capture-hook.sh"):
+            shutil.copy2(REPO / "scripts" / name, self.repo / "scripts" / name)
+        self.installer = self.repo / "scripts/p0-codex-hook-install.sh"
+        self.wrapper = self.repo / "scripts/jasmine-capture-hook.sh"
+        self.hooks = self.repo / ".codex/hooks.json"
+        self.home = self.base / "home"
+        (self.home / ".codex").mkdir(parents=True)
+        self.global_hooks = self.home / ".codex/hooks.json"
+        self.global_hooks.write_bytes(b'{"hooks":{"UserPromptSubmit":[]}}\n')
+        self.config = self.home / ".codex/config.toml"
+        self.config.write_bytes(b'# no trust\n')
+        self.state = self.base / "state"
+        self.state.mkdir()
+        self.db = self.state / "core.db"
+        self.token = self.state / "capture-token"
+        self.token.write_text("t" * 43)
+        self.token.chmod(0o600)
+        self.env = dict(os.environ, HOME=str(self.home), JASMINE_CORE_DB=str(self.db),
+                        JASMINE_CORE_STATE_DIR=str(self.state), PYTHONPATH=str(self.repo / "src"))
+        boot = run([PYTHON, "-m", "jasmine_core.cli", "bootstrap",
+                    "--scopes", "events:write", "events:read"], env=self.env,
+                   cwd=self.repo)
+        self.assertEqual(boot.returncode, 0, boot.stderr)
 
-    def test_both_scripts_parse_as_shell(self) -> None:
-        for script in (INSTALLER, WRAPPER):
-            with self.subTest(script=script.name):
-                result = run(["bash", "-n", str(script)])
-                self.assertEqual(result.returncode, 0, result.stderr)
+    def install(self, *args, env=None):
+        return run([str(self.installer), "--python", PYTHON, *args],
+                   env=env or self.env, cwd=self.repo)
 
-    def test_they_declare_strict_mode(self) -> None:
-        for script in (INSTALLER, WRAPPER):
-            with self.subTest(script=script.name):
-                self.assertIn("set -uo pipefail", script.read_text())
+    def test_scripts_parse_and_are_executable(self):
+        for script in (self.installer, self.wrapper):
+            self.assertTrue(os.access(script, os.X_OK))
+            self.assertEqual(run(["bash", "-n", str(script)]).returncode, 0)
 
-
-class InstallerNeverTouchesGlobalState(unittest.TestCase):
-    """A project-local entry is the whole point; a global one would not be."""
-
-    def setUp(self) -> None:
-        self.installer = INSTALLER.read_text()
-
-    def test_the_installer_states_it_will_not_touch_the_global_configuration(self) -> None:
-        # The promise is also made in the text the operator reads, so a future
-        # change that breaks it contradicts what this file says.
-        self.assertIn("will NOT", self.installer)
-        self.assertIn("compute, guess or inject a trusted_hash", self.installer)
-        self.assertIn("Trusting the entry is a decision", self.installer)
-
-    def test_the_default_target_is_project_local(self) -> None:
-        self.assertIn('HOOKS_JSON="$ROOT/.codex/hooks.json"', self.installer)
-        # A global target must be opt-in, not the default.
-        self.assertIn("--global", self.installer)
-        self.assertIn("asks first", self.installer)
-
-
-class InstallerBehaviour(unittest.TestCase):
-    """Exercise the installer against a throwaway HOME and a real checkout."""
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls._tmp = tempfile.TemporaryDirectory(prefix="jasmine-core-installer-")
-        root = Path(cls._tmp.name)
-        cls.home = root / "home"
-        cls.home.mkdir()
-        (cls.home / ".codex").mkdir()
-        (cls.home / ".codex" / "config.toml").write_text(
-            '[hooks.state]\n\n'
-            '[hooks.state."/Users/mercuryliu/.codex/hooks.json:user_prompt_submit:0:0"]\n'
-            'trusted_hash = "sha256:deadbeef"\n', encoding="utf-8")
-        (cls.home / ".codex" / "hooks.json").write_text(json.dumps({
-            "description": "Local Codex lifecycle hooks",
-            "hooks": {"UserPromptSubmit": [{"hooks": [{
-                "type": "command",
-                "command": "/usr/bin/python3 '/Users/other/jasmine_memory/codex_hook.py'",
-                "timeout": 8, "additionalContextLimit": 1500}]}]},
-        }, indent=2), encoding="utf-8")
-
-        cls.state_root = root
-        cls.db = root / "core.db"
-        cls.token = root / "capture-token"
-        env = dict(os.environ, HOME=str(cls.home), JASMINE_CORE_DB=str(cls.db),
-                   JASMINE_CORE_STATE_DIR=str(root))
-        cls.token.write_text("t" * 43, encoding="utf-8")
-        cls.token.chmod(0o600)
-        boot = run([sys.executable, "-m", "jasmine_core.cli", "bootstrap",
-                    "--scopes", "events:write", "events:read"],
-                   env=dict(env, PYTHONPATH=str(REPO / "src")), cwd=REPO)
-        assert boot.returncode == 0, boot.stderr
-        cls.bootstrap = json.loads(boot.stdout)
-        cls.env = env
-        cls.hooks_json = REPO / ".codex" / "hooks.json"
-        cls._had_hooks = cls.hooks_json.is_file()
-        if cls._had_hooks:
-            cls._hooks_backup = cls.hooks_json.read_bytes()
-
-    @classmethod
-    def tearDownClass(cls) -> None:
-        if cls._had_hooks:
-            cls.hooks_json.write_bytes(cls._hooks_backup)
-        elif cls.hooks_json.is_file():
-            cls.hooks_json.unlink()
-        for stray in REPO.glob(".codex/hooks.json.bak.*"):
-            stray.unlink()
-        for stray in REPO.glob("*.bak.*"):
-            stray.unlink()
-        cls._tmp.cleanup()
-
-    def install(self, *args) -> subprocess.CompletedProcess:
-        return run([str(INSTALLER), *args], env=dict(self.env, PYTHONPATH=str(REPO / "src")),
-                   cwd=REPO)
-
-    def test_a_dry_run_writes_nothing(self) -> None:
-        if self.hooks_json.is_file():
-            self.hooks_json.unlink()
+    def test_dry_run_changes_no_files_or_permissions(self):
+        self.wrapper.chmod(0o644)
+        before = self.wrapper.stat().st_mode
+        failed = self.install("--dry-run")
+        self.assertNotEqual(failed.returncode, 0)
+        self.assertEqual(self.wrapper.stat().st_mode, before)
+        self.wrapper.chmod(0o755)
+        db_before = {p.name: p.read_bytes() for p in self.state.iterdir() if p.is_file()}
+        global_before = (self.global_hooks.read_bytes(), self.config.read_bytes())
         result = self.install("--dry-run")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("would-write", result.stdout)
-        self.assertFalse(self.hooks_json.exists())
+        self.assertFalse(self.hooks.exists())
+        self.assertEqual(db_before, {p.name: p.read_bytes() for p in self.state.iterdir() if p.is_file()})
+        self.assertEqual(global_before, (self.global_hooks.read_bytes(), self.config.read_bytes()))
 
-    def test_it_installs_a_quoted_path_only_entry(self) -> None:
+    def test_install_preserves_other_handlers_and_token_stays_out(self):
+        other = {"hooks": [{"type": "command", "command": "echo other"}]}
+        self.hooks.write_text(json.dumps({"hooks": {"UserPromptSubmit": [other],
+                                                 "Stop": [other]}}))
+        result = self.install()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        data = json.loads(self.hooks.read_text())
+        self.assertEqual(data["hooks"]["UserPromptSubmit"][0], other)
+        self.assertEqual(data["hooks"]["Stop"], [other])
+        command = data["hooks"]["UserPromptSubmit"][1]["hooks"][0]["command"]
+        self.assertIn("--python", command)
+        self.assertIn(f"python{sys.version_info.major}.{sys.version_info.minor}" if PYTHON == sys.executable else Path(PYTHON).name, command)
+        self.assertIn(str(self.wrapper), command)
+        self.assertNotIn(self.token.read_text(), self.hooks.read_text())
+        self.assertEqual(self.install().returncode, 0)
+        self.assertIn("unchanged", self.install().stdout)
+        self.assertEqual((self.global_hooks.read_bytes(), self.config.read_bytes()),
+                         (b'{"hooks":{"UserPromptSubmit":[]}}\n', b'# no trust\n'))
+
+    def test_force_preserves_other_hooks_in_shared_entry(self):
+        other_hook = {"type": "command", "command": "echo keep"}
+        mine = {"type": "command", "command": "'/old/jasmine-capture-hook.sh' --host stale"}
+        shared = {"matcher": "", "hooks": [other_hook, mine]}
+        self.hooks.write_text(json.dumps({"hooks": {"UserPromptSubmit": [shared]}}))
         result = self.install("--force")
         self.assertEqual(result.returncode, 0, result.stderr)
-        config = json.loads(self.hooks_json.read_text(encoding="utf-8"))
-        entry = config["hooks"]["UserPromptSubmit"][-1]["hooks"][0]
-        command = entry["command"]
-        # Every path with a space in it must be single-quoted, because Codex
-        # runs the command through a shell.
-        for token in command.split():
-            if " " in token or token.startswith("/"):
-                self.assertTrue(token.startswith("'") or "'" in token, token)
-        self.assertIn(str(REPO / "scripts" / "jasmine-capture-hook.sh"), command)
-        # No token, and no interpreter path: both are resolved at run time.
-        self.assertNotIn(self.token.read_text(), command)
-        self.assertNotIn("/opt/homebrew", command)
-        self.assertNotIn("python3", command)
-        # No matcher: UserPromptSubmit has no tool to match on, so a matcher
-        # would be a false promise of scoping.
-        self.assertNotIn("matcher", json.dumps(config))
+        entries = json.loads(self.hooks.read_text())["hooks"]["UserPromptSubmit"]
+        self.assertEqual(entries[0], {"matcher": "", "hooks": [other_hook]})
+        self.assertEqual(len(entries), 2)
 
-    def test_it_is_idempotent(self) -> None:
-        self.install("--force")
-        first = self.hooks_json.read_text(encoding="utf-8")
-        second = self.install()
-        self.assertEqual(second.returncode, 0, second.stderr)
-        self.assertIn("unchanged", second.stdout)
-        self.assertEqual(self.hooks_json.read_text(encoding="utf-8"), first)
+    def test_changed_entry_refused_then_force_backs_up_original_bytes(self):
+        self.assertEqual(self.install().returncode, 0)
+        data = json.loads(self.hooks.read_text())
+        data["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"] += " --old"
+        stale = json.dumps(data, separators=(",", ":")).encode()
+        self.hooks.write_bytes(stale)
+        before = self.hooks.stat()
+        refused = self.install()
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("--force", refused.stderr)
+        self.assertEqual(self.hooks.read_bytes(), stale)
+        replaced = self.install("--force")
+        self.assertEqual(replaced.returncode, 0, replaced.stderr)
+        backups = list(self.hooks.parent.glob("hooks.json.bak.*"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), stale)
+        self.assertEqual(self.hooks.stat().st_mode & 0o777, before.st_mode & 0o777)
 
-    def test_it_refuses_to_silently_replace_a_stale_entry(self) -> None:
-        self.install("--force")
-        unchanged = self.install()
-        self.assertEqual(unchanged.returncode, 0, unchanged.stderr)
-        # A stale entry is still one of ours -- the same wrapper, an old host id.
-        # It must be reported and held, not quietly replaced.
-        config = json.loads(self.hooks_json.read_text(encoding="utf-8"))
-        config["hooks"]["UserPromptSubmit"][-1]["hooks"][0]["command"] = (
-            f"'{REPO}/scripts/jasmine-capture-hook.sh' --host 'hst_stale' --db '/x' "
-            f"--state-dir '/y'")
-        self.hooks_json.write_text(json.dumps(config, indent=2), encoding="utf-8")
-        stale = self.hooks_json.read_text(encoding="utf-8")
-        result = self.install()
+    def test_global_and_outside_target_are_refused(self):
+        before = self.global_hooks.read_bytes()
+        for args in (("--global",), ("--hooks-json", str(self.global_hooks)),
+                     ("--hooks-json", str(self.base / "outside.json"))):
+            with self.subTest(args=args):
+                result = self.install(*args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertEqual(self.global_hooks.read_bytes(), before)
+                self.assertFalse((self.base / "outside.json").exists())
+
+    def test_symlinked_project_codex_directory_cannot_write_global_hooks(self):
+        (self.repo / ".codex").rmdir()
+        (self.repo / ".codex").symlink_to(self.home / ".codex", target_is_directory=True)
+        before = (self.global_hooks.read_bytes(), self.config.read_bytes())
+        for args in (("--dry-run",), ()):
+            with self.subTest(args=args):
+                result = self.install(*args)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("symlinked project .codex", result.stderr)
+                self.assertEqual((self.global_hooks.read_bytes(), self.config.read_bytes()), before)
+                self.assertEqual(list((self.home / ".codex").glob("hooks.json.bak.*")), [])
+
+    def test_nonempty_wal_is_refused_without_changing_it(self):
+        wal = Path(str(self.db) + "-wal")
+        wal.write_bytes(b"pending WAL bytes")
+        before = wal.read_bytes()
+        result = self.install("--dry-run")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("--force", result.stderr)
-        self.assertEqual(self.hooks_json.read_text(encoding="utf-8"), stale)
+        self.assertIn("active WAL", result.stderr)
+        self.assertEqual(wal.read_bytes(), before)
+        self.assertFalse(self.hooks.exists())
 
-    def test_it_creates_no_file_anywhere_else(self) -> None:
-        def snapshot() -> dict:
-            out = {}
-            for base in (self.home, self.state_root):
-                for path in sorted(base.rglob("*")):
-                    if path.is_file():
-                        out[str(path)] = path.read_bytes()
-            return out
+    def test_pinned_interpreter_does_not_fallback(self):
+        nonexistent = self.base / "removed-python"
+        result = run([str(self.wrapper), "--python", str(nonexistent),
+                      "--state-dir", str(self.state)], env=self.env, input="{}")
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout), {})
+        self.assertIn("configured --python", result.stderr)
+        self.assertFalse((self.state / "hook-invocations.log").exists())
 
-        before = snapshot()
-        self.install("--force")
-        after = snapshot()
-        created = sorted(set(after) - set(before))
-        allowed = [p for p in created if p.endswith(".bak.")]
-        unexpected = [p for p in created if p not in allowed]
-        self.assertEqual(unexpected, [], f"the installer created {unexpected}")
-        for path, content in before.items():
-            if path == str(self.hooks_json):
-                continue
-            self.assertEqual(after[path], content, f"{path} changed")
-
-    def test_it_preserves_the_global_configuration_byte_for_byte(self) -> None:
-        global_hooks = self.home / ".codex" / "hooks.json"
-        config_toml = self.home / ".codex" / "config.toml"
-        before = (global_hooks.read_bytes(), config_toml.read_bytes())
-        self.install("--force")
-        self.assertEqual((global_hooks.read_bytes(), config_toml.read_bytes()), before)
-
-    def test_it_backs_up_the_file_it_replaces(self) -> None:
-        self.install("--force")
-        first = self.hooks_json.read_text(encoding="utf-8")
-        self.install("--force")
-        backups = list(REPO.glob(".codex/hooks.json.bak.*"))
-        self.assertTrue(backups)
-        self.assertEqual(backups[0].read_text(encoding="utf-8"), first)
-
-    def test_it_reports_a_missing_token_rather_than_proceeding(self) -> None:
+    def test_missing_token_and_old_interpreter_are_refused(self):
         self.token.unlink()
-        try:
-            result = self.install()
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("no capture token", result.stderr)
-        finally:
-            self.token.write_text("t" * 43, encoding="utf-8")
-            self.token.chmod(0o600)
-
-    def test_it_reports_a_missing_database_rather_than_proceeding(self) -> None:
-        result = self.install("--db", str(REPO / "nope.db"))
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("no core.db", result.stderr)
-
-    def test_it_rejects_a_python_below_the_floor(self) -> None:
-        old = self.home / "bin" / "python3"
-        old.parent.mkdir(parents=True, exist_ok=True)
-        old.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        self.assertIn("no capture token", self.install().stderr)
+        self.token.write_text("t" * 43)
+        old = self.base / "not-python"
+        old.write_text("#!/bin/sh\nexit 0\n")
         old.chmod(0o755)
-        result = run([str(INSTALLER), "--python", str(old)], cwd=REPO,
-                     env=dict(self.env, PYTHONPATH=str(REPO / "src")))
+        result = run([str(self.installer), "--python", str(old)], env=self.env,
+                     cwd=self.repo)
         self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(self.hooks.exists())
 
-
-class WrapperResolvesEverythingAtRunTime(unittest.TestCase):
-    def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory(prefix="jasmine-core-wrapper-")
-        self.addCleanup(self._tmp.cleanup)
-        self.state = Path(self._tmp.name)
-
-    def test_a_missing_token_still_prints_the_context_object_and_exits_zero(self) -> None:
-        result = run([str(WRAPPER), "--state-dir", str(self.state)],
-                     env=dict(os.environ, HOME=str(self.state)))
+    def test_wrapper_uses_exact_token_path_and_explicit_interpreter(self):
+        (self.state / "something.token").write_text("s" * 43)
+        self.token.unlink()
+        result = run([str(self.wrapper), "--python", PYTHON,
+                      "--state-dir", str(self.state)], env=self.env, input="{}")
         self.assertEqual(result.returncode, 0)
         self.assertEqual(json.loads(result.stdout), {})
         self.assertIn("JASMINE_CORE_TOKEN", result.stderr)
-
-    def test_an_interpreter_below_the_floor_is_rejected_not_used(self) -> None:
-        # /usr/bin/python3 is 3.9 on macOS. If the hook used it the import would
-        # fail and the turn would look like a capture that silently did nothing.
-        (self.state / "capture-token").write_text("t" * 43, encoding="utf-8")
-        old = "/usr/bin/python3"
-        version = run([old, "-c", "import sys; print(sys.version_info[:2])"]).stdout.strip()
-        if version.startswith("(3, 9"):
-            result = run([str(WRAPPER), "--state-dir", str(self.state),
-                          "--host", "hst_x"],
-                         env=dict(os.environ, HOME=str(self.state),
-                                  JASMINE_PYTHON=old,
-                                  JASMINE_CORE_URL="http://127.0.0.1:1"))
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(json.loads(result.stdout), {})
-
-    def test_a_missing_token_still_traces_and_exits_zero(self) -> None:
-        result = run([str(WRAPPER), "--state-dir", str(self.state)],
-                     env=dict(os.environ, HOME=str(self.state)))
-        self.assertEqual(result.returncode, 0)
-        self.assertEqual(json.loads(result.stdout), {})
-        # The Gate tells "the entry never ran" from "the entry ran and could not
-        # capture" by this trace line, so it must exist even on the early exits.
+        self.assertNotIn("s" * 43, result.stdout + result.stderr)
         trace = self.state / "hook-invocations.log"
-        self.assertTrue(trace.is_file(), "no invocation trace was written")
-        self.assertFalse(json.loads(trace.read_text().strip())["captured"])
-
-    def test_the_token_is_exported_only_to_the_child_not_echoed(self) -> None:
-        token = "s" * 43
-        (self.state / "capture-token").write_text(token, encoding="utf-8")
-        result = run([str(WRAPPER), "--state-dir", str(self.state), "--host", "hst_x"],
-                     env=dict(os.environ, HOME=str(self.state),
-                              JASMINE_CORE_URL="http://127.0.0.1:1"))
-        self.assertEqual(result.returncode, 0)
-        self.assertNotIn(token, result.stdout)
-        self.assertNotIn(token, result.stderr)
+        self.assertTrue(trace.is_file())
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ from typing import Any, Callable
 from .. import db, errors, ids
 from ..canonical import looks_like_credential
 from ..migrations import check_version, migrate
-from .dispatch import JSON_CONTENT_TYPE, dispatch
+from .dispatch import JSON_CONTENT_TYPE, dispatch, safe_log_method
 from .handlers import Core
 from .request import MAX_BODY_BYTES, Request, split_target
 
@@ -158,9 +158,9 @@ class _Handler(BaseHTTPRequestHandler):
             self.wfile.write(payload)
 
     def log_message(self, fmt: str, *args: Any) -> None:
-        # The default handler writes the raw request line to stderr, which can
-        # include a token in a header line. P0 logs method, status and path only.
-        self._app.log(f"{self.command} {self.path.split('?')[0]} -> {self._last_status()}")
+        # The method, request target and query can carry credentials. Log only
+        # recognised verbs; audit stores a separately redacted path.
+        self._app.log(f"{safe_log_method(getattr(self, 'command', None))} -> {self._last_status()}")
 
     def _last_status(self) -> str:
         return getattr(self, "_status", "-")

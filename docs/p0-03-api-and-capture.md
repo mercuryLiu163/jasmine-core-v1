@@ -26,18 +26,21 @@ PYTHONPATH=src python3 -m jasmine_core.cli bootstrap     # host, actor, and a to
 PYTHONPATH=src python3 -m jasmine_core.cli serve        # http://127.0.0.1:8787
 ```
 
-The token is printed once and only its SHA-256 is stored. To wire the capture
-entry into Codex, see `scripts/p0-t07-real-conversation.sh`: the entry must be
-present in `~/.codex/hooks.json` **and** carry a `trusted_hash` in
-`~/.codex/config.toml`, which only the operator can grant.
+The token is printed once and only its SHA-256 is stored. The capture installer
+registers a `UserPromptSubmit` entry in this checkout's `.codex/hooks.json`.
+The operator must review and trust that command in Codex before the real
+conversation Gate can run it; the installer does not edit
+`~/.codex/config.toml`.
 
 ## Authorisation
 
 The dispatcher resolves the route, authenticates, checks the scope, runs the
-handler, and audits. A caller who fails at any step writes nothing at all — not
-to `events`, the object tables, or `api_keys`. `last_used_at` is recorded only
-after the scope check passes, so a refused caller leaves no trace beyond its
-audit row.
+handler, and audits. Missing, unknown, revoked, or wrong-scope credentials
+cannot write Truth or update `api_keys.last_used_at`; those refusals still get
+an audit row. After successful authentication and scope checking,
+`last_used_at` is updated on a best-effort basis before the handler runs. A
+later handler refusal can therefore leave that timestamp updated while its
+Truth write is rolled back or never attempted.
 
 ## What the audit log does not keep
 
@@ -46,6 +49,8 @@ redacted before they are stored, because a client can put a token in any of
 them. A `Bearer%20…`, `sk-…`, `ghp_…`, JWT or PEM in a URL is masked, and a
 `X-Request-Id` that looks like a credential is replaced with a generated one.
 Field values are length-clipped so a row cannot grow with the request body.
+The HTTP access log omits the request target entirely because both its path and
+query can carry credentials.
 
 ## Deliberately not implemented
 
@@ -57,66 +62,97 @@ anything.
 
 ## Tests
 
-The standard-library suite and a seven-case acceptance matrix. The acceptance
-runner was itself checked by mutation: removing the scope check, the audit
-redaction, the revoked-key refusal, the per-write timestamp, the `after_seq`
-validation, the no-replace trigger, the cross-kind triggers, the append-only
-triggers, the rollback, the registry-sourced `actor_kind`, the
-`recursive_triggers` pragma, and the replay conflict each turn the relevant case
-FAIL. A case that crashes is recorded as FAIL with the exception and the bundle
-is still written; the runner exits 0 / 1 / 2 for PASS / FAIL / BLOCKED.
+The standard-library suite covers the API and capture components. The P0
+acceptance runner records a seven-case matrix, including P0-T07; it records a
+case crash as FAIL and still writes the evidence bundle. The runner exits 0 / 1
+/ 2 for PASS / FAIL / BLOCKED. A fixture or direct hook invocation does not
+satisfy the real-conversation P0-T07 Gate.
 
 ## Wiring the capture entry into Codex
 
 ```bash
 scripts/p0-codex-hook-install.sh --dry-run     # validate and preview
-scripts/p0-codex-hook-install.sh              # write <repo>/.codex/hooks.json
+scripts/p0-codex-hook-install.sh               # write <repo>/.codex/hooks.json
 ```
 
 The entry is **project-local on purpose**. `UserPromptSubmit` has no tool to
 match on, so Codex ignores a `matcher` on that event: a *globally* installed
 entry runs on every prompt in every project on the machine. Scoping comes from
 where the hooks file lives, and the installer writes only
-`<repo>/.codex/hooks.json` — it reads `~/.codex/hooks.json` to show what is
-there and never modifies it. A stale entry is reported and held rather than
-silently replaced, the file is backed up, and re-running is a no-op.
+`<repo>/.codex/hooks.json` by default. A custom `--hooks-json` target must also
+be inside this checkout's `.codex` directory. The installer rejects
+`--global`; it does not modify `~/.codex/hooks.json`. A changed or duplicate
+Jasmine entry requires explicit `--force`. It rejects a symlinked project
+`.codex` directory so the default target cannot resolve to a global hooks file.
+The installer backs up an existing
+hooks file before changing it; an unchanged entry is a no-op.
 
-The command it writes names **paths only**: no token, no interpreter path, no
-`PYTHONPATH`. Those are resolved at run time by
-`scripts/jasmine-capture-hook.sh`, so the token stays in a 0600 file, never in a
-hooks file and never in this repository. The installer validates the interpreter
-*version* (not just its existence — macOS ships 3.9, below the 3.11 floor), that
-the capture module imports from this checkout, that the database and a host
-exist, and that a token is readable, before it writes anything.
+The command contains the wrapper path plus validated `--python`, host, database,
+and state-directory paths, but no token or `PYTHONPATH`. The installer accepts
+`--python PATH` or chooses Python 3.11+ and pins its resolved executable path
+in the hook command. The wrapper does not fall back to another interpreter if
+that pinned path later becomes invalid. At run time it reads the token from
+`<state-dir>/capture-token`; the Gate requires owner-only permissions (normally
+0600).
+The token is never placed in the hooks file or command arguments. The installer
+checks that the capture module imports, the database schema and host are
+available, and the token file is readable and nonempty. Even `--dry-run`
+refuses a nonempty database WAL, because its immutable read could otherwise
+see stale data; stop Core and checkpoint the WAL before retrying.
 
 ### Trust is the operator's
 
-Codex runs a hook command only once it has recorded a `trusted_hash` for it in
-`~/.codex/config.toml`. An untrusted entry is skipped **silently**, and
-`codex exec` cannot create the hash non-interactively. This work did not forge a
-hash, did not pass `--dangerously-bypass-hook-trust`, and did not touch
-`~/.codex/config.toml`. Review the command in the Codex UI and accept it.
+Review the project-local command in the Codex UI and accept it there. The Gate
+checks for a `trusted_hash` record in `~/.codex/config.toml`, but treats that
+record as advisory: it may be stale after a hook change. A same-turn invocation
+trace is required to prove that Codex actually ran the entry. Neither the
+installer nor the Gate writes a trust hash.
 
-## P0-T07 is BLOCKED, and that is the correct verdict
+## P0-T07 Gate and current status
 
-The Gate tells three states apart, and BLOCKED is not a single one:
+P0-T07 remains BLOCKED pending a real Codex conversation and Core restart
+readback. No real Gate run has been executed for this implementation. The Gate
+distinguishes these conditions:
 
 | State | Verdict |
 | --- | --- |
-| no entry in the hooks file | BLOCKED — not wired up |
-| entry present, no `trusted_hash` in `config.toml` | BLOCKED — registered, not trusted |
-| entry trusted, but the entry's own invocation trace gained no line | BLOCKED — never invoked |
-| the entry ran and did not capture | **FAIL** — the product |
-| the entry ran, captured, and the text reads back after a restart | **PASS** |
+| no matching entry in the project hooks file | BLOCKED — not wired up |
+| entry present, no `trusted_hash` record | BLOCKED — operator review required |
+| trust record present, but no matching same-turn invocation trace | BLOCKED — hook invocation unproven |
+| matching same-turn entry ran and failed to capture | **FAIL** |
+| matching entry captured a fresh event, and the same event reads back after an owned Core restart | **PASS** |
 
-The third row is why the capture entry writes a line to
-`$JASMINE_CORE_STATE_DIR/hook-invocations.log` on *every* path, with no prompt
-text. Without it, "Codex never ran us" and "the Core was down" look identical,
-and the Gate would blame the product for a setup problem. A `FAIL` is only
-reachable once the entry is demonstrably running.
+Once the capture module starts, it appends a trace to
+`<state-dir>/hook-invocations.log` on each invocation without prompt text. The
+Gate matches the new trace to the `codex exec --json` session, turn, prompt
+digest, and Core URL; checks the fresh Raw Event's ID, sequence, host, actor,
+and prompt; then reads it before and after restarting the Core process it owns.
+That same-turn evidence, rather than the trust record alone, determines whether
+capture actually ran.
 
-What is demonstrated here: the entry is installed and trusted-state is read
-correctly, the wiring captures a real-shaped payload end to end when invoked the
-way Codex invokes it, and the Gate reports BLOCKED — naming the exact
-`trusted_hash` key that is missing — rather than PASS or FAIL. No synthetic
-payload was ever substituted for a real conversation.
+### Final operator sequence
+
+After installing and trusting the project-local hook, run the Gate against the
+existing dedicated capture database and state directory. Then run acceptance
+with the Gate evidence directory as `--work` and a fresh, separate scratch
+database. The acceptance bundle goes to its own `--out` directory:
+
+```bash
+scripts/p0-t07-real-conversation.sh \
+  --out <gate-evidence> \
+  --db <existing-dedicated-capture-db> \
+  --state-dir <capture-state-dir>
+
+python3 scripts/p0-acceptance.py \
+  --work <same-gate-evidence> \
+  --out <acceptance-bundle> \
+  --db <fresh-separate-scratch-db> \
+  --executor <executor-id> \
+  --reviewer <reviewer-id> \
+  --verifier <verifier-id>
+```
+
+Acceptance reads the P0-T07 marker from `--work`, not `--out`. Preserve the
+existing capture database for the Gate's restart readback; do not reset or
+reuse it as the acceptance scratch database. Report status from the evidence
+bundle for the exact commit under test, rather than from an earlier test count.

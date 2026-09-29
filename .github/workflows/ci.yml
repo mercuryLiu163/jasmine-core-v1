@@ -82,15 +82,14 @@ jobs:
           set -x
           # P0-T07 needs a real Codex conversation, which CI does not have, so
           # the expected outcome is BLOCKED. The point of this step is that the
-          # runner works and does not silently succeed: a non-zero exit means a
-          # case failed outright.
+          # runner preserves BLOCKED as a distinct exit code and verdict.
           set +e
           python3 scripts/p0-acceptance.py \
             --out "$RUNNER_TEMP/acceptance" --db "$RUNNER_TEMP/acceptance.db"
           code=$?
           set -e
-          # 0 = ran and the worst case was BLOCKED, which is correct here.
-          test "$code" = 0
+          # 2 means the real-conversation case is BLOCKED in CI.
+          test "$code" = 2
           python3 -c "
           import glob, json, sys
           path = sorted(glob.glob('$RUNNER_TEMP/acceptance/run-*.json'))[-1]
@@ -98,9 +97,18 @@ jobs:
           assert run['verdict'] == 'BLOCKED', run['verdict']
           verdicts = {c['case_id']: c['verdict'] for c in run['cases']}
           print(json.dumps(verdicts, indent=2))
-          for case in run['cases']:
-              assert case['verdict'] == 'PASS', (case['case_id'], case.get('failure_output'))
+          expected = {f'P0-T{i:02d}': 'PASS' for i in range(1, 7)}
+          expected['P0-T07'] = 'BLOCKED'
+          assert verdicts == expected, verdicts
           "
+
+      - name: Preserve P0 acceptance verdict and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-acceptance-${{ matrix.os }}-py${{ matrix.python }}
+          path: ${{ runner.temp }}/acceptance/
+          if-no-files-found: warn
 
       - name: Verify no runtime data was committed
         run: |
@@ -131,10 +139,10 @@ jobs:
           set -x
           # Fails if a released migration was edited in place, or if the
           # recorded checksum and the shipped SQL have diverged.
-          db="$RUNNER_TEMP/checksum.db"
-          rm -f "$db"*
-          JASMINE_CORE_DB="$db" python -m jasmine_core.cli migrate
-          JASMINE_CORE_DB="$db" python -m jasmine_core.cli schema
+          export JASMINE_CORE_DB="$RUNNER_TEMP/checksum.db"
+          rm -f "$JASMINE_CORE_DB"*
+          python -m jasmine_core.cli migrate
+          python -m jasmine_core.cli schema
           python - <<'PY'
           import json, os, sqlite3
           from jasmine_core.migrations import discover

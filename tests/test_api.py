@@ -7,6 +7,7 @@ tests exercise the real `http.server` path, not a stubbed one.
 
 from __future__ import annotations
 
+import io
 import json
 import socket
 import tempfile
@@ -14,12 +15,16 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+from contextlib import redirect_stderr
 from pathlib import Path
+from unittest.mock import patch
 
 from support import DbTestCase  # noqa: E402
 
 from jasmine_core import SCHEMA_VERSION, db, registry  # noqa: E402
 from jasmine_core.api.server import Application, _Handler  # noqa: E402
+from jasmine_core.api.dispatch import dispatch  # noqa: E402
+from jasmine_core.api.request import Request  # noqa: E402
 from jasmine_core.migrations import migrate  # noqa: E402
 from http.server import ThreadingHTTPServer
 
@@ -139,6 +144,53 @@ class HealthAndSchema(ApiTestCase):
         self.assertEqual(status, 405)
         self.assertEqual(body["error"]["code"], "method_not_allowed")
         self.assertEqual(body["error"]["details"]["allowed"], ["GET", "POST"])
+
+    def test_access_log_omits_credentials_in_url_path(self) -> None:
+        stderr = io.StringIO()
+        fixture_secret = "sk-fixture-path-secret"
+        with redirect_stderr(stderr):
+            for path in (f"/v1/events/Bearer%20{fixture_secret}",
+                         f"/v1/events/{fixture_secret}"):
+                status, _ = self.call("GET", path, token=self.admin_token)
+                self.assertEqual(status, 400)
+        output = stderr.getvalue()
+        self.assertEqual(output.count("GET -> 400"), 2)
+        self.assertNotIn(fixture_secret, output)
+        self.assertNotIn("Bearer%20", output)
+
+    def test_unknown_http_method_is_not_echoed_to_stderr(self) -> None:
+        fixture_secret = "sk-fixture-method-secret"
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            with socket.create_connection(("127.0.0.1", self.port), timeout=10) as connection:
+                connection.sendall(
+                    f"{fixture_secret} /v1/health HTTP/1.1\r\n"
+                    "Host: 127.0.0.1\r\nConnection: close\r\n\r\n".encode("ascii")
+                )
+                response = bytearray()
+                while chunk := connection.recv(4096):
+                    response.extend(chunk)
+            status, _ = self.call("GET", "/v1/health")
+        self.assertIn(b"501", response.split(b"\r\n", 1)[0])
+        self.assertEqual(status, 200)
+        output = stderr.getvalue()
+        self.assertNotIn(fixture_secret, output)
+        self.assertIn("UNKNOWN ->", output)
+        self.assertIn("GET -> 200", output)
+
+    def test_unhandled_error_log_omits_request_path_and_exception_message(self) -> None:
+        fixture_secret = "sk-fixture-path-secret"
+        stderr = io.StringIO()
+        request = Request(method="GET", path=f"/v1/events/Bearer%20{fixture_secret}")
+        with patch("jasmine_core.api.dispatch.handlers.resolve",
+                   side_effect=RuntimeError(f"failed at {fixture_secret}")):
+            with redirect_stderr(stderr):
+                response = dispatch(self.app._core(), request)
+        self.assertEqual(response.status, 500)
+        output = stderr.getvalue()
+        self.assertIn("unhandled error on GET: RuntimeError", output)
+        self.assertNotIn(fixture_secret, output)
+        self.assertNotIn("Bearer%20", output)
 
 
 class P0T02ThroughTheApi(ApiTestCase):

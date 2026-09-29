@@ -23,6 +23,12 @@ from .handlers import Core, Route
 from .request import Request, Response
 
 JSON_CONTENT_TYPE = "application/json; charset=utf-8"
+_LOGGABLE_METHODS = frozenset({"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "TRACE"})
+
+
+def safe_log_method(method: str | None) -> str:
+    """Avoid echoing an attacker-controlled HTTP method into diagnostic logs."""
+    return method if method in _LOGGABLE_METHODS else "UNKNOWN"
 
 
 def dispatch(core: Core, request: Request) -> Response:
@@ -59,12 +65,9 @@ def dispatch(core: Core, request: Request) -> Response:
         status = 500
         decision = "error"
         error_code = "internal_error"
-        # No type, message or traceback from the exception reaches the client
-        # (ADR 0003 §1.4); the log line goes through redaction instead.
-        from ..canonical import redact_text
-
-        _log(f"unhandled error on {request.method} {request.path}: "
-             f"{type(exc).__name__}: {redact_text(str(exc))[:200]}")
+        # No caller-controlled path or exception message reaches stderr. Either
+        # can contain credentials, including shapes the text redactor misses.
+        _log(f"unhandled error on {safe_log_method(request.method)}: {type(exc).__name__}")
         audit_detail = {"code": "internal_error"}
         response = Response(500, errors.CoreError("internal error").to_payload(request_id))
 

@@ -97,10 +97,25 @@ def _trace(state_dir: Path | None, outcome: dict) -> None:
             # A hash of (source, session, turn), so the Gate can confirm which
             # turn the entry saw without the prompt text being written down.
             "source_turn_sha256": outcome.get("source_turn_sha256"),
+            "source_session_sha256": outcome.get("source_session_sha256"),
+            "turn_sha256": outcome.get("turn_sha256"),
+            "prompt_sha256": outcome.get("prompt_sha256"),
+            "core_url": _trace_core_url(),
             "host_id_configured": bool(os.environ.get(HOST_ENV)),
             "token_configured": bool(os.environ.get(TOKEN_ENV)),
         }
-        _append(target, json.dumps(fields, ensure_ascii=False, sort_keys=True))
+        # Trace lines must stay valid JSON. The general log helper truncates at
+        # 500 characters, which can cut a closing quote after these identity
+        # fields were added and make the Gate mistake an invocation for absence.
+        for key in ("reason",):
+            if isinstance(fields.get(key), str):
+                fields[key] = fields[key][:256]
+        line = json.dumps(fields, ensure_ascii=False, sort_keys=True) + "\n"
+        fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        try:
+            os.write(fd, line.encode("utf-8"))
+        finally:
+            os.close(fd)
     except (OSError, TypeError, ValueError):
         pass
 
@@ -236,6 +251,9 @@ def main(argv: list[str] | None = None) -> int:
     outcome: dict[str, Any] = {
         "hook_event_name": payload.get("hook_event_name"),
         "source_turn_sha256": _turn_digest(payload),
+        "source_session_sha256": _identity_digest(payload.get("session_id")),
+        "turn_sha256": _identity_digest(payload.get("turn_id")),
+        "prompt_sha256": _prompt_digest(payload),
     }
 
     token = os.environ.get(TOKEN_ENV)
@@ -270,6 +288,37 @@ def _turn_digest(payload: dict[str, Any]) -> str | None:
         return None
     material = "\x1f".join((SOURCE_SYSTEM, str(session_id), str(turn_id or "")))
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:32]
+
+
+def _prompt_digest(payload: dict[str, Any]) -> str | None:
+    import hashlib
+
+    prompt = payload.get("prompt")
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest() if isinstance(prompt, str) else None
+
+
+def _identity_digest(value: Any) -> str | None:
+    import hashlib
+
+    return hashlib.sha256(value.encode("utf-8")).hexdigest() if isinstance(value, str) and value else None
+
+
+def _trace_core_url() -> str | None:
+    """Trace the local endpoint without writing URL credentials or query data."""
+    from urllib.parse import urlsplit
+
+    url = os.environ.get("JASMINE_CORE_URL", DEFAULT_BASE_URL)
+    parts = urlsplit(url)
+    if parts.scheme != "http" or parts.hostname not in ("127.0.0.1", "localhost", "::1"):
+        return None
+    try:
+        port = parts.port
+    except ValueError:
+        return None
+    if port is None:
+        return None
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    return f"http://{host}:{port}"
 
 
 def _report(result: dict[str, Any]) -> None:
