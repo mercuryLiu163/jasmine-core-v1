@@ -227,3 +227,18 @@ validation-bundles/
 *.sqlite-*
 *.db
 *.db-*
+
+# Jasmine Core V1 runtime data and credentials
+core.db
+*.sqlite3
+*.db-journal
+auth.json
+keys.json
+secrets.yaml
+secrets.yml
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa
+id_ed25519
