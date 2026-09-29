@@ -46,7 +46,7 @@ jobs:
           python -m jasmine_core.cli migrate
           python -m jasmine_core.cli serve --port 8799 &
           server=$!
-          trap 'kill $server' EXIT
+          trap 'kill "$server" 2>/dev/null || true; wait "$server" 2>/dev/null || true' EXIT
           for _ in $(seq 1 40); do
             curl -sf http://127.0.0.1:8799/v1/health && break
             sleep 0.25
@@ -58,7 +58,6 @@ jobs:
             http://127.0.0.1:8799/v1/projects -H 'Content-Type: application/json' \
             -d '{"name":"x","host_id":"hst_01K742SG00BMSDET9BTP151RAR"}')
           test "$status" = 401
-          kill $server
 
       - name: Migration smoke run from an empty database
         env:
