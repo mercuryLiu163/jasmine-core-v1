@@ -560,6 +560,56 @@ def _evidence(client: CoreClient, evidence_ids: list[str], manifest: dict) -> li
     return values
 
 
+def _captured_tool_event(client: CoreClient, manifest: dict[str, Any],
+                         turn: dict[str, Any], command: str,
+                         allowed_decisions: set[str]) -> dict[str, Any]:
+    expected_hash = hashlib.sha256(canonical_json({"command": command}).encode()).hexdigest()
+    prompt_traces = [entry for entry in turn["hook_traces"] if
+                     entry.get("hook_event_name") == "UserPromptSubmit" and
+                     entry.get("result") == "captured" and
+                     entry.get("session_id") == turn["session_id"]]
+    if len(prompt_traces) != 1:
+        raise Failed("tool turn has no unique same-session UserPromptSubmit trace")
+    turn_id = prompt_traces[0].get("turn_id")
+    pre = [entry for entry in turn["hook_traces"] if
+           entry.get("hook_event_name") == "PreToolUse" and
+           entry.get("result") in allowed_decisions and
+           entry.get("tool_input_sha256") == expected_hash and
+           entry.get("session_id") == turn["session_id"] and
+           entry.get("turn_id") == turn_id and entry.get("tool_use_id")]
+    if len(pre) != 1:
+        raise Failed("allowed tool lacks one matching real PreToolUse decision")
+    post = [entry for entry in turn["hook_traces"] if
+            entry.get("hook_event_name") == "PostToolUse" and entry.get("result") == "captured" and
+            entry.get("tool_input_sha256") == expected_hash and
+            all(entry.get(key) == pre[0].get(key) for key in
+                ("session_id", "turn_id", "tool_use_id")) and isinstance(entry.get("event_id"), str)]
+    if len(post) != 1:
+        raise Failed("allowed tool lacks one matching real PostToolUse capture")
+    event = _api(client, "GET", f"/v1/events/{post[0]['event_id']}")["event"]
+    payload = event.get("payload", {})
+    if (event.get("event_type") != "tool.result" or event.get("actor_kind") != "system" or
+        event.get("actor_id") != manifest["system_actor_id"] or
+        event.get("task_id") != manifest["task_id"] or event.get("project_id") != manifest["project_id"] or
+        payload.get("codex_session_id") != turn["session_id"] or payload.get("turn_id") != turn_id or
+        payload.get("tool_use_id") != pre[0]["tool_use_id"] or payload.get("tool_name") != "Bash" or
+        not isinstance(payload.get("call_event_id"), str)):
+        raise Failed("stored tool.result does not match the real bound Bash call")
+    call = _api(client, "GET", f"/v1/events/{payload['call_event_id']}")["event"]
+    call_payload = call.get("payload", {})
+    if (call.get("event_type") != "tool.call" or call.get("actor_kind") != "system" or
+        call.get("actor_id") != event["actor_id"] or call.get("task_id") != manifest["task_id"] or
+        call.get("project_id") != manifest["project_id"] or
+        call_payload.get("codex_session_id") != turn["session_id"] or
+        call_payload.get("turn_id") != turn_id or
+        call_payload.get("tool_use_id") != pre[0]["tool_use_id"] or
+        call_payload.get("tool_name") != "Bash" or
+        call_payload.get("tool_input", {}).get("command") != command or
+        hashlib.sha256(canonical_json(call_payload.get("tool_input")).encode()).hexdigest() != expected_hash):
+        raise Failed("linked tool.call does not match the real Bash command and session")
+    return event
+
+
 def _hook_probe(manifest: dict[str, Any], session: str, nonce: str,
                 *, bound: bool) -> dict[str, Any]:
     """Direct integration probe after Core stop; it is not real Codex Evidence."""
@@ -650,17 +700,9 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
                all(t.get(key) == denied_trace.get(key) for key in
                    ("session_id", "turn_id", "tool_use_id")) for t in traces):
             raise Failed("denied Bash call reached PostToolUse; native denial was not enforced")
-        captured = [t for t in traces if t.get("hook_event_name") == "PostToolUse" and t.get("result") == "captured"]
-        if not captured:
-            raise Failed("real allowed Bash tool has no PostToolUse Evidence trace")
-        matching = []
-        for trace in captured:
-            event = _api(human, "GET", f"/v1/events/{trace['event_id']}")["event"]
-            if event.get("payload", {}).get("tool_input", {}).get("command") == manifest["allowed_command"]:
-                matching.append(event)
-        if len(matching) != 1:
-            raise Failed("real allowed Bash command did not produce one matching tool.result Event")
-        response = matching[0]["payload"].get("tool_response")
+        first_tool_event = _captured_tool_event(human, manifest, report["turns"][-1],
+                                                 manifest["allowed_command"], {"guard:verify"})
+        response = first_tool_event["payload"].get("tool_response")
         exit_code = response.get("exit_code", response.get("exitCode")) if isinstance(response, dict) else None
         if type(exit_code) is not int or exit_code != 0:
             raise Failed("native PostToolUse result has no trustworthy zero integer exit code")
@@ -671,7 +713,7 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
                                 expected_state=("STEP", step["status"], step["revision"]))
         verified = _transition(agent, manifest, "VERIFIED")
         refs = _evidence(human, verified["evidence_ids"], manifest)
-        if not any(item.get("source_event_id") == matching[0]["event_id"] for item in refs):
+        if not any(item.get("source_event_id") == first_tool_event["event_id"] for item in refs):
             raise Failed("VERIFIED did not cite actual PostToolUse Evidence")
         if {"rule_id": manifest["rules"][1]["rule_id"], "version": 1} not in verified["rule_versions"]:
             raise Failed("VERIFIED did not consume the active VERIFY Rule version")
@@ -680,6 +722,8 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
                                 session, nonce, report,
                                 expected_state=("STEP", step["status"], step["revision"]),
                                 allowed_commands=(manifest["stale_command"],))
+        _captured_tool_event(human, manifest, report["turns"][-1], manifest["stale_command"],
+                             {"guard:allow"})
         task, step = _state(human, manifest["task_id"], manifest["step_id"])
         if not Path(manifest["stale"]).exists() or step["status"] != "STALE":
             raise Failed("real workspace mutation did not persist VERIFIED to STALE")
@@ -687,9 +731,13 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
         prompt4 = f"Use Bash to run exactly `{manifest['allowed_command']}` again. Report its outcome."
         session, _ = _real_turn(args, out, manifest, "04-rerun", prompt4, session, nonce, report,
                                 allowed_commands=(manifest["allowed_command"],))
+        rerun_event = _captured_tool_event(human, manifest, report["turns"][-1],
+                                            manifest["allowed_command"], {"guard:verify"})
         _transition(agent, manifest, "EXECUTED")
         verified_again = _transition(agent, manifest, "VERIFIED")
-        _evidence(human, verified_again["evidence_ids"], manifest)
+        rerun_refs = _evidence(human, verified_again["evidence_ids"], manifest)
+        if not any(item.get("source_event_id") == rerun_event["event_id"] for item in rerun_refs):
+            raise Failed("second VERIFIED did not cite the actual rerun PostToolUse")
         _, step = _state(human, manifest["task_id"], manifest["step_id"])
         session, step_origin = _real_turn(args, out, manifest, "05-step-confirm", PROMPT_STEP_CONFIRM,
                                           session, nonce, report,

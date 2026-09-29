@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import importlib.util
+import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -151,6 +153,63 @@ class RealGateRunner(unittest.TestCase):
                 with self.assertRaisesRegex(gate.Failed, "without a valid bound session lease"):
                     gate._real_turn(args, out, manifest, "01-tools", "probe", None,
                                     "mock-private-nonce", record)
+
+    def test_post_trace_links_actual_core_call_and_result_events(self) -> None:
+        """Synthetic PostTool payload checks the API shape, never T10 real coverage."""
+        gate = module()
+        with tempfile.TemporaryDirectory(prefix="p1-gate-linked-events-") as temp:
+            out = Path(temp) / "gate"
+            prepared = subprocess.run([sys.executable, str(SCRIPT), "--prepare", "--out", str(out),
+                                       "--project-root", str(ROOT)], capture_output=True,
+                                      text=True, timeout=30)
+            self.assertEqual(prepared.returncode, 2, prepared.stderr)
+            manifest = json.loads((out / "manifest.json").read_text())
+            core = gate._start_core(Path(manifest["db"]), Path(manifest["workspace"]),
+                                    manifest["port"], out)
+            try:
+                system = gate.CoreClient(f"http://127.0.0.1:{manifest['port']}",
+                                         (out / "system.token").read_text().strip())
+                human = gate.CoreClient(f"http://127.0.0.1:{manifest['port']}",
+                                        (out / "human.token").read_text().strip())
+                command = manifest["allowed_command"]
+                recorded = system.post("/v1/tool-results", {"task_id": manifest["task_id"],
+                    "step_id": manifest["step_id"], "host_id": manifest["host_id"],
+                    "codex_session_id": "component-session", "turn_id": "component-turn",
+                    "tool_use_id": "component-tool", "tool_name": "Bash",
+                    "tool_input": {"command": command}, "tool_response": {"exit_code": 0}})
+                input_hash = hashlib.sha256(gate.canonical_json({"command": command}).encode()).hexdigest()
+                common = {"session_id": "component-session", "turn_id": "component-turn"}
+                turn = {"session_id": "component-session", "hook_traces": [
+                    {**common, "hook_event_name": "UserPromptSubmit", "result": "captured"},
+                    {**common, "hook_event_name": "PreToolUse", "result": "guard:verify",
+                     "tool_use_id": "component-tool", "tool_input_sha256": input_hash},
+                    {**common, "hook_event_name": "PostToolUse", "result": "captured",
+                     "tool_use_id": "component-tool", "tool_input_sha256": input_hash,
+                     "event_id": recorded["result_event"]["event_id"]}]}
+                actual = gate._captured_tool_event(human, manifest, turn, command, {"guard:verify"})
+                self.assertEqual(actual["event_id"], recorded["result_event"]["event_id"])
+                other_session = copy.deepcopy(turn)
+                other_session["session_id"] = "other-session"
+                with self.assertRaises(gate.Failed):
+                    gate._captured_tool_event(human, manifest, other_session, command, {"guard:verify"})
+                original_api = gate._api
+                def missing_call(client, method, path, body=None):
+                    if path == f"/v1/events/{recorded['call_event']['event_id']}":
+                        raise gate.Failed("linked call missing")
+                    return original_api(client, method, path, body)
+                with patch.object(gate, "_api", side_effect=missing_call):
+                    with self.assertRaises(gate.Failed):
+                        gate._captured_tool_event(human, manifest, turn, command, {"guard:verify"})
+                def wrong_command(client, method, path, body=None):
+                    value = original_api(client, method, path, body)
+                    if path == f"/v1/events/{recorded['call_event']['event_id']}":
+                        value["event"]["payload"]["tool_input"]["command"] = "touch /wrong"
+                    return value
+                with patch.object(gate, "_api", side_effect=wrong_command):
+                    with self.assertRaises(gate.Failed):
+                        gate._captured_tool_event(human, manifest, turn, command, {"guard:verify"})
+            finally:
+                gate._stop_core(core, manifest["port"])
 
 
 if __name__ == "__main__":
