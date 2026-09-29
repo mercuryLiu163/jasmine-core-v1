@@ -18,7 +18,8 @@ from .canonical import canonical_json, sha256_hex
 
 TOKEN_BYTES = 32
 SCOPES = ("admin", "objects:read", "objects:write", "events:read", "events:write",
-          "authority:read", "authority:propose", "authority:manage", "guard:check")
+          "authority:read", "authority:propose", "authority:manage", "guard:check",
+          "state:read", "state:write", "state:accept")
 
 
 @dataclass(frozen=True)
@@ -54,6 +55,8 @@ class Auth:
         kind = self._conn.execute("SELECT kind FROM actors WHERE actor_id = ?", (actor_id,)).fetchone()["kind"]
         if kind == "agent" and "authority:manage" in scopes:
             raise errors.ForbiddenActorKind("agent keys cannot carry authority:manage")
+        if kind == "agent" and "state:accept" in scopes:
+            raise errors.ForbiddenActorKind("agent keys cannot carry state:accept")
         key_id = ids.new_id("key")
         token = secrets.token_urlsafe(TOKEN_BYTES)
         with db.translate_lock_errors(), db.transaction(self._conn):

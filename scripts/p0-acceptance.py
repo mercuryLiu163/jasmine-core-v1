@@ -644,7 +644,7 @@ def case_t05(core: LiveCore, work: Path) -> Case:
             ("task",
              "INSERT INTO tasks (task_id, project_id, title, description, status, revision,"
              " source_event_id, created_at, updated_at) VALUES"
-             " ('tsk_01K742SG00YPWF74TSXEKA3254', ?, 'x', '', 'open', 1, ?,"
+             " ('tsk_01K742SG00YPWF74TSXEKA3254', ?, 'x', '', 'ACTIVE', 1, ?,"
              " '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z')",
              (project_id, event_id)),
             # A session, not a second project: a second project is already

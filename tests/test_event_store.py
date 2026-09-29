@@ -196,7 +196,7 @@ class ObjectCreation(StoreTestCase):
         result = self.create_task(project["project_id"])
         task = result["object"]
         self.assertEqual(task["project_id"], project["project_id"])
-        self.assertEqual(task["status"], "open")
+        self.assertEqual(task["status"], "ACTIVE")
         self.assertEqual(task["revision"], 1)
         self.assertEqual(self.objects.events.get(task["source_event_id"])["event_type"],
                          "task.created")
@@ -542,7 +542,7 @@ class OneEventCreatesAtMostOneObject(StoreTestCase):
                     "INSERT INTO tasks (task_id, project_id, title, description, status, revision,"
                     " source_event_id, created_at, updated_at)"
                     " VALUES ('tsk_01K742SG00YPWF74TSXEKA3254',"
-                    " 'prj_01K742SG000Z61XPMPFJBYH7RZ', 'x', '', 'open', 1, ?,"
+                    " 'prj_01K742SG000Z61XPMPFJBYH7RZ', 'x', '', 'ACTIVE', 1, ?,"
                     " '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z')",
                     (project_event,),
                 )
