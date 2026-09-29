@@ -48,6 +48,12 @@ EVENT_TYPES = frozenset({
     "task.transitioned",
     "task.criteria_updated",
     "task.accepted",
+    "tool.call",
+    "tool.result",
+    "evidence.recorded",
+    "evidence.confirmed",
+    "workspace.fingerprinted",
+    "step.staled",
 })
 
 MAX_TEXT_BYTES = 256 * 1024

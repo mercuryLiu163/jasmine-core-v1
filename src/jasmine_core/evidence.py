@@ -74,7 +74,7 @@ def _requirement_set(value: Any) -> dict[str, Any]:
             raise errors.InvalidRequest("requirement key must be unique and nonempty")
         seen.add(key)
         kind, result = item.get("kind"), item.get("required_result")
-        if not isinstance(kind, str) or kind not in KINDS or result not in (
+        if not isinstance(kind, str) or not isinstance(result, str) or kind not in KINDS or result not in (
             {"PASS", "INFO"} if kind == "USER_CONFIRMATION" else {"PASS"}
         ):
             raise errors.InvalidRequest("invalid Evidence kind or required_result")
@@ -219,7 +219,11 @@ class EvidenceStore:
         try:
             if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):
                 return "BROKEN_REFERENCE"
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            digest_hash = hashlib.sha256()
+            with path.open("rb") as stream:
+                while chunk := stream.read(1024 * 1024):
+                    digest_hash.update(chunk)
+            digest = digest_hash.hexdigest()
         except OSError:
             return "BROKEN_REFERENCE"
         return "OK" if digest == item["artifact_sha256"] else "BROKEN_REFERENCE"
