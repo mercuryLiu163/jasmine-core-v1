@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .. import SCHEMA_VERSION, __version__
+from ..canonical import looks_like_credential
 
 VERDICTS = ("PASS", "FAIL", "BLOCKED")
 SECTIONS = (
@@ -35,28 +36,22 @@ SECTIONS = (
     "context",
 )
 
-FORBIDDEN_KEYS = ("token", "secret", "password", "api_key", "authorization", "private_key")
+#: Field names that always hold credential material. Matched on the *normalised*
+#: whole name, not as a substring: `api_key_rows` is a row count and `token_count`
+#: is a statistic, and a substring rule would reject honest evidence while
+#: stopping no real leak. The value-level rules below are what actually catch
+#: material.
+FORBIDDEN_FIELD_NAMES = frozenset({
+    "token", "tokens", "accesstoken", "refreshtoken", "idtoken", "bearertoken",
+    "apikey", "apikeys", "password", "passwd", "secret", "secrets", "clientsecret",
+    "authorization", "privatekey", "credential", "credentials", "cookie", "sessionkey",
+})
 NOT_IMPLEMENTED = "N/A (P0 not implemented)"
 
-#: Shapes that indicate real credential material. A shell placeholder such as
-#: `$READER` or `${TOKEN}` in a reproduction step is documentation, not a leak,
-#: so it is deliberately not in this list: refusing it would make an honest
-#: bundle impossible to write.
-_LITERAL_CREDENTIAL_RES = (
-    re.compile(r"(?i)\bbearer\s+(?!\$\{?\$?[A-Za-z_])[A-Za-z0-9._-]{8,}"),
-    re.compile(r"\bsk-[A-Za-z0-9_-]{8,}\b"),
-    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{16,}\b"),
-    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b"),
-    re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}\b"),
-    re.compile(r"\bAKIA[0-9A-Z]{12,}\b"),
-    re.compile(r"\bAIza[0-9A-Za-z_-]{10,}\b"),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\b"),
-    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
-)
 
+def _normalise_field(name: str) -> str:
+    return "".join(char for char in str(name).lower() if char.isalnum())
 
-def looks_like_credential(text: str) -> bool:
-    return any(pattern.search(text) for pattern in _LITERAL_CREDENTIAL_RES)
 
 
 @dataclass
@@ -142,19 +137,60 @@ def environment() -> dict[str, Any]:
     }
 
 
-def assert_no_secrets(payload: Any, path: str = "run") -> None:
-    """Refuse to write a bundle that contains real credential material.
+WITHHELD = "[REDACTED: withheld from the evidence bundle]"
 
-    Two things are rejected: a field *named* like a credential, and a string that
-    contains something shaped like an actual secret. Text that merely refers to
-    credentials by name -- a reproduction step using `$TOKEN` -- is allowed,
-    because refusing it would make a usable bundle impossible to write while
-    stopping none of the real leaks.
+
+def looks_like_credential_field(name: str) -> bool:
+    return _normalise_field(name) in FORBIDDEN_FIELD_NAMES
+
+
+class Redaction:
+    """One thing the guard removed, named so a reviewer can go looking for it."""
+
+    def __init__(self, path: str, reason: str) -> None:
+        self.path = path
+        self.reason = reason
+
+    def to_dict(self) -> dict[str, str]:
+        return {"path": self.path, "reason": self.reason, "value": WITHHELD}
+
+
+def sanitise_secrets(payload: Any, path: str = "run",
+                     found: list[Redaction] | None = None) -> Any:
+    """Remove credential material, recording where it was found.
+
+    This deliberately does not raise. A bundle that refuses to exist because the
+    product leaked a token into a response throws away the one piece of evidence
+    that matters. Instead the material is replaced, the location is recorded in
+    `redactions`, and the acceptance runner treats any redaction as a failure to
+    investigate -- so a leak is disclosed rather than either hidden or fatal.
+    """
+    found = [] if found is None else found
+    if isinstance(payload, dict):
+        return {
+            key: (found.append(Redaction(f"{path}.{key}", "credential-shaped field name"))
+                  or WITHHELD)
+            if looks_like_credential_field(key) else sanitise_secrets(value, f"{path}.{key}", found)
+            for key, value in payload.items()
+        }
+    if isinstance(payload, (list, tuple)):
+        return [sanitise_secrets(item, f"{path}[{index}]", found)
+                for index, item in enumerate(payload)]
+    if isinstance(payload, str) and looks_like_credential(payload):
+        found.append(Redaction(path, "credential-shaped value"))
+        return WITHHELD
+    return payload
+
+
+def assert_no_secrets(payload: Any, path: str = "run") -> None:
+    """Raise if `payload` holds credential material.
+
+    Kept as a strict check for callers that want refusal semantics; the
+    recorder itself uses :func:`sanitise_secrets`.
     """
     if isinstance(payload, dict):
         for key, value in payload.items():
-            lowered = str(key).lower()
-            if any(needle in lowered for needle in FORBIDDEN_KEYS):
+            if looks_like_credential_field(key):
                 raise ValueError(
                     f"{path}.{key} is named like a credential field; refusing to write it"
                 )
@@ -184,6 +220,7 @@ class Recorder:
             reviewer=reviewer,
             verifier=verifier,
         )
+        self.redactions: list[Redaction] = []
 
     def add(self, case: Case) -> None:
         self.run.cases.append(case)
@@ -196,9 +233,17 @@ class Recorder:
 
     def write(self) -> Path:
         payload = self.run.to_dict()
-        assert_no_secrets(payload)
+        clean = sanitise_secrets(payload, found=self.redactions)
+        clean["redactions"] = [item.to_dict() for item in self.redactions]
+        if self.redactions:
+            # Say so in the summary, not only in a field: a bundle that had to
+            # remove something is not a bundle to sign off without reading.
+            clean["redaction_warning"] = (
+                f"{len(self.redactions)} value(s) contained credential material and were "
+                "withheld. This means the product put a secret into a recorded response."
+            )
         self.output_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = self.output_dir / f"{self.run.run_id}.json"
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        path.write_text(json.dumps(clean, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         path.chmod(0o600)
         return path

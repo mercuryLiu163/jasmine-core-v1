@@ -10,12 +10,14 @@ implemented **and** exercised; anything not listed is not implemented.
 | Capability | P0 state |
 | --- | --- |
 | Public ID contract, package boundary | implemented (ADR 0001) |
-| `core.db` versioned schema, WAL, empty-database migration | implemented (ADR 0001) |
-| Transaction / `revision` / atomicity contract | implemented (ADR 0002) |
-| Core API error and idempotency contract | specified in ADR 0003; HTTP layer lands in P0-03 |
-| Raw text retention, authn and audit contract | specified in ADR 0004; key/audit tables land in P0-03 |
+| `core.db` versioned schema v2, WAL, empty-database migration | implemented (ADR 0001) |
+| Transaction / `revision` / atomicity contract | implemented (ADR 0002); the `expected_revision` update path is P1 |
+| Core API, error and idempotency contract | implemented ([ADR 0003](docs/adr/0003-core-api-errors-and-idempotency.md), [API doc](docs/api/core-api-v1.md)) |
+| Raw text retention, bearer auth, append-only audit | implemented (ADR 0004) |
 | Immutable idempotent Event Store, project/task/session | implemented ([P0-02](docs/p0-02-event-store.md)) |
-| Core API server, Codex UserPromptSubmit capture, Validation Recorder | P0-03 |
+| Codex `UserPromptSubmit` capture entry | implemented, but **not registered with Codex** — see below |
+| Minimal Validation Recorder and the P0 acceptance matrix | implemented ([P0-03](docs/p0-03-api-and-capture.md)) |
+| Real-conversation Gate (P0-T07) | **BLOCKED**: the capture entry is not installed in `~/.codex/hooks.json` |
 
 Not implemented in P0 and not claimed anywhere in this repository: Rule/Guard,
 the full Task state machine, Evidence sufficiency, LLM Interpreter/Resolver,

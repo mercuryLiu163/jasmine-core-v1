@@ -79,13 +79,26 @@ class Auth:
             raise errors.Unauthenticated("the bearer token is not recognised")
         if row["revoked_at"] is not None:
             raise errors.Unauthenticated("this API key has been revoked")
-        scopes = frozenset(json_scopes(row["scopes"]))
-        with db.translate_lock_errors():
-            self._conn.execute(
-                "UPDATE api_keys SET last_used_at = ? WHERE key_id = ?",
-                (clock.now_rfc3339(), row["key_id"]),
-            )
-        return Principal(actor_id=row["actor_id"], key_id=row["key_id"], scopes=scopes)
+        # Deliberately read-only. Recording last_used_at here would mean a
+        # caller with the wrong scope had already written to `api_keys` before
+        # the refusal, which is a write Truth does not promise to be unchanged.
+        return Principal(actor_id=row["actor_id"], key_id=row["key_id"],
+                         scopes=frozenset(json_scopes(row["scopes"])))
+
+    def touch(self, key_id: str) -> None:
+        """Record that a key was used, called only after the request is allowed.
+
+        Best effort by design: losing a last-used timestamp must not fail the
+        request it was describing.
+        """
+        try:
+            with db.translate_lock_errors(), db.transaction(self._conn):
+                self._conn.execute(
+                    "UPDATE api_keys SET last_used_at = ? WHERE key_id = ?",
+                    (clock.now_rfc3339(), key_id),
+                )
+        except (db.errors.DatabaseBusy, sqlite3.OperationalError):
+            pass
 
     def list_keys(self) -> list[dict[str, Any]]:
         """Metadata only. There is no endpoint that can return a token again."""

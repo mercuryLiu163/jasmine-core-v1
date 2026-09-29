@@ -19,6 +19,12 @@
 | --- | --- | --- | --- |
 | GET | `/v1/health` | 无 | 进程存活、schema 版本、commit/版本 |
 | GET | `/v1/meta/schema` | 无 | 当前 `schema_version` 与已应用迁移列表 |
+| GET | `/v1/hosts` | `objects:read` | 已注册的采集设备 |
+| GET | `/v1/actors` | `objects:read` | 已注册身份 |
+| POST | `/v1/auth/keys` | `admin` | 签发 API key（明文只返回一次） |
+| GET | `/v1/auth/keys` | `admin` | 仅元数据，永不返回 token |
+| POST | `/v1/auth/keys/{key_id}/revoke` | `admin` | 吊销，幂等 |
+| GET | `/v1/audit` | `admin` | 仅元数据，无 prompt 原文、无 token |
 | POST | `/v1/projects` | `objects:write` | 创建 project，同事务写源 Event |
 | GET | `/v1/projects` `/v1/projects/{id}` | `objects:read` | 列表 / 单个 |
 | POST | `/v1/tasks` | `objects:write` | 创建 task（需已存在的 `project_id`） |
@@ -71,9 +77,11 @@
 | --- | --- | --- |
 | 400 | `invalid_request` | JSON 解析失败、字段类型/取值非法、未知字段 |
 | 400 | `missing_expected_revision` | 更新类请求缺 `expected_revision`（P0 无更新端点，保留契约） |
+| 400 | `invalid_request` | 未知字段（`POST /v1/auth/keys` 也拒绝）、非法查询参数（`limit`/`offset`/`after_seq`）|
 | 401 | `unauthenticated` | 缺失/非法/吊销的 `Authorization: Bearer` |
 | 403 | `forbidden_scope` | scope 不足 |
 | 404 | `project_not_found` / `task_not_found` / `session_not_found` / `event_not_found` | 引用或查询目标不存在 |
+| 404 | `key_not_found` | 吊销一个不存在的 key |
 | 404 | `host_not_found` / `actor_not_found` | 请求引用的 host 或 actor 未注册 |
 | 409 | `event_id_conflict` | 同 `event_id` 不同内容 |
 | 409 | `source_event_duplicate` | 同 `(source_system, source_event_id)` 重复 |
@@ -85,7 +93,9 @@
 | 503 | `schema_version_unsupported` | DB 版本高于/低于代码期望且无法迁移，或检测到迁移漂移 |
 | 503 | `migration_conflict` | 迁移无法由本进程推进（例如被其他进程占用） |
 
-**鉴权与校验失败绝不写入 Truth**（`events` 与对象表），但**一定写入审计**（`audit_log`），失败也在自己的独立事务里落盘——审计失败不能反过来阻断业务事务，两者分开提交。
+**鉴权与校验失败绝不写入任何表**（`events`、对象表、`api_keys`）。`last_used_at` 只在 scope 校验通过之后才记录：被拒绝的调用方不得留下任何痕迹以外的东西。失败**一定写入审计**（`audit_log`），在独立事务里落盘——审计失败不能反过来阻断业务事务，两者分开提交。
+
+**审计不保存调用方输入里的凭据。** `path`、`X-Request-Id` 与 `details` 都可能被调用方塞进 token，因此三者都过脱敏（同时匹配 `Bearer%20`、`sk-`、`ghp_`、JWT、PEM 等形态），`X-Request-Id` 若像凭据则换成 Core 生成的值。审计字段另有长度上限，`detail_json` 不随请求体线性增长。
 
 ### 1.5 Event 不可变
 

@@ -8,7 +8,11 @@ anything but loopback.
 * Request and response bodies are `application/json; charset=utf-8`. Original
   text is stored and returned exactly as written — not escaped, not normalised.
 * Every response carries `X-Request-Id`. Send your own to correlate; otherwise
-  one is generated.
+  one is generated. A supplied id that is longer than 128 characters or that
+  looks like a credential is replaced with a generated one, because the audit
+  log stores it.
+* Numeric query parameters are validated, not coerced: `?after_seq=abc` is a
+  `400 invalid_request`, never a 500.
 * Errors are always `{"error": {"code", "message", "request_id", "details"}}`.
   `code` is stable; branch on it, never on `message`.
 * P0 has **no** `PUT` / `PATCH` / `DELETE`. A known path with the wrong method
@@ -38,8 +42,9 @@ request is refused with `403 actor_mismatch`.
 | GET | `/v1/actors` | `objects:read` | registered identities |
 | POST | `/v1/auth/keys` | `admin` | mint a key; the token is returned once |
 | GET | `/v1/auth/keys` | `admin` | metadata only, never a token |
-| POST | `/v1/auth/keys/{key_id}/revoke` | `admin` | idempotent |
+| POST | `/v1/auth/keys/{key_id}/revoke` | `admin` | idempotent; the key is then refused with 401 |
 | GET | `/v1/audit` | `admin` | metadata only; no prompt text, no token |
+| GET | `/v1/hosts`, `/v1/actors` | `objects:read` | registered devices and identities |
 | POST | `/v1/events` | `events:write` | append one Raw Event |
 | GET | `/v1/events` | `events:read` | filter by `session_id`, `task_id`, `project_id`, `event_type`, `source_system`, `after_seq`, `limit` |
 | GET | `/v1/events/{event_id}` | `events:read` | one Event, payload included |
@@ -99,6 +104,11 @@ P0 has no update endpoint; optimistic locking arrives with P1.
 `payload.text` is required and is stored byte for byte. A reference you state
 must resolve (`404 …_not_found`); a reference you omit is simply absent.
 
+The Codex capture entry deliberately sends **no** `cwd` and **no** `occurred_at`.
+Neither is part of a turn's identity: `cwd` is reported inconsistently between
+deliveries of the same turn, and an invented timestamp would make every retry a
+different body. The device is recorded as `host_id`.
+
 **`occurred_at` is optional on purpose.** A source with no timestamp of its own
 — the Codex hook — omits it, the Core records its own acceptance time, and the
 omission keeps the field out of the idempotency hash so a retried delivery is
@@ -127,6 +137,7 @@ recognised as a replay. Supplying it makes it part of the hashed content.
 | 403 | `forbidden_scope` | scope missing; nothing was written |
 | 403 | `actor_mismatch` | the body names a different actor than the token |
 | 404 | `project_not_found`, `task_not_found`, `session_not_found`, `event_not_found`, `host_not_found`, `actor_not_found`, `route_not_found` | target or reference does not exist |
+| 404 | `key_not_found` | revoking a key that does not exist |
 | 405 | `method_not_allowed` | known path, wrong method; `details.allowed` lists the rest |
 | 409 | `event_id_conflict`, `source_event_duplicate` | see the table above |
 | 409 | `revision_conflict` | reserved for P1 updates |
@@ -135,5 +146,11 @@ recognised as a replay. Supplying it makes it part of the hashed content.
 | 500 | `internal_error` | no exception type, message or stack is ever returned |
 | 503 | `database_busy`, `schema_version_unsupported`, `migration_conflict` | see the ADRs |
 
-A refusal never writes Truth. A refusal is always written to the audit log,
-which holds metadata and lengths only.
+A refusal never writes anything — not to `events`, the object tables, or
+`api_keys`. `last_used_at` is only recorded after the scope check passes, so a
+refused caller leaves no trace beyond the audit row.
+
+That audit row holds metadata and lengths only. `path`, the caller's
+`X-Request-Id` and any `details` value are all passed through redaction before
+they are stored, so a client that puts a token in a URL cannot land it on disk.
+Field values are length-clipped, so an audit row cannot grow with the body.

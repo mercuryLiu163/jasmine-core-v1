@@ -17,13 +17,19 @@ import sqlite3
 from typing import Any
 
 from . import clock, db, errors, ids
-from .canonical import canonical_json, redact
+from .canonical import canonical_json, redact, redact_text
 
 _INSERT = """
 INSERT INTO audit_log (audit_id, seq, at, request_id, actor_id, method, path, decision,
                        status_code, scope, target_id, error_code, detail_json)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
+
+
+#: A caller-supplied value must not be able to make the audit row unbounded.
+#: The body cap is 1 MiB; an audit row is metadata and does not need to be.
+MAX_FIELD_CHARS = 512
+MAX_DETAIL_CHARS = 4096
 
 
 class AuditLog:
@@ -35,10 +41,17 @@ class AuditLog:
                scope: str | None = None, target_id: str | None = None,
                error_code: str | None = None, detail: dict[str, Any] | None = None) -> str:
         audit_id = ids.new_id("aud")
-        # `path` is redacted too: a future endpoint could put a value in a query
-        # string, and the same rule should apply without anyone remembering.
-        safe_detail = redact(detail or {})
-        safe_path = redact(str(path))
+        # `path`, `request_id` and every detail value are caller-influenced, and
+        # ADR 0004 §1.2 promises the masking holds "even if the caller
+        # mistakenly passes it". A caller-supplied `X-Request-Id`, a path
+        # segment, or an echoed `details.value` are exactly the channels through
+        # which a bearer token would otherwise reach the table.
+        safe_detail = _clip(canonical_json(redact(detail or {})))
+        row_values = (
+            audit_id, _clip(str(request_id)), _clip(str(method)), _safe_path(path),
+            _clip(str(decision)), _clip(str(actor_id)) if actor_id else None, scope,
+            _clip(str(target_id)) if target_id else None, error_code,
+        )
         with db.translate_lock_errors(), db.transaction(self._conn):
             row = self._conn.execute(
                 "SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM audit_log"
@@ -46,9 +59,9 @@ class AuditLog:
             self._conn.execute(
                 _INSERT,
                 (
-                    audit_id, int(row["next"]), clock.now_rfc3339(), request_id, actor_id,
-                    str(method), safe_path, decision, status_code, scope,
-                    target_id, error_code, canonical_json(safe_detail),
+                    row_values[0], int(row["next"]), clock.now_rfc3339(), row_values[1],
+                    row_values[5], row_values[2], row_values[3], row_values[4], status_code,
+                    row_values[6], row_values[7], row_values[8], safe_detail,
                 ),
             )
         return audit_id
@@ -81,10 +94,36 @@ class AuditLog:
         return int(self._conn.execute("SELECT COUNT(*) AS n FROM audit_log").fetchone()["n"])
 
 
+def _safe_path(path: str) -> str:
+    """Redact a request path and query, and clip it.
+
+    Both the raw and the percent-decoded forms are masked, because a caller can
+    put anything in a path segment or query parameter and the audit log is not
+    the place to discover what.
+    """
+    from urllib.parse import unquote
+
+    masked = redact_text(str(path))
+    decoded = unquote(str(path))
+    if decoded != str(path):
+        masked = redact_text(masked) + " " + redact_text(decoded)
+    return _clip(masked)
+
+
+def _clip(value: str, limit: int = MAX_FIELD_CHARS) -> str:
+    if len(value) <= limit:
+        return value
+    return value[:limit] + f"…[truncated {len(value) - limit} chars]"
+
+
 def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
     """The only error information allowed out of the request path.
 
-    `CoreError.details` can carry caller-supplied values, so it is redacted; the
-    message and code are frozen by the ADR and are safe by construction.
+    `CoreError.details` can carry caller-supplied values, so it is redacted and
+    clipped; the code is frozen by the ADR and the message is written by us.
     """
-    return {"code": exc.code, "message": exc.message, "details": exc.details}
+    return {
+        "code": exc.code,
+        "message": _clip(exc.message),
+        "details": redact(_clip(canonical_json(exc.details), MAX_DETAIL_CHARS)),
+    }

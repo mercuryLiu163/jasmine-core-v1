@@ -34,13 +34,16 @@ def dispatch(core: Core, request: Request) -> Response:
     error_code: str | None = None
     audit_detail: dict[str, Any] = {}
     try:
-        route, _ = handlers.resolve(request.method, request.path)
+        route, match = handlers.resolve(request.method, request.path)
         scope = route.scope
         if not route.public:
             principal = core.auth.authenticate(request.header("authorization"))
             if route.scope:
                 principal.require(route.scope)
-        response = route.handler(request, core, principal)
+            # Only now, after the scope has been satisfied, does a request touch
+            # any table. A refused caller writes nothing at all.
+            core.auth.touch(principal.key_id)
+        response = route.handler(request, core, principal, match)
         status = response.status
         error_code = None
         target = _target_of(response)

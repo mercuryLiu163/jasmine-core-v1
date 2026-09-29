@@ -20,7 +20,7 @@ from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from .request import Request, Response
 
-Handler = Callable[[Request, "Core", auth.Principal | None], Response]
+Handler = Callable[[Request, "Core", auth.Principal | None, "re.Match[str]"], Response]
 
 PLURAL = {"project": "projects", "task": "tasks", "session": "sessions"}
 ID_PREFIX = {"project": "prj", "task": "tsk", "session": "ses"}
@@ -106,7 +106,8 @@ def resolve(method: str, path: str) -> tuple[Route, re.Match[str]]:
 # -- handlers ---------------------------------------------------------------
 
 
-def health(request: Request, core: Core, principal: auth.Principal | None) -> Response:
+def health(request: Request, core: Core, principal: auth.Principal | None,
+           match: re.Match[str]) -> Response:
     return Response(200, {
         "status": "ok",
         "core_version": __version__,
@@ -114,7 +115,8 @@ def health(request: Request, core: Core, principal: auth.Principal | None) -> Re
     })
 
 
-def meta_schema(request: Request, core: Core, principal: auth.Principal | None) -> Response:
+def meta_schema(request: Request, core: Core, principal: auth.Principal | None,
+                match: re.Match[str]) -> Response:
     return Response(200, {
         "core_version": __version__,
         "schema_version": current_version(core.conn),
@@ -123,8 +125,12 @@ def meta_schema(request: Request, core: Core, principal: auth.Principal | None) 
     })
 
 
-def create_key(request: Request, core: Core, principal: auth.Principal) -> Response:
+def create_key(request: Request, core: Core, principal: auth.Principal,
+               match: re.Match[str]) -> Response:
     body = request.json_body()
+    unknown = sorted(set(body) - {"actor_id", "label", "scopes"})
+    if unknown:
+        raise errors.InvalidRequest(f"unknown fields: {', '.join(unknown)}", fields=unknown)
     assert principal is not None
     actor_id = body.get("actor_id", principal.actor_id)
     if actor_id != principal.actor_id:
@@ -141,24 +147,31 @@ def create_key(request: Request, core: Core, principal: auth.Principal) -> Respo
     return Response(201, issued, {"Location": f"/v1/auth/keys/{issued['key_id']}"})
 
 
-def list_keys(request: Request, core: Core, principal: auth.Principal) -> Response:
+def list_keys(request: Request, core: Core, principal: auth.Principal,
+            match: re.Match[str]) -> Response:
     return Response(200, {"keys": core.auth.list_keys()})
 
 
-def revoke_key(request: Request, core: Core, principal: auth.Principal) -> Response:
-    key_id = _last_segment(request)
+def revoke_key(request: Request, core: Core, principal: auth.Principal,
+               match: re.Match[str]) -> Response:
+    # From the route's captured group, not from the last path segment: the last
+    # segment of /v1/auth/keys/{key_id}/revoke is the literal "revoke", which
+    # made this endpoint fail every time it was called.
+    key_id = match.group(1)
     _require_id(key_id, "key", "key_id")
     core.auth.revoke(key_id)
     return Response(200, {"key_id": key_id, "revoked": True})
 
 
-def list_audit(request: Request, core: Core, principal: auth.Principal) -> Response:
+def list_audit(request: Request, core: Core, principal: auth.Principal,
+            match: re.Match[str]) -> Response:
     entries = core.audit.list(actor_id=_optional_param(request, "actor_id"),
                               limit=_int_param(request, "limit", 100))
     return Response(200, {"entries": entries, "count": len(entries)})
 
 
-def create_event(request: Request, core: Core, principal: auth.Principal) -> Response:
+def create_event(request: Request, core: Core, principal: auth.Principal,
+            match: re.Match[str]) -> Response:
     assert principal is not None
     spec = NewEvent.from_request(request.json_body(), actor_id=principal.actor_id,
                                  actor_kind=core.actor_kind(principal.actor_id))
@@ -170,8 +183,8 @@ def create_event(request: Request, core: Core, principal: auth.Principal) -> Res
                     {"Location": f"/v1/events/{event['event_id']}"})
 
 
-def list_events(request: Request, core: Core, principal: auth.Principal) -> Response:
-    after = _optional_param(request, "after_seq")
+def list_events(request: Request, core: Core, principal: auth.Principal,
+            match: re.Match[str]) -> Response:
     events = core.objects.events.list(
         session_id=_optional_param(request, "session_id"),
         task_id=_optional_param(request, "task_id"),
@@ -179,13 +192,14 @@ def list_events(request: Request, core: Core, principal: auth.Principal) -> Resp
         event_type=_optional_param(request, "event_type"),
         source_system=_optional_param(request, "source_system"),
         limit=_int_param(request, "limit", 100),
-        after_seq=int(after) if after else None,
+        after_seq=_int_param(request, "after_seq", 0) or None,
     )
     return Response(200, {"events": events, "count": len(events)})
 
 
-def get_event(request: Request, core: Core, principal: auth.Principal) -> Response:
-    event_id = _last_segment(request)
+def get_event(request: Request, core: Core, principal: auth.Principal,
+              match: re.Match[str]) -> Response:
+    event_id = match.group(1)
     _require_id(event_id, "evt", "event_id")
     event = core.objects.events.get(event_id)
     if event is None:
@@ -193,16 +207,19 @@ def get_event(request: Request, core: Core, principal: auth.Principal) -> Respon
     return Response(200, {"event": event})
 
 
-def list_hosts(request: Request, core: Core, principal: auth.Principal) -> Response:
+def list_hosts(request: Request, core: Core, principal: auth.Principal,
+            match: re.Match[str]) -> Response:
     return Response(200, {"hosts": core.registry.list_hosts()})
 
 
-def list_actors(request: Request, core: Core, principal: auth.Principal) -> Response:
+def list_actors(request: Request, core: Core, principal: auth.Principal,
+            match: re.Match[str]) -> Response:
     return Response(200, {"actors": core.registry.list_actors()})
 
 
 def _make_create(kind: str) -> Handler:
-    def handler(request: Request, core: Core, principal: auth.Principal) -> Response:
+    def handler(request: Request, core: Core, principal: auth.Principal,
+               match: re.Match[str]) -> Response:
         assert principal is not None
         result = core.objects.create(PARSERS[kind](request.json_body()),
                                      actor_id=principal.actor_id)
@@ -217,7 +234,8 @@ def _make_create(kind: str) -> Handler:
 
 
 def _make_list(kind: str) -> Handler:
-    def handler(request: Request, core: Core, principal: auth.Principal) -> Response:
+    def handler(request: Request, core: Core, principal: auth.Principal,
+               match: re.Match[str]) -> Response:
         rows = core.objects.list(
             kind,
             project_id=_optional_param(request, "project_id"),
@@ -231,8 +249,9 @@ def _make_list(kind: str) -> Handler:
 
 
 def _make_get(kind: str) -> Handler:
-    def handler(request: Request, core: Core, principal: auth.Principal) -> Response:
-        object_id = _last_segment(request)
+    def handler(request: Request, core: Core, principal: auth.Principal,
+               match: re.Match[str]) -> Response:
+        object_id = match.group(1)
         _require_id(object_id, ID_PREFIX[kind], "id")
         return Response(200, {kind: core.objects.require(kind, object_id)})
 
@@ -240,10 +259,6 @@ def _make_get(kind: str) -> Handler:
 
 
 # -- small request helpers ---------------------------------------------------
-
-
-def _last_segment(request: Request) -> str:
-    return request.path.rsplit("/", 1)[-1]
 
 
 def _require_id(value: str, prefix: str, field: str) -> None:

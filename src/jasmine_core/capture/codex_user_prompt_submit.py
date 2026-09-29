@@ -60,13 +60,17 @@ def _log(state_dir: Path | None, message: str) -> None:
         pass
 
 
-def derive_event_id(session_id: str, turn_id: str) -> str:
-    """A stable `evt_` id for a Codex turn.
+def derive_event_id(host_id: str, session_id: str, turn_id: str, prompt: str) -> str:
+    """A stable `evt_` id for one user turn on one device.
 
     Deterministic, so a retried hook is recognised as a replay by the Core's
-    `event_id` idempotency instead of writing the user's message twice, and
-    scoped to the source identity so two devices cannot silently collide on the
-    same conversation.
+    `event_id` idempotency instead of writing the user's message twice. Every
+    input to the *identity* of the turn is included -- host, session, turn and
+    the prompt itself -- so two devices capturing the same conversation, or the
+    same turn delivered with a different working directory, cannot collide.
+    Omitting `host_id` was a real defect: two devices produced the same id, the
+    different `host_id` changed the body hash, and the second device's prompt
+    was rejected as a conflict and lost.
 
     A client-supplied id carries no timestamp component. That is deliberate:
     the client cannot know the Core's clock, and ordering comes from
@@ -77,16 +81,15 @@ def derive_event_id(session_id: str, turn_id: str) -> str:
 
     from ..ids import CROCKFORD
 
-    raw = hashlib.sha256(f"{SOURCE_SYSTEM}\x1f{session_id}\x1f{turn_id}".encode("utf-8")).digest()
-    out = []
-    for index in range(26):
-        # 16 bytes is 128 bits; 26 characters need 130, so reuse the first two
-        # bits of the digest for the last character rather than shortening the id.
-        bit = (index * 5) % 128
-        byte = raw[bit // 8]
-        out.append(CROCKFORD[(byte >> (3 - (bit % 8))) & 0x1F] if bit % 8 <= 3
-                   else CROCKFORD[(byte << (bit % 8 - 3)) & 0x1F])
-    return "evt_" + "".join(out)
+    material = "\x1f".join((SOURCE_SYSTEM, host_id, session_id, turn_id, prompt))
+    raw = hashlib.sha256(material.encode("utf-8")).digest()  # 32 bytes = 256 bits
+    # Take 26 groups of 5 bits from 30 bytes. Reading bit-by-bit across byte
+    # boundaries is what makes every character independent; a byte-aligned
+    # shift silently degrades most of the id to one or two significant bits.
+    value = int.from_bytes(raw[:30], "big") >> 6  # drop the low 6 unused bits
+    return "evt_" + "".join(
+        CROCKFORD[(value >> (5 * (25 - index))) & 0x1F] for index in range(26)
+    )
 
 
 def build_event_body(payload: dict[str, Any], *, host_id: str) -> dict[str, Any]:
@@ -100,6 +103,13 @@ def build_event_body(payload: dict[str, Any], *, host_id: str) -> dict[str, Any]
     timestamp, so any value here would be invented, and inventing a fresh one on
     every delivery would turn a retried turn into an `event_id_conflict` instead
     of the replay it is. The Core records its own acceptance time.
+
+    `cwd` is deliberately not sent either. It is provenance rather than part of
+    the turn's identity, it is not part of the idempotency hash, and Codex
+    reports it inconsistently (a resolved path on one delivery, the symlink on
+    the next), so including it turned a legitimate retry into a conflict. The
+    device is already recorded as `host_id`, and the transcript path in the
+    Codex session file remains the place to look for a working directory.
     """
     session_id = payload.get("session_id")
     turn_id = payload.get("turn_id")
@@ -113,11 +123,10 @@ def build_event_body(payload: dict[str, Any], *, host_id: str) -> dict[str, Any]
         "source_system": SOURCE_SYSTEM,
         "source_event_id": f"{session_id}:{turn_id}" if isinstance(turn_id, str) and turn_id else None,
         "host_id": host_id,
-        "event_id": derive_event_id(session_id, str(turn_id or "")),
+        "event_id": derive_event_id(host_id, session_id, str(turn_id or ""), prompt),
         "payload": {
             "text": prompt,
             "turn_id": turn_id if isinstance(turn_id, str) else None,
-            "cwd": payload.get("cwd"),
             "source_session_id": session_id,
         },
     }

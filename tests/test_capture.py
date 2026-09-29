@@ -45,22 +45,44 @@ def codex_payload(prompt: str = PROMPT, *, session_id: str = "codex-session-prob
 
 
 class EventIdDerivation(unittest.TestCase):
+    def derive(self, prompt: str = "hello", session: str = "s1", turn: str = "t1",
+               host: str = HOST) -> str:
+        return capture.derive_event_id(host, session, turn, prompt)
+
     def test_the_id_has_the_frozen_shape(self) -> None:
-        derived = capture.derive_event_id("s", "t")
+        derived = self.derive()
         self.assertTrue(ids.is_id(derived, "evt"), derived)
         self.assertEqual(len(derived), 30)
 
     def test_the_same_turn_always_derives_the_same_id(self) -> None:
-        self.assertEqual(capture.derive_event_id("s1", "t1"), capture.derive_event_id("s1", "t1"))
+        self.assertEqual(self.derive(), self.derive())
 
-    def test_a_different_turn_or_session_derives_a_different_id(self) -> None:
-        base = capture.derive_event_id("s1", "t1")
-        self.assertNotEqual(base, capture.derive_event_id("s1", "t2"))
-        self.assertNotEqual(base, capture.derive_event_id("s2", "t1"))
+    def test_a_different_turn_session_host_or_prompt_derives_a_different_id(self) -> None:
+        base = self.derive()
+        self.assertNotEqual(base, self.derive(turn="t2"))
+        self.assertNotEqual(base, self.derive(session="s2"))
+        self.assertNotEqual(base, self.derive(host="hst_01M3PGHM5X336XRWCS1D2B3N2F"))
+        self.assertNotEqual(base, self.derive(prompt="a different message"))
 
-    def test_ids_are_well_spread(self) -> None:
-        derived = {capture.derive_event_id("s", f"turn-{i}") for i in range(200)}
-        self.assertEqual(len(derived), 200)
+    def test_two_devices_capturing_the_same_turn_do_not_collide(self) -> None:
+        # Omitting host_id made both devices derive the same id; the differing
+        # host_id then changed the body hash and the second prompt was rejected
+        # as a conflict and lost.
+        self.assertNotEqual(
+            self.derive(host="hst_01K742SG00BMSDET9BTP151RAR"),
+            self.derive(host="hst_01M3PGHM5X336XRWCS1D2B3N2F"),
+        )
+
+    def test_every_character_carries_its_full_five_bits(self) -> None:
+        # A byte-aligned extraction left most positions with one or two
+        # significant bits: 98 bits of entropy in a 130-bit id.
+        derived = [self.derive(prompt=f"p{index}") for index in range(4000)]
+        for position in range(4, 30):
+            with self.subTest(position=position):
+                self.assertEqual(len({value[position] for value in derived}), 32)
+
+    def test_ids_are_distinct_across_many_prompts(self) -> None:
+        self.assertEqual(len({self.derive(prompt=f"p{index}") for index in range(2000)}), 2000)
 
 
 class BodyTranslation(unittest.TestCase):
@@ -72,6 +94,11 @@ class BodyTranslation(unittest.TestCase):
         body = self.build(codex_payload(prompt))
         self.assertEqual(body["payload"]["text"], prompt)
 
+    def test_the_source_identity_includes_the_device(self) -> None:
+        body = self.build(codex_payload())
+        self.assertEqual(body["host_id"], HOST)
+        self.assertTrue(body["event_id"].startswith("evt_"))
+
     def test_the_source_identity_is_recorded(self) -> None:
         body = self.build(codex_payload())
         self.assertEqual(body["source_system"], "codex")
@@ -80,6 +107,13 @@ class BodyTranslation(unittest.TestCase):
         self.assertEqual(body["source_event_id"], "codex-session-probe-0001:turn-1")
         self.assertEqual(body["payload"]["source_session_id"], "codex-session-probe-0001")
         self.assertEqual(body["payload"]["turn_id"], "turn-1")
+
+    def test_the_working_directory_is_not_part_of_the_turn_identity(self) -> None:
+        # Codex reports cwd inconsistently between deliveries of one turn; it is
+        # provenance, not identity, so it must not be in the hashed payload.
+        body = self.build(codex_payload())
+        self.assertNotIn("cwd", body["payload"])
+        self.assertNotIn("cwd", body)
 
     def test_a_payload_without_a_session_is_refused(self) -> None:
         with self.assertRaises(ValueError):
@@ -103,6 +137,12 @@ class CaptureAgainstARealServer(ApiTestCase):
         self.addCleanup(self._tmpdir.cleanup)
         self.state_dir = Path(self._tmpdir.name)
         self.client = self._client()
+        self.conn = db.connect(self.db_path)
+        self.addCleanup(self.conn.close)
+
+    @staticmethod
+    def _txn(conn):
+        return db.transaction(conn)
 
     def _client(self):
         from jasmine_core.api.client import CoreClient
@@ -136,6 +176,38 @@ class CaptureAgainstARealServer(ApiTestCase):
         self.assertEqual(first["event_id"], second["event_id"])
         _, listed = self.call("GET", "/v1/events", token=self.admin_token)
         self.assertEqual(listed["count"], 1)
+
+    def test_the_same_turn_from_a_different_device_is_reported_as_a_source_duplicate(self) -> None:
+        # Two devices seeing one Codex turn is the same *source* event reported
+        # twice, so ADR 0003 §1.3's (source_system, source_event_id) guard
+        # refuses the second one. Before the derived id included host_id, both
+        # devices derived the same event_id and the refusal was mislabelled as
+        # `event_id_conflict`, i.e. a content conflict, which it is not.
+        other_host = "hst_01M3PGHM5X336XRWCS1D2B3N2F"
+        with self._txn(self.conn):
+            registry.Registry(self.conn).upsert_host(other_host)
+        first = capture.handle(codex_payload(), self.client, host_id=HOST, state_dir=self.state_dir)
+        second = capture.handle(codex_payload(), self.client, host_id=other_host,
+                                state_dir=self.state_dir)
+        self.assertTrue(first["captured"], first)
+        self.assertFalse(second["captured"], second)
+        self.assertIn("409 source_event_duplicate", second["reason"])
+        _, listed = self.call("GET", "/v1/events", token=self.admin_token)
+        self.assertEqual(listed["count"], 1)
+        self.assertEqual(listed["events"][0]["host_id"], HOST)
+        # The refusal must be visible locally, not silent.
+        log = (self.state_dir / capture.LOG_NAME).read_text(encoding="utf-8")
+        self.assertIn("source_event_duplicate", log)
+
+    def test_the_same_turn_retried_from_another_directory_is_a_replay(self) -> None:
+        # cwd travels in the hashed payload, so it used to turn a retry into a
+        # conflict; the derived id now covers everything the hash does.
+        first = capture.handle(codex_payload(), self.client, host_id=HOST, state_dir=self.state_dir)
+        moved = dict(codex_payload(), cwd="/somewhere/else")
+        second = capture.handle(moved, self.client, host_id=HOST, state_dir=self.state_dir)
+        self.assertTrue(second["captured"], second)
+        self.assertTrue(second["replayed"])
+        self.assertEqual(first["event_id"], second["event_id"])
 
     def test_different_turns_are_different_events(self) -> None:
         capture.handle(codex_payload(turn_id="turn-1"), self.client, host_id=HOST,

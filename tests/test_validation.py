@@ -121,14 +121,44 @@ class BundleWriting(unittest.TestCase):
         self.assertEqual(len(payload["cases"]), 1)
         self.assertTrue(payload["not_implemented"])
 
-    def test_a_real_credential_literal_refuses_to_write(self) -> None:
+    def test_a_credential_in_the_recorded_response_is_withheld_and_disclosed(self) -> None:
+        # A bundle must not vanish because the product leaked a token into a
+        # response -- that is the evidence. It must be redacted, disclosed, and
+        # surfaced as a finding the acceptance runner turns into a FAIL.
+        recorder = Recorder(self.out)
+        recorder.add(a_pass())
+        case = a_pass()
+        case.tools = [{"request": "POST /v1/auth/keys", "status": 201,
+                       "response": {"token": "sk-leaked-0123456789abcdef"}}]
+        recorder.add(case)
+        path = recorder.write()
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertNotIn("sk-leaked", path.read_text(encoding="utf-8"))
+        self.assertTrue(payload["redactions"])
+        self.assertIn("redaction_warning", payload)
+        self.assertIn("token", payload["redactions"][0]["path"])
+        self.assertEqual(len(recorder.redactions), 1)
+
+    def test_a_credential_named_field_is_withheld(self) -> None:
         recorder = Recorder(self.out)
         case = a_pass()
-        case.reproduction = ["curl -H 'Authorization: Bearer sk-live-abcdef0123456789'"]
+        case.tools = [{"api_key": "abc123"}]
         recorder.add(case)
-        with self.assertRaises(ValueError):
-            recorder.write()
-        self.assertEqual(list(self.out.iterdir()), [])
+        payload = json.loads(recorder.write().read_text(encoding="utf-8"))
+        self.assertEqual(len(payload["redactions"]), 1)
+        self.assertIn("credential-shaped field name", payload["redactions"][0]["reason"])
+
+    def test_an_ordinary_bundle_records_no_redactions(self) -> None:
+        recorder = Recorder(self.out)
+        recorder.add(a_pass())
+        payload = json.loads(recorder.write().read_text(encoding="utf-8"))
+        self.assertEqual(payload["redactions"], [])
+        self.assertNotIn("redaction_warning", payload)
+
+    def test_metadata_field_names_are_not_treated_as_credentials(self) -> None:
+        # `api_key_rows` is a row count, not a secret; a substring rule would
+        # reject honest evidence while stopping no real leak.
+        assert_no_secrets({"api_key_rows": 3, "token_count": 0, "session_key_note": "n/a"})
 
     def test_a_shell_placeholder_in_a_reproduction_step_is_allowed(self) -> None:
         # Refusing documentation that names a variable would make a usable
@@ -143,13 +173,11 @@ class BundleWriting(unittest.TestCase):
         recorder.add(case)
         self.assertTrue(recorder.write().exists())
 
-    def test_a_credential_shaped_field_refuses_to_write(self) -> None:
-        recorder = Recorder(self.out)
-        case = a_pass()
-        case.tools = [{"command": "login", "api_key": "abc123"}]
-        recorder.add(case)
+    def test_assert_no_secrets_still_refuses_when_asked_to(self) -> None:
+        # The strict check remains available for callers that want refusal
+        # semantics; the recorder itself sanitises so evidence is never lost.
         with self.assertRaises(ValueError):
-            recorder.write()
+            assert_no_secrets({"api_key": "abc123"})
 
     def test_assert_no_secrets_accepts_ordinary_content(self) -> None:
         assert_no_secrets({"command": "jasmine-core migrate", "text": "hello"})

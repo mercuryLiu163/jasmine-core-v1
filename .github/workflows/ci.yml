@@ -75,6 +75,33 @@ jobs:
           PYTHON: python
         run: ./scripts/run-tests.sh
 
+      - name: The acceptance runner executes and reports BLOCKED, not PASS
+        env:
+          PYTHON: python
+        run: |
+          set -x
+          # P0-T07 needs a real Codex conversation, which CI does not have, so
+          # the expected outcome is BLOCKED. The point of this step is that the
+          # runner works and does not silently succeed: a non-zero exit means a
+          # case failed outright.
+          set +e
+          python3 scripts/p0-acceptance.py \
+            --out "$RUNNER_TEMP/acceptance" --db "$RUNNER_TEMP/acceptance.db"
+          code=$?
+          set -e
+          # 0 = ran and the worst case was BLOCKED, which is correct here.
+          test "$code" = 0
+          python3 -c "
+          import glob, json, sys
+          path = sorted(glob.glob('$RUNNER_TEMP/acceptance/run-*.json'))[-1]
+          run = json.load(open(path))
+          assert run['verdict'] == 'BLOCKED', run['verdict']
+          verdicts = {c['case_id']: c['verdict'] for c in run['cases']}
+          print(json.dumps(verdicts, indent=2))
+          for case in run['cases']:
+              assert case['verdict'] == 'PASS', (case['case_id'], case.get('failure_output'))
+          "
+
       - name: Verify no runtime data was committed
         run: |
           set -x
