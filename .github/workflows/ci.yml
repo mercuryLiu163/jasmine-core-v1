@@ -37,6 +37,28 @@ jobs:
           python -VV
           python -c "import sqlite3; print('sqlite3', sqlite3.sqlite_version)"
 
+      - name: Serve the API and probe it end to end
+        env:
+          PYTHONPATH: src
+        run: |
+          set -x
+          export JASMINE_CORE_DB="$RUNNER_TEMP/api.db"
+          python -m jasmine_core.cli migrate
+          python -m jasmine_core.cli serve --port 8799 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true; wait "$server" 2>/dev/null || true' EXIT
+          for _ in $(seq 1 40); do
+            curl -sf http://127.0.0.1:8799/v1/health && break
+            sleep 0.25
+          done
+          curl -sf http://127.0.0.1:8799/v1/health
+          curl -sf http://127.0.0.1:8799/v1/meta/schema
+          # An unauthenticated write must be refused and must not reach Truth.
+          status=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+            http://127.0.0.1:8799/v1/projects -H 'Content-Type: application/json' \
+            -d '{"name":"x","host_id":"hst_01K742SG00BMSDET9BTP151RAR"}')
+          test "$status" = 401
+
       - name: Migration smoke run from an empty database
         env:
           PYTHONPATH: src
@@ -51,6 +73,41 @@ jobs:
         env:
           PYTHON: python
         run: ./scripts/run-tests.sh
+
+      - name: The acceptance runner executes and reports BLOCKED, not PASS
+        env:
+          PYTHON: python
+        run: |
+          set -x
+          # P0-T07 needs a real Codex conversation, which CI does not have, so
+          # the expected outcome is BLOCKED. The point of this step is that the
+          # runner preserves BLOCKED as a distinct exit code and verdict.
+          set +e
+          python3 scripts/p0-acceptance.py \
+            --out "$RUNNER_TEMP/acceptance" --db "$RUNNER_TEMP/acceptance.db"
+          code=$?
+          set -e
+          # 2 means the real-conversation case is BLOCKED in CI.
+          test "$code" = 2
+          python3 -c "
+          import glob, json, sys
+          path = sorted(glob.glob('$RUNNER_TEMP/acceptance/run-*.json'))[-1]
+          run = json.load(open(path))
+          assert run['verdict'] == 'BLOCKED', run['verdict']
+          verdicts = {c['case_id']: c['verdict'] for c in run['cases']}
+          print(json.dumps(verdicts, indent=2))
+          expected = {f'P0-T{i:02d}': 'PASS' for i in range(1, 7)}
+          expected['P0-T07'] = 'BLOCKED'
+          assert verdicts == expected, verdicts
+          "
+
+      - name: Preserve P0 acceptance verdict and evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: p0-acceptance-${{ matrix.os }}-py${{ matrix.python }}
+          path: ${{ runner.temp }}/acceptance/
+          if-no-files-found: warn
 
       - name: Verify no runtime data was committed
         run: |

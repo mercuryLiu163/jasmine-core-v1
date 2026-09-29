@@ -14,8 +14,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from . import SCHEMA_VERSION, __version__, db, errors
+from . import SCHEMA_VERSION, __version__, db, errors, ids
 from .migrations import applied_migrations, check_version, current_version, migrate, verify_checksums
+from .registry import ACTOR_KINDS as AUTH_ACTOR_KINDS
 
 DB_ENV_VAR = "JASMINE_CORE_DB"
 
@@ -81,10 +82,66 @@ def cmd_schema(args: argparse.Namespace) -> int:
 
 
 def cmd_serve(args: argparse.Namespace) -> int:
-    from .api.server import serve  # imported lazily; the API layer is a later P0 PR
+    from .api.server import serve
 
     path = _resolve_db(args.db)
     serve(path, host=args.host, port=args.port, log=_log)
+    return 0
+
+
+def cmd_bootstrap(args: argparse.Namespace) -> int:
+    """Create (or reuse) a host, an actor and an API key, and print the token.
+
+    This is the P0 setup path for the capture entry: the hook needs a `host_id`
+    that exists and a token whose actor exists, and neither can be guessed. The
+    token is printed once and only its SHA-256 is stored.
+    """
+    from . import auth, registry
+
+    path = _resolve_db(args.db)
+    conn = db.connect(path)
+    try:
+        migrate(conn, log=_log)
+        host_id = args.host_id or ids.new_id("hst")
+        actor_id = args.actor_id or ids.new_id("act")
+        reg = registry.Registry(conn)
+        with db.transaction(conn):
+            reg.upsert_host(host_id, display_name=args.host_name or host_id)
+            reg.upsert_actor(actor_id, kind=args.actor_kind, display_name=args.actor_name or actor_id,
+                             home_host_id=host_id)
+        issued = auth.Auth(conn).issue_key(actor_id=actor_id, label=args.label,
+                                           scopes=list(args.scopes))
+    finally:
+        conn.close()
+    print(json.dumps({
+        "db": str(path),
+        "host_id": host_id,
+        "actor_id": actor_id,
+        "key_id": issued["key_id"],
+        "token": issued["token"],
+        "scopes": issued["scopes"],
+        "warning": issued["warning"],
+        "next": "export JASMINE_CORE_TOKEN=<token> JASMINE_CORE_HOST_ID=" + host_id,
+    }, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_register(args: argparse.Namespace) -> int:
+    from . import registry
+
+    path = _resolve_db(args.db)
+    conn = db.connect(path)
+    try:
+        reg = registry.Registry(conn)
+        with db.transaction(conn):
+            if args.kind == "host":
+                record = reg.upsert_host(args.id, display_name=args.name, kind=args.host_kind)
+            else:
+                record = reg.upsert_actor(args.id, kind=args.actor_kind, display_name=args.name,
+                                          home_host_id=args.home_host_id)
+    finally:
+        conn.close()
+    print(json.dumps(record, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -100,6 +157,36 @@ def build_parser() -> argparse.ArgumentParser:
     schema_parser = sub.add_parser("schema", help="print the applied schema version and migrations")
     schema_parser.add_argument("--db", help="path to core.db (or set JASMINE_CORE_DB)")
     schema_parser.set_defaults(func=cmd_schema)
+
+    serve_parser = sub.add_parser("serve", help="run the Core API on loopback")
+    serve_parser.add_argument("--db", help="path to core.db (or set JASMINE_CORE_DB)")
+    serve_parser.add_argument("--host", default="127.0.0.1",
+                              help="bind address; only loopback is permitted in P0")
+    serve_parser.add_argument("--port", type=int, default=8787)
+    serve_parser.set_defaults(func=cmd_serve)
+
+    boot_parser = sub.add_parser(
+        "bootstrap", help="create a host, an actor and an API key for the capture entry"
+    )
+    boot_parser.add_argument("--db")
+    boot_parser.add_argument("--host-id", help="reuse an existing hst_ id instead of generating one")
+    boot_parser.add_argument("--host-name")
+    boot_parser.add_argument("--actor-id", help="reuse an existing act_ id instead of generating one")
+    boot_parser.add_argument("--actor-name")
+    boot_parser.add_argument("--actor-kind", default="human", choices=list(AUTH_ACTOR_KINDS))
+    boot_parser.add_argument("--label", default="capture")
+    boot_parser.add_argument("--scopes", nargs="+", default=["events:write", "events:read"])
+    boot_parser.set_defaults(func=cmd_bootstrap)
+
+    register_parser = sub.add_parser("register", help="register or update a host or an actor")
+    register_parser.add_argument("--db")
+    register_parser.add_argument("kind", choices=["host", "actor"])
+    register_parser.add_argument("id", help="an existing hst_ or act_ id")
+    register_parser.add_argument("--name")
+    register_parser.add_argument("--host-kind", default="workstation")
+    register_parser.add_argument("--actor-kind", default="human", choices=list(AUTH_ACTOR_KINDS))
+    register_parser.add_argument("--home-host-id")
+    register_parser.set_defaults(func=cmd_register)
     return parser
 
 

@@ -28,6 +28,8 @@ EXPECTED_TABLES = {
     "tasks",
     "sessions",
     "events",
+    "api_keys",
+    "audit_log",
 }
 
 
@@ -55,7 +57,7 @@ class MigrationFromEmptyDatabase(DbTestCase):
 
     def test_migrate_creates_the_full_baseline_schema(self) -> None:
         applied = migrate(self.conn)
-        self.assertEqual(applied, ["m0001_baseline"])
+        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit"])
         self.assertEqual(_tables(self.conn), EXPECTED_TABLES)
         self.assertEqual(current_version(self.conn), expected_version())
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
@@ -71,7 +73,8 @@ class MigrationFromEmptyDatabase(DbTestCase):
     def test_migrate_installs_the_immutability_and_uniqueness_guards(self) -> None:
         migrate(self.conn)
         self.assertLessEqual(
-            {"trg_events_immutable_update", "trg_events_immutable_delete"},
+            {"trg_events_immutable_update", "trg_events_immutable_delete",
+             "trg_audit_immutable_update", "trg_audit_immutable_delete"},
             _triggers(self.conn),
         )
         self.assertIn("ux_events_source", _indexes(self.conn))
@@ -79,7 +82,7 @@ class MigrationFromEmptyDatabase(DbTestCase):
     def test_migration_record_carries_a_checksum_and_timestamp(self) -> None:
         migrate(self.conn)
         recorded = applied_migrations(self.conn)
-        self.assertEqual([row["version"] for row in recorded], [1])
+        self.assertEqual([row["version"] for row in recorded], [1, 2])
         for row in recorded:
             self.assertEqual(len(row["checksum"]), 64)
             self.assertTrue(row["applied_at"].endswith("Z"), row["applied_at"])

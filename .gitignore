@@ -228,6 +228,12 @@ validation-bundles/
 *.db
 *.db-*
 
+# Jasmine Core V1 per-machine Codex wiring. The entry embeds absolute paths and
+# each machine must trust its own hash, so it is not shared through git. The
+# installer recreates it with scripts/p0-codex-hook-install.sh.
+.codex/
+*.bak.*
+
 # Jasmine Core V1 runtime data and credentials
 core.db
 *.sqlite3

@@ -41,8 +41,9 @@
 - `evidence` 的结构（`evidence_id`、`event_id`、`workspace_fingerprint`、`kind`、`payload`）在 P0 只冻结 ID 与外键约定，**不建表、不实现**：P1 的 Evidence Agent 才落地。P0 不允许把"证据"写成测试日志或 README 里的 PASS 声明。
 - P0 的 Validation Run 是**验收记录**，不是产品 Evidence。其内容遵循任务书：保留必要原文、请求/响应、命令与输出、版本、失败分类。
 - 硬性禁止写进任何 Validation 记录或证据包：API key / token / 私钥、`auth.json` 内容、用户私人对话全文、V0 state 目录文件、数据库文件本身。P0-T07 的测试消息必须是**固定的无敏感短句**，执行前由执行者确认。
+- Recorder 的守卫是**清洗并披露**，不是拒绝写入：把值替换为 `[REDACTED: withheld from the evidence bundle]`，在 `redactions` 中记下位置与原因，并由验收 runner 记为 `P0-SEC` FAIL。一个因为产品泄露了 token 就拒绝生成 bundle 的守卫，会把唯一能证明这件事的证据一起丢掉。
 
 ## 2 后果
 
 - "原文完整保存"与"日志脱敏"是两条独立的规则，实现上以不同函数实现（`payload` 落库原样 vs `redact()` 用于日志/审计），避免互相污染。
-- 客户端不传 `host_id` 会被拒（`400 missing_host_id`）而不是被 Core 猜测，防止把不同设备的对话混为一谈。
+- 客户端不传 `host_id` 会被拒：`400 invalid_request`，`details.field = "host_id"`。Core 不猜测，防止把不同设备的对话混为一谈。（早先这里写的是一个从未实现过的 `missing_host_id` 错误码；已按实际实现更正。）

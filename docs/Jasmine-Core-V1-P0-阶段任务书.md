@@ -1,6 +1,6 @@
 # Jasmine Core V1 第一阶段 P0 Baseline 实施与验证任务书
 
-状态：待执行。目标仓库已创建；本文给出可分派的任务、Review 和验收标准；当前未创建 P0 PR、未实现 P0、未运行 P0 验收。
+状态以最新、与验收 commit 绑定的 Validation Run 为准；本文规定 Review 与验收要求，不充当实时状态记录。只有全部 T01～T07 通过、P0-01～03 的 PR 已合并且最终 commit 复验满足 §6 时，阶段才可标为 PASS。
 
 ## 1 目标和依据
 
