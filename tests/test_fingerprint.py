@@ -37,6 +37,24 @@ class FingerprintTests(unittest.TestCase):
         (self.root / "untracked.txt").write_text("changed")
         self.assertEqual(compare(first, capture(self.root)), "MISMATCH")
 
+    def test_nested_tracked_runtime_like_names_remain_relevant(self) -> None:
+        subprocess.run(["git", "init", "-q", str(self.root)], check=True)
+        source = self.root / "src"
+        source.mkdir()
+        for name in ("auth.json", "fixture.db"):
+            (source / name).write_text("first")
+        (self.root / "auth.json").write_text("root-secret-not-read")
+        (self.root / "core.db").write_text("root-db-not-read")
+        subprocess.run(["git", "-C", str(self.root), "add", "src/auth.json", "src/fixture.db"], check=True)
+        first = capture(self.root)
+        self.assertTrue(first["complete"])
+        self.assertEqual(set(first["selected_hashes"]), {"src/auth.json", "src/fixture.db"})
+        (source / "auth.json").write_text("second")
+        self.assertEqual(compare(first, capture(self.root)), "MISMATCH")
+        (source / "auth.json").write_text("first")
+        (source / "fixture.db").write_text("second")
+        self.assertEqual(compare(first, capture(self.root)), "MISMATCH")
+
     def test_nongit_symlink_is_partial_and_never_same(self) -> None:
         outside = self.root.parent / (self.root.name + "-outside")
         outside.write_text("outside")

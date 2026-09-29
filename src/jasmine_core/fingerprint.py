@@ -34,9 +34,13 @@ def _relevant(relative: str) -> bool:
     if parts == (".codex", "hooks.json"):
         return True
     # Runtime and historical directories are excluded only at the configured
-    # root; a source file under src/evidence remains part of the fingerprint.
-    return (bool(parts) and (len(parts) == 1 or parts[0] not in EXCLUDED_DIRS)
-            and name not in EXCLUDED_NAMES and not name.endswith((".sqlite", ".db", "-wal", "-shm")))
+    # root. Filename exclusions are root-only too: src/auth.json or a tracked
+    # fixture.db can be a relevant source input, despite its runtime-like name.
+    if not parts or (len(parts) > 1 and parts[0] in EXCLUDED_DIRS):
+        return False
+    return (len(parts) > 1 or
+            (name not in EXCLUDED_NAMES and
+             not name.endswith((".sqlite", ".db", "-wal", "-shm"))))
 
 
 def _git(root: Path, *args: str) -> bytes | None:
