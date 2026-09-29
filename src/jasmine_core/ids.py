@@ -1,9 +1,10 @@
 """Public ID generation and validation.
 
-See docs/adr/0001-public-id-schema-and-package-boundary.md. The format is
-frozen for every downstream stage: ``<prefix>_<26 Crockford base32 chars>``
-where the first 10 characters encode the 48-bit creation timestamp in
-milliseconds and the remaining 16 are random.
+See docs/adr/0001-public-id-schema-and-package-boundary.md. Every ID has the
+shape ``<prefix>_<26 Crockford base32 chars>``. For prefixes other than
+``evt``, the first 10 characters encode a 48-bit creation timestamp in
+milliseconds and the remaining 16 are random. An ``evt`` body is opaque:
+clients may derive it deterministically for idempotent retries.
 """
 
 from __future__ import annotations
@@ -44,7 +45,7 @@ def _b32(value: int, width: int) -> str:
 
 
 def new_id(prefix: str, *, now_ms: int | None = None) -> str:
-    """Return a new identifier such as ``evt_01K5S0Q8H4M9ABCD7FGH2JKMNP``."""
+    """Return a server-generated ID, including a valid opaque ``evt_`` ID."""
     if prefix not in PREFIXES:
         raise IdError(f"unknown id prefix: {prefix!r}")
     ms = int(time.time() * 1000) if now_ms is None else int(now_ms)
@@ -54,11 +55,11 @@ def new_id(prefix: str, *, now_ms: int | None = None) -> str:
     return f"{prefix}_{_b32(ms, TIMESTAMP_CHARS)}{_b32(randomness, RANDOM_CHARS)}"
 
 
-def parse_id(value: str, *, expect_prefix: str | None = None) -> tuple[str, int]:
-    """Return ``(prefix, created_ms)``; raise :class:`IdError` when malformed."""
+def parse_id(value: str, *, expect_prefix: str | None = None) -> tuple[str, int | None]:
+    """Return ``(prefix, created_ms)``; ``created_ms`` is ``None`` for events."""
     if not isinstance(value, str):
         raise IdError("id must be a string")
-    match = ID_RE.match(value)
+    match = ID_RE.fullmatch(value)
     if match is None:
         raise IdError(f"malformed id: {value!r}")
     prefix, body = match.group(1), match.group(2)
@@ -66,9 +67,13 @@ def parse_id(value: str, *, expect_prefix: str | None = None) -> tuple[str, int]
         raise IdError(f"unknown id prefix: {prefix!r}")
     if expect_prefix is not None and prefix != expect_prefix:
         raise IdError(f"expected a {expect_prefix}_ id, got {prefix}_")
+    if prefix == "evt":
+        return prefix, None
     ms = 0
     for char in body[:TIMESTAMP_CHARS]:
         ms = (ms << 5) | _ENCODE[char]
+    if ms >= (1 << 48):
+        raise IdError("timestamp out of range for a 48-bit millisecond clock")
     return prefix, ms
 
 
