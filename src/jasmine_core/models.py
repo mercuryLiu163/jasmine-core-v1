@@ -42,6 +42,12 @@ EVENT_TYPES = frozenset({
     "rule.approved",
     "rule.superseded",
     "rule.retired",
+    "step.created",
+    "step.transitioned",
+    "step.criteria_updated",
+    "task.transitioned",
+    "task.criteria_updated",
+    "task.accepted",
 })
 
 MAX_TEXT_BYTES = 256 * 1024
@@ -212,6 +218,7 @@ class NewObject:
     #: The actor the body claims. Never the source of truth: `ObjectStore.create`
     #: compares it with the authenticated actor and raises `actor_mismatch`.
     actor_id: str | None = None
+    acceptance_criteria: dict[str, Any] | None = None
 
     @staticmethod
     def project(body: dict[str, Any]) -> "NewObject":
@@ -235,7 +242,7 @@ class NewObject:
     def task(body: dict[str, Any]) -> "NewObject":
         allowed = {"title", "description", "project_id", "event_id", "host_id",
                    "source_system", "source_event_id", "occurred_at", "expected_revision",
-                   "actor_id"}
+                   "actor_id", "acceptance_criteria"}
         _reject_unknown(body, allowed, "task")
         title = body.get("title")
         if not isinstance(title, str) or not title.strip():
@@ -252,6 +259,7 @@ class NewObject:
             source_event_id=optional(body, "source_event_id"),
             event_id=optional_id(body, "event_id", "evt"),
             actor_id=optional_id(body, "actor_id", "act"),
+            acceptance_criteria=body.get("acceptance_criteria"),
         )
 
     @staticmethod
@@ -287,6 +295,7 @@ class NewObject:
             "description": self.description,
             "project_id": self.project_id,
             "task_id": self.task_id,
+            **({"acceptance_criteria": self.acceptance_criteria} if self.kind == "task" else {}),
         }
 
 

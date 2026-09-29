@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, ids, objects, registry
+from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, ids, objects, registry, state
 from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from .request import Request, Response
@@ -36,6 +36,7 @@ class Core:
         self.conn = conn
         self.schema_version = current_version(conn)
         self.objects = objects.ObjectStore(conn, schema_version=self.schema_version)
+        self.state = state.StateStore(conn, schema_version=self.schema_version)
         self.registry = registry.Registry(conn)
         self.auth = auth.Auth(conn)
         self.audit = audit.AuditLog(conn)
@@ -88,6 +89,16 @@ def _base_routes() -> list[Route]:
         Route("POST", re.compile(r"^/v1/rules/([^/]+)/supersede$"), supersede_rule, "authority:manage"),
         Route("POST", re.compile(r"^/v1/rules/([^/]+)/retire$"), retire_rule, "authority:manage"),
         Route("POST", re.compile(r"^/v1/guard/check$"), guard_check, "guard:check"),
+        Route("POST", re.compile(r"^/v1/tasks/([^/]+)/steps$"), create_step, "state:write"),
+        Route("GET", re.compile(r"^/v1/tasks/([^/]+)/steps$"), list_steps, "state:read"),
+        Route("GET", re.compile(r"^/v1/tasks/([^/]+)/history$"), task_history, "state:read"),
+        Route("POST", re.compile(r"^/v1/tasks/([^/]+)/transition$"), transition_task, "state:write"),
+        Route("POST", re.compile(r"^/v1/tasks/([^/]+)/criteria$"), set_task_criteria, "state:accept"),
+        Route("POST", re.compile(r"^/v1/tasks/([^/]+)/accept$"), accept_task, "state:accept"),
+        Route("GET", re.compile(r"^/v1/steps/([^/]+)$"), get_step, "state:read"),
+        Route("GET", re.compile(r"^/v1/steps/([^/]+)/history$"), step_history, "state:read"),
+        Route("POST", re.compile(r"^/v1/steps/([^/]+)/transition$"), transition_step, "state:write"),
+        Route("POST", re.compile(r"^/v1/steps/([^/]+)/criteria$"), set_step_criteria, "state:accept"),
     ]
 
 
@@ -295,8 +306,14 @@ def _make_create(kind: str) -> Handler:
     def handler(request: Request, core: Core, principal: auth.Principal,
                match: re.Match[str]) -> Response:
         assert principal is not None
-        result = core.objects.create(PARSERS[kind](request.json_body()),
-                                     actor_id=principal.actor_id)
+        spec = PARSERS[kind](request.json_body())
+        if kind == "task" and spec.acceptance_criteria is not None:
+            criteria = state.validate_criteria(spec.acceptance_criteria)
+            if criteria["requirements"]:
+                principal.require("state:accept")
+                if core.actor_kind(principal.actor_id) not in ("human", "system"):
+                    raise errors.ForbiddenActorKind("only human or system may set Task acceptance requirements")
+        result = core.objects.create(spec, actor_id=principal.actor_id)
         key = PRIMARY_KEY[kind]
         return Response(
             200 if result["replayed"] else 201,
@@ -356,5 +373,99 @@ def _int_param(request: Request, name: str, default: int) -> int:
     except ValueError as exc:
         raise errors.InvalidRequest(f"{name} must be an integer", field=name, value=raw) from exc
 
+
+
+def _state_body(request: Request, allowed: set[str]) -> dict[str, Any]:
+    body = request.json_body()
+    unknown = sorted(set(body) - allowed)
+    if unknown:
+        raise errors.InvalidRequest(f"unknown fields: {', '.join(unknown)}", fields=unknown)
+    return body
+
+
+def create_step(request: Request, core: Core, principal: auth.Principal,
+                match: re.Match[str]) -> Response:
+    task_id = match.group(1)
+    _require_id(task_id, "tsk", "task_id")
+    result = core.state.create_step(task_id, _state_body(request, {"title", "description", "acceptance_criteria", "expected_revision", "host_id", "event_id"}),
+                                    actor_id=principal.actor_id, actor_kind=core.actor_kind(principal.actor_id),
+                                    can_accept="state:accept" in principal.scopes)
+    return Response(200 if result["replayed"] else 201, result)
+
+
+def list_steps(request: Request, core: Core, principal: auth.Principal,
+               match: re.Match[str]) -> Response:
+    task_id = match.group(1)
+    _require_id(task_id, "tsk", "task_id")
+    return Response(200, {"steps": core.state.steps(task_id)})
+
+
+def get_step(request: Request, core: Core, principal: auth.Principal,
+             match: re.Match[str]) -> Response:
+    step_id = match.group(1)
+    _require_id(step_id, "stp", "step_id")
+    return Response(200, {"step": core.state.step(step_id)})
+
+
+def task_history(request: Request, core: Core, principal: auth.Principal,
+                 match: re.Match[str]) -> Response:
+    task_id = match.group(1)
+    _require_id(task_id, "tsk", "task_id")
+    return Response(200, {"events": core.state.history(task_id)})
+
+
+def step_history(request: Request, core: Core, principal: auth.Principal,
+                 match: re.Match[str]) -> Response:
+    step_id = match.group(1)
+    _require_id(step_id, "stp", "step_id")
+    step = core.state.step(step_id)
+    return Response(200, {"events": core.state.history(step["task_id"], step_id=step_id)})
+
+
+def set_step_criteria(request: Request, core: Core, principal: auth.Principal,
+                      match: re.Match[str]) -> Response:
+    step_id = match.group(1)
+    _require_id(step_id, "stp", "step_id")
+    body = _state_body(request, {"acceptance_criteria", "expected_revision", "host_id", "event_id"})
+    return Response(200, core.state.set_step_criteria(step_id, body, actor_id=principal.actor_id,
+        actor_kind=core.actor_kind(principal.actor_id), can_accept=True))
+
+
+def transition_step(request: Request, core: Core, principal: auth.Principal,
+                    match: re.Match[str]) -> Response:
+    step_id = match.group(1)
+    _require_id(step_id, "stp", "step_id")
+    body = _state_body(request, {"status", "reason", "expected_revision", "host_id", "event_id"})
+    result = core.state.transition_step(step_id, body, actor_id=principal.actor_id,
+        actor_kind=core.actor_kind(principal.actor_id), can_accept="state:accept" in principal.scopes)
+    return Response(200, result)
+
+
+def transition_task(request: Request, core: Core, principal: auth.Principal,
+                    match: re.Match[str]) -> Response:
+    task_id = match.group(1)
+    _require_id(task_id, "tsk", "task_id")
+    body = _state_body(request, {"status", "reason", "expected_revision", "host_id", "event_id"})
+    result = core.state.transition_task(task_id, body, actor_id=principal.actor_id,
+        actor_kind=core.actor_kind(principal.actor_id), can_accept="state:accept" in principal.scopes)
+    return Response(200, result)
+
+
+def set_task_criteria(request: Request, core: Core, principal: auth.Principal,
+                      match: re.Match[str]) -> Response:
+    task_id = match.group(1)
+    _require_id(task_id, "tsk", "task_id")
+    body = _state_body(request, {"acceptance_criteria", "expected_revision", "host_id", "event_id"})
+    return Response(200, core.state.set_task_criteria(task_id, body, actor_id=principal.actor_id,
+        actor_kind=core.actor_kind(principal.actor_id), can_accept=True))
+
+
+def accept_task(request: Request, core: Core, principal: auth.Principal,
+                match: re.Match[str]) -> Response:
+    task_id = match.group(1)
+    _require_id(task_id, "tsk", "task_id")
+    body = _state_body(request, {"expected_revision", "host_id", "event_id"})
+    return Response(200, core.state.accept_task(task_id, body, actor_id=principal.actor_id,
+        actor_kind=core.actor_kind(principal.actor_id), can_accept=True))
 
 ROUTES = tuple(_base_routes()) + tuple(_collection_routes())

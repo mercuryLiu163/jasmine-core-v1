@@ -43,6 +43,16 @@ class AuthorityHttp(ApiTestCase):
         body.update(changes)
         return body
 
+    def test_malformed_content_enums_are_typed_400(self) -> None:
+        # Compatibility guard: P1-01 _content already checks JSON types before
+        # frozenset membership. Keep that behavior while State adds new enums.
+        for field in ("kind", "severity", "enforcement"):
+            body = self.proposal()
+            body[field] = []
+            status, refusal = self.call("POST", "/v1/rules/proposals", body,
+                                        token=self.agent_key)
+            self.assertEqual((status, refusal["error"]["code"]), (400, "invalid_request"))
+
     def test_agent_proposal_human_approval_guard_and_replay(self) -> None:
         proposal = self.proposal()
         status, first = self.call("POST", "/v1/rules/proposals", proposal, token=self.agent_key)

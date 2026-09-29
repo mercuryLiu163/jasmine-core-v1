@@ -14,10 +14,12 @@ P1, and there is no endpoint that could contradict an append-only Event.
 from __future__ import annotations
 
 import sqlite3
+import json
 from dataclasses import replace
 from typing import Any
 
 from . import db, errors, ids, registry
+from .canonical import canonical_json
 from .events import EventStore
 from .models import NewEvent, NewObject
 
@@ -56,7 +58,12 @@ class ObjectStore:
         row = self._conn.execute(
             f"SELECT * FROM {TABLES[kind]} WHERE {PRIMARY_KEY[kind]} = ?", (object_id,)
         ).fetchone()
-        return None if row is None else dict(row)
+        if row is None:
+            return None
+        result = dict(row)
+        if kind == "task" and "acceptance_criteria_json" in result:
+            result["acceptance_criteria"] = json.loads(result.pop("acceptance_criteria_json"))
+        return result
 
     def require(self, kind: str, object_id: str) -> dict[str, Any]:
         found = self.get(kind, object_id)
@@ -81,7 +88,7 @@ class ObjectStore:
             " LIMIT ? OFFSET ?",
             params,
         ).fetchall()
-        return [dict(row) for row in rows]
+        return [self.get(kind, row[PRIMARY_KEY[kind]]) for row in rows]
 
     def count(self, kind: str) -> int:
         return int(self._conn.execute(f"SELECT COUNT(*) AS n FROM {TABLES[kind]}").fetchone()["n"])
@@ -112,6 +119,11 @@ class ObjectStore:
             # reference costs no Event at all, and so a session that names only a
             # task still gets a project column for ADR 0003 §1.2 filtering.
             spec = self._check_references(spec)
+            if spec.kind == "task":
+                from .state import validate_criteria
+                criteria = validate_criteria(spec.acceptance_criteria)
+                if criteria["requirements"] and actor["kind"] not in ("human", "system"):
+                    raise errors.ForbiddenActorKind("only human or system may set Task acceptance requirements")
             object_id = ids.new_id(ID_PREFIX[spec.kind])
             event, replayed = self.events.append(
                 self._event_spec(spec, object_id, actor_id, actor["kind"])
@@ -140,6 +152,18 @@ class ObjectStore:
                 existing_event_id=event["event_id"],
                 existing_body_sha256=event["body_sha256"],
             )
+        if spec.kind == "task":
+            # The Task may since have acquired Steps, a new revision, or a new
+            # status. A create replay is the original created snapshot.
+            payload = event["payload"]
+            return {
+                "task_id": stored_id, "project_id": payload["project_id"],
+                "title": payload["name"], "description": payload["description"],
+                "status": "ACTIVE", "revision": 1,
+                "acceptance_criteria": payload.get("acceptance_criteria") or {"requirements": []},
+                "source_event_id": event["event_id"],
+                "created_at": event["recorded_at"], "updated_at": event["recorded_at"],
+            }
         return found
 
     def _event_spec(self, spec: NewObject, object_id: str, actor_id: str,
@@ -179,9 +203,11 @@ class ObjectStore:
         elif spec.kind == "task":
             self._conn.execute(
                 "INSERT INTO tasks (task_id, project_id, title, description, status, revision,"
-                " source_event_id, created_at, updated_at) VALUES (?, ?, ?, ?, 'open', 1, ?, ?, ?)",
+                " source_event_id, created_at, updated_at, acceptance_criteria_json)"
+                " VALUES (?, ?, ?, ?, 'ACTIVE', 1, ?, ?, ?, ?)",
                 (object_id, spec.project_id, spec.name, spec.description,
-                 event["event_id"], now, now),
+                 event["event_id"], now, now,
+                 canonical_json(spec.acceptance_criteria or {"requirements": []})),
             )
         else:
             # The actor comes from the Event, not from the caller, so the session

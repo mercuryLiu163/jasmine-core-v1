@@ -184,3 +184,30 @@ New errors: `403 forbidden_actor_kind`, `409 rule_key_conflict`; existing
 means the original command Event and Rule snapshot were returned without a new
 Authority write. Guard HTTP 200 does not authorize a tool action by itself;
 inspect `decision` and `capability`.
+
+## P1-02 Task/Step State extension
+
+See [ADR 0006](../adr/0006-task-step-state-and-evidence-boundaries.md) for the
+state machine, revision ownership, acceptance criteria and Evidence gate. State
+scopes are `state:read`, `state:write`, and `state:accept`; Agent keys cannot
+carry `state:accept`.
+
+| Method | Path | Scope | Purpose |
+| --- | --- | --- | --- |
+| POST | `/v1/tasks/{task_id}/steps` | `state:write` | Create PLANNED Step; lock Task revision |
+| GET | `/v1/tasks/{task_id}/steps` | `state:read` | List Steps |
+| GET | `/v1/steps/{step_id}` | `state:read` | Current Step |
+| GET | `/v1/tasks/{task_id}/history` | `state:read` | State Events in sequence |
+| GET | `/v1/steps/{step_id}/history` | `state:read` | Step Events in sequence |
+| POST | `/v1/steps/{step_id}/transition` | `state:write` | Lock Step revision; advance Step and Task revisions |
+| POST | `/v1/steps/{step_id}/criteria` | `state:accept` | Human/system criteria update; lock Step revision |
+| POST | `/v1/tasks/{task_id}/transition` | `state:write` | Lock Task revision |
+| POST | `/v1/tasks/{task_id}/criteria` | `state:accept` | Human/system criteria update; lock Task revision |
+| POST | `/v1/tasks/{task_id}/accept` | `state:accept` | Human/system acceptance; lock Task revision |
+
+Every write takes `host_id` and a positive integer `expected_revision` (except
+`POST /v1/tasks`, which is a create). `event_id` is optional and supports exact
+replay. A Step transition body uses `status` and, when required, `reason`.
+The response includes the new Step revision and `task_revision`. A rejected
+write leaves Truth unchanged. `VERIFIED` and `ACCEPTED` return
+`422 missing_evidence` until a real Evidence validator is available.

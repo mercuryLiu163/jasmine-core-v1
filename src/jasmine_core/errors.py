@@ -128,3 +128,13 @@ class DatabaseBusy(CoreError):
 
     status = 503
     code = "database_busy"
+
+
+class InvalidStateTransition(CoreError):
+    status = 409
+    code = "invalid_state_transition"
+
+
+class MissingEvidence(CoreError):
+    status = 422
+    code = "missing_evidence"
