@@ -81,10 +81,10 @@ jobs:
           set -x
           # Fails if a released migration was edited in place, or if the
           # recorded checksum and the shipped SQL have diverged.
-          db="$RUNNER_TEMP/checksum.db"
-          rm -f "$db"*
-          JASMINE_CORE_DB="$db" python -m jasmine_core.cli migrate
-          JASMINE_CORE_DB="$db" python -m jasmine_core.cli schema
+          export JASMINE_CORE_DB="$RUNNER_TEMP/checksum.db"
+          rm -f "$JASMINE_CORE_DB"*
+          python -m jasmine_core.cli migrate
+          python -m jasmine_core.cli schema
           python - <<'PY'
           import json, os, sqlite3
           from jasmine_core.migrations import discover
