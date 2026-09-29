@@ -138,12 +138,15 @@ with the Gate evidence directory as `--work` and a fresh, separate scratch
 database. The acceptance bundle goes to its own `--out` directory:
 
 ```bash
+export JASMINE_PYTHON=/absolute/path/to/python3.11-or-newer
+"$JASMINE_PYTHON" -c 'import sys; assert sys.version_info >= (3, 11)'
+
 scripts/p0-t07-real-conversation.sh \
   --out <gate-evidence> \
   --db <existing-dedicated-capture-db> \
   --state-dir <capture-state-dir>
 
-python3 scripts/p0-acceptance.py \
+"$JASMINE_PYTHON" scripts/p0-acceptance.py \
   --work <same-gate-evidence> \
   --out <acceptance-bundle> \
   --db <fresh-separate-scratch-db> \
