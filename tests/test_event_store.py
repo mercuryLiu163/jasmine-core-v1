@@ -50,6 +50,15 @@ class StoreTestCase(DbTestCase):
         fields["client_occurred_at"] = fields["occurred_at"]
         return NewEvent(**fields)
 
+    def new_event_with_payload(self, payload: dict) -> NewEvent:
+        from jasmine_core.clock import parse_rfc3339
+
+        return NewEvent(
+            event_type="user.prompt", source_system="test", actor_id=ACTOR, actor_kind="human",
+            host_id=HOST, payload=payload, occurred_at=parse_rfc3339(HAPPENED),
+            client_occurred_at=parse_rfc3339(HAPPENED),
+        )
+
     def append(self, spec: NewEvent, **kwargs) -> dict:
         with db.transaction(self.conn):
             event, _ = self.objects.events.append(spec, **kwargs)
@@ -58,17 +67,17 @@ class StoreTestCase(DbTestCase):
     def create_project(self, name: str = "demo", **kwargs) -> dict:
         body = {"name": name, "host_id": HOST}
         body.update(kwargs)
-        return self.objects.create(NewObject.project(body), actor_id=ACTOR, actor_kind="human")
+        return self.objects.create(NewObject.project(body), actor_id=ACTOR)
 
     def create_task(self, project_id: str, title: str = "do it", **kwargs) -> dict:
         body = {"title": title, "project_id": project_id, "host_id": HOST}
         body.update(kwargs)
-        return self.objects.create(NewObject.task(body), actor_id=ACTOR, actor_kind="human")
+        return self.objects.create(NewObject.task(body), actor_id=ACTOR)
 
     def create_session(self, **kwargs) -> dict:
         body = {"host_id": HOST}
         body.update(kwargs)
-        return self.objects.create(NewObject.session(body), actor_id=ACTOR, actor_kind="human")
+        return self.objects.create(NewObject.session(body), actor_id=ACTOR)
 
     def count(self, table: str) -> int:
         return self.conn.execute(f"SELECT COUNT(*) AS n FROM {table}").fetchone()["n"]
@@ -103,10 +112,15 @@ class EventAppend(StoreTestCase):
         self.assertIsNone(event["session_id"])
         self.assertEqual(self.count("events"), 1)
 
-    def test_an_explicit_nonexistent_task_is_refused(self) -> None:
-        # ADR 0002 §2.4: an explicit dangling reference is an error, not a silent drop.
-        with self.assertRaises(sqlite3.IntegrityError):
+    def test_an_explicit_nonexistent_task_is_refused_with_a_typed_error(self) -> None:
+        # ADR 0002 §2.4: an explicit dangling reference is an error, not a silent
+        # drop -- and ADR 0003 §1.4 freezes the code as 404 task_not_found, so it
+        # must not reach the caller as a raw sqlite3.IntegrityError at COMMIT.
+        with self.assertRaises(errors.NotFound) as ctx:
             self.append(self.new_event("dangling", task_id="tsk_01K742SG00YPWF74TSXEKA3254"))
+        self.assertEqual(ctx.exception.status, 404)
+        self.assertEqual(ctx.exception.code, "task_not_found")
+        self.assertEqual(self.count("events"), 0)
 
 
 class EventIdempotency(StoreTestCase):
@@ -195,6 +209,9 @@ class ObjectCreation(StoreTestCase):
         self.assertEqual(session["host_id"], HOST)
         self.assertEqual(session["actor_id"], ACTOR)
         self.assertEqual(session["task_id"], task["task_id"])
+        self.assertEqual(session["status"], "open")
+        self.assertEqual(session["revision"], 1)
+        self.assertIsNone(session["ended_at"])
         self.assertEqual(self.objects.events.get(session["source_event_id"])["event_type"],
                          "session.started")
 
@@ -220,8 +237,8 @@ class ObjectCreation(StoreTestCase):
 
     def test_retrying_a_create_replays_instead_of_duplicating(self) -> None:
         body = {"name": "demo", "host_id": HOST, "event_id": "evt_01K742SG00KSNSRN81BXC5ZAZC"}
-        first = self.objects.create(NewObject.project(body), actor_id=ACTOR, actor_kind="human")
-        second = self.objects.create(NewObject.project(body), actor_id=ACTOR, actor_kind="human")
+        first = self.objects.create(NewObject.project(body), actor_id=ACTOR)
+        second = self.objects.create(NewObject.project(body), actor_id=ACTOR)
         self.assertFalse(first["replayed"])
         self.assertTrue(second["replayed"])
         self.assertEqual(first["object"]["project_id"], second["object"]["project_id"])
@@ -230,10 +247,10 @@ class ObjectCreation(StoreTestCase):
 
     def test_reusing_an_event_id_for_different_content_is_a_conflict(self) -> None:
         body = {"name": "demo", "host_id": HOST, "event_id": "evt_01K742SG00KSNSRN81BXC5ZAZC"}
-        self.objects.create(NewObject.project(body), actor_id=ACTOR, actor_kind="human")
+        self.objects.create(NewObject.project(body), actor_id=ACTOR)
         body["name"] = "renamed"
         with self.assertRaises(errors.EventIdConflict):
-            self.objects.create(NewObject.project(body), actor_id=ACTOR, actor_kind="human")
+            self.objects.create(NewObject.project(body), actor_id=ACTOR)
         self.assertEqual(self.count("projects"), 1)
         self.assertEqual(self.objects.get("project", self.objects.list("project")[0]["project_id"])["name"],
                          "demo")
@@ -242,9 +259,8 @@ class ObjectCreation(StoreTestCase):
         # Otherwise a retry would hash differently (new object_id) and be reported
         # as a conflict instead of a replay.
         body = {"name": "demo", "host_id": HOST, "event_id": "evt_01K742SG00KSNSRN81BXC5ZAZC"}
-        self.objects.create(NewObject.project(body), actor_id=ACTOR, actor_kind="human")
-        result = self.objects.create(NewObject.project(dict(body)), actor_id=ACTOR,
-                                      actor_kind="human")
+        self.objects.create(NewObject.project(body), actor_id=ACTOR)
+        result = self.objects.create(NewObject.project(dict(body)), actor_id=ACTOR)
         self.assertTrue(result["replayed"])
 
 
@@ -349,8 +365,12 @@ class Queries(StoreTestCase):
                                    task_id=task["task_id"], project_id=project["project_id"]))
         self.append(self.new_event("elsewhere"))
         self.assertEqual(len(self.objects.events.list(session_id=session["session_id"])), 2)
-        self.assertEqual(len(self.objects.events.list(task_id=task["task_id"])), 2)
-        self.assertEqual(len(self.objects.events.list(project_id=project["project_id"])), 2)
+        # Three, not two: the task.created event now carries the task_id column, so
+        # the creating event is findable by the object it created.
+        self.assertEqual(len(self.objects.events.list(task_id=task["task_id"])), 3)
+        # Four: project.created, task.created, session.started and one prompt all
+        # name the project, so the chain is walkable from the project downwards.
+        self.assertEqual(len(self.objects.events.list(project_id=project["project_id"])), 4)
         self.assertEqual(len(self.objects.events.list(event_type="user.prompt")), 3)
         self.assertEqual(len(self.objects.events.list(source_system="test")), 3)
 
@@ -361,7 +381,14 @@ class Queries(StoreTestCase):
         self.assertEqual([e["payload"]["text"] for e in page], ["turn 0", "turn 1", "turn 2"])
         rest = self.objects.events.list(limit=10, after_seq=page[-1]["seq"])
         self.assertEqual(len(rest), 4)
+    def test_page_size_is_clamped_to_a_sane_range(self) -> None:
+        for index in range(4):
+            self.append(self.new_event(f"turn {index}"))
+        # A nonsense limit must not return nothing and must not return everything:
+        # it is clamped, so the page is usable rather than empty or unbounded.
         self.assertEqual(len(self.objects.events.list(limit=0)), 1)
+        self.assertEqual(len(self.objects.events.list(limit=10_000)), 4)
+        self.assertEqual(len(self.objects.events.list(limit=-5)), 1)
 
     def test_tasks_can_be_listed_per_project(self) -> None:
         first = self.create_project("one")["object"]
@@ -399,15 +426,6 @@ class RequestValidation(StoreTestCase):
         with self.assertRaises(errors.InvalidRequest):
             self.append(self.new_event_with_payload({"text": 7}))
         self.assertEqual(self.count("events"), 0)
-
-    def new_event_with_payload(self, payload: dict) -> NewEvent:
-        from jasmine_core.clock import parse_rfc3339
-
-        return NewEvent(
-            event_type="user.prompt", source_system="test", actor_id=ACTOR, actor_kind="human",
-            host_id=HOST, payload=payload, occurred_at=parse_rfc3339(HAPPENED),
-            client_occurred_at=parse_rfc3339(HAPPENED),
-        )
 
     def test_oversized_text_is_refused(self) -> None:
         from jasmine_core import models
@@ -447,6 +465,188 @@ class RequestValidation(StoreTestCase):
         self.assertEqual(spec.source_system, "codex")
         self.assertEqual(spec.payload["text"], "hi")
         self.assertIsNone(spec.session_id)
+
+
+class TimestampsAreSampledPerWrite(StoreTestCase):
+    def test_recorded_at_advances_instead_of_being_frozen_at_store_creation(self) -> None:
+        first = self.create_project("one")["object"]["created_at"]
+        self.conn.execute("UPDATE core_meta SET value = value")  # no-op, keeps the write above
+        second = self.create_project("two")["object"]["created_at"]
+        self.assertNotEqual(first, second)
+
+    def test_created_at_and_updated_at_come_from_the_accepting_event(self) -> None:
+        result = self.create_project("demo")
+        record, event = result["object"], result["event"]
+        self.assertEqual(record["created_at"], event["recorded_at"])
+        self.assertEqual(record["updated_at"], event["recorded_at"])
+        self.assertEqual(record["source_event_id"], event["event_id"])
+
+    def test_a_session_started_at_comes_from_its_event(self) -> None:
+        result = self.create_session()
+        self.assertEqual(result["object"]["started_at"], result["event"]["occurred_at"])
+
+
+class IdentityIsNotTakenOnTrust(StoreTestCase):
+    OTHER_ACTOR = "act_01K742SG00YPWF74TSXEKA3254"
+
+    def test_actor_kind_is_read_from_the_registry_not_from_the_caller(self) -> None:
+        with db.transaction(self.conn):
+            self.registry.upsert_actor(self.OTHER_ACTOR, kind="system")
+        result = self.objects.create(
+            NewObject.project({"name": "demo", "host_id": HOST}), actor_id=self.OTHER_ACTOR
+        )
+        self.assertEqual(result["event"]["actor_kind"], "system")
+
+    def test_a_body_naming_another_actor_is_refused(self) -> None:
+        with db.transaction(self.conn):
+            self.registry.upsert_actor(self.OTHER_ACTOR, kind="system")
+        with self.assertRaises(errors.ActorMismatch) as ctx:
+            self.create_project("demo", actor_id=self.OTHER_ACTOR)
+        self.assertEqual(ctx.exception.status, 403)
+        self.assertEqual(ctx.exception.code, "actor_mismatch")
+        self.assertEqual(self.count("events"), 0)
+        self.assertEqual(self.count("projects"), 0)
+
+    def test_a_body_naming_the_same_actor_is_accepted(self) -> None:
+        result = self.create_project("demo", actor_id=ACTOR)
+        self.assertEqual(result["event"]["actor_id"], ACTOR)
+
+    def test_an_unregistered_actor_is_refused(self) -> None:
+        with self.assertRaises(errors.NotFound) as ctx:
+            self.objects.create(
+                NewObject.project({"name": "demo", "host_id": HOST}), actor_id=self.OTHER_ACTOR
+            )
+        self.assertEqual(ctx.exception.code, "actor_not_found")
+
+    def test_an_unregistered_host_is_refused(self) -> None:
+        with self.assertRaises(errors.NotFound) as ctx:
+            self.objects.create(
+                NewObject.project({"name": "demo", "host_id": "hst_01K742SG00YPWF74TSXEKA3254"}),
+                actor_id=ACTOR,
+            )
+        self.assertEqual(ctx.exception.code, "host_not_found")
+        self.assertEqual(self.count("events"), 0)
+
+    def test_an_unregistered_host_on_a_raw_event_is_refused(self) -> None:
+        with self.assertRaises(errors.NotFound) as ctx:
+            self.append(self.new_event("x", host_id="hst_01K742SG00YPWF74TSXEKA3254"))
+        self.assertEqual(ctx.exception.code, "host_not_found")
+
+
+class OneEventCreatesAtMostOneObject(StoreTestCase):
+    def test_a_projection_cannot_claim_another_kind_of_creating_event(self) -> None:
+        project_event = self.create_project("demo")["event"]["event_id"]
+        with self.assertRaises(sqlite3.IntegrityError) as ctx:
+            with db.transaction(self.conn):
+                self.conn.execute(
+                    "INSERT INTO tasks (task_id, project_id, title, description, status, revision,"
+                    " source_event_id, created_at, updated_at)"
+                    " VALUES ('tsk_01K742SG00YPWF74TSXEKA3254',"
+                    " 'prj_01K742SG000Z61XPMPFJBYH7RZ', 'x', '', 'open', 1, ?,"
+                    " '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z')",
+                    (project_event,),
+                )
+        self.assertIn("task.created", str(ctx.exception))
+        self.assertEqual(self.count("tasks"), 0)
+
+    def test_a_project_cannot_claim_a_session_event(self) -> None:
+        session_event = self.create_session()["event"]["event_id"]
+        with self.assertRaises(sqlite3.IntegrityError) as ctx:
+            with db.transaction(self.conn):
+                self.conn.execute(
+                    "INSERT INTO projects (project_id, name, description, status, revision,"
+                    " source_event_id, created_at, updated_at) VALUES"
+                    " ('prj_01K742SG000Z61XPMPFJBYH7RZ', 'x', '', 'active', 1, ?,"
+                    " '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z')",
+                    (session_event,),
+                )
+        self.assertIn("project.created", str(ctx.exception))
+
+    def test_a_session_cannot_claim_a_task_event(self) -> None:
+        project = self.create_project("demo")["object"]
+        task = self.create_task(project["project_id"])["object"]
+        with self.assertRaises(sqlite3.IntegrityError) as ctx:
+            with db.transaction(self.conn):
+                self.conn.execute(
+                    "INSERT INTO sessions (session_id, project_id, task_id, host_id, actor_id,"
+                    " status, revision, source_event_id, started_at, created_at, updated_at)"
+                    " VALUES ('ses_01K742SG00YPWF74TSXEKA3254', NULL, NULL, ?, ?, 'open', 1, ?,"
+                    " '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z', '2026-09-29T12:00:00Z')",
+                    (HOST, ACTOR, task["source_event_id"]),
+                )
+        self.assertIn("session.started", str(ctx.exception))
+
+
+class EventsCarryTheirObjectAssociation(StoreTestCase):
+    def test_a_task_created_event_carries_the_project_and_task_columns(self) -> None:
+        project = self.create_project("demo")["object"]
+        result = self.create_task(project["project_id"], "write the ADR")
+        event = result["event"]
+        self.assertEqual(event["project_id"], project["project_id"])
+        self.assertIsNone(event["task_id"])  # the task does not exist yet when its Event is written
+        self.assertEqual(result["object"]["project_id"], project["project_id"])
+
+    def test_a_session_event_carries_the_task_and_the_project_derived_from_it(self) -> None:
+        project = self.create_project("demo")["object"]
+        task = self.create_task(project["project_id"])["object"]
+        result = self.create_session(task_id=task["task_id"])  # no project_id given
+        event = result["event"]
+        self.assertEqual(event["task_id"], task["task_id"])
+        self.assertEqual(event["project_id"], project["project_id"])
+        self.assertEqual(result["object"]["project_id"], project["project_id"])
+
+    def test_the_creating_event_is_findable_through_its_project(self) -> None:
+        project = self.create_project("demo")["object"]
+        task = self.create_task(project["project_id"])["object"]
+        by_project = self.objects.events.list(project_id=project["project_id"])
+        # A project.created event cannot name its own project: the row does not
+        # exist until after the Event is written, and the Event is append-only.
+        # Every later event in the project can, which is what makes the chain
+        # walkable from a project downwards.
+        self.assertEqual([e["event_type"] for e in by_project], ["task.created"])
+        self.assertIsNone(self.objects.events.get(
+            self.objects.list("project")[0]["source_event_id"])["project_id"])
+
+
+class DeferralIsLoadBearing(DbTestCase):
+    """The deferral is a design decision, so a test must depend on it."""
+
+    def test_a_reference_to_a_session_created_later_succeeds_at_statement_time(self) -> None:
+        reg = registry.Registry(self.conn)
+        with db.transaction(self.conn):
+            reg.upsert_host(HOST)
+            reg.upsert_actor(ACTOR, kind="human")
+        conn = self.conn
+        with self.assertRaises(sqlite3.IntegrityError):
+            with db.transaction(conn):
+                # With a non-deferred foreign key this INSERT itself would fail.
+                # It is the deferral that lets the Event land and lets the object
+                # that creates the session be written in the same transaction.
+                conn.execute(
+                    "INSERT INTO events (event_id, seq, schema_version, event_type, source_system,"
+                    " source_event_id, occurred_at, recorded_at, actor_id, actor_kind, host_id,"
+                    " session_id, project_id, task_id, payload_json, body_sha256)"
+                    " VALUES (?, 1, 1, 'user.prompt', 'test', NULL, '2026-09-29T00:00:00Z',"
+                    " '2026-09-29T00:00:00Z', ?, 'human', ?, ?, NULL, NULL, '{}', ?)",
+                    ("evt_01K742SG00KSNSRN81BXC5ZAZC", ACTOR, HOST,
+                     "ses_01K742SG00CN4E98TXMDE6TBEP", "e" * 64),
+                )
+                self.assertIsNotNone(
+                    conn.execute("SELECT 1 FROM events WHERE event_id = ?",
+                                 ("evt_01K742SG00KSNSRN81BXC5ZAZC",)).fetchone()
+                )
+        self.assertIsNone(
+            conn.execute("SELECT 1 FROM events WHERE event_id = ?",
+                         ("evt_01K742SG00KSNSRN81BXC5ZAZC",)).fetchone()
+        )
+
+
+class NonFinitePayloadsAreRefused(StoreTestCase):
+    def test_nan_and_infinity_are_refused_with_a_typed_error(self) -> None:
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.assertRaises(errors.InvalidRequest):
+                self.append(self.new_event_with_payload({"text": "x", "weird": value}))
+        self.assertEqual(self.count("events"), 0)
 
 
 if __name__ == "__main__":

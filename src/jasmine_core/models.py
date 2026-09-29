@@ -8,7 +8,7 @@ clients.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -198,12 +198,14 @@ class NewObject:
     occurred_at: datetime | None = None
     source_event_id: str | None = None
     event_id: str | None = None
-    extra_event: dict[str, Any] = field(default_factory=dict)
+    #: The actor the body claims. Never the source of truth: `ObjectStore.create`
+    #: compares it with the authenticated actor and raises `actor_mismatch`.
+    actor_id: str | None = None
 
     @staticmethod
     def project(body: dict[str, Any]) -> "NewObject":
         allowed = {"name", "description", "event_id", "host_id", "source_system",
-                   "source_event_id", "occurred_at", "expected_revision"}
+                   "source_event_id", "occurred_at", "expected_revision", "actor_id"}
         _reject_unknown(body, allowed, "project")
         return NewObject(
             kind="project",
@@ -215,12 +217,14 @@ class NewObject:
             occurred_at=_optional_time(body),
             source_event_id=optional(body, "source_event_id"),
             event_id=optional_id(body, "event_id", "evt"),
+            actor_id=optional_id(body, "actor_id", "act"),
         )
 
     @staticmethod
     def task(body: dict[str, Any]) -> "NewObject":
         allowed = {"title", "description", "project_id", "event_id", "host_id",
-                   "source_system", "source_event_id", "occurred_at", "expected_revision"}
+                   "source_system", "source_event_id", "occurred_at", "expected_revision",
+                   "actor_id"}
         _reject_unknown(body, allowed, "task")
         title = body.get("title")
         if not isinstance(title, str) or not title.strip():
@@ -236,20 +240,16 @@ class NewObject:
             occurred_at=_optional_time(body),
             source_event_id=optional(body, "source_event_id"),
             event_id=optional_id(body, "event_id", "evt"),
+            actor_id=optional_id(body, "actor_id", "act"),
         )
 
     @staticmethod
     def session(body: dict[str, Any]) -> "NewObject":
         allowed = {"title", "project_id", "task_id", "host_id", "event_id", "source_system",
-                   "source_event_id", "occurred_at", "expected_revision"}
+                   "source_event_id", "occurred_at", "expected_revision", "actor_id"}
         _reject_unknown(body, allowed, "session")
         project_id = optional_id(body, "project_id", "prj")
         task_id = optional_id(body, "task_id", "tsk")
-        if project_id is None and task_id is None:
-            # A session with no project and no task is a conversation that has not
-            # been attached to any Truth yet. That is legal: Raw Events must be
-            # recordable before interpretation exists (ADR 0002 §2.4).
-            pass
         return NewObject(
             kind="session",
             name=optional(body, "title") or "",
@@ -261,6 +261,7 @@ class NewObject:
             occurred_at=_optional_time(body),
             source_event_id=optional(body, "source_event_id"),
             event_id=optional_id(body, "event_id", "evt"),
+            actor_id=optional_id(body, "actor_id", "act"),
         )
 
     def event_payload(self, object_id: str) -> dict[str, Any]:
@@ -275,7 +276,6 @@ class NewObject:
             "description": self.description,
             "project_id": self.project_id,
             "task_id": self.task_id,
-            **self.extra_event,
         }
 
 

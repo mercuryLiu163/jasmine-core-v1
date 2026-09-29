@@ -21,9 +21,19 @@ import json
 import sqlite3
 from typing import Any
 
-from . import clock, errors, ids
+from . import clock, db, errors, ids
 from .canonical import canonical_json, sha256_hex
 from .models import EVENT_TYPES, NewEvent
+
+#: table -> primary key column, used to resolve the caller's stated references
+#: before the database does it for us with an untyped error.
+_PK = {
+    "hosts": "host_id",
+    "actors": "actor_id",
+    "sessions": "session_id",
+    "projects": "project_id",
+    "tasks": "task_id",
+}
 
 #: Bounded so a pathological clock or a hostile client cannot force an unbounded
 #: retry loop inside one transaction.
@@ -63,9 +73,6 @@ class EventStore:
     def __init__(self, conn: sqlite3.Connection, *, schema_version: int) -> None:
         self._conn = conn
         self._schema_version = schema_version
-        # One recorded_at per store: every Event in a transaction is accepted at
-        # the same instant, and it is never part of the idempotency hash.
-        self._recorded_at = clock.now_rfc3339()
 
     # -- reading -----------------------------------------------------------
 
@@ -123,8 +130,13 @@ class EventStore:
         event was already stored by an earlier identical request, in which case
         this call wrote nothing. Must be called inside `db.transaction()`.
         """
+        with db.translate_lock_errors():
+            return self._append(spec, event_id)
+
+    def _append(self, spec: NewEvent, event_id: str | None) -> tuple[dict[str, Any], bool]:
         wanted = event_id or spec.event_id
         validate_payload(spec)
+        self._check_references(spec)
         digest = spec.digest()
 
         if wanted is not None:
@@ -162,7 +174,11 @@ class EventStore:
 
     def _write(self, spec: NewEvent, wanted: str | None, digest: str) -> dict[str, Any]:
         payload_json = canonical_json(spec.payload)
-        occurred_at = clock.to_rfc3339(spec.occurred_at) if spec.occurred_at else self._recorded_at
+        # Sampled per write, not per store: a long-lived process must stamp each
+        # Event with the moment it was accepted, and the value lands in a table
+        # that can never be corrected.
+        recorded_at = clock.now_rfc3339()
+        occurred_at = clock.to_rfc3339(spec.occurred_at) if spec.occurred_at else recorded_at
         seq = _next_seq(self._conn)
         for attempt in range(ID_ALLOCATION_ATTEMPTS):
             event_id = wanted or ids.new_id("evt")
@@ -171,7 +187,7 @@ class EventStore:
                     _INSERT,
                     (
                         event_id, seq, self._schema_version, spec.event_type, spec.source_system,
-                        spec.source_event_id, occurred_at, self._recorded_at, spec.actor_id,
+                        spec.source_event_id, occurred_at, recorded_at, spec.actor_id,
                         spec.actor_kind, spec.host_id, spec.session_id, spec.project_id,
                         spec.task_id, payload_json, digest,
                     ),
@@ -187,6 +203,29 @@ class EventStore:
             assert stored is not None  # just inserted in this transaction
             return stored
         raise errors.CoreError("could not allocate a unique event_id")  # pragma: no cover
+
+    def _check_references(self, spec: NewEvent) -> None:
+        """Refuse explicit references that do not exist, with the frozen codes.
+
+        ADR 0002 §2.4: a Raw Event may have no project, task or session at all,
+        but a reference the caller *did* state must resolve. Letting the foreign
+        key do it would surface a raw ``sqlite3.IntegrityError`` at COMMIT instead
+        of the documented 404.
+        """
+        for column, ident, kind in (
+            ("hosts", spec.host_id, "host"),
+            ("actors", spec.actor_id, "actor"),
+            ("sessions", spec.session_id, "session"),
+            ("projects", spec.project_id, "project"),
+            ("tasks", spec.task_id, "task"),
+        ):
+            if ident is None:
+                continue
+            row = self._conn.execute(
+                f"SELECT 1 FROM {column} WHERE {_PK[column]} = ?", (ident,)
+            ).fetchone()
+            if row is None:
+                raise errors.NotFound(kind, ident)
 
 
 def _next_seq(conn: sqlite3.Connection) -> int:
@@ -211,3 +250,22 @@ def validate_payload(spec: NewEvent) -> None:
             f"event_type must be one of {', '.join(sorted(EVENT_TYPES))}", field="event_type"
         )
     require_text(spec.payload)
+    _reject_non_finite(spec.payload)
+
+
+def _reject_non_finite(payload: Any) -> None:
+    """`NaN`/`Infinity` are Python-only JSON extensions.
+
+    `json.dumps` emits them by default and the `json_valid` CHECK on `events`
+    would then reject the INSERT with a raw IntegrityError at COMMIT. Refusing
+    them here keeps the error a typed 400.
+    """
+    if isinstance(payload, float) and (payload != payload or payload in (float("inf"), float("-inf"))):
+        raise errors.InvalidRequest("payload must not contain NaN or Infinity", field="payload")
+    if isinstance(payload, dict):
+        for key, value in payload.items():
+            _reject_non_finite(key)
+            _reject_non_finite(value)
+    elif isinstance(payload, (list, tuple)):
+        for item in payload:
+            _reject_non_finite(item)

@@ -34,10 +34,13 @@ def connect(path: str | Path) -> sqlite3.Connection:
     """Open ``core.db`` with the frozen pragma set."""
     db_path = Path(path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), isolation_level=None, timeout=5.0)
-    conn.row_factory = sqlite3.Row
-    for name, value in PRAGMAS:
-        conn.execute(f"PRAGMA {name}={value}")
+    with translate_lock_errors():
+        conn = sqlite3.connect(str(db_path), isolation_level=None, timeout=5.0)
+        conn.row_factory = sqlite3.Row
+        for name, value in PRAGMAS:
+            # journal_mode needs a write lock, so a concurrent process can make
+            # this fail; surface it as database_busy rather than a traceback.
+            conn.execute(f"PRAGMA {name}={value}")
     return conn
 
 

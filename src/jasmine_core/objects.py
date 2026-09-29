@@ -3,8 +3,9 @@
 Every create runs inside one transaction and always follows
 `EventStore.append` (ADR 0002 §2.2: Event first, projection second, one commit).
 The projection's `source_event_id` is `UNIQUE` and its foreign key to `events` is
-not deferred, so a projection cannot exist without exactly one originating Event
-and two objects cannot share one.
+not deferred, so a projection cannot exist without exactly one originating Event.
+Cross-kind sharing is closed by the `trg_*_source_event_kind` triggers in
+`m0001_baseline`, because `UNIQUE` alone is only per table.
 
 P0 deliberately exposes no update or delete: the Task state machine belongs to
 P1, and there is no endpoint that could contradict an append-only Event.
@@ -13,10 +14,10 @@ P1, and there is no endpoint that could contradict an append-only Event.
 from __future__ import annotations
 
 import sqlite3
+from dataclasses import replace
 from typing import Any
 
-from . import errors, ids
-from .db import transaction
+from . import db, errors, ids, registry
 from .events import EventStore
 from .models import NewEvent, NewObject
 
@@ -47,6 +48,7 @@ class ObjectStore:
     def __init__(self, conn: sqlite3.Connection, *, schema_version: int) -> None:
         self._conn = conn
         self.events = EventStore(conn, schema_version=schema_version)
+        self.registry = registry.Registry(conn)
 
     # -- reading -----------------------------------------------------------
 
@@ -86,16 +88,33 @@ class ObjectStore:
 
     # -- writing -----------------------------------------------------------
 
-    def create(self, spec: NewObject, *, actor_id: str, actor_kind: str) -> dict[str, Any]:
+    def create(self, spec: NewObject, *, actor_id: str) -> dict[str, Any]:
         """Create one object and its source Event in a single transaction.
+
+        ``actor_id`` is the *authenticated* identity. A body that names a
+        different actor is refused with `403 actor_mismatch` (ADR 0004 §1.3), and
+        the Event's ``actor_kind`` is read from the registry rather than trusted
+        from the request, so an append-only row can never misstate who acted.
 
         Returns ``{"object", "event", "replayed"}``. On a replay the originally
         stored object is returned unchanged and no row is written.
         """
-        with transaction(self._conn):
+        with db.transaction(self._conn):
+            actor = self.registry.require_actor(actor_id)
+            if spec.actor_id is not None and spec.actor_id != actor_id:
+                raise errors.ActorMismatch(
+                    "the body names a different actor than the authenticated one",
+                    authenticated_actor_id=actor_id,
+                    body_actor_id=spec.actor_id,
+                )
+            self.registry.require_host(spec.host_id or "")
+            # References are resolved before the Event is written so a bad
+            # reference costs no Event at all, and so a session that names only a
+            # task still gets a project column for ADR 0003 §1.2 filtering.
+            spec = self._check_references(spec)
             object_id = ids.new_id(ID_PREFIX[spec.kind])
             event, replayed = self.events.append(
-                self._event_spec(spec, object_id, actor_id, actor_kind)
+                self._event_spec(spec, object_id, actor_id, actor["kind"])
             )
             if replayed:
                 return {"object": self._replayed_object(spec, event),
@@ -129,6 +148,9 @@ class ObjectStore:
 
         if not spec.host_id:
             raise errors.InvalidRequest("host_id is required", field="host_id")
+        # The creating Event carries the same project/task columns as the object
+        # it creates, so `GET /v1/events?project_id=...` (ADR 0003 §1.2) finds a
+        # `task.created` event and the link is a real column, not JSON.
         return NewEvent(
             event_type=spec.event_type,
             source_system=spec.source_system,
@@ -137,6 +159,8 @@ class ObjectStore:
             actor_id=actor_id,
             actor_kind=actor_kind,
             host_id=spec.host_id,
+            project_id=spec.project_id,
+            task_id=spec.task_id,
             payload=spec.event_payload(object_id),
             event_id=spec.event_id,
             hash_payload=_hash_payload(spec.event_payload(object_id)),
@@ -145,7 +169,6 @@ class ObjectStore:
 
     def _insert_projection(self, spec: NewObject, object_id: str,
                            event: dict[str, Any]) -> dict[str, Any]:
-        self._check_references(spec)
         now = event["recorded_at"]
         if spec.kind == "project":
             self._conn.execute(
@@ -174,19 +197,31 @@ class ObjectStore:
         assert record is not None
         return record
 
-    def _check_references(self, spec: NewObject) -> None:
+    def _check_references(self, spec: NewObject) -> NewObject:
+        """Validate the caller's references; return a spec with them resolved.
+
+        A session may name only a task, but the project is then known from that
+        task, and both the session and its Event are stored with it so
+        `GET /v1/events?project_id=` finds the creating event.
+        """
         if spec.kind == "task":
             if self.get("project", spec.project_id or "") is None:
                 raise errors.NotFound("project", spec.project_id or "")
-        elif spec.kind == "session":
-            if spec.project_id is not None and self.get("project", spec.project_id) is None:
-                raise errors.NotFound("project", spec.project_id)
-            if spec.task_id is not None:
-                task = self.get("task", spec.task_id)
-                if task is None:
-                    raise errors.NotFound("task", spec.task_id)
-                if spec.project_id is not None and task["project_id"] != spec.project_id:
-                    raise errors.InvalidRequest(
-                        "task does not belong to the given project",
-                        field="project_id", task_project_id=task["project_id"],
-                    )
+            return spec
+        if spec.kind != "session":
+            return spec
+        if spec.project_id is not None and self.get("project", spec.project_id) is None:
+            raise errors.NotFound("project", spec.project_id)
+        if spec.task_id is None:
+            return spec
+        task = self.get("task", spec.task_id)
+        if task is None:
+            raise errors.NotFound("task", spec.task_id)
+        if spec.project_id is not None and task["project_id"] != spec.project_id:
+            raise errors.InvalidRequest(
+                "task does not belong to the given project",
+                field="project_id", task_project_id=task["project_id"],
+            )
+        if spec.project_id is None:
+            spec = replace(spec, project_id=task["project_id"])
+        return spec
