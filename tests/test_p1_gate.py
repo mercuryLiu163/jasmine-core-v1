@@ -26,6 +26,12 @@ def module():
 
 
 class RealGateRunner(unittest.TestCase):
+    def test_endpoint_mismatch_preserves_expected_and_observed_owners(self) -> None:
+        gate = module()
+        with patch.object(gate, "_port_owners", return_value={9001, 9002}):
+            with self.assertRaisesRegex(gate.Blocked, r"expected=9001, observed=\[9001, 9002\]"):
+                gate._owned_endpoint("http://127.0.0.1:54321", 9001)
+
     def test_unexpected_runner_error_still_saves_standard_fail_report(self) -> None:
         gate = module()
         with tempfile.TemporaryDirectory(prefix="p1-gate-unexpected-") as temp:

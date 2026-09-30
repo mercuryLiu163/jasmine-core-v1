@@ -105,8 +105,10 @@ def _owned_endpoint(url: str, pid: int) -> dict[str, Any]:
     parsed = urlparse(url)
     if parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or parsed.path not in ("", "/"):
         raise Blocked("Core URL must be exact loopback HTTP")
-    if parsed.port is None or _port_owners(parsed.port) != {pid}:
-        raise Blocked("Core endpoint is not exclusively owned by the expected PID")
+    owners = _port_owners(parsed.port) if parsed.port is not None else set()
+    if parsed.port is None or owners != {pid}:
+        raise Blocked(f"Core endpoint is not exclusively owned by the expected PID "
+                      f"(expected={pid}, observed={sorted(owners)})")
     with socket.create_connection(("127.0.0.1", parsed.port), timeout=1):
         pass
     return {"port": parsed.port, "owner_pid": pid}
@@ -122,6 +124,7 @@ def _start_core(db_path: Path, workspace: Path, port: int, out: Path) -> subproc
                              str(db_path), "--host", "127.0.0.1", "--port", str(port)],
                             cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
     log.close()
+    last_readiness_error = "no readiness probe completed"
     try:
         for _ in range(80):
             if proc.poll() is not None:
@@ -130,10 +133,10 @@ def _start_core(db_path: Path, workspace: Path, port: int, out: Path) -> subproc
                 _owned_endpoint(f"http://127.0.0.1:{port}", proc.pid)
                 if CoreClient(f"http://127.0.0.1:{port}").get("/v1/health").get("status") == "ok":
                     return proc
-            except (Blocked, OSError, ApiError):
-                pass
+            except (Blocked, OSError, ApiError) as exc:
+                last_readiness_error = str(exc) if isinstance(exc, Blocked) else type(exc).__name__
             time.sleep(0.1)
-        raise Blocked(f"owned Core did not become healthy; see {out/'api.log'}")
+        raise Blocked(f"owned Core did not become healthy: {last_readiness_error}; see {out/'api.log'}")
     except BaseException:
         _stop_core(proc, port)
         raise
