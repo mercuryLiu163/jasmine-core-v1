@@ -326,5 +326,8 @@ The catalog must retain the actual `gpt-6.1-sol` entry and have
 `supports_search_tool: false`, and `tool_mode: null`. This release supports only the independently
 verified CLI0.159.0 binary fingerprint recorded in the provider. Other binaries
 or missing configuration return a recorded `FAILED/provider_unavailable`.
-The request body cannot alter this profile. Model weights/build version is not
+The request body cannot alter this `no-execution.v2` profile or its default
+non-Plan execution mode. The CLI may declare one Plan-only question meta tool;
+independent forced-call verification must prove it is unavailable in this mode.
+This is not a claim that the platform declares zero tools. Model weights/build version is not
 attested by this CLI; extractor_version records the CLI version and its digest.

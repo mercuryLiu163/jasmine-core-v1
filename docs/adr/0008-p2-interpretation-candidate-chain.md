@@ -1,6 +1,6 @@
 # ADR 0008 — P2-01 Interpretation 候选链
 
-- 状态：候选数据合同 Accepted；provider完整工具面验证待冻结；候选实现验收另行记录，不宣称 P2 验收。
+- 状态：候选数据合同 Accepted；provider no-execution.v2 默认模式拒绝元工具验证待冻结；候选实现验收另行记录，不宣称 P2 验收。
 - 日期：2026-09-29
 - 基线：`9de00fe`，Schema 6；本 PR 独占新增 `m0007_interpretations` / Schema 7。
 
@@ -24,9 +24,9 @@ POST 必须 idempotency_key（1–128 ASCII safe characters）和 event_id，可
 
 ## 3 Provider
 
-优先复用已登录 Codex，固定 gpt-6.1-sol；不接V0、不新建账户或付费凭据。operator配置选择绝对CLI路径，不允许HTTP body挑可执行文件/model/prompt。以新临时private目录运行 `codex exec`，无repo配置，无resume；`--ignore-user-config --ephemeral --skip-git-repo-check --sandbox read-only --output-schema --json`；清除继承Jasmine Gate nonce/服务token环境、禁hooks/memories/plugins/apps/agents/browser/web/shell/image等能力，固定prompt仅把source JSON当数据。不能仅凭prompt说无tools。provider上线前须捕获实际请求，验证model为指定ID、tools为空及schema/prompt；若当前CLI配置不能做到，无工具provider为 BLOCKED/provider_unavailable，不降级执行原话命令。独立验证agent负责最小preflight；具体可运行flags在合同评审附录冻结。
+优先复用已登录 Codex，固定 gpt-6.1-sol；不接V0、不新建账户或付费凭据。operator配置选择绝对CLI路径，不允许HTTP body挑可执行文件/model/prompt。以新临时private目录运行 `codex exec`，无repo配置，无resume；`--ignore-user-config --ephemeral --skip-git-repo-check --sandbox read-only --output-schema --json`；清除继承Jasmine Gate nonce/服务token环境、禁hooks/memories/plugins/apps/agents/browser/web/shell/image等能力，固定prompt仅把source JSON当数据。不能仅凭prompt说禁tools。provider上线前须捕获实际完整请求并验证model为指定ID、无执行工具面及固定schema/prompt；平台仅允许一项默认模式不可执行的Plan-only request_user_input元声明，须独立forced-call证明不可执行；不满足此合同则 BLOCKED/provider_unavailable，不降级执行原话命令。独立验证agent负责最小preflight；具体可运行flags在合同评审附录冻结。
 
-限制：UTF-8源原话<=32KiB、完整输入<=48KiB、结果<=64KiB、CLIstdout/stderr各<=256KiB；timeout默认120s（含spawn/输出），进程组终止、短grace后kill，有限缓冲防大输出。原始畸形JSON截断上限保留，error_code固定不返回stderr/token/堆栈。输出CLI item允许text-only reasoning、唯一agent_message及完整顺序生命周期/usage；出现任何工具执行/调用项fail closed。这是额外断言，不能替代请求tools=[]。fake provider明确 `component_simulation`，不被真实Gate认作LLM。
+限制：UTF-8源原话<=32KiB、完整输入<=48KiB、结果<=64KiB、CLIstdout/stderr各<=256KiB；timeout默认120s（含spawn/输出），进程组终止、短grace后kill，有限缓冲防大输出。原始畸形JSON截断上限保留，error_code固定不返回stderr/token/堆栈。输出CLI item允许text-only reasoning、唯一agent_message及完整顺序生命周期/usage；出现任何工具执行/调用项fail closed。这是额外断言，不能替代完整请求工具面的独立检查。fake provider明确 `component_simulation`，不被真实Gate认作LLM。
 
 真实saved-auth smoke已验证CLI0.159.0 / gpt-6.1-sol约11秒可结构提取；该结果只证明provider能力，不证明硬禁tools。provider不可用/timeout/输出异常留下FAILED。P2-01不接同步hook；P2-03 deadline必须单独冻结：当前P1 hook12秒，超时必须显式pending/block，Guard仍生效，不能输出空context暗示本轮已处理。
 
@@ -58,6 +58,12 @@ Provider额外设置project_doc_max_bytes=0并写入config digest，阻止全局
 
 真实HTTP首轮保留FAILED/provider_tool_use：CLI可发送非工具reasoning完成项。协议reasoning-and-final.v1严格允许thread.started→turn.started→零或多条指定reasoning文本→唯一agent_message→turn.completed；reasoning仅接受id/type/text且text是字符串。任何其他item或晚到reasoning仍fail closed，实际模型请求无工具的边界必须通过完整preflight确认。reasoning协议版本进入config digest，首轮FAILED不覆写，最终独立重试用新配置provenance。
 
-真实失败进一步定位为Code Mode不可用startup error项，并非已证实reasoning项；保留拒绝error项，不把启动降级视为无工具成功。provider强制actual catalog tool_mode=null以避免code_mode_only在input.additional_tools注入functions.exec，模型slug保持gpt-6.1-sol。最终必须验证顶层tools、input.additional_tools、所有namespace/exec面均为空且真实调用无降级error；尚未成立时仍BLOCKED，不将之前结构结果标为安全providerGate PASS。
+真实失败进一步定位为Code Mode不可用startup error项，并非已证实reasoning项；保留拒绝error项，不把启动降级视为无工具成功。provider强制actual catalog tool_mode=null以避免code_mode_only在input.additional_tools注入functions.exec，模型slug保持gpt-6.1-sol。最终必须检查顶层tools、input.additional_tools和所有namespace：只允许默认模式不可执行的Plan-only request_user_input声明，其他执行/操作面必须为空，且真实调用无降级error；尚未成立时仍BLOCKED，不将之前结构结果标为安全providerGate PASS。
 
 固定skills.include_instructions=false和skills.bundled.enabled=false并记录digest，避免自动技能block污染解释prompt（[官方配置Schema](https://learn.chatgpt.com/docs/config-schema.json)）。tools契约仍待完整工具面结果，不能从工具禁用flags直接推断无可调用面。
+
+## 8 no-execution.v2 合同调整（root审查后决定）
+
+用户要求Interpreter只抽取数据、不执行工具/命令。CLI当前固定catalog tool_mode=null后仍声明一个Plan-only request_user_input元工具，因此撤回任何literal tools=[]/绝对无声明的旧结论，保留初始preflight与真实HTTP FAILED证据。本版本名称为no-execution.v2，不能写成no-tools。完整实际请求仅可有该唯一元声明，不可有exec/shell/code-mode/MCP/browser/file/网络动作工具。CLI固定`codex exec`默认非Plan模式、ignore-user-config、private无配置目录，禁default_mode_request_user_input；HTTP及model数据不能选择/切换mode。该执行模式、meta声明白名单和default-mode禁调用flag均入config digest。
+
+独立验收必须让component模型响应实际调用request_user_input，检查完整后续请求/CLI日志：默认模式明确拒绝、不会弹用户问询、不会切Plan、不会执行命令/其他操作。只有这一拒绝证据和完整工具面检查成立，才能冻结此provider；描述中的Plan-only本身不是证明。任何额外native工具/错误项仍fail closed；reasoning仅数据whitelist。随后在相同candidateSHA跑真实LLM/API并确认Truth不变。若元工具可以实际询问用户、改变模式或执行操作，此路线BLOCKED。
