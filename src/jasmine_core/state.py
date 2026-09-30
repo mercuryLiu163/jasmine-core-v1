@@ -277,8 +277,8 @@ class StateStore:
 
 
     def set_step_criteria(self, step_id: str, body: dict[str, Any], *, actor_id: str,
-                          actor_kind: str, can_accept: bool) -> dict[str, Any]:
-        with db.translate_lock_errors(), db.transaction(self.conn):
+                          actor_kind: str, can_accept: bool, unit_of_work=None) -> dict[str, Any]:
+        with db.translate_lock_errors(), db.transaction(self.conn, unit_of_work=unit_of_work):
             step = self.step(step_id)
             task = self.task(step["task_id"])
             criteria = validate_criteria(body.get("acceptance_criteria"))
@@ -389,8 +389,8 @@ class StateStore:
             return {"task": self.task(task_id), "event": event, "replayed": False}
 
     def set_task_criteria(self, task_id: str, body: dict[str, Any], *, actor_id: str,
-                          actor_kind: str, can_accept: bool) -> dict[str, Any]:
-        with db.translate_lock_errors(), db.transaction(self.conn):
+                          actor_kind: str, can_accept: bool, unit_of_work=None) -> dict[str, Any]:
+        with db.translate_lock_errors(), db.transaction(self.conn, unit_of_work=unit_of_work):
             task = self.task(task_id)
             criteria = validate_criteria(body.get("acceptance_criteria"))
             expected = body.get("expected_revision")

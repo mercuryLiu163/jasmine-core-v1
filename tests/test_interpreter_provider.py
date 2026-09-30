@@ -9,9 +9,9 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from support import DbTestCase
-from jasmine_core.interpreter_provider import CodexProvider, ProviderFailure, _base_config
+from jasmine_core.interpreter_provider import CodexProvider, ProviderFailure, _base_config, _cancel_owned_process
 
 
 class ProviderSubprocess(unittest.TestCase):
@@ -91,3 +91,44 @@ print(json.dumps({'type':'turn.completed'}))
                     path.write_text(json.dumps({"models":[current]}))
                     provider=CodexProvider(str(binary),str(path))
                     self.assertEqual(provider.valid,mode is None)
+
+    def test_group_eperm_exited_parent_preserves_output_cap(self):
+        spawn=subprocess.Popen
+        owned=[]
+        def exited(*args,**kwargs):
+            proc=spawn(*args,**kwargs);proc.wait(timeout=2);owned.append(proc)
+            proc.terminate=Mock(side_effect=AssertionError('exited parent must not be signalled'))
+            proc.kill=Mock(side_effect=AssertionError('exited parent must not be signalled'))
+            return proc
+        with patch('jasmine_core.interpreter_provider.subprocess.Popen',side_effect=exited), patch('jasmine_core.interpreter_provider.os.killpg',side_effect=PermissionError('EPERM')):
+            with self.assertRaises(ProviderFailure) as raised:
+                self.run_script('import sys;open(sys.argv[1],"w").write("x"*70000)')
+        self.assertEqual(raised.exception.code,'provider_output_too_large')
+        self.assertEqual(raised.exception.cleanup_errors,('cleanup_permission_denied',))
+        self.assertIsNotNone(owned[0].poll())
+        self.assertTrue(all(stream.closed for stream in (owned[0].stdin,owned[0].stdout,owned[0].stderr)))
+
+    def test_group_eperm_live_parent_uses_only_owned_parent_fallback(self):
+        spawn=subprocess.Popen;owned=[]
+        def live(*args,**kwargs):
+            proc=spawn(*args,**kwargs);owned.append(proc);return proc
+        start=time.monotonic()
+        with patch('jasmine_core.interpreter_provider.subprocess.Popen',side_effect=live), patch('jasmine_core.interpreter_provider.os.killpg',side_effect=PermissionError('EPERM')):
+            with self.assertRaises(ProviderFailure) as raised:
+                self.run_script('import time;time.sleep(20)',timeout=.1)
+        self.assertEqual(raised.exception.code,'provider_timeout')
+        self.assertIn('cleanup_permission_denied',raised.exception.cleanup_errors)
+        self.assertLess(time.monotonic()-start,2)
+        self.assertIsNotNone(owned[0].poll())
+        self.assertTrue(all(stream.closed for stream in (owned[0].stdin,owned[0].stdout,owned[0].stderr)))
+
+    def test_cleanup_denied_and_incomplete_wait_remain_bounded_diagnostics(self):
+        proc=Mock();proc.pid=12345;proc.poll.return_value=None
+        proc.terminate.side_effect=PermissionError('EPERM');proc.kill.side_effect=PermissionError('EPERM')
+        proc.wait.side_effect=subprocess.TimeoutExpired('owned component',1)
+        with patch('jasmine_core.interpreter_provider.os.killpg',side_effect=PermissionError('EPERM')):
+            diagnostics=_cancel_owned_process(proc)
+        self.assertEqual(diagnostics,('cleanup_permission_denied','cleanup_incomplete'))
+        self.assertEqual(proc.wait.call_count,2)
+        self.assertTrue(all(call.kwargs=={'timeout':1} for call in proc.wait.call_args_list))
+        proc.terminate.assert_called_once();proc.kill.assert_called_once()

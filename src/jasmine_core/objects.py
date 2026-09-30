@@ -95,7 +95,7 @@ class ObjectStore:
 
     # -- writing -----------------------------------------------------------
 
-    def create(self, spec: NewObject, *, actor_id: str) -> dict[str, Any]:
+    def create(self, spec: NewObject, *, actor_id: str, unit_of_work=None) -> dict[str, Any]:
         """Create one object and its source Event in a single transaction.
 
         ``actor_id`` is the *authenticated* identity. A body that names a
@@ -106,7 +106,7 @@ class ObjectStore:
         Returns ``{"object", "event", "replayed"}``. On a replay the originally
         stored object is returned unchanged and no row is written.
         """
-        with db.transaction(self._conn):
+        with db.transaction(self._conn, unit_of_work=unit_of_work):
             actor = self.registry.require_actor(actor_id)
             if spec.actor_id is not None and spec.actor_id != actor_id:
                 raise errors.ActorMismatch(

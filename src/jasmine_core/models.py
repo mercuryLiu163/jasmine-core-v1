@@ -54,6 +54,8 @@ EVENT_TYPES = frozenset({
     "evidence.confirmed",
     "workspace.fingerprinted",
     "step.staled",
+    "resolution.command", "interpretation.bound", "review.approved", "review.rejected",
+    "interpretation.corrected", "interpretation.rejected", "interpretation.rerun",
 })
 
 MAX_TEXT_BYTES = 256 * 1024

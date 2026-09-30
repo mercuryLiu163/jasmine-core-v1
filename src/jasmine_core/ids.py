@@ -25,7 +25,7 @@ RANDOM_BYTES = RANDOM_BITS // 8
 
 #: prefix -> what the identifier names. `stp` and `evd` are reserved here so
 #: that P1 cannot introduce a different shape; the columns are not created yet.
-PREFIXES = frozenset({"prj", "tsk", "stp", "ses", "hst", "act", "evt", "evd", "aud", "key", "rul", "int"})
+PREFIXES = frozenset({"prj", "tsk", "stp", "ses", "hst", "act", "evt", "evd", "aud", "key", "rul", "int", "res", "rvw"})
 
 #: Every shipped prefix is three characters; the pattern is exact rather than a
 #: 3-4 character range so a future one cannot slip in unnoticed.

@@ -12,4 +12,4 @@ __version__ = "0.1.0"
 
 #: Mirrors the highest shipped migration. Kept here so the version check does
 #: not require importing every migration module.
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8

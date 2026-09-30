@@ -115,7 +115,7 @@ class InterpretationStore:
         items=[self._get(row['interpretation_id']) for row in rows[:limit]]
         return {'items':items,'next_after_id':items[-1]['interpretation_id'] if len(rows)>limit else None}
 
-    def process(self,body:dict,*,actor_id:str):
+    def process(self,body:dict,*,actor_id:str, operation_context=None, parent_interpretation_id=None, on_reserved=None):
         # Even in-process callers cannot accidentally keep an enclosing write lock
         # open across an external model invocation.
         if self.conn.in_transaction:
@@ -128,7 +128,10 @@ class InterpretationStore:
         extractor_id=body.get('extractor_id','codex-local-v1')
         if extractor_id!='codex-local-v1':
             raise errors.InvalidRequest('unknown extractor_id')
-        request_hash=sha256_hex(canonical_json({'event_id':event_id,'extractor_id':extractor_id}))
+        request_data={'event_id':event_id,'extractor_id':extractor_id}
+        if operation_context is not None:
+            request_data['operation_context']=operation_context
+        request_hash=sha256_hex(canonical_json(request_data))
         replay=None;source=None;config=None;provider=None;ident=None
         # Runtime/catalog reads occur before reserving any database write lock.
         existing_key=self.conn.execute('SELECT 1 FROM interpretation_request_keys WHERE processor_actor_id=? AND idempotency_key=?',
@@ -147,6 +150,11 @@ class InterpretationStore:
                 if self.conn.execute('SELECT 1 FROM actors WHERE actor_id=?',(actor_id,)).fetchone() is None:
                     raise errors.NotFound('actor',actor_id)
                 source=self._source(event_id)
+                if operation_context is not None:
+                    parent=self._get(parent_interpretation_id)
+                    if parent['event_id']!=event_id:
+                        raise errors.InvalidRequest('rerun parent source mismatch')
+                    source['operation_context']=operation_context
                 config_digest=sha256_hex(canonical_json(config));input_hash=sha256_hex(canonical_json(source))
                 prior=self.conn.execute('SELECT interpretation_id FROM interpretations WHERE processor_actor_id=? '
                     'AND event_id=? AND input_hash=? AND config_digest=?',(actor_id,event_id,input_hash,config_digest)).fetchone()
@@ -161,16 +169,18 @@ class InterpretationStore:
                             self.conn.execute('INSERT INTO interpretations '
                                 '(interpretation_id,event_id,project_id,task_id,session_id,host_id,source_actor_id,source_actor_kind,source_type,'
                                 'processor_actor_id,extractor_id,extractor_model,extractor_version,provider,prompt_version,output_schema_version,'
-                                'schema_digest,config_digest,input_hash,config_json,created_at,deadline_at) VALUES('+','.join('?'*22)+')',
+                                'schema_digest,config_digest,input_hash,config_json,created_at,deadline_at,parent_interpretation_id) VALUES('+','.join('?'*23)+')',
                                 (ident,event_id,source['project_id'],source['task_id'],source['session_id'],source['host_id'],source['actor_id'],
                                  source['actor_kind'],source['source_type'],actor_id,extractor_id,config['model'],config['version'],config['provider'],
                                  config['prompt_version'],config['output_schema_version'],config['schema_digest'],config_digest,input_hash,
-                                 canonical_json(config),created,deadline))
+                                 canonical_json(config),created,deadline,parent_interpretation_id))
                             break
                         except sqlite3.IntegrityError:
                             if self.conn.execute('SELECT 1 FROM interpretations WHERE interpretation_id=?',(ident,)).fetchone() is None or attempt==7:
                                 raise
                 self.conn.execute('INSERT INTO interpretation_request_keys VALUES(?,?,?,?)',(actor_id,key,request_hash,replay or ident))
+                if on_reserved is not None:
+                    on_reserved(replay or ident)
         if replay:
             return {'interpretation':self.get(replay),'replayed':True}
         if self.conn.in_transaction:
@@ -183,6 +193,8 @@ class InterpretationStore:
             error='invalid_output:'+str(exc)
         except ProviderFailure as exc:
             error=exc.code
+            if exc.cleanup_errors:
+                error+=':'+','.join(exc.cleanup_errors)
             raw=exc.raw
         except Exception:
             error='provider_error'

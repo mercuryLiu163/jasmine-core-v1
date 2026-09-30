@@ -69,7 +69,7 @@ def translate_lock_errors() -> Iterator[None]:
 
 
 @contextmanager
-def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+def transaction(conn: sqlite3.Connection, *, unit_of_work=None) -> Iterator[sqlite3.Connection]:
     """Run a block inside ``BEGIN IMMEDIATE`` .. ``COMMIT``/``ROLLBACK``.
 
     IMMEDIATE takes the write lock up front so a mid-transaction busy failure
@@ -80,6 +80,11 @@ def transaction(conn: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
     transaction commits. Leaving that case un-rolled-back would expose a
     half-written Event plus projection and wedge the connection.
     """
+    if unit_of_work is not None:
+        if not isinstance(unit_of_work, _UnitOfWork) or _ACTIVE_UOW.get(id(conn)) is not unit_of_work or unit_of_work.conn is not conn or not unit_of_work.active or not conn.in_transaction:
+            raise RuntimeError("invalid or inactive unit of work")
+        yield conn
+        return
     if conn.in_transaction:
         # Nested use would silently widen an outer transaction's blast radius.
         raise RuntimeError("nested transaction: use one transaction per write operation")
@@ -104,3 +109,23 @@ def set_meta(conn: sqlite3.Connection, key: str, value: Any) -> None:
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         (key, str(value)),
     )
+
+
+class _UnitOfWork:
+    def __init__(self, conn):
+        self.conn = conn
+        self.active = True
+
+_ACTIVE_UOW = {}
+
+@contextmanager
+def unit_of_work(conn):
+    """Explicit internal capability; ordinary nested transactions still fail."""
+    with transaction(conn):
+        token = _UnitOfWork(conn)
+        _ACTIVE_UOW[id(conn)] = token
+        try:
+            yield token
+        finally:
+            token.active = False
+            _ACTIVE_UOW.pop(id(conn), None)
