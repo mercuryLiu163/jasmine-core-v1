@@ -142,3 +142,13 @@ class MissingEvidence(CoreError):
 
 class FingerprintUnavailable(MissingEvidence):
     code = "fingerprint_unavailable"
+
+
+class InvalidInterpretationSource(CoreError):
+    status = 400
+    code = "invalid_interpretation_source"
+
+
+class InterpretationIdempotencyConflict(CoreError):
+    status = 409
+    code = "interpretation_idempotency_conflict"

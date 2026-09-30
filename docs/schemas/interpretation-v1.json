@@ -1,0 +1,162 @@
+{
+  "type": "object",
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 30
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "candidates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "TASK_CREATE_OR_ATTACH",
+              "REQUIRED_CAPABILITY",
+              "RULE",
+              "CORRECTION",
+              "DECISION",
+              "ACCEPTANCE",
+              "NO_STRUCTURE"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "scope": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "GLOBAL",
+                  "PROJECT",
+                  "TASK",
+                  "PATH",
+                  "TOOL"
+                ]
+              },
+              "project_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 30
+              },
+              "task_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 30
+              },
+              "path": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 512
+              },
+              "tool": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 80
+              }
+            },
+            "required": [
+              "kind",
+              "project_id",
+              "task_id",
+              "path",
+              "tool"
+            ],
+            "additionalProperties": false
+          },
+          "impact": {
+            "type": "string",
+            "enum": [
+              "LOW",
+              "MEDIUM",
+              "HIGH"
+            ]
+          },
+          "certainty": {
+            "type": "string",
+            "enum": [
+              "EXPLICIT",
+              "TENTATIVE",
+              "QUOTED",
+              "NEGATED",
+              "AMBIGUOUS"
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "rationale": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          },
+          "source_span": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "quote": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 32768
+              }
+            },
+            "required": [
+              "start",
+              "end",
+              "quote"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "kind",
+          "content",
+          "scope",
+          "impact",
+          "certainty",
+          "confidence",
+          "rationale",
+          "source_span"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "event_id",
+    "confidence",
+    "candidates"
+  ],
+  "additionalProperties": false
+}
