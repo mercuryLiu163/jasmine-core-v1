@@ -1,13 +1,15 @@
 # Jasmine Core V1 多阶段 PR 计划
 
-状态：阶段计划。P0 的 PR #1–#3 已合并，基线为 `46cf99f`；P1 正在实施，P2–P7 尚为规划。P0 验收证据见 `validation-runs/p0-resume-20260929T143554Z/main-46cf99f-real-acceptance/run-20260929T162925Z.json`（本机保留）。下表描述各阶段目标，不代表未完成阶段已通过。
+状态：阶段计划。P0 的 PR #1–#3 和 P1 的 PR #4–#6 已合并；P1 最终基线为 `905962564d07e4b5d7c08802231611c21f0b4ad5`，真实 Gate、独立审查、PR/main CI 与合并后验证已通过。P2–P7 尚为规划，不表示已实施。P0/P1 原始验收证据在本机 ignored validation/artifacts 保留，下表描述未来阶段目标。
+
+P2/P3 由当前调度线程顺序负责，P4 Memory 和 P6 Dashboard 委派其他 Agent 按依赖并行。可执行文档：[并行协作说明](Jasmine-Core-V1-P2-P3-P4-P6-并行协作说明.md)、[P2](Jasmine-Core-V1-P2-阶段任务书.md)、[P3](Jasmine-Core-V1-P3-阶段任务书.md)、[P4](Jasmine-Core-V1-P4-阶段任务书.md)、[P6](Jasmine-Core-V1-P6-阶段任务书.md)。文档交付本身不构成这些阶段的实现或验收。
 
 ## 依据与边界
 
 - 《Jasmine-Core-V1-实施与验证任务书》§1–3、§7–10 给出 P0–P7 顺序、WS-A–J、真实对话验收和发布门禁。
 - 《Jasmine-Core-V1-详细设计书》§2–15 与《Jasmine-Core-V1-模块设计书》§1–20 给出权威边界、20 个模块及依赖。
 - 文档没有规定 PR 数量、PR 边界或“四线并行”的具体分组。下列 PR、分工和合并次序是本次建议。文档中的操作文字作为设计要求阅读，不作为本次立即实施或改变环境的命令。
-- 目标仓库已确定为私有的 [mercuryLiu163/jasmine-core-v1](https://github.com/mercuryLiu163/jasmine-core-v1)，默认分支为 `main`。Jasmine Mesh 父目录不是 Git 仓库，实际 checkout 是其下的 `jasmine-core-v1/`。V0 已归档退役，旧全局 hook、MCP 与自启动服务已移除；V1 不复用其运行状态。
+- 目标仓库为公开的 [mercuryLiu163/jasmine-core-v1](https://github.com/mercuryLiu163/jasmine-core-v1)，默认分支为 `main`，CI 使用标准 GitHub runner。Jasmine Mesh 父目录不是 Git 仓库，实际 checkout 是其下的 `jasmine-core-v1/`。V0 已归档退役，旧全局 hook、MCP 与自启动服务已移除；V1 不复用其运行状态。
 
 ## 所有阶段共用的协作与合并规则
 
@@ -54,6 +56,6 @@
 
 ## 实施输入与后续门禁
 
-- checkout 与 V0 边界已确定，见本文依据与边界。P1 从已合并的 P0 基线开发。
-- P0-01 契约已在 ADR 0001–0004 冻结；P1 扩展须通过新 ADR 和前向迁移。Resolver 的 source×impact×scope 策略矩阵仍由 P2 定义。
-- P0 的真实 Codex 捕获 Gate 已完成。P1 新增 PreToolUse/PostToolUse 的实际阻断与证据链仍须独立验证；现有 UserPromptSubmit 信任不能替代新增 hook 的审查信任。缺少入口或用户信任时记录 BLOCKED，不能用合成请求冒充。
+- checkout 与 V0 边界已确定，见本文依据与边界。P0/P1 已完成，P2 从核对过的当前 `main` 开发。
+- P0/P1 契约已在 ADR 0001–0007 和 Schema v6 冻结；后续扩展须通过新 ADR 和前向迁移。Resolver 的 source×impact×scope 策略矩阵由 P2 定义；P3 拥有 Checkpoint/Context，P4 拥有 Memory/jobs，P6 消费已冻结 API。迁移编号、公共 ID/auth/API 文件由集成 owner 串行协调。
+- P0 捕获和 P1 真实 PreToolUse 阻断、Post/native Evidence/State Gate 已完成。P3 新生命周期 hook 的信任和实际能力须单独验证，已有 P1 信任不能代替新增定义。缺少入口或用户信任时记录 BLOCKED，不能用合成请求冒充。验收 CLI 采用命令级 Memory 隔离，避免内部记忆整理会话继承 nonce 抢占测试绑定；不改用户全局设置。
