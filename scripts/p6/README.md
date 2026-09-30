@@ -98,3 +98,21 @@ Drives one Task to acceptance through the frozen API (respecting the ADR 0006/
 ```bash
 python3 scripts/p6/p6_accept_fixture.py /private/tmp/p6-scratch-accept 8899
 ```
+
+## `p6_pending_check.mjs` — "未接入" honesty
+
+Walks every placeholder route in a real browser and asserts that each unfrozen
+area (P2 interpretation, P3 checkpoint/context, P4 memory, P7-01 validation, P5
+registry online, P5/P7 backup) renders a `未接入` panel naming its owner and the
+contract it waits for, that an unknown placeholder key is reported rather than
+silently rendered, and — the important half — that the page never even attempts
+a request to an unfrozen endpoint.
+
+```bash
+node scripts/p6/p6_pending_check.mjs --ui http://127.0.0.1:5180 \
+  --token-file /private/tmp/p6-scratch/tokens.json --token-key read \
+  --out <dir> --task tsk_…
+```
+
+Exit code is non-zero if any area is unmarked, an unknown key is silently
+rendered, or an unfrozen path is requested.

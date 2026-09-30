@@ -49,18 +49,35 @@ Legend: **D** = delivered, **P** = partially delivered (the gap is named),
 - Independent review of `4a4ee17`: 4 blockers raised (sign-in validated with the
   public `/v1/health`; the proxy forwarded `OPTIONS`; the Evidence panel missed
   `task.accepted`; a refused `steps` read rendered as "no requirements"). All four
-  are fixed above, each with a regression test.
-- Independent validation of `4a4ee17`: P6-T01 and P6-T02 **PASS** on the scratch
-  fixture, P6-T07 **PARTIAL**. It also recorded an integrity incident — the
-  worktree was committed to while it ran, so its verdict binds `4a4ee17` only and
-  must not be transferred to a later tip.
+  are fixed, each with a regression test; r2 confirmed the two that can be
+  falsified from a browser.
+- Independent validation of `4a4ee17` (r1): P6-T01/T02 **PASS**, T07 **PARTIAL**,
+  plus an integrity incident — the worktree was committed to mid-run, so that
+  verdict binds `4a4ee17` only.
+- Independent re-validation of `a5a92ca` (r2): P6-T01/T02 **PASS**, T07
+  **PARTIAL**; the tracked commit did not move during the run. It also found a
+  stale pre-fix server process on the dashboard port (the allowlist is read once
+  at start-up), the stale sign-in label, and the missing real `task.accepted`
+  readback.
+- All three r2 findings are closed in `f7addbf`, whose evidence is
+  `validation-runs/p6/20260930T060437Z-p6-01-gate/` (20/20 browser steps, no Truth
+  write) and `validation-runs/p6/20260930T060050Z-p6-t07/` (11/11: 259-Event
+  pagination, 216,015-character Event, API-down/restore, real `task.accepted`).
+- Independent re-check of `f7addbf` (r3): see `validation-runs/p6/20260930T060528Z-p6-01-independent-r3/validation-independent-r3.md`.
 
 ## Status
 
-`P6-01: PARTIAL`. The read-only dashboard and its real-Core browser trace work
-on an isolated scratch fixture, the independent reviewer's four blockers are
-fixed with regression tests, and the independent validator passed T01/T02 (T07
-PARTIAL) on the pre-fix commit. P6-01 becomes "done" only after a re-validation
-of the frozen post-fix commit on a worktree with no concurrent writer, plus the
-remaining A08 contrast check. P6 as a stage, and V1 as a release, are unaffected
-by this PR.
+`P6-01: PASS on the scratch fixture for T01/T02/T07` as of the r3 verdict on
+`f7addbf`; **`P6` as a stage is not complete** and nothing here releases V1.
+
+Still open, and deliberately not claimed:
+
+- P6-T03 (audited human writes) — P6-02 is not delivered; no write UI exists.
+- P6-T04/T05/T06 — P3 Context, P4 Memory and P7-01 Validation contracts are not
+  frozen; those views are explicit `未接入` panels.
+- The operator's own Core and a real captured conversation were not used; every
+  Gate ran against an isolated scratch fixture.
+- Throttling/back-pressure and an automated colour-contrast sweep are still not
+  exercised (A08 remains `P`).
+- The independent verdicts bind their commits: `4a4ee17` (r1), `a5a92ca` (r2),
+  `f7addbf` (r3). A later docs-only commit does not inherit them.

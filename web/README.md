@@ -148,9 +148,10 @@ explicitly *not* delivered.
 
 ## Phase status
 
-`P6-01: PARTIAL` — the read-only dashboard, tests and real browser trace exist
-and pass on the fixture above. It is **not** `P6` done: P6-02 (audited human
-writes) and P6-03a/b/c (P3/P4/P7-01 inspectors) are not delivered, the browser
-trace was run against a scratch fixture rather than the operator's own Core, and
-an independent reviewer/validator has to confirm the result. See the run
-directory under `validation-runs/p6/` for raw evidence.
+`P6-01: PASS on the scratch fixture for T01/T02/T07`, confirmed by an
+independent validator on `f7addbf` (see `P6-01-COMPLIANCE.md` for the commit
+binding of each verdict). It is **not** `P6` done: P6-02 (audited human writes)
+and P6-03a/b/c (P3/P4/P7-01 inspectors) are not delivered, no Gate ran against
+the operator's own Core or a real captured conversation, and throttling plus an
+automated contrast sweep remain uncovered. See the run directories under
+`validation-runs/p6/` for raw evidence.
