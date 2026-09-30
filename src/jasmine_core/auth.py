@@ -20,7 +20,7 @@ TOKEN_BYTES = 32
 SCOPES = ("admin", "objects:read", "objects:write", "events:read", "events:write",
           "authority:read", "authority:propose", "authority:manage", "guard:check",
           "state:read", "state:write", "state:accept", "evidence:read",
-          "evidence:write", "evidence:attest", "evidence:confirm", "fingerprint:scan", "fingerprint:read", "interpretations:read", "interpretations:process", "interpretations:manage", "resolutions:read", "resolutions:process", "reviews:read", "reviews:manage")
+          "evidence:write", "evidence:attest", "evidence:confirm", "fingerprint:scan", "fingerprint:read", "interpretations:read", "interpretations:process", "interpretations:manage", "resolutions:read", "resolutions:process", "reviews:read", "reviews:manage", "checkpoint:read", "checkpoint:write", "resume:read", "resume:build")
 
 
 @dataclass(frozen=True)

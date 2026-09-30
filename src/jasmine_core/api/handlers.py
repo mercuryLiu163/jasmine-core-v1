@@ -18,6 +18,7 @@ from typing import Any, Callable
 from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, evidence, ids, interpretations, objects, registry, state, resolver, reviews
 from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
+from ..continuity import ContinuityStore
 from .request import Request, Response
 
 Handler = Callable[[Request, "Core", auth.Principal | None, "re.Match[str]"], Response]
@@ -42,6 +43,7 @@ class Core:
         self.interpretations = interpretations.InterpretationStore(conn, schema_version=self.schema_version)
         self.resolver = resolver.ResolverStore(self.interpretations)
         self.reviews = reviews.ReviewStore(self.resolver)
+        self.continuity = ContinuityStore(conn,schema_version=self.schema_version)
         self.registry = registry.Registry(conn)
         self.auth = auth.Auth(conn)
         self.audit = audit.AuditLog(conn)
@@ -75,6 +77,11 @@ def _collection_routes() -> list[Route]:
 
 def _base_routes() -> list[Route]:
     return [
+        Route("POST", re.compile(r"^/v1/checkpoints$"), create_checkpoint, "checkpoint:write"),
+        Route("GET", re.compile(r"^/v1/tasks/([^/]+)/checkpoints/latest$"), latest_checkpoint, "checkpoint:read"),
+        Route("GET", re.compile(r"^/v1/checkpoints/([^/]+)$"), get_checkpoint, "checkpoint:read"),
+        Route("POST", re.compile(r"^/v1/tasks/([^/]+)/resume$"), build_resume, "resume:build"),
+        Route("GET", re.compile(r"^/v1/resumes/([^/]+)$"), get_resume, "resume:read"),
         Route("GET", re.compile(r"^/v1/resolutions/preview$"), resolution_preview, "resolutions:read"),
         Route("POST", re.compile(r"^/v1/resolve/([^/]+)$"), resolve_interpretation, "resolutions:process"),
         Route("GET", re.compile(r"^/v1/resolutions/([^/]+)$"), get_resolution, "resolutions:read"),
@@ -658,6 +665,53 @@ def maintenance_change(request,core,principal,match):
     if match.group(2)=='rerun':principal.require('interpretations:process')
     result=core.resolver.maintenance.change(match.group(1),match.group(2),_p2_write(request),actor_id=principal.actor_id)
     return Response(200 if result['replayed'] else 201,result)
+
+
+
+
+
+# -- P3 coherent continuity -------------------------------------------------
+
+def _continuity_read(principal):
+    for scope in ('objects:read','state:read','authority:read','evidence:read','events:read'):
+        principal.require(scope)
+
+
+def create_checkpoint(request,core,principal,match):
+    _continuity_read(principal)
+    if request.query:raise errors.InvalidRequest('checkpoint POST accepts no query')
+    result=core.continuity.create(request.json_body(),actor_id=principal.actor_id)
+    return Response(200 if result['replayed'] else 201,result)
+
+
+def get_checkpoint(request,core,principal,match):
+    _continuity_read(principal)
+    if request.query:raise errors.InvalidRequest('checkpoint GET accepts no query')
+    return Response(200,{'checkpoint':core.continuity.get_checkpoint(match.group(1))})
+
+
+def latest_checkpoint(request,core,principal,match):
+    _continuity_read(principal)
+    if set(request.query)-{'session_id'}:raise errors.InvalidRequest('unknown latest checkpoint query')
+    session=None
+    if 'session_id' in request.query:
+        values=request.query['session_id']
+        if len(values)!=1 or not ids.is_id(values[0],'ses'):raise errors.InvalidRequest('invalid session_id query')
+        session=values[0]
+    return Response(200,{'checkpoint':core.continuity.latest(match.group(1),session_id=session)})
+
+
+def build_resume(request,core,principal,match):
+    _continuity_read(principal);principal.require('checkpoint:read')
+    if request.query:raise errors.InvalidRequest('resume POST accepts no query')
+    result=core.continuity.resume(match.group(1),request.json_body(),actor_id=principal.actor_id)
+    return Response(200 if result['replayed'] else 201,result)
+
+
+def get_resume(request,core,principal,match):
+    _continuity_read(principal);principal.require('checkpoint:read')
+    if request.query:raise errors.InvalidRequest('resume GET accepts no query')
+    return Response(200,{'resume':core.continuity.get_resume(match.group(1))})
 
 
 ROUTES = tuple(_base_routes()) + tuple(_collection_routes())

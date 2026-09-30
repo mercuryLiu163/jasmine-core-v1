@@ -360,3 +360,23 @@ expected_revisions is an exact array of `{object_type:project|task|step|rule,obj
 New command201; exact historical replay200; source replay200. Review source-race loser is SOURCE_REPLAYED and preserves original applied action refs. Bad syntax400, wrong role/scope403, missing resource404, stale head409 interpretation_not_current, unready processing409 interpretation_not_ready, key conflict409 idempotency_conflict, stale full context409 context_conflict, latest application conflict409 application_conflict. Existing GET Interpretation adds maintenance_head/history/operation_completions while preserving original processing fields. Unsupported PATH/TOOL manual mappings return400 and keep pending; no silently changed scope or claimed application.
 
 Review APPROVE may map a CORRECTION candidate to SUPERSEDE_RULE targeting a different-source Rule only in the same Task and exact scope, with authority:manage, human/system identity and the complete revision/context snapshot. This exception is unavailable to ordinary manual-reapply. The immutable action result preserves previous_origin_event_id, previous_rule_version, previous_source_event_id plus the new change_event_ids.
+
+## P3-01 Checkpoint and Resume (Schema 9)
+
+These endpoints store deterministic continuity receipts; they do not attest actual compact/Stop hooks or restore Truth. All require `objects:read`, `state:read`, `authority:read`, `evidence:read`, and `events:read`, in addition to the endpoint scope.
+
+| Endpoint | Scope | Result |
+| --- | --- | --- |
+| POST `/v1/checkpoints` | `checkpoint:write` | 201 new / 200 exact replay |
+| GET `/v1/checkpoints/{ckp}` | `checkpoint:read` | exact immutable checkpoint |
+| GET `/v1/tasks/{tsk}/checkpoints/latest` | `checkpoint:read` | latest checkpoint or null |
+| POST `/v1/tasks/{tsk}/resume` | `resume:build`, `checkpoint:read` | 201 new / 200 exact replay |
+| GET `/v1/resumes/{rms}` | `resume:read`, `checkpoint:read` | exact immutable Resume |
+
+Checkpoint body: `{task_id,host_id,source_event_id,reason,idempotency_key,session_id?,current_step_id?,note?}`. Note is `{text,source_event_id}`, bounded to 2000 characters. Reasons: MANUAL, HANDOFF, BLOCKED, STEP_VERIFIED, PRE_COMPACT, SESSION_STOP. Native lifecycle reasons are caller requests labeled UNVERIFIED_REQUEST; they are not native platform proof.
+
+Resume body: `{host_id,source_event_id,idempotency_key,session_id?,checkpoint_id?}`. Null/omitted checkpoint selects the latest matching Task and optional Core session; explicit checkpoint must belong to that Task. Optional identities can be null; required identities cannot. Latest GET accepts only a single `session_id` query. All other endpoints accept no query. Unknown/duplicate fields, malformed IDs, nonfinite or invalid Unicode JSON fail 400.
+
+New commands use server-owned complete snapshots and bounded outside-transaction fingerprint scans. Scan timeout/failure/output cap return 503 `checkpoint_scan_timeout`, `checkpoint_scan_failed`, or `checkpoint_scan_too_large`. Concurrent Truth/selection changes after one retry return 409 `checkpoint_context_conflict` or `resume_context_conflict`. Corrupt/ahead checkpoint contents return 409 `checkpoint_integrity_error`. Oversized complete context returns 409 `checkpoint_context_too_large`. Exact actor/key replay returns original stored receipt contents even after subsequent business changes; a changed request body with the same key returns 409 `idempotency_conflict`.
+
+See [ADR 0011](../adr/0011-checkpoint-resume-snapshot.md) for integrity, provenance, budget and non-Authority note boundaries.
