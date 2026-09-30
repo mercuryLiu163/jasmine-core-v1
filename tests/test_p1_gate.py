@@ -26,6 +26,30 @@ def module():
 
 
 class RealGateRunner(unittest.TestCase):
+    def test_cli_bash_envelope_requires_exact_single_prepared_command(self) -> None:
+        gate = module()
+        allowed = "touch '/tmp/p1 gate/allowed.txt'"
+        def items(command: str) -> list[dict]:
+            stdout = "\n".join(json.dumps({"type": phase, "item": {
+                "id": "item_2", "type": "command_execution", "command": command,
+                "status": "in_progress" if phase == "item.started" else "completed",
+                "exit_code": None if phase == "item.started" else 0}})
+                for phase in ("item.started", "item.completed"))
+            return gate._tool_items(stdout)
+        for flag in ("-c", "-lc"):
+            raw = f"/bin/bash {flag} {json.dumps(allowed)}"
+            parsed = items(raw)
+            self.assertEqual(parsed[0]["command"], raw, "raw CLI command was lost")
+            self.assertEqual(parsed[0]["inner_command"], allowed)
+            gate._checked_tool_items(parsed, (allowed,), "fixture")
+        gate._checked_tool_items(items(allowed), (allowed,), "fixture")
+        for raw in (f"/bin/bash -c {json.dumps(allowed)} extra",
+                    f"/bin/sh -c {json.dumps(allowed)}",
+                    f"/bin/bash -c {json.dumps(allowed + '; rm /tmp/other')}",
+                    "/bin/bash -c 'unterminated"):
+            with self.subTest(raw=raw), self.assertRaises(gate.Failed):
+                gate._checked_tool_items(items(raw), (allowed,), "fixture")
+
     def test_acceptance_requires_current_rule_refs_in_result_and_event(self) -> None:
         gate = module()
         rule = {"rule_id": "rul_current", "version": 2}

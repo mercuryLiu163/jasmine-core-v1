@@ -458,8 +458,27 @@ def _tool_items(stdout: str) -> list[dict[str, Any]]:
         if kind not in {"command_execution", "tool_call", "function_call", "mcp_tool_call", "file_change"}:
             continue
         key = str(item.get("id", len(calls)))
-        calls[key] = {"id": key, "type": kind, "command": item.get("command")}
+        raw_command = item.get("command")
+        inner_command = raw_command
+        if kind == "command_execution" and isinstance(raw_command, str):
+            try:
+                envelope = shlex.split(raw_command, posix=True)
+            except ValueError:
+                envelope = []
+            # Codex JSONL reports a Bash invocation envelope while the hook
+            # receives the inner command. Accept only this exact shell form;
+            # the inner command is still compared byte-for-byte to the fixture.
+            if len(envelope) == 3 and envelope[0] == "/bin/bash" and envelope[1] in ("-c", "-lc"):
+                inner_command = envelope[2]
+        calls[key] = {"id": key, "type": kind, "command": raw_command,
+                      "inner_command": inner_command}
     return list(calls.values())
+
+
+def _checked_tool_items(items: list[dict[str, Any]], allowed_commands: tuple[str, ...], name: str) -> None:
+    if any(item["type"] != "command_execution" or item["inner_command"] not in allowed_commands
+           for item in items):
+        raise Failed(f"{name} Codex JSONL contains an unexpected tool call")
 
 
 def _real_turn(args: argparse.Namespace, out: Path, manifest: dict[str, Any],
@@ -500,9 +519,7 @@ def _real_turn(args: argparse.Namespace, out: Path, manifest: dict[str, Any],
         raise Blocked(f"{name} has no real hook invocation; hook load or trust is unproven")
     tool_items = _tool_items(stdout)
     report["turns"][-1]["codex_tool_items"] = tool_items
-    if any(item["type"] != "command_execution" or item["command"] not in allowed_commands
-           for item in tool_items):
-        raise Failed(f"{name} Codex JSONL contains an unexpected tool call")
+    _checked_tool_items(tool_items, allowed_commands, name)
     allowed_inputs = {hashlib.sha256(canonical_json({"command": command}).encode()).hexdigest()
                       for command in allowed_commands}
     if any(entry.get("hook_event_name") in ("PreToolUse", "PostToolUse") and
