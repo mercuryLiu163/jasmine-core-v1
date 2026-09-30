@@ -9,6 +9,7 @@ being disabled.
 from __future__ import annotations
 
 import select
+import socketserver
 import sys
 import threading
 import time
@@ -24,6 +25,15 @@ from .handlers import Core
 from .request import MAX_BODY_BYTES, Request, split_target
 
 Log = Callable[[str], None]
+
+
+class _LoopbackHTTPServer(ThreadingHTTPServer):
+    """Bind the configured local address without reverse DNS resolution."""
+
+    def server_bind(self) -> None:
+        socketserver.TCPServer.server_bind(self)
+        self.server_name = self.server_address[0]
+        self.server_port = self.server_address[1]
 
 #: A hostile Content-Length must not pin a worker thread forever.
 DRAIN_TIMEOUT_SECONDS = 10.0
@@ -217,10 +227,10 @@ def serve(db_path: str | Path, *, host: str = "127.0.0.1", port: int = 8787,
     except Exception:
         conn.close()
         raise
-    log(f"jasmine-core API on http://{host}:{port} (schema v{version}, db {db_path})")
-    server = ThreadingHTTPServer((host, port), _Handler)
+    server = _LoopbackHTTPServer((host, port), _Handler)
     server.app = Application(db_path, log=log)  # type: ignore[attr-defined]
     server.daemon_threads = True
+    log(f"jasmine-core API on http://{host}:{server.server_port} (schema v{version}, db {db_path})")
     try:
         server.serve_forever()
     except KeyboardInterrupt:

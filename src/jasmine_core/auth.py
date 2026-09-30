@@ -19,7 +19,8 @@ from .canonical import canonical_json, sha256_hex
 TOKEN_BYTES = 32
 SCOPES = ("admin", "objects:read", "objects:write", "events:read", "events:write",
           "authority:read", "authority:propose", "authority:manage", "guard:check",
-          "state:read", "state:write", "state:accept")
+          "state:read", "state:write", "state:accept", "evidence:read",
+          "evidence:write", "evidence:attest", "evidence:confirm", "fingerprint:scan", "fingerprint:read")
 
 
 @dataclass(frozen=True)
@@ -43,6 +44,8 @@ class Auth:
         self._conn = conn
 
     def issue_key(self, *, actor_id: str, label: str, scopes: list[str]) -> dict[str, Any]:
+        if not isinstance(scopes, list) or not all(isinstance(scope, str) for scope in scopes):
+            raise errors.InvalidRequest("scopes must be an array of strings", field="scopes")
         unknown = sorted(set(scopes) - set(SCOPES))
         if unknown:
             raise errors.InvalidRequest(
@@ -57,6 +60,11 @@ class Auth:
             raise errors.ForbiddenActorKind("agent keys cannot carry authority:manage")
         if kind == "agent" and "state:accept" in scopes:
             raise errors.ForbiddenActorKind("agent keys cannot carry state:accept")
+        if kind != "system" and ("evidence:write" in scopes or "evidence:attest" in scopes or
+                                 "fingerprint:scan" in scopes):
+            raise errors.ForbiddenActorKind("only trusted system keys can capture tool Evidence or fingerprints")
+        if kind != "human" and "evidence:confirm" in scopes:
+            raise errors.ForbiddenActorKind("only human keys can confirm Evidence")
         key_id = ids.new_id("key")
         token = secrets.token_urlsafe(TOKEN_BYTES)
         with db.translate_lock_errors(), db.transaction(self._conn):

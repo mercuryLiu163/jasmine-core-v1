@@ -193,6 +193,10 @@ class AuthorityStore:
         ).fetchone()
         status_event_id = status_row["change_event_id"] if status_row else None
         status_event = self.events.get(status_event_id) if status_event_id else None
+        requirements_row = self.conn.execute(
+            "SELECT requirements_json FROM rule_verification_requirements WHERE rule_id=? AND version=?",
+            (rule_id, ver),
+        ).fetchone()
         return {"rule_id": rule_id, "rule_key": row["rule_key"], "version": ver,
                 "revision": active_revision, "status": status or row["status"],
                 "scope": {"kind": row["scope_kind"], "project_id": row["project_id"],
@@ -200,6 +204,8 @@ class AuthorityStore:
                 "kind": data["kind"], "severity": data["severity"],
                 "enforcement": data["enforcement"], "content": data["content"],
                 "matcher": json.loads(data["matcher_json"]),
+                "verification_requirements": json.loads(requirements_row["requirements_json"])
+                if requirements_row is not None else None,
                 "origin_event_id": data["origin_event_id"],
                 "origin_actor_kind": origin["actor_kind"] if origin else None,
                 "origin_event_type": origin["event_type"] if origin else None,
@@ -249,13 +255,19 @@ class AuthorityStore:
 
     def propose(self, body: dict[str, Any], *, actor_id: str) -> dict[str, Any]:
         _fields(body, {"rule_key", "kind", "severity", "enforcement", "content", "matcher",
-                       "scope", "origin_event_id", "host_id", "event_id"})
+                       "scope", "origin_event_id", "host_id", "event_id",
+                       "verification_requirements"})
         if "expected_revision" in body:
             raise errors.UnexpectedExpectedRevision("creation does not accept expected_revision")
         key = body.get("rule_key")
         if not isinstance(key, str) or RULE_KEY.fullmatch(key) is None:
             raise errors.InvalidRequest("rule_key must be a lowercase stable key", field="rule_key")
         content = _content(body)
+        from .evidence import _requirement_set
+        requirements = (_requirement_set(body["verification_requirements"])
+                        if "verification_requirements" in body else None)
+        if requirements is not None and content["kind"] != "ACCEPTANCE" and content["enforcement"] != "VERIFY":
+            raise errors.InvalidRequest("verification_requirements requires ACCEPTANCE or VERIFY")
         host_id = _id(body, "host_id", "hst")
         origin_event_id = _id(body, "origin_event_id", "evt")
         event_id = _id(body, "event_id", "evt", required=False)
@@ -265,6 +277,8 @@ class AuthorityStore:
             actor_kind = self._actor(actor_id, host_id)
             payload = {"action": "propose", "rule_key": key, "scope": body["scope"],
                        "origin_event_id": origin_event_id, **content}
+            if requirements is not None:
+                payload["verification_requirements"] = requirements
             rule_id = ids.new_id("rul")
             spec = self._event(event_type="rule.proposed", actor_id=actor_id,
                                actor_kind=actor_kind, host_id=host_id,
@@ -294,6 +308,13 @@ class AuthorityStore:
                  content["content"], canonical_json(content["matcher"]),
                  origin_event_id, event["event_id"], now),
             )
+            if requirements is not None:
+                self.conn.execute(
+                    "INSERT INTO rule_verification_requirements"
+                    "(rule_id,version,requirements_json,source_event_id,actor_id,created_at)"
+                    " VALUES(?,?,?,?,?,?)",
+                    (rule_id, 1, canonical_json(requirements), event["event_id"], actor_id, now),
+                )
             self._change(event["event_id"], rule_id, 1, "PROPOSED", 1, now)
             return {"rule": self.get(rule_id), "event": event, "replayed": False}
 
@@ -315,12 +336,17 @@ class AuthorityStore:
         allowed = {"expected_revision", "host_id", "event_id"}
         if action == "supersede":
             allowed |= {"kind", "severity", "enforcement", "content", "matcher",
-                        "origin_event_id", "scope"}
+                        "origin_event_id", "scope", "verification_requirements"}
         _fields(body, allowed)
         expected = _positive_revision(body)
         host_id = _id(body, "host_id", "hst")
         event_id = _id(body, "event_id", "evt", required=False)
         new_content = _content(body) if action == "supersede" else None
+        from .evidence import _requirement_set
+        requirements = (_requirement_set(body["verification_requirements"])
+                        if action == "supersede" and "verification_requirements" in body else None)
+        if requirements is not None and new_content["kind"] != "ACCEPTANCE" and new_content["enforcement"] != "VERIFY":
+            raise errors.InvalidRequest("verification_requirements requires ACCEPTANCE or VERIFY")
         origin_event_id = _id(body, "origin_event_id", "evt") if action == "supersede" else None
         with db.translate_lock_errors(), db.transaction(self.conn):
             row = self.conn.execute("SELECT * FROM rules WHERE rule_id=?", (rule_id,)).fetchone()
@@ -338,6 +364,8 @@ class AuthorityStore:
             if action == "supersede":
                 payload.update({"scope": body["scope"], "origin_event_id": origin_event_id,
                                 **new_content})
+                if requirements is not None:
+                    payload["verification_requirements"] = requirements
             spec = self._event(event_type=f"rule.{action}d" if action == "approve" else
                                ("rule.retired" if action == "retire" else "rule.superseded"),
                                actor_id=actor_id, actor_kind=actor_kind, host_id=host_id,
@@ -366,6 +394,14 @@ class AuthorityStore:
                      canonical_json(new_content["matcher"]), origin_event_id,
                      event["event_id"], now),
                 )
+                if requirements is not None:
+                    self.conn.execute(
+                        "INSERT INTO rule_verification_requirements"
+                        "(rule_id,version,requirements_json,source_event_id,actor_id,created_at)"
+                        " VALUES(?,?,?,?,?,?)",
+                        (rule_id, next_version, canonical_json(requirements),
+                         event["event_id"], actor_id, now),
+                    )
             self.conn.execute(
                 "UPDATE rules SET current_version=?,status=?,revision=?,updated_at=? "
                 "WHERE rule_id=? AND revision=?",

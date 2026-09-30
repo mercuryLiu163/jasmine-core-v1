@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, ids, objects, registry, state
+from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, evidence, ids, objects, registry, state
 from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from .request import Request, Response
@@ -36,7 +36,9 @@ class Core:
         self.conn = conn
         self.schema_version = current_version(conn)
         self.objects = objects.ObjectStore(conn, schema_version=self.schema_version)
-        self.state = state.StateStore(conn, schema_version=self.schema_version)
+        self.evidence = evidence.EvidenceStore(conn, schema_version=self.schema_version)
+        self.state = state.StateStore(conn, schema_version=self.schema_version,
+                                      evidence_validator=evidence.CurrentEvidenceValidator(conn))
         self.registry = registry.Registry(conn)
         self.auth = auth.Auth(conn)
         self.audit = audit.AuditLog(conn)
@@ -89,6 +91,13 @@ def _base_routes() -> list[Route]:
         Route("POST", re.compile(r"^/v1/rules/([^/]+)/supersede$"), supersede_rule, "authority:manage"),
         Route("POST", re.compile(r"^/v1/rules/([^/]+)/retire$"), retire_rule, "authority:manage"),
         Route("POST", re.compile(r"^/v1/guard/check$"), guard_check, "guard:check"),
+        Route("POST", re.compile(r"^/v1/tool-results$"), record_tool_result, "evidence:write"),
+        Route("POST", re.compile(r"^/v1/codex-exec-observations$"), record_codex_exec_observation, "evidence:attest"),
+        Route("POST", re.compile(r"^/v1/evidence/confirm$"), confirm_evidence, "evidence:confirm"),
+        Route("GET", re.compile(r"^/v1/evidence/([^/]+)$"), get_evidence, "evidence:read"),
+        Route("GET", re.compile(r"^/v1/tasks/([^/]+)/evidence$"), list_task_evidence, "evidence:read"),
+        Route("POST", re.compile(r"^/v1/workspaces/fingerprint$"), capture_fingerprint, "fingerprint:scan"),
+        Route("POST", re.compile(r"^/v1/workspaces/compare$"), compare_fingerprints, "fingerprint:read"),
         Route("POST", re.compile(r"^/v1/tasks/([^/]+)/steps$"), create_step, "state:write"),
         Route("GET", re.compile(r"^/v1/tasks/([^/]+)/steps$"), list_steps, "state:read"),
         Route("GET", re.compile(r"^/v1/tasks/([^/]+)/history$"), task_history, "state:read"),
@@ -290,6 +299,66 @@ def retire_rule(request: Request, core: Core, principal: auth.Principal,
 def guard_check(request: Request, core: Core, principal: auth.Principal,
                 match: re.Match[str]) -> Response:
     return Response(200, core.authority.guard(request.json_body()))
+
+
+def record_tool_result(request: Request, core: Core, principal: auth.Principal,
+                       match: re.Match[str]) -> Response:
+    if core.actor_kind(principal.actor_id) != "system":
+        raise errors.ForbiddenActorKind("tool Evidence requires a trusted system actor")
+    result = core.evidence.record_tool_result(request.json_body(), actor_id=principal.actor_id)
+    return Response(200 if result["replayed"] else 201, result)
+
+
+def record_codex_exec_observation(request: Request, core: Core, principal: auth.Principal,
+                                  match: re.Match[str]) -> Response:
+    if core.actor_kind(principal.actor_id) != "system":
+        raise errors.ForbiddenActorKind("native observation requires a trusted system actor")
+    result = core.evidence.record_codex_exec_observation(request.json_body(), actor_id=principal.actor_id)
+    return Response(200 if result["replayed"] else 201, result)
+
+
+def confirm_evidence(request: Request, core: Core, principal: auth.Principal,
+                     match: re.Match[str]) -> Response:
+    if core.actor_kind(principal.actor_id) != "human":
+        raise errors.ForbiddenActorKind("USER_CONFIRMATION requires a human actor")
+    result = core.evidence.record_confirmation(request.json_body(), actor_id=principal.actor_id)
+    return Response(200 if result["replayed"] else 201, result)
+
+
+def get_evidence(request: Request, core: Core, principal: auth.Principal,
+                 match: re.Match[str]) -> Response:
+    evidence_id = match.group(1)
+    _require_id(evidence_id, "evd", "evidence_id")
+    return Response(200, {"evidence": core.evidence.get(evidence_id)})
+
+
+def list_task_evidence(request: Request, core: Core, principal: auth.Principal,
+                       match: re.Match[str]) -> Response:
+    task_id = match.group(1)
+    _require_id(task_id, "tsk", "task_id")
+    records = core.evidence.list_task(task_id)
+    return Response(200, {"evidence": records, "count": len(records)})
+
+
+def capture_fingerprint(request: Request, core: Core, principal: auth.Principal,
+                        match: re.Match[str]) -> Response:
+    if core.actor_kind(principal.actor_id) != "system":
+        raise errors.ForbiddenActorKind("fingerprint scanning requires a trusted system actor")
+    body = _state_body(request, {"project_id", "host_id"})
+    _require_id(body.get("project_id"), "prj", "project_id")
+    _require_id(body.get("host_id"), "hst", "host_id")
+    return Response(200, core.evidence.capture(body["project_id"], actor_id=principal.actor_id,
+                                                host_id=body["host_id"]))
+
+
+def compare_fingerprints(request: Request, core: Core, principal: auth.Principal,
+                         match: re.Match[str]) -> Response:
+    body = _state_body(request, {"left_sha256", "right_sha256"})
+    for field in ("left_sha256", "right_sha256"):
+        value = body.get(field)
+        if not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdef" for c in value):
+            raise errors.InvalidRequest(f"{field} must be lowercase SHA-256 hex", field=field)
+    return Response(200, core.evidence.compare(body["left_sha256"], body["right_sha256"]))
 
 
 def list_hosts(request: Request, core: Core, principal: auth.Principal,

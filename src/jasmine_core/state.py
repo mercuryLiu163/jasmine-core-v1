@@ -144,7 +144,7 @@ class StateStore:
         rows = self.conn.execute(
             "SELECT event_id FROM events WHERE task_id=? AND event_type IN "
             "('task.created','task.criteria_updated','task.transitioned','task.accepted',"
-            "'step.created','step.criteria_updated','step.transitioned') ORDER BY seq", (task_id,))
+            "'step.created','step.criteria_updated','step.transitioned','step.staled') ORDER BY seq", (task_id,))
         events = [self.events.get(row["event_id"]) for row in rows]
         return [event for event in events if event is not None and
                 (step_id is None or event["payload"].get("step_id") == step_id)]
