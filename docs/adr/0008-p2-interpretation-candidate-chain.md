@@ -26,7 +26,7 @@ POST 必须 idempotency_key（1–128 ASCII safe characters）和 event_id，可
 
 优先复用已登录 Codex，固定 gpt-6.1-sol；不接V0、不新建账户或付费凭据。operator配置选择绝对CLI路径，不允许HTTP body挑可执行文件/model/prompt。以新临时private目录运行 `codex exec`，无repo配置，无resume；`--ignore-user-config --ephemeral --skip-git-repo-check --sandbox read-only --output-schema --json`；清除继承Jasmine Gate nonce/服务token环境、禁hooks/memories/plugins/apps/agents/browser/web/shell/image等能力，固定prompt仅把source JSON当数据。不能仅凭prompt说无tools。provider上线前须捕获实际请求，验证model为指定ID、tools为空及schema/prompt；若当前CLI配置不能做到，无工具provider为 BLOCKED/provider_unavailable，不降级执行原话命令。独立验证agent负责最小preflight；具体可运行flags在合同评审附录冻结。
 
-限制：UTF-8源原话<=32KiB、完整输入<=48KiB、结果<=64KiB、CLIstdout/stderr各<=256KiB；timeout默认120s（含spawn/输出），进程组终止、短grace后kill，有限缓冲防大输出。原始畸形JSON截断上限保留，error_code固定不返回stderr/token/堆栈。输出CLI item只允许agent_message及生命周期/usage；出现任何工具执行/调用项fail closed。这是额外断言，不能替代请求tools=[]。fake provider明确 `component_simulation`，不被真实Gate认作LLM。
+限制：UTF-8源原话<=32KiB、完整输入<=48KiB、结果<=64KiB、CLIstdout/stderr各<=256KiB；timeout默认120s（含spawn/输出），进程组终止、短grace后kill，有限缓冲防大输出。原始畸形JSON截断上限保留，error_code固定不返回stderr/token/堆栈。输出CLI item允许text-only reasoning、唯一agent_message及完整顺序生命周期/usage；出现任何工具执行/调用项fail closed。这是额外断言，不能替代请求tools=[]。fake provider明确 `component_simulation`，不被真实Gate认作LLM。
 
 真实saved-auth smoke已验证CLI0.159.0 / gpt-6.1-sol约11秒可结构提取；该结果只证明provider能力，不证明硬禁tools。provider不可用/timeout/输出异常留下FAILED。P2-01不接同步hook；P2-03 deadline必须单独冻结：当前P1 hook12秒，超时必须显式pending/block，Guard仍生效，不能输出空context暗示本轮已处理。
 
@@ -55,3 +55,5 @@ P0/P1 tokens是整个Core实例的scope，尚无project ACL；过滤是查询上
 P2-02/03续接验收须包含project已知但task为空的真实原话，之后由Resolver创建Task及requirement；P2-01允许TASK scope task_id=null。P1旧hook的task/step固定绑定保持兼容，project-only输入到后续Task绑定过渡留给P2-03，不由本PR预造Task替代自然语言创建Gate。
 
 Provider额外设置project_doc_max_bytes=0并写入config digest，阻止全局/目录AGENTS正文进入实际解释prompt；独立preflight按候选相同flags验证无额外用户文档。timeout取消包括已退出父进程但仍持pipe的所有本调用processgroup子进程（TERM后KILL）；不触已有服务。
+
+真实HTTP首轮保留FAILED/provider_tool_use：CLI可发送非工具reasoning完成项。协议reasoning-and-final.v1严格允许thread.started→turn.started→零或多条指定reasoning文本→唯一agent_message→turn.completed；reasoning仅接受id/type/text且text是字符串。任何其他item或晚到reasoning仍fail closed，实际模型请求无工具的边界不变。reasoning协议版本进入config digest，首轮FAILED不覆写，最终独立重试用新配置provenance。

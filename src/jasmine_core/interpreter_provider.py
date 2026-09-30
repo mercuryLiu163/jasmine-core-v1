@@ -44,7 +44,8 @@ def _base_config():
         'output_schema_version':SCHEMA_VERSION,'schema_digest':sha256_hex(canonical_json(OUTPUT_SCHEMA)),
         'timeout_seconds':120,'max_input_bytes':48*1024,'max_output_bytes':64*1024,
         'max_stream_bytes':MAX_STREAM_BYTES,'disabled_features':list(DISABLED_FEATURES),
-        'web_search':'disabled','agents_enabled':False,'project_doc_max_bytes':0,'tool_profile':'no-tools.v1'}
+        'web_search':'disabled','agents_enabled':False,'project_doc_max_bytes':0,'tool_profile':'no-tools.v1',
+        'native_protocol_version':'reasoning-and-final.v1'}
 
 
 class UnavailableProvider:
@@ -205,15 +206,24 @@ class CodexProvider:
                 completions=0;messages=[];lifecycle=[]
                 for line in native.splitlines():
                     record=json.loads(line)
-                    kind=record.get('type');lifecycle.append(kind)
+                    kind=record.get('type')
                     if kind not in ('thread.started','turn.started','turn.completed','item.completed'):
                         raise ProviderFailure('provider_protocol_error',bounded_final())
+                    if kind!='item.completed':
+                        lifecycle.append(kind)
                     if kind=='turn.completed':
                         completions+=1
                     if kind=='item.completed':
-                        if record.get('item',{}).get('type')!='agent_message':
+                        item=record.get('item',{})
+                        if item.get('type')=='reasoning':
+                            if (lifecycle!=['thread.started','turn.started'] or
+                                set(item)-{'id','type','text'} or not isinstance(item.get('text'),str)):
+                                raise ProviderFailure('provider_protocol_error',bounded_final())
+                        elif item.get('type')=='agent_message':
+                            lifecycle.append('item.completed')
+                            messages.append(item.get('text'))
+                        else:
                             raise ProviderFailure('provider_tool_use',bounded_final())
-                        messages.append(record['item'].get('text'))
                 if (root/'result.json').stat().st_size>64*1024:
                     raise ProviderFailure('provider_output_too_large',bounded_final())
                 raw=(root/'result.json').read_text(encoding='utf-8')

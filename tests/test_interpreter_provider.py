@@ -36,6 +36,7 @@ raw='{"only":"component simulation"}'
 open(sys.argv[1],'w').write(raw)
 print(json.dumps({'type':'thread.started'}))
 print(json.dumps({'type':'turn.started'}))
+print(json.dumps({'type':'item.completed','item':{'id':'reason','type':'reasoning','text':'data-only reasoning'}}))
 print(json.dumps({'type':'item.completed','item':{'type':'agent_message','text':raw}}))
 print(json.dumps({'type':'turn.completed'}))
 '''
