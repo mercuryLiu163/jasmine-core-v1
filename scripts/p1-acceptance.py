@@ -246,9 +246,9 @@ DEVICE = {"requirements": [{"key": "device", "kind": "DEVICE_TEST", "required_re
 
 
 def case_t01(f: Fixture) -> None:
-    check(SCHEMA_VERSION == 5, "P1-03 must ship schema version 5")
+    check(SCHEMA_VERSION == 6, "P1-03 must ship schema version 6")
     applied = expect(f.call("GET", "/v1/meta/schema"), 200)["migrations"]
-    check([m["version"] for m in applied] == [1, 2, 3, 4, 5], "empty DB migration sequence")
+    check([m["version"] for m in applied] == [1, 2, 3, 4, 5, 6], "empty DB migration sequence")
     conn = db.connect(f.root / "old.db")
     try:
         with db.transaction(conn):
@@ -279,11 +279,12 @@ def case_t01(f: Fixture) -> None:
                          (task_id, project_id, "old task", task_event["event_id"],
                           clock.now_rfc3339(), clock.now_rfc3339()))
         check([m for m in migrate(conn)] == ["m0003_authority", "m0004_task_step_state",
-                                              "m0005_evidence_fingerprint"], "old DB migration list")
+                                              "m0005_evidence_fingerprint",
+                                              "m0006_codex_exec_observations"], "old DB migration list")
         row = conn.execute("SELECT status,revision FROM tasks WHERE task_id=?", (task_id,)).fetchone()
         check((row["status"], row["revision"]) == ("ACTIVE", 7), "P0 open maps ACTIVE without revision loss")
         check(migrate(conn) == [], "second migrate must be no-op")
-        check(EventStore(conn, schema_version=5).get(task_event["event_id"]) is not None,
+        check(EventStore(conn, schema_version=6).get(task_event["event_id"]) is not None,
               "P0 Event remains readable")
     finally:
         conn.close()

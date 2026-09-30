@@ -57,10 +57,12 @@ class Failed(Exception):
     """A real Gate assertion failed after the runtime was available."""
 
 
-def _write_private(path: Path, data: str | dict[str, Any]) -> None:
-    raw = data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+def _write_private(path: Path, data: bytes | str | dict[str, Any]) -> None:
+    raw = data if isinstance(data, (str, bytes)) else json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+    if isinstance(raw, str):
+        raw = raw.encode("utf-8")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+    with os.fdopen(fd, "wb") as stream:
         stream.write(raw)
 
 
@@ -213,7 +215,7 @@ def _db_binding(path: Path, binding: dict[str, Any]) -> dict[str, Any]:
             if conn.execute("SELECT 1 FROM hosts WHERE host_id=?", (binding["host_id"],)).fetchone() is None:
                 raise Blocked("binding Host is absent")
             system = _token_identity(conn, Path(binding["token_file"]), kind="system",
-                scopes_required={"guard:check", "evidence:write", "fingerprint:scan",
+                scopes_required={"guard:check", "evidence:write", "evidence:attest", "fingerprint:scan",
                                  "objects:read", "state:read", "authority:read"})
             human = _token_identity(conn, Path(binding["human_token_file"]), kind="human",
                 scopes_required={"objects:read", "events:read", "events:write",
@@ -314,7 +316,7 @@ def _prepare(args: argparse.Namespace, report: dict[str, Any]) -> None:
                 "state:read", "state:write", "state:accept", "evidence:read",
                 "evidence:confirm", "fingerprint:read"])["token"],
             "system": issuer.issue_key(actor_id=system, label="p1-gate-system", scopes=[
-                "guard:check", "evidence:write", "evidence:read", "fingerprint:scan",
+                "guard:check", "evidence:write", "evidence:attest", "evidence:read", "fingerprint:scan",
                 "fingerprint:read", "objects:read", "state:read", "authority:read"])["token"],
             "agent": issuer.issue_key(actor_id=agent, label="p1-gate-agent", scopes=[
                 "objects:read", "state:read", "state:write", "events:write",
@@ -459,7 +461,7 @@ def _tool_items(stdout: str) -> list[dict[str, Any]]:
             continue
         key = str(item.get("id", len(calls)))
         raw_command = item.get("command")
-        inner_command = raw_command
+        inner_command = None
         if kind == "command_execution" and isinstance(raw_command, str):
             try:
                 envelope = shlex.split(raw_command, posix=True)
@@ -490,26 +492,48 @@ def _real_turn(args: argparse.Namespace, out: Path, manifest: dict[str, Any],
                    "--sandbox", "workspace-write", "--add-dir", manifest["workspace"], prompt]
     else:
         command = [args.codex_bin, "exec", "resume", "--json", "--skip-git-repo-check", session, prompt]
-    before = len(_traces(out / "hook-trace.jsonl"))
+    trace_path = out / "hook-trace.jsonl"
+    trace_prefix = _private_file(trace_path, "hook trace") if trace_path.exists() else b""
+    trace_before = len(trace_prefix)
     env = dict(os.environ, JASMINE_CORE_GATE_NONCE=nonce)
     stdout_path, stderr_path = out / f"{name}-codex.jsonl", out / f"{name}-stderr.txt"
     timed_out = False
     try:
         completed = subprocess.run(command, cwd=manifest["project_root"], env=env,
-                                   capture_output=True, text=True, timeout=args.codex_timeout)
+                                   capture_output=True, timeout=args.codex_timeout)
         stdout, stderr, exit_code = completed.stdout, completed.stderr, completed.returncode
     except subprocess.TimeoutExpired as exc:
         timed_out = True
-        stdout = exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-        stderr = exc.stderr.decode(errors="replace") if isinstance(exc.stderr, bytes) else (exc.stderr or "")
+        stdout = exc.stdout or b""
+        stderr = exc.stderr or b""
         exit_code = None
-    _write_private(stdout_path, stdout)
-    _write_private(stderr_path, stderr)
+    stdout_bytes = stdout.encode("utf-8") if isinstance(stdout, str) else stdout
+    stderr_bytes = stderr.encode("utf-8") if isinstance(stderr, str) else stderr
+    _write_private(stdout_path, stdout_bytes)
+    _write_private(stderr_path, stderr_bytes)
     report.setdefault("turns", []).append({"name": name, "command": command[:-1] + ["<prompt>"],
         "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
         "stdout": str(stdout_path), "stderr": str(stderr_path), "exit": exit_code,
-        "timed_out": timed_out})
-    recent = _traces(out / "hook-trace.jsonl")[before:]
+        "timed_out": timed_out, "stdout_sha256": hashlib.sha256(stdout_bytes).hexdigest()})
+    try:
+        stdout = stdout_bytes.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise Failed(f"{name} Codex JSONL is not UTF-8; original bytes preserved") from exc
+    trace_raw = _private_file(trace_path, "hook trace") if trace_path.exists() else b""
+    if not trace_raw.startswith(trace_prefix):
+        raise Failed(f"{name} hook trace was changed or truncated during Codex turn")
+    recent_raw = trace_raw[trace_before:]
+    turn_trace_path = out / f"{name}-hook-trace.jsonl"
+    try:
+        recent_text = recent_raw.decode("utf-8")
+        recent = [json.loads(line) for line in recent_text.splitlines()]
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise Failed(f"{name} hook trace is not complete UTF-8 JSONL") from exc
+    if any(not isinstance(entry, dict) for entry in recent):
+        raise Failed(f"{name} hook trace contains a non-object entry")
+    _write_private(turn_trace_path, recent_text)
+    report["turns"][-1]["hook_trace_raw"] = str(turn_trace_path)
+    report["turns"][-1]["hook_trace_sha256"] = hashlib.sha256(recent_raw).hexdigest()
     report["turns"][-1]["hook_traces"] = recent
     captured_prompts = [entry for entry in recent if entry.get("hook_event_name") == "UserPromptSubmit"
                         and entry.get("result") == "captured"]
@@ -643,6 +667,81 @@ def _captured_tool_event(client: CoreClient, manifest: dict[str, Any],
     return event
 
 
+def _codex_executable(command: str) -> dict[str, str]:
+    located = shutil.which(command)
+    if located is None:
+        raise Blocked("codex executable is unavailable")
+    path = Path(located).resolve(strict=True)
+    if not path.is_file():
+        raise Blocked("codex executable is not a regular file")
+    try:
+        version = subprocess.run([str(path), "--version"], capture_output=True,
+                                 text=True, timeout=10, check=True).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise Blocked("codex executable version could not be read") from exc
+    if not version:
+        raise Blocked("codex executable version is empty")
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return {"path": str(path), "version": version, "sha256": digest.hexdigest()}
+
+
+def _observe_native(system: CoreClient, human: CoreClient, manifest: dict[str, Any],
+                    turn: dict[str, Any], origin: dict[str, Any], post_event: dict[str, Any],
+                    executable: dict[str, str]) -> dict[str, Any]:
+    """Attest saved raw CLI and hook captures; preserve the original Post INFO."""
+    executable_path = Path(executable["path"])
+    with executable_path.open("rb") as executable_stream:
+        executable_sha = hashlib.file_digest(executable_stream, "sha256").hexdigest()
+    if (str(executable_path.resolve(strict=True)) != executable["path"] or
+            executable_sha != executable["sha256"]):
+        raise Failed("attested Codex executable changed before native observation")
+    cli_raw = _private_file(Path(turn["stdout"]), "Codex JSONL").decode("utf-8")
+    trace_raw = _private_file(Path(turn["hook_trace_raw"]), "turn hook trace").decode("utf-8")
+    if (hashlib.sha256(cli_raw.encode()).hexdigest() != turn["stdout_sha256"] or
+            hashlib.sha256(trace_raw.encode()).hexdigest() != turn["hook_trace_sha256"]):
+        raise Failed("saved native capture changed before observation")
+    post_id = post_event["event_id"]
+    response = _api(system, "POST", "/v1/codex-exec-observations", {
+        "task_id": manifest["task_id"], "step_id": manifest["step_id"],
+        "host_id": manifest["host_id"], "origin_prompt_event_id": origin["event_id"],
+        "related_posttool_event_id": post_id, "codex_jsonl": cli_raw,
+        "codex_jsonl_sha256": hashlib.sha256(cli_raw.encode("utf-8")).hexdigest(),
+        "hook_trace_jsonl": trace_raw,
+        "hook_trace_sha256": hashlib.sha256(trace_raw.encode("utf-8")).hexdigest(),
+        "codex_executable": executable,
+    })
+    evidence, event = response.get("evidence"), response.get("result_event")
+    if (response.get("replayed") is not False or response.get("related_posttool_event_id") != post_id or
+            not isinstance(evidence, dict) or not isinstance(event, dict) or
+            evidence.get("kind") != "COMMAND_RESULT" or evidence.get("status") != "PASS" or
+            evidence.get("source_event_id") != event.get("event_id") or
+            evidence.get("related_posttool_event_id") != post_id or
+            evidence.get("evidence_id") is None or event.get("event_type") != "tool.result" or
+            event.get("source_system") != "codex-exec-jsonl" or
+            event.get("actor_kind") != "system" or event.get("actor_id") != manifest["system_actor_id"] or
+            event.get("task_id") != manifest["task_id"] or
+            event.get("project_id") != manifest["project_id"] or
+            event.get("payload", {}).get("related_posttool_event_id") != post_id or
+            event.get("payload", {}).get("origin_prompt_event_id") != origin["event_id"]):
+        raise Failed("native observer did not persist linked PASS Evidence and Event")
+    saved_event = _api(human, "GET", f"/v1/events/{event['event_id']}")["event"]
+    saved_evidence = _api(human, "GET", f"/v1/evidence/{evidence['evidence_id']}")["evidence"]
+    if saved_event != event or saved_evidence != evidence:
+        raise Failed("native observer response differs from persisted Event or Evidence")
+    old_evidence = _api(human, "GET", f"/v1/tasks/{manifest['task_id']}/evidence")["evidence"]
+    old = [item for item in old_evidence if item.get("source_event_id") == post_id]
+    if len(old) != 1 or old[0].get("status") != "INFO":
+        raise Failed("original PostToolUse INFO Evidence was altered or missing")
+    turn["native_observation"] = {"result_event_id": event["event_id"],
+                                  "evidence_id": evidence["evidence_id"],
+                                  "related_posttool_event_id": post_id,
+                                  "origin_prompt_event_id": origin["event_id"]}
+    return response
+
+
 def _hook_probe(manifest: dict[str, Any], session: str, nonce: str,
                 *, bound: bool) -> dict[str, Any]:
     """Direct integration probe after Core stop; it is not real Codex Evidence."""
@@ -685,6 +784,9 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
         raise Blocked("project hooks and trust require operator review")
     if not shutil.which(args.codex_bin):
         raise Blocked("codex executable is unavailable")
+    executable = _codex_executable(args.codex_bin)
+    args.codex_bin = executable["path"]
+    report["codex_executable"] = executable
     nonce = os.environ.get("JASMINE_CORE_GATE_NONCE", "")
     binding_path = Path(manifest["binding"])
     binding = _binding(binding_path, nonce)
@@ -713,14 +815,13 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
             raise Failed("prepared HARD Rule does not deny the actual Bash wire action")
         report["guard_preflight"] = {"decision": guard["decision"], "matched": guard["matched"]}
         _transition(agent, manifest, "IN_PROGRESS")
-        prompt1 = (f"P1 real Gate: use Bash to run exactly `{manifest['denied_command']}` and observe the native denial. "
-                   f"Then independently use Bash to run exactly `{manifest['allowed_command']}`. "
-                   "Continue after the denial. Report both outcomes and do not use other tools.")
-        session, _ = _real_turn(args, out, manifest, "01-tools", prompt1, None, nonce, report,
-                                allowed_commands=(manifest["denied_command"], manifest["allowed_command"]))
+        prompt1 = (f"P1 real Gate: use Bash to run exactly `{manifest['denied_command']}`. "
+                   "Observe the native denial, report its outcome, and do not use another tool.")
+        session, _ = _real_turn(args, out, manifest, "01-denied", prompt1, None, nonce, report,
+                                allowed_commands=(manifest["denied_command"],))
         traces = report["turns"][-1]["hook_traces"]
-        if Path(manifest["denied"]).exists() or not Path(manifest["allowed"]).exists():
-            raise Failed("native DENY had a side effect or allowed Bash tool did not run")
+        if Path(manifest["denied"]).exists() or report["turns"][-1]["codex_tool_items"]:
+            raise Failed("native DENY had a side effect or executed a Codex tool item")
         denied_input_sha = hashlib.sha256(canonical_json(
             {"command": manifest["denied_command"]}).encode()).hexdigest()
         prompt_turns = [t.get("turn_id") for t in traces if
@@ -739,24 +840,31 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
                all(t.get(key) == denied_trace.get(key) for key in
                    ("session_id", "turn_id", "tool_use_id")) for t in traces):
             raise Failed("denied Bash call reached PostToolUse; native denial was not enforced")
+        prompt2 = (f"Use Bash to run exactly `{manifest['allowed_command']}`. "
+                   "Report the outcome and do not use another tool.")
+        session, allowed_origin = _real_turn(args, out, manifest, "02-allowed", prompt2,
+                                             session, nonce, report,
+                                             allowed_commands=(manifest["allowed_command"],))
+        if not Path(manifest["allowed"]).exists():
+            raise Failed("allowed Bash tool did not create its scratch file")
         first_tool_event = _captured_tool_event(human, manifest, report["turns"][-1],
                                                  manifest["allowed_command"], {"guard:verify"})
-        response = first_tool_event["payload"].get("tool_response")
-        exit_code = response.get("exit_code", response.get("exitCode")) if isinstance(response, dict) else None
-        if type(exit_code) is not int or exit_code != 0:
-            raise Failed("native PostToolUse result has no trustworthy zero integer exit code")
+        first_observation = _observe_native(system, human, manifest, report["turns"][-1],
+                                            allowed_origin, first_tool_event, executable)
         _transition(agent, manifest, "EXECUTED")
         _, step = _state(human, manifest["task_id"], manifest["step_id"])
-        session, _ = _real_turn(args, out, manifest, "02-executed", PROMPT_EXECUTED,
+        session, _ = _real_turn(args, out, manifest, "03-executed", PROMPT_EXECUTED,
                                 session, nonce, report,
                                 expected_state=("STEP", step["status"], step["revision"]))
         verified = _transition(agent, manifest, "VERIFIED")
         refs = _evidence(human, verified["evidence_ids"], manifest)
-        if not any(item.get("source_event_id") == first_tool_event["event_id"] for item in refs):
-            raise Failed("VERIFIED did not cite actual PostToolUse Evidence")
+        if not any(item.get("source_event_id") == first_observation["result_event"]["event_id"] and
+                   item.get("related_posttool_event_id") == first_tool_event["event_id"]
+                   for item in refs):
+            raise Failed("VERIFIED did not cite linked native Codex result Evidence")
         _assert_rule_refs(verified, manifest["rules"][1], "first VERIFIED")
         _, step = _state(human, manifest["task_id"], manifest["step_id"])
-        session, _ = _real_turn(args, out, manifest, "03-stale", PROMPT_VERIFIED.format(stale_command=manifest["stale_command"]),
+        session, _ = _real_turn(args, out, manifest, "04-stale", PROMPT_VERIFIED.format(stale_command=manifest["stale_command"]),
                                 session, nonce, report,
                                 expected_state=("STEP", step["status"], step["revision"]),
                                 allowed_commands=(manifest["stale_command"],))
@@ -767,18 +875,22 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
             raise Failed("real workspace mutation did not persist VERIFIED to STALE")
         _transition(agent, manifest, "IN_PROGRESS")
         prompt4 = f"Use Bash to run exactly `{manifest['allowed_command']}` again. Report its outcome."
-        session, _ = _real_turn(args, out, manifest, "04-rerun", prompt4, session, nonce, report,
+        session, rerun_origin = _real_turn(args, out, manifest, "05-rerun", prompt4, session, nonce, report,
                                 allowed_commands=(manifest["allowed_command"],))
         rerun_event = _captured_tool_event(human, manifest, report["turns"][-1],
                                             manifest["allowed_command"], {"guard:verify"})
+        rerun_observation = _observe_native(system, human, manifest, report["turns"][-1],
+                                             rerun_origin, rerun_event, executable)
         _transition(agent, manifest, "EXECUTED")
         verified_again = _transition(agent, manifest, "VERIFIED")
         rerun_refs = _evidence(human, verified_again["evidence_ids"], manifest)
-        if not any(item.get("source_event_id") == rerun_event["event_id"] for item in rerun_refs):
-            raise Failed("second VERIFIED did not cite the actual rerun PostToolUse")
+        if not any(item.get("source_event_id") == rerun_observation["result_event"]["event_id"] and
+                   item.get("related_posttool_event_id") == rerun_event["event_id"]
+                   for item in rerun_refs):
+            raise Failed("second VERIFIED did not cite linked rerun native Codex Evidence")
         _assert_rule_refs(verified_again, manifest["rules"][1], "second VERIFIED")
         _, step = _state(human, manifest["task_id"], manifest["step_id"])
-        session, step_origin = _real_turn(args, out, manifest, "05-step-confirm", PROMPT_STEP_CONFIRM,
+        session, step_origin = _real_turn(args, out, manifest, "06-step-confirm", PROMPT_STEP_CONFIRM,
                                           session, nonce, report,
                                           expected_state=("STEP", step["status"], step["revision"]))
         task, step = _state(human, manifest["task_id"], manifest["step_id"])
@@ -791,7 +903,7 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
             raise Failed("Step ACCEPTED did not cite the genuine current-revision confirmation")
         _assert_rule_refs(accepted_step, manifest["rules"][1], "Step ACCEPTED")
         task, _ = _state(human, manifest["task_id"], manifest["step_id"])
-        session, task_origin = _real_turn(args, out, manifest, "06-task-confirm", PROMPT_TASK_CONFIRM,
+        session, task_origin = _real_turn(args, out, manifest, "07-task-confirm", PROMPT_TASK_CONFIRM,
                                           session, nonce, report,
                                           expected_state=("TASK", task["status"], task["revision"]))
         task, step = _state(human, manifest["task_id"], manifest["step_id"])

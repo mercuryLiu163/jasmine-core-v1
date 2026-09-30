@@ -26,6 +26,22 @@ def module():
 
 
 class RealGateRunner(unittest.TestCase):
+    def test_real_turn_preserves_raw_cli_bytes(self) -> None:
+        gate = module()
+        with tempfile.TemporaryDirectory(prefix="p1-gate-raw-") as temp:
+            out = Path(temp).resolve()
+            args = type("Args", (), {"codex_bin": "codex", "codex_timeout": 1})()
+            raw = b'{"type":"thread.started","thread_id":"fixture"}\r\n'
+            record = {"turns": []}
+            with patch.object(gate.subprocess, "run", return_value=
+                              subprocess.CompletedProcess([], 0, raw, b"error\r\n")) as invoked:
+                with self.assertRaises(gate.Blocked):
+                    gate._real_turn(args, out, {"workspace": str(out), "project_root": str(ROOT)},
+                                    "bytes", "fixture", None, "nonce", record)
+            self.assertNotIn("text", invoked.call_args.kwargs)
+            self.assertEqual((out / "bytes-codex.jsonl").read_bytes(), raw)
+            self.assertEqual(record["turns"][0]["stdout_sha256"], hashlib.sha256(raw).hexdigest())
+
     def test_cli_bash_envelope_requires_exact_single_prepared_command(self) -> None:
         gate = module()
         allowed = "touch '/tmp/p1 gate/allowed.txt'"
@@ -42,8 +58,7 @@ class RealGateRunner(unittest.TestCase):
             self.assertEqual(parsed[0]["command"], raw, "raw CLI command was lost")
             self.assertEqual(parsed[0]["inner_command"], allowed)
             gate._checked_tool_items(parsed, (allowed,), "fixture")
-        gate._checked_tool_items(items(allowed), (allowed,), "fixture")
-        for raw in (f"/bin/bash -c {json.dumps(allowed)} extra",
+        for raw in (allowed, f"/bin/bash -c {json.dumps(allowed)} extra",
                     f"/bin/sh -c {json.dumps(allowed)}",
                     f"/bin/bash -c {json.dumps(allowed + '; rm /tmp/other')}",
                     "/bin/bash -c 'unterminated"):
@@ -69,7 +84,7 @@ class RealGateRunner(unittest.TestCase):
 
     def test_prepare_bootstraps_private_fixture_and_exits_blocked(self) -> None:
         with tempfile.TemporaryDirectory(prefix="p1-gate-prepare-") as temp:
-            out = Path(temp) / "gate"
+            out = Path(temp).resolve() / "gate"
             result = subprocess.run([sys.executable, str(SCRIPT), "--prepare", "--out",
                                      str(out), "--project-root", str(ROOT)],
                                     cwd=ROOT, capture_output=True, text=True, timeout=30)
@@ -91,7 +106,7 @@ class RealGateRunner(unittest.TestCase):
 
     def test_run_without_operator_trust_stays_blocked(self) -> None:
         with tempfile.TemporaryDirectory(prefix="p1-gate-blocked-") as temp:
-            out = Path(temp) / "gate"
+            out = Path(temp).resolve() / "gate"
             subprocess.run([sys.executable, str(SCRIPT), "--prepare", "--out", str(out),
                             "--project-root", str(ROOT)], capture_output=True, text=True,
                            timeout=30, check=False)
@@ -112,7 +127,7 @@ class RealGateRunner(unittest.TestCase):
     def test_prepared_agent_can_read_state_and_start_step_over_real_http(self) -> None:
         gate = module()
         with tempfile.TemporaryDirectory(prefix="p1-gate-agent-route-") as temp:
-            out = Path(temp) / "gate"
+            out = Path(temp).resolve() / "gate"
             prepared = subprocess.run([sys.executable, str(SCRIPT), "--prepare", "--out",
                                        str(out), "--project-root", str(ROOT)],
                                       cwd=ROOT, capture_output=True, text=True, timeout=30)
@@ -207,7 +222,7 @@ class RealGateRunner(unittest.TestCase):
     def test_observed_hook_without_lease_is_failed(self) -> None:
         gate = module()
         with tempfile.TemporaryDirectory(prefix="p1-gate-lease-") as temp:
-            out = Path(temp)
+            out = Path(temp).resolve()
             args = type("Args", (), {"codex_bin": "codex", "codex_timeout": 1})()
             manifest = {"workspace": str(out), "project_root": str(ROOT),
                         "binding": str(out / "binding.json")}
@@ -216,8 +231,11 @@ class RealGateRunner(unittest.TestCase):
             completed = subprocess.CompletedProcess(["codex", "exec"], 0, codex_output, "")
             trace = {"hook_event_name": "UserPromptSubmit", "result": "captured",
                      "session_id": "real-session", "event_id": "evt_fixture"}
-            with patch.object(gate.subprocess, "run", return_value=completed), \
-                 patch.object(gate, "_traces", side_effect=[[], [trace]]):
+            def invoked(*args, **kwargs):
+                gate._write_private(out / "hook-trace.jsonl", json.dumps(trace) + "\n")
+                os.chmod(out / "hook-trace.jsonl", 0o600)
+                return completed
+            with patch.object(gate.subprocess, "run", side_effect=invoked):
                 with self.assertRaisesRegex(gate.Failed, "without a valid bound session lease"):
                     gate._real_turn(args, out, manifest, "01-tools", "probe", None,
                                     "mock-private-nonce", record)
@@ -226,7 +244,7 @@ class RealGateRunner(unittest.TestCase):
         """Synthetic PostTool payload checks the API shape, never T10 real coverage."""
         gate = module()
         with tempfile.TemporaryDirectory(prefix="p1-gate-linked-events-") as temp:
-            out = Path(temp) / "gate"
+            out = Path(temp).resolve() / "gate"
             prepared = subprocess.run([sys.executable, str(SCRIPT), "--prepare", "--out", str(out),
                                        "--project-root", str(ROOT)], capture_output=True,
                                       text=True, timeout=30)
@@ -244,15 +262,22 @@ class RealGateRunner(unittest.TestCase):
                 human = gate.CoreClient(f"http://127.0.0.1:{manifest['port']}",
                                         (out / "human.token").read_text().strip())
                 command = manifest["allowed_command"]
+                origin = human.post("/v1/events", {"event_type": "user.prompt",
+                    "source_system": "codex-p1-bound", "source_event_id": "component-prompt",
+                    "host_id": manifest["host_id"], "project_id": manifest["project_id"],
+                    "task_id": manifest["task_id"], "payload": {"text": "Component simulation only",
+                    "step_id": manifest["step_id"], "source_session_id": "component-session",
+                    "turn_id": "component-turn"}})["event"]
                 recorded = system.post("/v1/tool-results", {"task_id": manifest["task_id"],
                     "step_id": manifest["step_id"], "host_id": manifest["host_id"],
                     "codex_session_id": "component-session", "turn_id": "component-turn",
                     "tool_use_id": "component-tool", "tool_name": "Bash",
-                    "tool_input": {"command": command}, "tool_response": {"exit_code": 0}})
+                    "tool_input": {"command": command}, "tool_response": {}})
                 input_hash = hashlib.sha256(gate.canonical_json({"command": command}).encode()).hexdigest()
                 common = {"session_id": "component-session", "turn_id": "component-turn"}
                 turn = {"session_id": "component-session", "hook_traces": [
-                    {**common, "hook_event_name": "UserPromptSubmit", "result": "captured"},
+                    {**common, "hook_event_name": "UserPromptSubmit", "result": "captured",
+                     "event_id": origin["event_id"]},
                     {**common, "hook_event_name": "PreToolUse", "result": "guard:verify",
                      "tool_use_id": "component-tool", "tool_input_sha256": input_hash},
                     {**common, "hook_event_name": "PostToolUse", "result": "captured",
@@ -260,6 +285,28 @@ class RealGateRunner(unittest.TestCase):
                      "event_id": recorded["result_event"]["event_id"]}]}
                 actual = gate._captured_tool_event(human, manifest, turn, command, {"guard:verify"})
                 self.assertEqual(actual["event_id"], recorded["result_event"]["event_id"])
+                native_command = "/bin/bash -lc " + gate.shlex.quote(command)
+                native = [{"type": "thread.started", "thread_id": "component-session"},
+                          {"type": "turn.started"}]
+                for phase, status in (("item.started", "in_progress"), ("item.completed", "completed")):
+                    native.append({"type": phase, "item": {"id": "component-native", "type": "command_execution",
+                        "command": native_command, "status": status, "exit_code": 0}})
+                native.append({"type": "turn.completed"})
+                cli = "\n".join(map(json.dumps, native)) + "\n"
+                trace = "\n".join(map(json.dumps, turn["hook_traces"])) + "\n"
+                gate._write_private(out / "component-cli.jsonl", cli)
+                gate._write_private(out / "component-trace.jsonl", trace)
+                turn.update(stdout=str(out / "component-cli.jsonl"),
+                    hook_trace_raw=str(out / "component-trace.jsonl"),
+                    stdout_sha256=hashlib.sha256(cli.encode()).hexdigest(),
+                    hook_trace_sha256=hashlib.sha256(trace.encode()).hexdigest())
+                executable = gate._codex_executable(sys.executable)
+                wrong_origin = dict(origin, event_id=gate.ids.new_id("evt"))
+                with self.assertRaises(gate.Failed):
+                    gate._observe_native(system, human, manifest, turn, wrong_origin, actual, executable)
+                observed = gate._observe_native(system, human, manifest, turn, origin, actual, executable)
+                self.assertEqual(observed["evidence"]["status"], "PASS")
+                self.assertNotEqual(observed["result_event"]["event_id"], actual["event_id"])
                 other_session = copy.deepcopy(turn)
                 other_session["session_id"] = "other-session"
                 with self.assertRaises(gate.Failed):
