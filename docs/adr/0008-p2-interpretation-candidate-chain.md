@@ -1,6 +1,6 @@
 # ADR 0008 — P2-01 Interpretation 候选链
 
-- 状态：候选数据合同 Accepted；provider no-execution.v2 默认模式拒绝元工具验证待冻结；候选实现验收另行记录，不宣称 P2 验收。
+- 状态：Accepted；provider no-execution.v2 已冻结并按真实/组件边界验证。完整 P2 的 scoped admission-only 独立验收见 [P2结果摘要](../p2-results.md)，不宣称实际工具执行或 P3。
 - 日期：2026-09-29
 - 基线：`9de00fe`，Schema 6；本 PR 独占新增 `m0007_interpretations` / Schema 7。
 
