@@ -53,3 +53,5 @@ P0/P1 tokens是整个Core实例的scope，尚无project ACL；过滤是查询上
 不同processor actor同源Event各有解释；后续Resolver必须按源Event及已应用历史去重，不能仅按interpretation_id。human assistant.message映射AGENT_PROPOSED（非用户明确），仅human user.prompt可标USER_EXPLICIT。schema版本不由model输出。
 
 P2-02/03续接验收须包含project已知但task为空的真实原话，之后由Resolver创建Task及requirement；P2-01允许TASK scope task_id=null。P1旧hook的task/step固定绑定保持兼容，project-only输入到后续Task绑定过渡留给P2-03，不由本PR预造Task替代自然语言创建Gate。
+
+Provider额外设置project_doc_max_bytes=0并写入config digest，阻止全局/目录AGENTS正文进入实际解释prompt；独立preflight按候选相同flags验证无额外用户文档。timeout取消包括已退出父进程但仍持pipe的所有本调用processgroup子进程（TERM后KILL）；不触已有服务。

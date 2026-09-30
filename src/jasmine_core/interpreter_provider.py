@@ -44,7 +44,7 @@ def _base_config():
         'output_schema_version':SCHEMA_VERSION,'schema_digest':sha256_hex(canonical_json(OUTPUT_SCHEMA)),
         'timeout_seconds':120,'max_input_bytes':48*1024,'max_output_bytes':64*1024,
         'max_stream_bytes':MAX_STREAM_BYTES,'disabled_features':list(DISABLED_FEATURES),
-        'web_search':'disabled','agents_enabled':False,'tool_profile':'no-tools.v1'}
+        'web_search':'disabled','agents_enabled':False,'project_doc_max_bytes':0,'tool_profile':'no-tools.v1'}
 
 
 class UnavailableProvider:
@@ -100,6 +100,7 @@ class CodexProvider:
     def _argv(self,root):
         argv=[str(self.executable),'exec','--ignore-user-config','--ephemeral','--skip-git-repo-check',
               '--sandbox','read-only','-m',MODEL,'-c','web_search="disabled"','-c','agents.enabled=false',
+              '-c','project_doc_max_bytes=0',
               '-c','memories.use_memories=false','-c','memories.generate_memories=false',
               '-c',f'model_catalog_json={json.dumps(str(root / "catalog.json"))}']
         for feature in DISABLED_FEATURES:
