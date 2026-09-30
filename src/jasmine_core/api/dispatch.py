@@ -19,7 +19,7 @@ from typing import Any
 from .. import audit as audit_module
 from .. import errors, ids
 from . import handlers
-from .handlers import Core, Route
+from .handlers import Core
 from .request import Request, Response
 
 JSON_CONTENT_TYPE = "application/json; charset=utf-8"
@@ -76,7 +76,17 @@ def dispatch(core: Core, request: Request) -> Response:
         # decision about authority, and a 5xx is neither.
         decision = "deny" if exc.status in (401, 403) else ("error" if exc.status >= 500 else "allow")
         audit_detail = audit_module.summarise_error(exc)
-        response = Response(status, exc.to_payload(request_id))
+        payload = exc.to_payload(request_id)
+        if exc.code == "internal_error":
+            # ADR 0003: a 500 returns no exception type, message or stack. A bare
+            # `CoreError` carries a developer-authored message that may quote a
+            # table name, an id, or a fragment of the request, so the generic text
+            # replaces it here. Typed 5xx subclasses (schema_version_unsupported,
+            # migration_conflict, database_busy) are a frozen contract whose
+            # message is meant to be read, and are left alone.
+            payload["error"]["message"] = "internal error"
+            payload["error"]["details"] = {}
+        response = Response(status, payload)
     except Exception as exc:  # noqa: BLE001 - last line of defence
         status = 500
         decision = "error"

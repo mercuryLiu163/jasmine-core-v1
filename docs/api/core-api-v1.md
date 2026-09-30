@@ -291,7 +291,7 @@ P1-T10 Gate, never inferred from a successful API call or synthetic test.
 
 ## P2-01 Interpretation candidate extension
 
-See [ADR 0008](../adr/0008-p2-interpretation-candidate-chain.md). Candidate
+See [ADR 0009](../adr/0008-p2-interpretation-candidate-chain.md). Candidate
 processing never applies Truth. Scopes are `interpretations:read` and
 `interpretations:process`; both require `events:read` on these routes, and
 process also requires read. These remain instance-wide scopes, not project ACLs.
@@ -360,3 +360,128 @@ expected_revisions is an exact array of `{object_type:project|task|step|rule,obj
 New command201; exact historical replay200; source replay200. Review source-race loser is SOURCE_REPLAYED and preserves original applied action refs. Bad syntax400, wrong role/scope403, missing resource404, stale head409 interpretation_not_current, unready processing409 interpretation_not_ready, key conflict409 idempotency_conflict, stale full context409 context_conflict, latest application conflict409 application_conflict. Existing GET Interpretation adds maintenance_head/history/operation_completions while preserving original processing fields. Unsupported PATH/TOOL manual mappings return400 and keep pending; no silently changed scope or claimed application.
 
 Review APPROVE may map a CORRECTION candidate to SUPERSEDE_RULE targeting a different-source Rule only in the same Task and exact scope, with authority:manage, human/system identity and the complete revision/context snapshot. This exception is unavailable to ordinary manual-reapply. The immutable action result preserves previous_origin_event_id, previous_rule_version, previous_source_event_id plus the new change_event_ids.
+
+## P4 Memory extension
+
+See [ADR 0011](../adr/0011-p4-memory-and-durable-jobs.md). Long-term Memory is
+**non-authoritative history**: these endpoints read and curate what an earlier
+session learned, and nothing here can activate a Rule, move State, mint
+Evidence, overwrite a Checkpoint or raise a Task revision. The server must be
+started with an operator-owned `JASMINE_HINDSIGHT_URL` for the worker to reach an
+engine; without it `/v1/health` is still `ok` and Memory reports `unconfigured`.
+
+New scopes: `memory:read`, `memory:manage`, `memory:reflect`. `memory:read` may be
+carried by an Agent key — the Inspector is history. `memory:manage` and
+`memory:reflect` are refused at key issuance for any non-human, non-system actor.
+
+| Method | Path | Scope and Registry actor | Purpose |
+| --- | --- | --- | --- |
+| GET | `/v1/memory/jobs` | `memory:read` | List jobs; `project_id`, `status`, `kind`, `memory_type`, `limit`, `after_job_id`; also returns per-status `counts` |
+| GET | `/v1/memory/jobs/{job_id}` | `memory:read` | One job plus its full append-only attempt history |
+| POST | `/v1/memory/jobs/{job_id}/retry` | `memory:manage`, human/system | Requeue a `FAILED` job; `host_id`, optional `event_id` |
+| GET | `/v1/memory/items` | `memory:read` | Memory Inspector list; `project_id`, `status`, `memory_type`, `bank_id`, `task_id`, `limit`, `after_memory_id` |
+| GET | `/v1/memory/items/{memory_id}` | `memory:read` | One item with its sources, jobs and a plain statement of what the engine actually has |
+| POST | `/v1/memory/items/{memory_id}/obsolete` | `memory:manage`, human/system | Stop recalling this item; keeps all metadata and provenance |
+| POST | `/v1/memory/items/{memory_id}/delete` | `memory:manage`, human/system | Tombstone locally and queue the remote document removal |
+| POST | `/v1/memory/items/{memory_id}/pin` | `memory:manage`, human/system | Inspector ordering only |
+| POST | `/v1/memory/items/{memory_id}/unpin` | `memory:manage`, human/system | Inspector ordering only |
+| GET | `/v1/memory/traces` | `memory:read` | Recall/Reflect traces; `project_id`, `task_id`, `limit`, `after_trace_id` |
+| GET | `/v1/memory/traces/{trace_id}` | `memory:read` | One trace with every result, included or filtered, and its reason |
+| GET | `/v1/memory/health` | `memory:read` | Memory availability, reported apart from Core liveness |
+| POST | `/v1/memory/reflect` | `memory:reflect`, human/system | Explicit historical synthesis; never called by a Context build |
+
+**There is no public retain endpoint and no bank selector.** Content enters the
+engine only through the worker acting on a job the recovery scan derived from
+committed truth, and the bank is derived from the item's own scope. A request
+cannot name a bank, cannot write `jasmine-global`, and cannot promote project
+content into it.
+
+`GET /v1/memory/jobs` and `POST /v1/memory/jobs/{id}/retry` keep the paths the
+module design specifies; the rest are the extensions the Inspector and the
+lifecycle need. Every response that carries Memory content is labelled
+`"non_authoritative": true`.
+
+### Lifecycle command bodies
+
+`obsolete`, `delete`, `pin` and `unpin` take exactly `expected_revision` (positive
+integer, required), `host_id`, an optional `event_id` for exact replay, and
+`reason` (≤500 characters, `obsolete`/`delete` only). The response carries the
+command Event with `before` and the declared `after`, the resulting item, and the
+queued engine job. A stale `expected_revision` is `409 revision_conflict` and
+writes nothing; a repeated `event_id` is a replay; a `DELETED` item is
+`409 invalid_state_transition` for every further command.
+
+`engine_claim` in the item detail is a plain sentence about the engine, split so
+the local and remote halves cannot be confused:
+
+| `engine_state` | Claim |
+| --- | --- |
+| `PENDING_RETAIN` | not yet sent to the engine |
+| `RETAINED` | retained in the engine; the logical lifecycle state is local |
+| `RETAIN_FAILED` | never confirmed as retained by the engine |
+| `DELETE_PENDING` | excluded locally; a queued job will remove the remote copy |
+| `DELETED` | the remote document and its memories were removed |
+| `DELETE_FAILED` | excluded locally; the remote copy may still exist |
+
+An `OBSOLETE` item reports whether the engine's own soft retire has run yet; the
+two states are separate because the local exclusion is immediate and the remote
+one is queued engine work.
+
+### Recalling Memory
+
+Recall is **not** an HTTP endpoint. It is the in-process provider the Context Pack
+Builder calls, so a Memory budget always comes from the pack that will contain the
+answer and cannot be requested independently. The result carries
+`status` (`ok`/`empty`/`degraded`/`skipped`), items, filtered results with
+machine-readable reasons, per-bank outcomes, budget and used tokens, a
+`degraded_banks` list, and a `trace_id`. A failed bank is `degraded`, never `ok`
+with zero items, and a bank with nothing to say is `empty` — the two are
+different facts and a Dashboard must be able to tell them apart.
+
+Trace rows store `query_sha256` and `query_length`, never the query text: the raw
+turn is already held by the Validation Recorder under its own permissions.
+
+### Project authorisation
+
+A project is resolved server-side from the authenticated actor. A `project_id`
+query parameter filters; it never authorises. A project the actor may not use is
+reported as `404 project_not_found`, so the Inspector and the job list cannot be
+used to discover another project's work. `jasmine-global` items are shared across
+this Core's projects and appear in every project's view.
+
+`JASMINE_MEMORY_DEPLOYMENT_MODE` selects the mode and is reported by
+`GET /v1/memory/health`:
+
+* `single_user` (default) — one trusted operator owns the Core; every project in
+  the database is theirs. Cross-project isolation holds absolutely. **This is a
+  trust premise, not a user-level ACL**, and no test may claim an ACL from it.
+* `acl` — `memory_project_actors` is authoritative. With no grant at all the
+  service refuses to serve Memory: `503 memory_deployment_not_ready`.
+
+### Failure modes
+
+| Remote condition | `error_code` | Retryable |
+| --- | --- | --- |
+| connection refused, DNS failure | `engine_unreachable` | yes |
+| deadline exceeded | `engine_timeout` | yes |
+| 401 / 403 | `engine_unauthorized` / `engine_forbidden` | no |
+| 404 | `engine_not_found` | no |
+| 409 | `engine_conflict` | yes |
+| 422 | `engine_rejected` | no |
+| 429 | `engine_rate_limited` | yes |
+| 5xx | `engine_server_error` | yes |
+| body is not JSON / has no `results` | `engine_protocol_error` | no |
+| response over 4 MiB | `engine_response_too_large` | no |
+| 3xx | `engine_unexpected_redirect` | no |
+| recall query over the documented limit | `query_too_long` | no |
+| no endpoint configured | `engine_not_configured` | no |
+
+`last_error_code` is the branchable value. `safe_error_summary` is redacted and
+clipped, is the only part stored in a row or returned, and never contains a
+credential, an endpoint credential or a raw engine body. A 30x is refused rather
+than followed, because following one would replay the `Authorization` header and
+the retained content at a host the operator did not name.
+
+New errors: `503 memory_deployment_not_ready`, plus the `404 memory_job_not_found`
+and `404 memory_trace_not_found` the `NotFound` shape already produces.
+

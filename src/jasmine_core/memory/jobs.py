@@ -1,0 +1,654 @@
+"""Durable asynchronous Memory jobs: enqueue, claim, lease, retry, recovery (ADR 0009 §8).
+
+Design module §12 draws the ordering: `state transaction commits first → enqueue
+PENDING → worker retain → DONE or retry with backoff`. The interesting part is
+what happens in the window the design does not draw.
+
+**The gap between commit and enqueue.** "Asynchronous" is not durability. If the
+process dies after the State transaction commits and before the job row exists,
+the content is eligible and there is no job, and a design that only enqueues
+inline loses it silently. P4 closes the gap by making the job a *projection* of
+committed Events rather than a side effect of a write path:
+
+    `enqueue_from_sources` walks the immutable Event stream above a persisted
+    cursor and creates a PENDING job for every eligible source that does not
+    already have one. The job inserts and the cursor update commit in the same
+    short transaction, so a crash mid-scan either has both or neither, and
+    re-running picks up exactly where it stopped.
+
+The unique index `ux_memory_jobs_source(source_event_id, kind)` is what makes
+that safe. It is a schema guarantee, not a code convention: a scan that runs
+twice over the same Event, on two workers, or after a cursor rollback, cannot
+produce a second job. A rolled-back Event is never seen by the scan, because the
+scan reads the committed `events` table.
+
+**The gap between a remote success and DONE.** A worker can die after Hindsight
+accepted the document and before the local `DONE`. The document id is
+deterministic (`eligibility.document_id_for`) and the engine's `update_mode` is
+`replace`, so re-sending is an idempotent upsert rather than a second memory.
+What P4 claims is therefore at-least-once delivery with an idempotent sink — not
+end-to-end exactly-once, which cannot be proven and is not claimed.
+
+**Claiming.** `claim_due` takes the write lock for the length of one `SELECT`
+and one `UPDATE`, releases it, and only then does the worker call the engine.
+Two workers therefore cannot both claim the same job (the second sees the first's
+`RUNNING` row inside the same `BEGIN IMMEDIATE`), and the SQLite write lock is
+never held across a network call. A claim carries a lease; a `RUNNING` job whose
+lease expired is claimable again, so a worker killed mid-retain loses nothing.
+
+**Retry.** A retryable failure returns the job to `PENDING` with an exponential
+backoff and `next_attempt_at`; a permanent failure, or an exhausted attempt
+budget, goes to `FAILED`. `last_error_code` is a summary — the full history is
+the append-only `memory_job_attempts`, because overwriting one column is how a
+"why did this fail" question becomes unanswerable.
+"""
+
+from __future__ import annotations
+
+import json
+import random
+import sqlite3
+from dataclasses import dataclass
+from typing import Any
+
+from .. import clock, db, errors, ids
+from ..canonical import canonical_json, sha256_hex
+from . import eligibility, filtering, scope as scope_module
+from .store import ATTEMPT_ID_PREFIX, JOB_ID_PREFIX, MemoryStore
+from .types import JOB_KINDS, JOB_STATUSES
+
+#: Key in `core_meta` holding the recovery scan cursor. A `core_meta` row rather
+#: than a P4 table because it must commit in the *same* transaction as the job
+#: inserts, and `db.set_meta` is already transaction-safe.
+CURSOR_KEY = "memory.recovery.seq"
+
+#: Defaults, frozen here and overridable per call. Recorded on the job row's
+#: `max_attempts` so a later change of default does not alter what an existing
+#: job is allowed to do.
+DEFAULT_MAX_ATTEMPTS = 5
+DEFAULT_LEASE_SECONDS = 120
+BASE_BACKOFF_SECONDS = 30
+MAX_BACKOFF_SECONDS = 3600
+#: Fraction of the backoff added as random jitter, so a restarted fleet does not
+#: retry the same batch in lockstep after an outage.
+JITTER = 0.25
+
+#: Failure classes. Split on whether trying again could plausibly change the
+#: answer, not on the HTTP status, because the worker's decision is "retry or
+#: give up", and a 500 from a saturated engine is worth another attempt while a
+#: rejected document is not.
+RETRYABLE_CODES = frozenset({
+    "engine_unreachable", "engine_timeout", "engine_rate_limited", "engine_server_error",
+    "engine_retain_failed", "engine_conflict",
+})
+PERMANENT_CODES = frozenset({
+    "engine_unauthorized", "engine_forbidden", "engine_rejected", "engine_not_found",
+    "engine_protocol_error", "engine_response_too_large", "engine_http_error",
+    "query_too_long", "content_too_large", "engine_not_configured",
+    "document_deleted_locally",
+})
+
+
+@dataclass(frozen=True)
+class ClaimedJob:
+    """A job this worker owns, with the content it must send."""
+
+    job: dict[str, Any]
+    item: dict[str, Any]
+    bank: scope_module.BankRef
+
+
+def is_retryable(error_code: str | None) -> bool:
+    if error_code is None:
+        return False
+    if error_code in PERMANENT_CODES:
+        return False
+    return error_code in RETRYABLE_CODES
+
+
+def backoff_seconds(attempt: int, *, rng: random.Random | None = None) -> int:
+    """Exponential backoff with jitter, clamped.
+
+    `attempt` is 1-based: the delay after the first failure is `BASE`, after the
+    second `2 * BASE`, and so on. The clamp matters because an exponential
+    without one eventually exceeds every deployment's patience and turns a
+    transient outage into a permanent give-up.
+    """
+    raw = BASE_BACKOFF_SECONDS * (2 ** max(0, attempt - 1))
+    raw = min(raw, MAX_BACKOFF_SECONDS)
+    if JITTER <= 0:
+        return raw
+    spread = int(raw * JITTER)
+    # Clamped *after* the jitter as well: clamping the base alone would let a
+    # retry wait 25% longer than the documented maximum.
+    return min(raw + (rng or random).randint(-spread, spread), MAX_BACKOFF_SECONDS)
+
+
+def _next_attempt_at(seconds: int, *, at: str | None = None) -> str:
+    from datetime import timedelta
+
+    base = clock.parse_rfc3339(at or clock.now_rfc3339())
+    return clock.to_rfc3339(base + timedelta(seconds=max(0, seconds)))
+
+
+class JobStore:
+    """The `memory_jobs` queue and its append-only attempt history."""
+
+    def __init__(self, conn: sqlite3.Connection, store: MemoryStore) -> None:
+        self._conn = conn
+        self._store = store
+
+    # -- enqueue -----------------------------------------------------------
+
+    def enqueue(self, candidate: eligibility.Candidate, *, max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+                at: str | None = None) -> tuple[dict[str, Any] | None, bool]:
+        """Create the Memory item and its PENDING job in the caller's transaction.
+
+        Returns `(job, created)`. `created=False` means this source already had a
+        job, which is the normal outcome of a re-scan and is not an error.
+
+        The item is created here rather than at enqueue time by the caller
+        because the item and the job are one decision: a job that exists without
+        an item has nothing to send, and an item without a job would never be
+        retained and would look, to an Inspector, like retained memory.
+        """
+        stamp = at or clock.now_rfc3339()
+        existing = self._conn.execute(
+            "SELECT * FROM memory_jobs WHERE source_event_id=? AND kind='retain'",
+            (candidate.source_event_id,),
+        ).fetchone()
+        if existing is not None:
+            return job_row(existing), False
+        item = self._store.item_by_document(candidate.document_id)
+        if item is None:
+            memory_id = self._store.insert_item(
+                bank=eligibility.resolve_destination(candidate),
+                memory_type=candidate.memory_type,
+                document_id=candidate.document_id,
+                source_event_id=candidate.source_event_id,
+                provenance=candidate.provenance,
+                sanitized_text=candidate.body,
+                content_sha256=sha256_hex(candidate.body),
+                task_id=candidate.task_id,
+                at=stamp,
+            )
+            item = self._store.item(memory_id)
+            assert item is not None
+        job_id = ids.new_id(JOB_ID_PREFIX)
+        self._conn.execute(
+            "INSERT INTO memory_jobs (job_id, kind, memory_id, source_event_id, project_id,"
+            " task_id, memory_type, bank_id, document_id, content_sha256, status, retry_count,"
+            " max_attempts, next_attempt_at, created_at, updated_at)"
+            " VALUES (?,'retain',?,?,?,?,?,?,?,?,'PENDING',0,?,?,?,?)",
+            (job_id, item["memory_id"], candidate.source_event_id, candidate.project_id or None,
+             candidate.task_id, candidate.memory_type, item["bank_id"], item["document_id"],
+             item["content_sha256"], max_attempts, stamp, stamp, stamp),
+        )
+        row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
+        return job_row(row), True
+
+    def enqueue_from_sources(self, registry: eligibility.SourceRegistry, *,
+                             limit: int = 200, max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+                             at: str | None = None) -> dict[str, Any]:
+        """The recovery scan: eligible committed sources → PENDING jobs.
+
+        One short transaction covers the window scan, the job inserts and the
+        cursor update. There is no code path in P4 that enqueues a job from
+        inside another domain's transaction, and none is needed: the scan reads
+        *committed* Events, so a rolled-back write is invisible to it and a
+        committed write is visible to the next run.
+        """
+        stamp = at or clock.now_rfc3339()
+        after_seq = int(db.get_meta(self._conn, CURSOR_KEY, 0) or 0)
+        highest = int(self._conn.execute("SELECT COALESCE(MAX(seq), 0) AS m FROM events").fetchone()["m"])
+        with db.translate_lock_errors(), db.transaction(self._conn):
+            # Re-read inside the transaction: another worker may have advanced
+            # the cursor between the read above and the lock being granted.
+            after_seq = int(db.get_meta(self._conn, CURSOR_KEY, 0) or 0)
+            reasons: list[dict[str, Any]] = []
+            candidates = registry.scan(self._conn, after_seq=after_seq, limit=limit,
+                                       reasons=reasons)
+            created: list[str] = []
+            skipped: list[str] = []
+            for candidate in candidates:
+                row = self._conn.execute("SELECT seq FROM events WHERE event_id=?",
+                                         (candidate.source_event_id,)).fetchone()
+                cursor_seq = int(row["seq"]) if row else highest
+                _job, made = self.enqueue(candidate, max_attempts=max_attempts, at=stamp)
+                if made:
+                    created.append(candidate.document_id)
+                else:
+                    skipped.append(candidate.document_id)
+                after_seq = max(after_seq, cursor_seq)
+            db.set_meta(self._conn, CURSOR_KEY, after_seq)
+        return {"cursor_after": after_seq, "scanned": len(candidates),
+                "created": created, "already_present": skipped,
+                "ineligible": reasons,
+                "sources": registry.names}
+
+    def cursor(self) -> int:
+        return int(db.get_meta(self._conn, CURSOR_KEY, 0) or 0)
+
+    def reset_cursor(self, value: int) -> None:
+        """Move the scan cursor. Operator-only; used to replay the whole stream.
+
+        Replaying is safe: the unique index turns every already-known source
+        into a no-op, so a full replay re-derives nothing and loses nothing.
+        """
+        with db.translate_lock_errors(), db.transaction(self._conn):
+            db.set_meta(self._conn, CURSOR_KEY, int(value))
+
+    # -- claim -------------------------------------------------------------
+
+    def claim_due(self, *, owner: str, lease_seconds: int = DEFAULT_LEASE_SECONDS,
+                  now: str | None = None) -> ClaimedJob | None:
+        """Atomically take ownership of one due job.
+
+        `BEGIN IMMEDIATE` is the whole concurrency story: the select and the
+        update share one write transaction, so a second worker either waits and
+        then sees `RUNNING`, or reads the row before the first commits and then
+        blocks on its own update. The `engine_state IN (...)` predicate repeats
+        the guard in the `WHERE` clause so correctness does not depend on the
+        caller having read the row first.
+        """
+        if not owner:
+            raise errors.InvalidRequest("lease owner is required", field="owner")
+        stamp = now or clock.now_rfc3339()
+        expires = _next_attempt_at(lease_seconds, at=stamp)
+        with db.translate_lock_errors(), db.transaction(self._conn):
+            row = self._conn.execute(
+                "SELECT * FROM memory_jobs WHERE (status='PENDING' AND next_attempt_at<=?)"
+                " OR (status='RUNNING' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?)"
+                " ORDER BY next_attempt_at, job_id LIMIT 1",
+                (stamp, stamp),
+            ).fetchone()
+            if row is None:
+                return None
+            job = job_row(row)
+            expired = job["status"] == "RUNNING"
+            attempt_number = int(job["retry_count"]) + 1
+            cursor = self._conn.execute(
+                "UPDATE memory_jobs SET status='RUNNING', lease_owner=?, lease_expires_at=?,"
+                " retry_count=?, updated_at=? WHERE job_id=? AND status=?",
+                (owner, expires, attempt_number, stamp, job["job_id"], job["status"]),
+            )
+            if cursor.rowcount != 1:
+                return None
+            self._attempt(job["job_id"], attempt_number, "CLAIMED", "SUCCESS", owner=owner, at=stamp,
+                          safe_error_summary="lease recovered from an expired claim" if expired else None)
+            refreshed = self._conn.execute(
+                "SELECT * FROM memory_jobs WHERE job_id=?", (job["job_id"],)
+            ).fetchone()
+            claimed = job_row(refreshed)
+        item = self._store.item(claimed["memory_id"])
+        if item is None:  # pragma: no cover - FK guarantees the row exists
+            raise errors.CoreError("claimed job has no memory item", job_id=claimed["job_id"])
+        bank = (scope_module.global_bank() if item["scope_kind"] == "global"
+                else scope_module.project_bank(item["project_id"]))
+        return ClaimedJob(job=claimed, item=item, bank=bank)
+
+    def _attempt(self, job_id: str, attempt_number: int, phase: str, outcome: str, *,
+                 owner: str, at: str, receipt: dict[str, Any] | None = None,
+                 error_code: str | None = None,
+                 safe_error_summary: str | None = None) -> None:
+        """Append one immutable attempt record.
+
+        `INSERT OR REPLACE` would be wrong here: a retried lease for the same
+        attempt number must not overwrite the earlier record of what the first
+        attempt actually did.
+        """
+        try:
+            self._conn.execute(
+                "INSERT INTO memory_job_attempts (attempt_id, job_id, attempt_number, phase,"
+                " outcome, error_code, safe_error_summary, receipt_json, lease_owner, started_at,"
+                " finished_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (ids.new_id(ATTEMPT_ID_PREFIX), job_id, attempt_number, phase, outcome,
+                 error_code, safe_error_summary,
+                 canonical_json(receipt) if receipt else None, owner, at, at),
+            )
+        except sqlite3.IntegrityError:
+            # Same (job, attempt, phase) twice: the lease was recovered for the
+            # same attempt number, which is a legal recovery, not a conflict.
+            self._conn.execute(
+                "UPDATE memory_job_attempts SET finished_at=?, error_code=COALESCE(?, error_code),"
+                " safe_error_summary=COALESCE(?, safe_error_summary), lease_owner=?"
+                " WHERE job_id=? AND attempt_number=? AND phase=?",
+                (at, error_code, safe_error_summary, owner, job_id, attempt_number, phase),
+            )
+
+    # -- completion --------------------------------------------------------
+
+    def complete(self, job: ClaimedJob, *, receipt: dict[str, Any], at: str | None = None) -> None:
+        stamp = at or clock.now_rfc3339()
+        with db.translate_lock_errors(), db.transaction(self._conn):
+            self._store.note_retained(job.job["memory_id"], receipt)
+            self._conn.execute(
+                "UPDATE memory_jobs SET status='DONE', lease_owner=NULL, lease_expires_at=NULL,"
+                " last_error_code=NULL, safe_error_summary=NULL, receipt_json=?, completed_at=?,"
+                " updated_at=? WHERE job_id=? AND status='RUNNING'",
+                (canonical_json(receipt), stamp, stamp, job.job["job_id"]),
+            )
+            self._attempt(job.job["job_id"], int(job.job["retry_count"]), "RETAINED", "SUCCESS",
+                          owner=job.job["lease_owner"] or "", at=stamp, receipt=receipt)
+
+    def fail(self, job: ClaimedJob, *, error_code: str, safe_error_summary: str,
+             at: str | None = None, rng: random.Random | None = None) -> str:
+        """Record a failure and decide PENDING-with-backoff or FAILED.
+
+        Returns the resulting status so the caller can log one line without a
+        second query. An exhausted attempt budget is `FAILED` even when the error
+        was retryable: an indefinitely retried job is how a queue looks healthy
+        while nothing is retained.
+        """
+        stamp = at or clock.now_rfc3339()
+        attempts = int(job.job["retry_count"])
+        budget = int(job.job["max_attempts"])
+        retry = is_retryable(error_code) and attempts < budget
+        status = "PENDING" if retry else "FAILED"
+        next_at = _next_attempt_at(backoff_seconds(attempts, rng=rng), at=stamp) if retry else stamp
+        with db.translate_lock_errors(), db.transaction(self._conn):
+            self._store.set_engine_state(
+                job.job["memory_id"],
+                engine_state=("RETAIN_FAILED" if job.job["kind"] == "retain"
+                              else "DELETE_FAILED" if job.job["kind"] == "delete"
+                              else "RETAINED"),
+                expected=("PENDING_RETAIN", "RETAINED", "RETAIN_FAILED", "DELETE_PENDING", "DELETED"),
+                error_code=error_code, safe_error_summary=filtering.safe_summary(safe_error_summary),
+                at=stamp,
+            )
+            self._conn.execute(
+                "UPDATE memory_jobs SET status=?, lease_owner=NULL, lease_expires_at=NULL,"
+                " last_error_code=?, safe_error_summary=?, next_attempt_at=?, completed_at=?,"
+                " updated_at=? WHERE job_id=? AND status='RUNNING'",
+                (status, error_code, filtering.safe_summary(safe_error_summary), next_at,
+                 None if retry else stamp, stamp, job.job["job_id"]),
+            )
+            self._attempt(job.job["job_id"], attempts,
+                          "DELETED" if job.job["kind"] == "delete" else
+                          "INVALIDATED" if job.job["kind"] == "invalidate" else "FAILED",
+                          "RETRY" if retry else "FAILED", owner=job.job["lease_owner"] or "",
+                          at=stamp, error_code=error_code,
+                          safe_error_summary=filtering.safe_summary(safe_error_summary))
+            self._store.note_engine_failure(error_code=error_code,
+                                            safe_error_summary=filtering.safe_summary(safe_error_summary),
+                                            at=stamp)
+        return status
+
+    # -- manual retry ------------------------------------------------------
+
+    def request_retry(self, job_id: str, *, actor_id: str, actor_kind: str, host_id: str,
+                      event_id: str | None = None) -> dict[str, Any]:
+        """An operator command: put a failed job back in the queue.
+
+        Three properties the taskbook requires, and how each is met:
+
+        * it may not change what is retained — the job's `document_id`,
+          `content_sha256` and `bank_id` are immutable by trigger, and this method
+          touches none of them;
+        * it may not retry a `DONE` job — a done document is already in the bank
+          and a second retain would replace it, which is an upgrade nobody asked
+          for;
+        * it is idempotent — a repeated `event_id` returns the original command
+          Event and writes no second job transition.
+
+        A `RUNNING` job is refused rather than stolen: its worker still holds a
+        lease and will finish or fail on its own, and interrupting it would leave
+        the engine in a state nobody is tracking.
+        """
+        from ..events import EventStore
+        from ..models import NewEvent
+
+        if actor_kind not in ("human", "system"):
+            raise errors.ForbiddenActorKind(
+                "only a human or trusted system actor may retry a Memory job"
+            )
+        if not ids.is_id(job_id, JOB_ID_PREFIX):
+            raise errors.InvalidRequest("job_id must be a mjb_ id", field="job_id", value=job_id)
+        events = EventStore(self._conn, schema_version=0)
+        with db.translate_lock_errors(), db.transaction(self._conn):
+            row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
+            if row is None:
+                raise errors.NotFound("memory_job", job_id)
+            job = job_row(row)
+            payload = {
+                "text": "",
+                "job_id": job_id,
+                "kind": job["kind"],
+                "memory_id": job["memory_id"],
+                "document_id": job["document_id"],
+                "bank_id": job["bank_id"],
+                "previous_status": job["status"],
+                "previous_retry_count": job["retry_count"],
+            }
+            spec = NewEvent(
+                event_type="memory.job.retried", source_system="core-api", source_event_id=None,
+                occurred_at=clock.now(), actor_id=actor_id, actor_kind=actor_kind,
+                host_id=host_id, project_id=job["project_id"], task_id=job["task_id"],
+                payload=payload, event_id=event_id,
+                # The idempotency hash covers the *command*, not the job's state
+                # at the time. A retry of the same request re-sent after the first
+                # one already succeeded must be recognised as the same command;
+                # hashing `previous_status` would make the second delivery look
+                # like a different request and raise a spurious conflict.
+                hash_payload={k: v for k, v in payload.items()
+                              if k not in ("previous_status", "previous_retry_count")},
+            )
+            stored, replayed = events.append(spec)
+            if replayed:
+                current = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?",
+                                             (job_id,)).fetchone()
+                return {"job": job_row(current), "event": stored, "replayed": True}
+            if job["status"] == "DONE":
+                raise errors.InvalidStateTransition(
+                    "a DONE Memory job is not retried; the document is already retained",
+                    job_id=job_id, status=job["status"],
+                )
+            if job["status"] == "RUNNING":
+                raise errors.InvalidStateTransition(
+                    "this Memory job is claimed by a worker; wait for its lease to expire",
+                    job_id=job_id, status=job["status"],
+                )
+            stamp = stored["recorded_at"]
+            self._conn.execute(
+                "UPDATE memory_jobs SET status='PENDING', next_attempt_at=?, lease_owner=NULL,"
+                " lease_expires_at=NULL, updated_at=? WHERE job_id=? AND status='FAILED'",
+                (stamp, stamp, job_id),
+            )
+            updated = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?",
+                                         (job_id,)).fetchone()
+        return {"job": job_row(updated), "event": stored, "replayed": False}
+
+    # -- lifecycle jobs ----------------------------------------------------
+
+    def enqueue_invalidate(self, *, memory_id: str, source_event_id: str,
+                           at: str | None = None) -> dict[str, Any]:
+        """Queue the engine's soft retire for an obsoleted item.
+
+        The local exclusion from Recall has already happened; this is the remote
+        half, and it is queued rather than done inline because it is network
+        work. A failure here leaves the item correctly excluded locally with the
+        remote copy still recallable *in the engine* — which is why
+        `lifecycle.describe_engine_claim` reports the two states separately
+        rather than claiming the engine agrees.
+        """
+        stamp = at or clock.now_rfc3339()
+        item = self._store.item(memory_id)
+        if item is None:
+            raise errors.NotFound("memory", memory_id)
+        existing = self._conn.execute(
+            "SELECT * FROM memory_jobs WHERE source_event_id=? AND kind='invalidate'",
+            (source_event_id,),
+        ).fetchone()
+        if existing is not None:
+            return job_row(existing)
+        job_id = ids.new_id(JOB_ID_PREFIX)
+        self._conn.execute(
+            "INSERT INTO memory_jobs (job_id, kind, memory_id, source_event_id, project_id,"
+            " task_id, memory_type, bank_id, document_id, content_sha256, status, retry_count,"
+            " max_attempts, next_attempt_at, created_at, updated_at)"
+            " VALUES (?,'invalidate',?,?,?,?,?,?,?,?,'PENDING',0,?,?,?,?)",
+            (job_id, memory_id, source_event_id, item["project_id"], item["task_id"],
+             item["memory_type"], item["bank_id"], item["document_id"],
+             item["content_sha256"], DEFAULT_MAX_ATTEMPTS, stamp, stamp, stamp),
+        )
+        row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
+        return job_row(row)
+
+    def mark_invalidated(self, job: ClaimedJob, *, receipt: dict[str, Any],
+                         at: str | None = None) -> None:
+        """Record that the engine's memory units were soft-retired.
+
+        `engine_state` is deliberately left alone: the item is still `RETAINED`
+        in the engine, it is just excluded from recall there. The receipt on the
+        job is what distinguishes the two, and the Inspector reads it from there.
+        """
+        stamp = at or clock.now_rfc3339()
+        with db.translate_lock_errors(), db.transaction(self._conn):
+            self._conn.execute(
+                "UPDATE memory_jobs SET status='DONE', lease_owner=NULL, lease_expires_at=NULL,"
+                " last_error_code=NULL, safe_error_summary=NULL, receipt_json=?, completed_at=?,"
+                " updated_at=? WHERE job_id=? AND status='RUNNING'",
+                (canonical_json(receipt), stamp, stamp, job.job["job_id"]),
+            )
+            self._attempt(job.job["job_id"], int(job.job["retry_count"]), "INVALIDATED",
+                          "SUCCESS", owner=job.job["lease_owner"] or "", at=stamp, receipt=receipt)
+
+    # -- delete jobs -------------------------------------------------------
+
+    def enqueue_delete(self, *, memory_id: str, source_event_id: str, at: str | None = None) -> dict[str, Any]:
+        """Queue the remote document deletion for a tombstoned item.
+
+        The tombstone and the exclusion from Recall happen locally and
+        immediately, in `lifecycle.delete`. This job is the *physical* removal,
+        and its failure leaves the item excluded with `DELETE_FAILED` — never a
+        claim that the remote copy is gone when it is not.
+        """
+        stamp = at or clock.now_rfc3339()
+        item = self._store.item(memory_id)
+        if item is None:
+            raise errors.NotFound("memory", memory_id)
+        existing = self._conn.execute(
+            "SELECT * FROM memory_jobs WHERE source_event_id=? AND kind='delete'",
+            (source_event_id,),
+        ).fetchone()
+        if existing is not None:
+            return job_row(existing)
+        job_id = ids.new_id(JOB_ID_PREFIX)
+        self._conn.execute(
+            "INSERT INTO memory_jobs (job_id, kind, memory_id, source_event_id, project_id,"
+            " task_id, memory_type, bank_id, document_id, content_sha256, status, retry_count,"
+            " max_attempts, next_attempt_at, created_at, updated_at)"
+            " VALUES (?,'delete',?,?,?,?,?,?,?,?,'PENDING',0,?,?,?,?)",
+            (job_id, memory_id, source_event_id, item["project_id"], item["task_id"],
+             item["memory_type"], item["bank_id"], item["document_id"],
+             item["content_sha256"], DEFAULT_MAX_ATTEMPTS, stamp, stamp, stamp),
+        )
+        row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
+        return job_row(row)
+
+    def mark_document_deleted(self, job: ClaimedJob, *, receipt: dict[str, Any],
+                              at: str | None = None) -> None:
+        stamp = at or clock.now_rfc3339()
+        with db.translate_lock_errors(), db.transaction(self._conn):
+            self._store.set_engine_state(job.job["memory_id"], engine_state="DELETED",
+                                         expected=("DELETE_PENDING", "DELETE_FAILED", "RETAINED"),
+                                         receipt=receipt, remote_deleted=True, at=stamp)
+            self._conn.execute(
+                "UPDATE memory_jobs SET status='DONE', lease_owner=NULL, lease_expires_at=NULL,"
+                " last_error_code=NULL, safe_error_summary=NULL, receipt_json=?, completed_at=?,"
+                " updated_at=? WHERE job_id=? AND status='RUNNING'",
+                (canonical_json(receipt), stamp, stamp, job.job["job_id"]),
+            )
+            self._attempt(job.job["job_id"], int(job.job["retry_count"]), "DELETED", "SUCCESS",
+                          owner=job.job["lease_owner"] or "", at=stamp, receipt=receipt)
+
+    # -- reading -----------------------------------------------------------
+
+    def job(self, job_id: str) -> dict[str, Any] | None:
+        if not ids.is_id(job_id, JOB_ID_PREFIX):
+            return None
+        row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
+        return None if row is None else job_row(row)
+
+    def jobs(self, *, project_id: str | None = None, status: str | None = None,
+             kind: str | None = None, memory_type: str | None = None,
+             limit: int = 100, after_job_id: str | None = None) -> list[dict[str, Any]]:
+        if status is not None and status not in JOB_STATUSES:
+            raise errors.InvalidRequest(f"status must be one of {', '.join(JOB_STATUSES)}",
+                                        field="status", value=status)
+        if kind is not None and kind not in JOB_KINDS:
+            raise errors.InvalidRequest(f"kind must be one of {', '.join(JOB_KINDS)}",
+                                        field="kind", value=kind)
+        clauses: list[str] = []
+        params: list[Any] = []
+        if project_id is not None:
+            # Project jobs *plus* global-bank jobs: the global bank is shared by
+            # every project in this Core, so its jobs belong in every project's
+            # view. Project A's own jobs are never in project B's list.
+            clauses.append("(project_id = ? OR bank_id = ?)")
+            params.extend([project_id, scope_module.GLOBAL_BANK_ID])
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if kind is not None:
+            clauses.append("kind = ?")
+            params.append(kind)
+        if memory_type is not None:
+            clauses.append("memory_type = ?")
+            params.append(memory_type)
+        if after_job_id is not None:
+            clauses.append("job_id > ?")
+            params.append(after_job_id)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        params.append(max(1, min(limit, 500)))
+        rows = self._conn.execute(
+            f"SELECT * FROM memory_jobs{where} ORDER BY job_id LIMIT ?", params
+        ).fetchall()
+        return [job_row(row) for row in rows]
+
+    def attempts(self, job_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(row, receipt=json.loads(row["receipt_json"]) if row["receipt_json"] else None)
+            for row in self._conn.execute(
+                "SELECT * FROM memory_job_attempts WHERE job_id=? ORDER BY attempt_number, phase",
+                (job_id,),
+            )
+        ]
+
+    def counts(self, *, project_id: str | None = None) -> dict[str, int]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if project_id is not None:
+            clauses.append("(project_id = ? OR bank_id = ?)")
+            params.extend([project_id, scope_module.GLOBAL_BANK_ID])
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        result: dict[str, int] = {}
+        for status in JOB_STATUSES:
+            row = self._conn.execute(
+                f"SELECT COUNT(*) AS n FROM memory_jobs{where}{' AND' if where else ' WHERE'} status=?",
+                (*params, status),
+            ).fetchone()
+            result[status.lower()] = int(row["n"])
+        return result
+
+
+def job_row(row: sqlite3.Row | None) -> dict[str, Any]:
+    """A `memory_jobs` row as a dict with its receipt decoded.
+
+    Named publicly because `lifecycle.MemoryLifecycle` reads the same rows for
+    the Inspector, and two readers of one table should not each hand-roll the
+    JSON decoding.
+    """
+    if row is None:  # pragma: no cover - callers check first
+        raise errors.NotFound("memory_job", "unknown")
+    job = dict(row)
+    receipt = job.get("receipt_json")
+    job["receipt"] = json.loads(receipt) if receipt else None
+    job.pop("receipt_json", None)
+    return job
+
+
+__all__ = [
+    "ClaimedJob", "JobStore", "CURSOR_KEY", "DEFAULT_LEASE_SECONDS", "DEFAULT_MAX_ATTEMPTS",
+    "PERMANENT_CODES", "RETRYABLE_CODES", "backoff_seconds", "is_retryable", "job_row",
+]

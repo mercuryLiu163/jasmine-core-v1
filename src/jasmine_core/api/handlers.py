@@ -15,7 +15,10 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, evidence, ids, interpretations, objects, registry, state, resolver, reviews
+from .. import (SCHEMA_VERSION, __version__, audit, auth, authority, db, errors,
+                evidence, ids, interpretations, objects, registry, resolver, reviews,
+                state)
+from ..memory import api as memory_api
 from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from .request import Request, Response
@@ -660,4 +663,13 @@ def maintenance_change(request,core,principal,match):
     return Response(200 if result['replayed'] else 201,result)
 
 
-ROUTES = tuple(_base_routes()) + tuple(_collection_routes())
+ROUTES = (tuple(_base_routes()) + tuple(_collection_routes())
+          + memory_api.routes(Route))
+"""Assigned at the bottom of the module: the route table names the handlers,
+so it can only be built once they exist.
+
+P4 appends its own route tuple from `memory.api` rather than editing this
+function. The alternative — a second dispatch table — would leave `resolve()`
+incomplete, and a route that `resolve()` cannot find is a route whose 404 is
+indistinguishable from a typo. The P4 tuple is still a shared-file change and is
+listed as such in ADR 0011 §12."""

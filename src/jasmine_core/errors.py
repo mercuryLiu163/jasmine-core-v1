@@ -130,6 +130,19 @@ class DatabaseBusy(CoreError):
     code = "database_busy"
 
 
+class MemoryDeploymentNotReady(CoreError):
+    """P4 is running in a mode this database cannot serve yet.
+
+    503 rather than 500: this is a deployment that is not ready, not a defect,
+    and the message is authored here rather than quoted from an exception, so
+    ADR 0003's "a 5xx never echoes internals" is not in tension with telling the
+    operator what to do. See `memory.scope.ProjectAccess.require_mode_ready`.
+    """
+
+    status = 503
+    code = "memory_deployment_not_ready"
+
+
 class InvalidStateTransition(CoreError):
     status = 409
     code = "invalid_state_transition"

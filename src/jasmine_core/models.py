@@ -56,6 +56,18 @@ EVENT_TYPES = frozenset({
     "step.staled",
     "resolution.command", "interpretation.bound", "review.approved", "review.rejected",
     "interpretation.corrected", "interpretation.rejected", "interpretation.rerun",
+    # P4 (ADR 0011 §7). Only human/system command actions on the Memory
+    # lifecycle are Events. Worker claim/retain/completion is *not*: those rows
+    # live in the append-only `memory_job_attempts` table, because a background
+    # worker holds a lease owner rather than a registered device actor, and a job
+    # row is not Truth that any other projection must agree with. Eligibilable
+    # source Events are the events P1 already commits; P4 never writes an Event
+    # to make content eligible.
+    "memory.obsoleted",
+    "memory.deleted",
+    "memory.pinned",
+    "memory.unpinned",
+    "memory.job.retried",
 })
 
 MAX_TEXT_BYTES = 256 * 1024

@@ -1,4 +1,4 @@
-# ADR 0008 — P2-01 Interpretation 候选链
+# ADR 0009 — P2-01 Interpretation 候选链
 
 - 状态：Accepted；provider no-execution.v2 已冻结并按真实/组件边界验证。完整 P2 的 scoped admission-only 独立验收见 [P2结果摘要](../p2-results.md)，不宣称实际工具执行或 P3。
 - 日期：2026-09-29

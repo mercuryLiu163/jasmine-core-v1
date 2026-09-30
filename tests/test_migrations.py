@@ -45,6 +45,16 @@ EXPECTED_TABLES = {
     "reviews", "review_changes", "review_request_keys",
     "maintenance_heads", "interpretation_changes", "interpretation_operation_completions",
     "maintenance_request_keys",
+    # P4 (ADR 0011 §3). P4 owns these and creates nothing else; the P0-P3 truth
+    # tables above are untouched by m0009_memory.
+    "memory_items",
+    "memory_item_sources",
+    "memory_jobs",
+    "memory_job_attempts",
+    "memory_query_traces",
+    "memory_query_trace_items",
+    "memory_engine_status",
+    "memory_project_actors",
 }
 
 
@@ -72,7 +82,7 @@ class MigrationFromEmptyDatabase(DbTestCase):
 
     def test_migrate_creates_the_full_baseline_schema(self) -> None:
         applied = migrate(self.conn)
-        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority", "m0004_task_step_state", "m0005_evidence_fingerprint", "m0006_codex_exec_observations", "m0007_interpretations", "m0008_resolutions"])
+        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority", "m0004_task_step_state", "m0005_evidence_fingerprint", "m0006_codex_exec_observations", "m0007_interpretations", "m0008_resolutions", "m0008_memory"])
         self.assertEqual(_tables(self.conn), EXPECTED_TABLES)
         self.assertEqual(current_version(self.conn), expected_version())
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)

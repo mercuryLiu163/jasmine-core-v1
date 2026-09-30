@@ -20,7 +20,18 @@ TOKEN_BYTES = 32
 SCOPES = ("admin", "objects:read", "objects:write", "events:read", "events:write",
           "authority:read", "authority:propose", "authority:manage", "guard:check",
           "state:read", "state:write", "state:accept", "evidence:read",
-          "evidence:write", "evidence:attest", "evidence:confirm", "fingerprint:scan", "fingerprint:read", "interpretations:read", "interpretations:process", "interpretations:manage", "resolutions:read", "resolutions:process", "reviews:read", "reviews:manage")
+          "evidence:write", "evidence:attest", "evidence:confirm", "fingerprint:scan",
+          "fingerprint:read", "interpretations:read", "interpretations:process",
+          "interpretations:manage", "resolutions:read", "resolutions:process",
+          "reviews:read", "reviews:manage",
+          # P4 (ADR 0011 §6). `memory:read` is read-only and non-authoritative,
+          # so an Agent key may hold it: the Inspector shows Memory as history.
+          # `memory:manage` (obsolete/delete/pin) and `memory:reflect` (an
+          # explicit LLM synthesis over the bank) are human/system only, for the
+          # same reason `authority:manage` is: an Agent must not be able to
+          # curate what the next turn will be told, and must not be the thing
+          # that decides a history question is worth an LLM call.
+          "memory:read", "memory:manage", "memory:reflect")
 
 
 @dataclass(frozen=True)
@@ -62,6 +73,14 @@ class Auth:
             raise errors.ForbiddenActorKind("agent keys cannot carry authority:manage")
         if kind == "agent" and "state:accept" in scopes:
             raise errors.ForbiddenActorKind("agent keys cannot carry state:accept")
+        if kind == "agent" and "memory:manage" in scopes:
+            raise errors.ForbiddenActorKind(
+                "agent keys cannot carry memory:manage; an agent must not curate what it will be shown"
+            )
+        if kind == "agent" and "memory:reflect" in scopes:
+            raise errors.ForbiddenActorKind(
+                "memory:reflect runs an LLM over the bank and is an explicit human request"
+            )
         if kind != "system" and ("evidence:write" in scopes or "evidence:attest" in scopes or
                                  "fingerprint:scan" in scopes):
             raise errors.ForbiddenActorKind("only trusted system keys can capture tool Evidence or fingerprints")

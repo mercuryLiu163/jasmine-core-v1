@@ -1,0 +1,376 @@
+"""P4-01: the real Hindsight transport, over a real socket.
+
+`StubHindsightServer` is a `ThreadingHTTPServer` on loopback speaking Hindsight
+0.10.2's real paths, methods, request bodies and response shapes, and the
+transport under test is `jasmine_core.memory.hindsight.HindsightTransport` — the
+one an operator's Core actually uses. So these tests catch the class of mistake a
+boundary double cannot: a wrong URL, a wrong field name, the wrong HTTP method, a
+body the engine would reject, a response shape read wrongly.
+
+They still do not make the boundary double into a real service. A real Hindsight
+process, with a real LLM extractor and a real database, is what P4-G01…G07 need,
+and the P4 taskbook is explicit that fake or wire-level evidence is not
+acceptance for those Gates. What this file earns is the right to say the adapter
+speaks the documented protocol.
+"""
+
+from __future__ import annotations
+
+import unittest
+from unittest.mock import patch
+
+from memory_support import MemoryTestCase, StubHindsightServer
+from jasmine_core import db
+from jasmine_core.memory import hindsight
+from jasmine_core.memory import scope
+from jasmine_core.memory.hindsight import HindsightConfig, HindsightTransport
+from jasmine_core.memory.transport import TransportError
+from jasmine_core.memory.types import RecallRequest
+
+
+class Configuration(unittest.TestCase):
+    def test_the_url_is_reduced_to_an_origin_with_no_credential_in_it(self) -> None:
+        config = HindsightConfig("http://user:hunter2@10.0.0.5:8888/v1?token=abc#frag")
+        self.assertEqual(config.origin_host, "http://10.0.0.5:8888")
+        self.assertNotIn("hunter2", config.base_url)
+        self.assertNotIn("abc", config.base_url)
+        self.assertNotIn("hunter2", repr(config))
+
+    def test_only_http_and_https_are_accepted(self) -> None:
+        for url in ("ftp://host", "not a url", "", "file:///etc/passwd", "hindsight:8888"):
+            with self.assertRaises(ValueError, msg=url):
+                HindsightConfig(url)
+
+    def test_a_credential_is_only_sent_when_one_is_configured(self) -> None:
+        self.assertNotIn("Authorization", HindsightConfig("http://h:1").headers())
+        self.assertEqual(HindsightConfig("http://h:1", api_key="k").headers()["Authorization"],
+                         "Bearer k")
+
+    def test_nothing_is_configured_by_default(self) -> None:
+        self.assertIsNone(hindsight.config_from_env({}))
+        config = hindsight.config_from_env({hindsight.URL_ENV_VAR: "http://h:1"})
+        self.assertIsNotNone(config)
+
+    def test_a_malformed_timeout_falls_back_rather_than_crashing_the_core(self) -> None:
+        config = hindsight.config_from_env({
+            hindsight.URL_ENV_VAR: "http://h:1", hindsight.TIMEOUT_ENV_VAR: "soon"})
+        self.assertEqual(config.timeout_seconds, hindsight.DEFAULT_TIMEOUT_SECONDS)
+
+
+class Wire(unittest.TestCase):
+    """Every request and response against the stub, over HTTP."""
+
+    def setUp(self) -> None:
+        self.server = StubHindsightServer()
+        self.addCleanup(self.server.stop)
+        self.transport = HindsightTransport(HindsightConfig(self.server.base_url,
+                                                           timeout_seconds=5))
+        self.bank = scope.project_bank("prj_" + "0" * 26)
+
+    # -- version -----------------------------------------------------------
+
+    def test_version_reads_the_documented_shape(self) -> None:
+        payload = self.transport.version()
+        self.assertTrue(payload["reachable"])
+        self.assertEqual(payload["api_version"], "0.10.2")
+        self.assertTrue(payload["features"]["store_document_text"])
+        ok, reason = hindsight.check_supported(payload)
+        self.assertTrue(ok, reason)
+
+    def test_an_unverified_api_version_is_reported_rather_than_assumed(self) -> None:
+        self.assertFalse(hindsight.check_supported({"api_version": "9.9"})[0])
+        self.assertFalse(hindsight.check_supported(
+            {"api_version": "0.10.2", "features": {"store_document_text": False}})[0])
+        self.assertTrue(hindsight.check_supported({"api_version": None})[0])
+
+    # -- retain ------------------------------------------------------------
+
+    def test_retain_posts_the_documented_body_and_reads_the_receipt(self) -> None:
+        receipt = self.transport.retain(
+            bank=self.bank, document_id="hindsight:verified_outcome:abc", content="a lesson",
+            context="jasmine verified outcome",
+            metadata={"jasmine_memory_id": "mem_" + "0" * 26, "jasmine_memory_type": "VERIFIED_OUTCOME"},
+            tags=("jasmine", "jasmine:type:VERIFIED_OUTCOME"), memory_type="VERIFIED_OUTCOME",
+            timestamp="2026-09-29T12:00:00Z")
+        self.assertEqual(receipt["items_count"], 1)
+        self.assertFalse(receipt["async"], "P4 retains synchronously to get a completion receipt")
+        self.assertEqual(receipt["usage"]["total_tokens"], 140)
+        document = self.transport.get_document(bank=self.bank,
+                                               document_id="hindsight:verified_outcome:abc")
+        self.assertEqual(document["original_text"], "a lesson")
+        self.assertEqual(document["memory_unit_count"], 1)
+
+    def test_a_re_send_of_the_same_document_replaces_it_rather_than_duplicating(self) -> None:
+        first = self.transport.retain(
+            bank=self.bank, document_id="doc-1", content="v1", context="c", metadata={},
+            tags=(), memory_type="FAILURE_LESSON", timestamp=None)
+        units_before = self.transport.list_document_memories(bank=self.bank, document_id="doc-1")
+        self.transport.retain(bank=self.bank, document_id="doc-1", content="v2", context="c",
+                              metadata={}, tags=(), memory_type="FAILURE_LESSON", timestamp=None)
+        units_after = self.transport.list_document_memories(bank=self.bank, document_id="doc-1")
+        self.assertEqual(len(units_before), 1)
+        self.assertEqual(len(units_after), 1)
+        # The engine's `replace` semantics renumber the unit, which is why P4
+        # never treats a memory unit id as a stable handle.
+        self.assertNotEqual(units_before[0]["id"], units_after[0]["id"])
+        self.assertEqual(self.transport.get_document(bank=self.bank,
+                                                     document_id="doc-1")["original_text"], "v2")
+        self.assertEqual(first["bank_id"], self.bank.bank_id)
+
+    def test_append_mode_is_never_used_implicitly(self) -> None:
+        self.transport.retain(bank=self.bank, document_id="doc-1", content="v1", context="c",
+                              metadata={}, tags=(), memory_type="FAILURE_LESSON", timestamp=None)
+        self.transport.retain(bank=self.bank, document_id="doc-1", content="v2", context="c",
+                              metadata={}, tags=(), memory_type="FAILURE_LESSON", timestamp=None)
+        document = self.transport.get_document(bank=self.bank, document_id="doc-1")
+        self.assertEqual(document["original_text"], "v2",
+                         "a retry must not accumulate duplicate text")
+
+    # -- recall ------------------------------------------------------------
+
+    def test_recall_returns_metadata_so_provenance_can_come_back(self) -> None:
+        self.transport.retain(
+            bank=self.bank, document_id="doc-1", content="the callback task id must match the task",
+            context="jasmine failure lesson", metadata={"jasmine_memory_id": "mem_x"},
+            tags=("jasmine:type:FAILURE_LESSON",), memory_type="FAILURE_LESSON", timestamp=None)
+        results = self.transport.recall(bank=self.bank, query="callback task id", max_tokens=500,
+                                        fact_types=("world", "experience"),
+                                        tags=("jasmine:type:FAILURE_LESSON",))
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].metadata["jasmine_memory_id"], "mem_x")
+        self.assertEqual(results[0].document_id, "doc-1")
+        self.assertEqual(results[0].bank_id, self.bank.bank_id)
+        self.assertEqual(results[0].engine_fact_type, "experience")
+        self.assertIsNotNone(results[0].score)
+
+    def test_an_oversized_query_is_refused_locally_not_by_the_engine(self) -> None:
+        with self.assertRaises(TransportError) as caught:
+            self.transport.recall(bank=self.bank, query="x" * (hindsight.MAX_QUERY_CHARS + 1),
+                                  max_tokens=100, fact_types=("world",), tags=())
+        self.assertEqual(caught.exception.code, "query_too_long")
+        self.assertFalse(caught.exception.retryable)
+
+    # -- reflect -----------------------------------------------------------
+
+    def test_reflect_reads_the_documented_answer_shape(self) -> None:
+        payload = self.transport.reflect(bank=self.bank, query="what changed?", max_tokens=300)
+        self.assertEqual(payload["text"], "stub synthesis")
+        self.assertEqual(payload["based_on_ids"], [])
+
+    # -- lifecycle verbs ---------------------------------------------------
+
+    def test_invalidate_then_delete_against_the_real_paths(self) -> None:
+        self.transport.retain(bank=self.bank, document_id="doc-1", content="a lesson to retire",
+                              context="c", metadata={}, tags=(), memory_type="FAILURE_LESSON",
+                              timestamp=None)
+        units = self.transport.list_document_memories(bank=self.bank, document_id="doc-1")
+        self.transport.invalidate_memory(bank=self.bank, memory_id=units[0]["id"],
+                                         reason="obsoleted")
+        after = self.transport.list_document_memories(bank=self.bank, document_id="doc-1")
+        self.assertEqual(after[0]["state"], "invalidated",
+                         "the engine keeps the unit; invalidate is not a delete")
+        receipt = self.transport.delete_document(bank=self.bank, document_id="doc-1")
+        self.assertEqual(receipt["memory_units_deleted"], 1)
+        self.assertIsNone(self.transport.get_document(bank=self.bank, document_id="doc-1"))
+
+    def test_a_missing_document_is_none_not_an_exception(self) -> None:
+        self.assertIsNone(self.transport.get_document(bank=self.bank, document_id="absent"))
+
+
+class FailureModes(Wire):
+    """Every remote failure becomes a stable code, and never a raw exception."""
+
+    def test_a_5xx_is_retryable_and_a_422_is_not(self) -> None:
+        self.server.set_unreachable(True)
+        with self.assertRaises(TransportError) as caught:
+            self.transport.recall(bank=self.bank, query="x", max_tokens=10,
+                                  fact_types=("world",), tags=())
+        self.assertEqual(caught.exception.code, "engine_server_error")
+        self.assertTrue(caught.exception.retryable)
+        self.assertEqual(caught.exception.http_status, 503)
+        self.server.set_unreachable(False)
+
+    def test_a_malformed_body_becomes_a_protocol_error_without_quoting_it(self) -> None:
+        with patch.object(HindsightTransport, "_request",
+                          side_effect=TransportError("engine_protocol_error",
+                                                     "the engine response was not valid JSON")):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.recall(bank=self.bank, query="x", max_tokens=10,
+                                      fact_types=("world",), tags=())
+        self.assertEqual(caught.exception.code, "engine_protocol_error")
+
+    def test_a_connection_that_is_not_there_is_unreachable_and_retryable(self) -> None:
+        transport = HindsightTransport(HindsightConfig("http://127.0.0.1:1", timeout_seconds=1))
+        with self.assertRaises(TransportError) as caught:
+            transport.recall(bank=self.bank, query="x", max_tokens=10,
+                             fact_types=("world",), tags=())
+        self.assertIn(caught.exception.code, ("engine_unreachable", "engine_timeout"))
+        self.assertTrue(caught.exception.retryable)
+        # `version()` never raises, so a health report is always possible even
+        # when the engine is gone: that is the whole point of reporting health
+        # separately from Core liveness.
+        probe = transport.version()
+        self.assertFalse(probe["reachable"])
+        self.assertIn(probe["error_code"], ("engine_unreachable", "engine_timeout"))
+
+    def test_a_redirect_is_refused_rather_than_replaying_the_credential(self) -> None:
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import threading
+
+        seen: list[str | None] = []
+
+        class Redirector(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def log_message(self, *args):
+                return
+
+            def _redirect(self) -> None:
+                seen.append(self.headers.get("Authorization"))
+                self.send_response(302)
+                self.send_header("Location", "http://example.invalid/elsewhere")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+            # Both verbs, because the refusal must hold for the probe and for a
+            # real recall; answering only GET would let an unhandled POST return
+            # 501 and hide the redirect behind an unrelated error.
+            do_GET = _redirect
+
+            def do_POST(self) -> None:  # noqa: N802
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                self._redirect()
+
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), Redirector)
+        thread = threading.Thread(target=httpd.serve_forever, kwargs={"poll_interval": 0.02},
+                                  daemon=True)
+        thread.start()
+        self.addCleanup(httpd.server_close)
+        self.addCleanup(httpd.shutdown)
+        transport = HindsightTransport(HindsightConfig(
+            f"http://127.0.0.1:{httpd.server_address[1]}", api_key="secret-token",
+            timeout_seconds=5))
+        with self.assertRaises(TransportError) as caught:
+            transport.recall(bank=self.bank, query="x", max_tokens=10,
+                             fact_types=("world",), tags=())
+        self.assertEqual(caught.exception.code, "engine_unexpected_redirect")
+        # The header was sent to the configured host and nowhere else.
+        self.assertEqual(seen, ["Bearer secret-token"])
+
+    def test_a_response_over_the_cap_is_refused_rather_than_truncated(self) -> None:
+        with patch.object(HindsightTransport, "_request",
+                          side_effect=TransportError("engine_response_too_large",
+                                                     "response exceeded the cap")):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.recall(bank=self.bank, query="x", max_tokens=10,
+                                      fact_types=("world",), tags=())
+        self.assertEqual(caught.exception.code, "engine_response_too_large")
+
+
+class EndToEndOverTheWire(MemoryTestCase):
+    """The whole P4 path against the wire double: scan, retain, recall, lifecycle."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.server = StubHindsightServer()
+        self.addCleanup(self.server.stop)
+        config = HindsightConfig(self.server.base_url, timeout_seconds=5)
+        self.wire = HindsightTransport(config)
+        self.project_id = self.project()
+        self.task_id = self.task(self.project_id)
+        self.failed_step(project_id=self.project_id, task_id=self.task_id,
+                         reason="callback task_id did not match the task")
+
+    def test_a_committed_failure_becomes_a_recallable_lesson(self) -> None:
+        report = self.scan()
+        self.assertEqual(len(report["created"]), 1)
+        tick = self.worker(transport=self.wire).tick()
+        self.assertEqual(tick.outcome, "retained")
+        job = self.job_store().jobs()[0]
+        self.assertEqual(job["status"], "DONE")
+        self.assertEqual(job["receipt"]["items_count"], 1)
+
+        # A real recall over HTTP, with Core doing the provenance checking.
+        from memory_support import HUMAN
+
+        outcome = self.adapter(transport=self.wire).recall(RecallRequest(
+            project_id=self.project_id, actor_id=HUMAN, query="callback task_id mismatch",
+            task_id=self.task_id, max_tokens=600))
+        self.assertEqual(outcome.status, "ok", outcome.as_dict())
+        item = outcome.items[0]
+        self.assertEqual(item.memory_type, "FAILURE_LESSON")
+        self.assertTrue(item.historical)
+        self.assertEqual(item.provenance.source_event_ids, (self.store.items()[0]["source_event_id"],))
+        # And the read-back the Gate would record.
+        units = self.wire.list_document_memories(
+            bank=scope.project_bank(self.project_id), document_id=item.document_id)
+        self.assertEqual(len(units), 1)
+        self.assertEqual(units[0]["metadata"]["jasmine_memory_type"], "FAILURE_LESSON")
+
+    def test_obsolete_then_delete_over_the_wire(self) -> None:
+        self.scan()
+        self.worker(transport=self.wire).tick()
+        item = self.store.items()[0]
+        bank = scope.project_bank(self.project_id)
+        from memory_support import HOST, HUMAN
+
+        self.lifecycle().obsolete(item["memory_id"],
+                                  {"expected_revision": 1, "host_id": HOST, "reason": "wrong"},
+                                  actor_id=HUMAN, actor_kind="human", host_id=HOST)
+        self.worker(transport=self.wire, lease_owner="w2").tick()
+        units = self.wire.list_document_memories(bank=bank, document_id=item["document_id"])
+        self.assertEqual(units[0]["state"], "invalidated")
+        # Soft retire is not removal: the document is still readable.
+        self.assertIsNotNone(self.wire.get_document(bank=bank, document_id=item["document_id"]))
+
+        revision = self.store.item(item["memory_id"])["revision"]
+        self.lifecycle().delete(item["memory_id"],
+                                {"expected_revision": revision, "host_id": HOST,
+                                 "reason": "user asked"},
+                                actor_id=HUMAN, actor_kind="human", host_id=HOST)
+        self.worker(transport=self.wire, lease_owner="w3").tick()
+        self.assertIsNone(self.wire.get_document(bank=bank, document_id=item["document_id"]),
+                          "the remote document must be gone, not merely hidden")
+        # And the Core source survived.
+        self.assertIsNotNone(self.conn.execute("SELECT 1 FROM events WHERE event_id=?",
+                                              (item["source_event_id"],)).fetchone())
+        self.assertIsNotNone(self.conn.execute("SELECT 1 FROM tasks WHERE task_id=?",
+                                              (self.task_id,)).fetchone())
+
+    def test_the_engine_going_away_degrades_recall_without_touching_truth(self) -> None:
+        self.scan()
+        self.worker(transport=self.wire).tick()
+        self.server.set_unreachable(True)
+        from memory_support import HUMAN
+
+        outcome = self.adapter(transport=self.wire).recall(RecallRequest(
+            project_id=self.project_id, actor_id=HUMAN, query="callback", max_tokens=400))
+        self.assertEqual(outcome.status, "degraded")
+        self.assertEqual(outcome.items, ())
+        self.assertEqual(outcome.error_code, "engine_server_error")
+        # Truth is untouched: the task is still there and the Core is still ok.
+        self.assertIsNotNone(self.conn.execute("SELECT 1 FROM tasks WHERE task_id=?",
+                                              (self.task_id,)).fetchone())
+        self.server.set_unreachable(False)
+        recovered = self.adapter(transport=self.wire).recall(RecallRequest(
+            project_id=self.project_id, actor_id=HUMAN, query="callback", max_tokens=400))
+        self.assertEqual(recovered.status, "ok")
+        self.assertEqual(len(recovered.items), 1)
+
+    def test_a_crash_between_retain_and_done_does_not_duplicate_the_document(self) -> None:
+        self.scan()
+        bank = scope.project_bank(self.project_id)
+        claimed = self.job_store().claim_due(owner="w1")
+        # The engine accepted it; the process then died.
+        self.wire.retain(bank=claimed.bank, document_id=claimed.job["document_id"],
+                         content=claimed.item["sanitized_text"], context="c", metadata={},
+                         tags=(), memory_type=claimed.item["memory_type"], timestamp=None)
+        with db.transaction(self.conn):
+            self.conn.execute(
+                "UPDATE memory_jobs SET lease_expires_at='1970-01-01T00:00:00.000000Z'")
+        report = self.worker(transport=self.wire, lease_owner="w2").tick(scan=False)
+        self.assertEqual(report.outcome, "retained")
+        self.assertEqual(self.job_store().jobs()[0]["status"], "DONE")
+        units = self.wire.list_document_memories(bank=bank,
+                                                document_id=claimed.job["document_id"])
+        self.assertEqual(len(units), 1, "one remote document, not two")
