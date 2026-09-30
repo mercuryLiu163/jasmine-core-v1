@@ -69,20 +69,26 @@ Legend: **D** = delivered, **P** = partially delivered (the gap is named),
   after it touches no product path and leaves the built bundle byte-identical, so
   the same verdict carries to the tip. Report:
   `validation-runs/p6/20260930T060528Z-p6-01-independent-r3/validation-independent-r3.md`.
-- r3 held T07 at PARTIAL for one taskbook action it did not run itself (a real
-  rapid project switch) plus throttling/back-pressure. The rapid switch now has
-  real-browser evidence: `scripts/p6/p6_t07_checks.mjs --phase rapidswitch` delays
-  project A's `tasks`/`sessions`/`events` responses by 1.8 s past a switch to
-  project B and asserts A never renders under B, before or after those responses
-  land (3/3 pass). Throttling/back-pressure remains unexercised, so the
-  independent verdict of record stays **PARTIAL** until a validator runs that
-  phase.
+- r3 §9: after the rapid-switch phase was added, the validator ran it itself
+  (3/3) and falsified it with its own control — the same delayed response *does*
+  render while project A is still active (so the assertion is non-vacuous), while
+  with the switch it never appears under B. It therefore upgraded T07 to
+  **PASS** for the taskbook action list. Two caveats it recorded, kept here:
+  (1) the anti-bleed it observed is cancel-on-scope-change (`useResource` aborts),
+  so the "a landed response is discarded" branch rests on the code guard
+  `if (!live || signal.aborted) return` and the component test, not on a positive
+  browser observation; (2) throttling/back-pressure remains unexercised, which is
+  outside the T07 action list.
+- **Final verdict for the code commit `f7addbf`, carried unchanged through
+  `44cd6b6` and `7464b83` (product paths and built bundle byte-identical):
+  P6-T01 PASS, P6-T02 PASS, P6-T07 PASS.** P6-T03/T04/T05/T06 remain out of scope.
 
 ## Status
 
-`P6-01: T01 PASS, T02 PASS, T07 PARTIAL` — the r3 verdict on `f7addbf`, whose
-code is byte-identical to the tip. **`P6` as a stage is not complete** and
-nothing here releases V1.
+`P6-01: T01 PASS, T02 PASS, T07 PASS` on an isolated scratch fixture — the r3
+verdict on `f7addbf` (T07 upgraded in r3 §9 after the validator ran and
+falsified the rapid-switch phase itself), whose product code is byte-identical to
+the tip. **`P6` as a stage is not complete** and nothing here releases V1.
 
 Still open, and deliberately not claimed:
 
@@ -91,8 +97,11 @@ Still open, and deliberately not claimed:
   frozen; those views are explicit `未接入` panels.
 - The operator's own Core and a real captured conversation were not used; every
   Gate ran against an isolated scratch fixture.
-- T07 is PARTIAL: throttling/back-pressure is not exercised, and the rapid
-  project-switch phase added after r3 has implementer evidence only.
+- Throttling/back-pressure is not exercised, and the "landed stale response is
+  discarded" branch of the anti-bleed guard is covered by a component test rather
+  than a positive browser observation (the browser shows cancellation instead).
 - An automated colour-contrast sweep is still missing (A08 remains `P`).
 - The independent verdicts bind their commits: `4a4ee17` (r1), `a5a92ca` (r2),
-  `f7addbf` (r3). A later docs-only commit does not inherit them.
+  `f7addbf` (r3). The later commits are documentation and read-only tooling with
+  byte-identical product paths and bundle, which the validator verified itself;
+  any future product-path change or rebuild voids the verdict.
