@@ -37,6 +37,8 @@ from jasmine_core.canonical import canonical_json  # noqa: E402
 from jasmine_core.migrations import migrate  # noqa: E402
 
 ID_SHAPE = re.compile(r"^[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$")
+CODEX_MEMORY_ISOLATION = {"features.memories": False, "memories.use_memories": False,
+                          "memories.generate_memories": False}
 PROMPT_EXECUTED = ("Read the Jasmine hook context. Report the Step as "
                    "`STEP status=<value> revision=<number>` using the exact values you see. Do not call any tool.")
 PROMPT_VERIFIED = ("Read the Jasmine hook context and report the exact Step status and revision. "
@@ -384,6 +386,7 @@ def _prepare(args: argparse.Namespace, report: dict[str, Any]) -> None:
         "trace_file": str(out / "hook-trace.jsonl")})
     manifest = {"prepared_commit": report["provenance"]["commit"], "project_root": str(project_root),
         "codex_model": args.codex_model,
+        "codex_memory_isolation": CODEX_MEMORY_ISOLATION,
         "workspace": str(workspace), "db": str(db_path), "binding": str(binding),
         "hook_config": str(project_root / ".codex" / "hooks.json"), "port": port,
         "project_id": project, "task_id": task, "step_id": step,
@@ -501,9 +504,11 @@ def _real_turn(args: argparse.Namespace, out: Path, manifest: dict[str, Any],
     else:
         command = [args.codex_bin, "exec", "resume", "--json", "--skip-git-repo-check", session, prompt]
     model = getattr(args, "codex_model", None)
+    option_index = 2 if session is None else 3
     if model:
-        option_index = 2 if session is None else 3
         command[option_index:option_index] = ["--model", model]
+    memory_flags = [flag for key in CODEX_MEMORY_ISOLATION for flag in ("-c", f"{key}=false")]
+    command[-1:-1] = memory_flags
     trace_path = out / "hook-trace.jsonl"
     trace_prefix = _private_file(trace_path, "hook trace") if trace_path.exists() else b""
     trace_before = len(trace_prefix)
@@ -801,6 +806,7 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
     args.codex_bin = executable["path"]
     report["codex_executable"] = executable
     report["codex_model"] = getattr(args, "codex_model", None)
+    report["codex_memory_isolation"] = CODEX_MEMORY_ISOLATION
     nonce = os.environ.get("JASMINE_CORE_GATE_NONCE", "")
     binding_path = Path(manifest["binding"])
     binding = _binding(binding_path, nonce)

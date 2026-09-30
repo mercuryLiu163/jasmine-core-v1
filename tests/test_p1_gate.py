@@ -53,6 +53,8 @@ class RealGateRunner(unittest.TestCase):
 
     def test_explicit_model_is_passed_to_initial_and_resume(self) -> None:
         gate = module()
+        config = Path.home() / ".codex/config.toml"
+        before = config.read_bytes() if config.exists() else None
         for session in (None, "component-session"):
             with self.subTest(session=session), tempfile.TemporaryDirectory(prefix="p1-gate-model-") as temp:
                 out = Path(temp).resolve()
@@ -67,6 +69,9 @@ class RealGateRunner(unittest.TestCase):
                 index = 2 if session is None else 3
                 self.assertEqual(command[index:index + 2], ["--model", "gpt-6.1-sol"])
                 self.assertEqual(command[-1], "prompt")
+                self.assertEqual(command[-7:-1], ["-c", "features.memories=false",
+                    "-c", "memories.use_memories=false", "-c", "memories.generate_memories=false"])
+        self.assertEqual(config.read_bytes() if config.exists() else None, before)
 
     def test_real_turn_preserves_raw_cli_bytes(self) -> None:
         gate = module()
@@ -140,6 +145,9 @@ class RealGateRunner(unittest.TestCase):
             self.assertNotIn(binding["run_nonce"], (out / "p1-t10-prepare.json").read_text())
             self.assertEqual((manifest["task_id"], manifest["step_id"]),
                              (binding["task_id"], binding["step_id"]))
+            self.assertEqual(manifest["codex_memory_isolation"], {
+                "features.memories": False, "memories.use_memories": False,
+                "memories.generate_memories": False})
             for name in ("binding.json", "human.token", "system.token", "agent.token"):
                 self.assertEqual((out / name).stat().st_mode & 0o077, 0)
             self.assertEqual(out.stat().st_mode & 0o077, 0)
