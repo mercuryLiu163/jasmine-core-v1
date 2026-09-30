@@ -32,6 +32,14 @@ class RealGateRunner(unittest.TestCase):
             with self.assertRaisesRegex(gate.Blocked, r"expected=9001, observed=\[9001, 9002\]"):
                 gate._owned_endpoint("http://127.0.0.1:54321", 9001)
 
+    def test_port_ownership_probe_preserves_lsof_returncode(self) -> None:
+        gate = module()
+        diagnostic = {}
+        with patch.object(gate.shutil, "which", return_value="lsof"), \
+             patch.object(gate.subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "")):
+            self.assertEqual(gate._port_owners(54321, diagnostic), set())
+        self.assertEqual(diagnostic, {"lsof_returncode": 1})
+
     def test_unexpected_runner_error_still_saves_standard_fail_report(self) -> None:
         gate = module()
         with tempfile.TemporaryDirectory(prefix="p1-gate-unexpected-") as temp:

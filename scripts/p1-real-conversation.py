@@ -91,13 +91,15 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _port_owners(port: int) -> set[int]:
+def _port_owners(port: int, diagnostic: dict[str, Any] | None = None) -> set[int]:
     if not shutil.which("lsof"):
         raise Blocked("lsof is needed to prove Core endpoint ownership")
     result = subprocess.run(["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
                             capture_output=True, text=True, timeout=5)
+    if diagnostic is not None:
+        diagnostic["lsof_returncode"] = result.returncode
     if result.returncode not in (0, 1):
-        raise Blocked("lsof could not inspect Core port")
+        raise Blocked(f"lsof could not inspect Core port (returncode={result.returncode})")
     return {int(line) for line in result.stdout.splitlines() if line.isdecimal()}
 
 
@@ -105,10 +107,12 @@ def _owned_endpoint(url: str, pid: int) -> dict[str, Any]:
     parsed = urlparse(url)
     if parsed.scheme != "http" or parsed.hostname != "127.0.0.1" or parsed.path not in ("", "/"):
         raise Blocked("Core URL must be exact loopback HTTP")
-    owners = _port_owners(parsed.port) if parsed.port is not None else set()
+    diagnostic: dict[str, Any] = {}
+    owners = _port_owners(parsed.port, diagnostic) if parsed.port is not None else set()
     if parsed.port is None or owners != {pid}:
         raise Blocked(f"Core endpoint is not exclusively owned by the expected PID "
-                      f"(expected={pid}, observed={sorted(owners)})")
+                      f"(expected={pid}, observed={sorted(owners)}, "
+                      f"lsof_returncode={diagnostic.get('lsof_returncode')})")
     with socket.create_connection(("127.0.0.1", parsed.port), timeout=1):
         pass
     return {"port": parsed.port, "owner_pid": pid}
