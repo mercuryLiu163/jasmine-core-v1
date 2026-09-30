@@ -59,3 +59,5 @@ Provider额外设置project_doc_max_bytes=0并写入config digest，阻止全局
 真实HTTP首轮保留FAILED/provider_tool_use：CLI可发送非工具reasoning完成项。协议reasoning-and-final.v1严格允许thread.started→turn.started→零或多条指定reasoning文本→唯一agent_message→turn.completed；reasoning仅接受id/type/text且text是字符串。任何其他item或晚到reasoning仍fail closed，实际模型请求无工具的边界必须通过完整preflight确认。reasoning协议版本进入config digest，首轮FAILED不覆写，最终独立重试用新配置provenance。
 
 真实失败进一步定位为Code Mode不可用startup error项，并非已证实reasoning项；保留拒绝error项，不把启动降级视为无工具成功。provider强制actual catalog tool_mode=null以避免code_mode_only在input.additional_tools注入functions.exec，模型slug保持gpt-6.1-sol。最终必须验证顶层tools、input.additional_tools、所有namespace/exec面均为空且真实调用无降级error；尚未成立时仍BLOCKED，不将之前结构结果标为安全providerGate PASS。
+
+固定skills.include_instructions=false和skills.bundled.enabled=false并记录digest，避免自动技能block污染解释prompt（[官方配置Schema](https://learn.chatgpt.com/docs/config-schema.json)）。tools契约仍待完整工具面结果，不能从工具禁用flags直接推断无可调用面。
