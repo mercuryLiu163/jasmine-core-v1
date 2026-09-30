@@ -376,6 +376,7 @@ def _prepare(args: argparse.Namespace, report: dict[str, Any]) -> None:
         "token_file": str(out / "system.token"), "human_token_file": str(out / "human.token"),
         "trace_file": str(out / "hook-trace.jsonl")})
     manifest = {"prepared_commit": report["provenance"]["commit"], "project_root": str(project_root),
+        "codex_model": args.codex_model,
         "workspace": str(workspace), "db": str(db_path), "binding": str(binding),
         "hook_config": str(project_root / ".codex" / "hooks.json"), "port": port,
         "project_id": project, "task_id": task, "step_id": step,
@@ -492,6 +493,10 @@ def _real_turn(args: argparse.Namespace, out: Path, manifest: dict[str, Any],
                    "--sandbox", "workspace-write", "--add-dir", manifest["workspace"], prompt]
     else:
         command = [args.codex_bin, "exec", "resume", "--json", "--skip-git-repo-check", session, prompt]
+    model = getattr(args, "codex_model", None)
+    if model:
+        option_index = 2 if session is None else 3
+        command[option_index:option_index] = ["--model", model]
     trace_path = out / "hook-trace.jsonl"
     trace_prefix = _private_file(trace_path, "hook trace") if trace_path.exists() else b""
     trace_before = len(trace_prefix)
@@ -787,6 +792,7 @@ def _run(args: argparse.Namespace, report: dict[str, Any]) -> None:
     executable = _codex_executable(args.codex_bin)
     args.codex_bin = executable["path"]
     report["codex_executable"] = executable
+    report["codex_model"] = getattr(args, "codex_model", None)
     nonce = os.environ.get("JASMINE_CORE_GATE_NONCE", "")
     binding_path = Path(manifest["binding"])
     binding = _binding(binding_path, nonce)
@@ -962,11 +968,12 @@ def main() -> int:
     parser.add_argument("--out", required=True)
     parser.add_argument("--project-root", default=str(ROOT), help="stable repo that will load project hooks")
     parser.add_argument("--codex-bin", default="codex")
+    parser.add_argument("--codex-model", help="explicit model for each exec/resume turn; default uses CLI config")
     parser.add_argument("--codex-timeout", type=int, default=300)
     parser.add_argument("--user-reviewed-trust", action="store_true")
     args = parser.parse_args()
     report = {"case_id": "P1-T10", "phase": "prepare" if args.prepare else "preflight",
-              "verdict": "BLOCKED", "provenance": _git(), "turns": []}
+              "verdict": "BLOCKED", "provenance": {**_git(), "codex_model": args.codex_model}, "turns": []}
     status = 2
     try:
         if args.prepare:

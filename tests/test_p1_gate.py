@@ -26,6 +26,23 @@ def module():
 
 
 class RealGateRunner(unittest.TestCase):
+    def test_explicit_model_is_passed_to_initial_and_resume(self) -> None:
+        gate = module()
+        for session in (None, "component-session"):
+            with self.subTest(session=session), tempfile.TemporaryDirectory(prefix="p1-gate-model-") as temp:
+                out = Path(temp).resolve()
+                args = type("Args", (), {"codex_bin": "codex", "codex_timeout": 1,
+                                         "codex_model": "gpt-6.1-sol"})()
+                with patch.object(gate.subprocess, "run", return_value=
+                                  subprocess.CompletedProcess([], 0, b"", b"")) as invoked:
+                    with self.assertRaises(gate.Blocked):
+                        gate._real_turn(args, out, {"workspace": str(out), "project_root": str(ROOT)},
+                                        "model", "prompt", session, "nonce", {"turns": []})
+                command = invoked.call_args.args[0]
+                index = 2 if session is None else 3
+                self.assertEqual(command[index:index + 2], ["--model", "gpt-6.1-sol"])
+                self.assertEqual(command[-1], "prompt")
+
     def test_real_turn_preserves_raw_cli_bytes(self) -> None:
         gate = module()
         with tempfile.TemporaryDirectory(prefix="p1-gate-raw-") as temp:
