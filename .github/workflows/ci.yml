@@ -69,6 +69,45 @@ jobs:
           python -m jasmine_core.cli migrate
           python -m jasmine_core.cli schema
 
+      - name: Diagnose macOS listener ownership tools
+        if: runner.os == 'macOS'
+        run: |
+          python - <<'PY'
+          import os, pathlib, shutil, subprocess, sys
+          child = subprocess.Popen([sys.executable, '-u', '-c',
+              'import socket,sys; s=socket.socket(); s.bind(("127.0.0.1",0)); '
+              's.listen(); print(s.getsockname()[1],flush=True); sys.stdin.readline()'],
+              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+          try:
+              port = int(child.stdout.readline())
+              print('listener uid/pid/port:', os.getuid(), child.pid, port, flush=True)
+              candidates = list(dict.fromkeys([shutil.which('lsof'), '/usr/sbin/lsof']))
+              for binary in candidates:
+                  if not binary or not pathlib.Path(binary).exists():
+                      continue
+                  version = subprocess.run([binary, '-v'], capture_output=True, text=True, timeout=10)
+                  print('lsof binary:', binary, 'version:', (version.stdout + version.stderr)[:1500], flush=True)
+                  for flags in ([f'-iTCP:{port}', '-sTCP:LISTEN'],
+                                [f'-iTCP:{port}'],
+                                ['-a', '-p', str(child.pid), f'-iTCP:{port}']):
+                      command = [binary, '-nP', *flags, '-t']
+                      result = subprocess.run(command, capture_output=True, text=True, timeout=10)
+                      pids = sorted({int(line) for line in result.stdout.splitlines() if line.isdecimal()})
+                      print('probe:', command, 'returncode:', result.returncode,
+                            'pids:', pids, 'diagnostic:', result.stderr[:1500], flush=True)
+          finally:
+              child.stdin.close()
+              try:
+                  child.wait(timeout=10)
+              except subprocess.TimeoutExpired:
+                  child.terminate()
+                  try:
+                      child.wait(timeout=5)
+                  except subprocess.TimeoutExpired:
+                      child.kill()
+                      child.wait(timeout=5)
+          PY
+
       - name: Test suite
         env:
           PYTHON: python
