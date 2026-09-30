@@ -572,7 +572,8 @@ def _real_turn(args: argparse.Namespace, out: Path, manifest: dict[str, Any],
                isinstance(entry.get("event_id"), str)]
     if len(prompts) != 1:
         raise Failed(f"{name} has {len(prompts)} captured same-session UserPromptSubmit traces")
-    human = CoreClient(manifest["core_url"], _private_file(out / "human.token", "human token").decode().strip())
+    human = CoreClient(f"http://127.0.0.1:{manifest['port']}",
+                       _private_file(out / "human.token", "human token").decode().strip())
     origin = _api(human, "GET", f"/v1/events/{prompts[0]['event_id']}")["event"]
     if (origin.get("event_type") != "user.prompt" or origin.get("source_system") != "codex-p1-bound" or
         origin.get("actor_kind") != "human" or origin.get("actor_id") != manifest["human_actor_id"] or
@@ -990,6 +991,12 @@ def main() -> int:
         report.update(verdict="FAIL" if args.run else "BLOCKED",
                       reason=f"{type(exc).__name__}: {exc}", failure_class=type(exc).__name__)
         status = 1 if args.run else 2
+    except Exception as exc:
+        # _run owns its Core cleanup in finally. Preserve a standard verdict
+        # even for a programming error after a genuine hook invocation.
+        report.update(verdict="FAIL", reason=f"unexpected {type(exc).__name__}",
+                      failure_class=type(exc).__name__)
+        status = 1
     out = Path(args.out).expanduser().resolve()
     record_path = out / ("p1-t10-prepare.json" if args.prepare else f"p1-t10-run-{time.time_ns()}.json")
     if out.is_dir():

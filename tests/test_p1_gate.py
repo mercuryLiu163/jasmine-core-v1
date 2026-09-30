@@ -26,6 +26,17 @@ def module():
 
 
 class RealGateRunner(unittest.TestCase):
+    def test_unexpected_runner_error_still_saves_standard_fail_report(self) -> None:
+        gate = module()
+        with tempfile.TemporaryDirectory(prefix="p1-gate-unexpected-") as temp:
+            with patch.object(sys, "argv", [str(SCRIPT), "--run", "--out", temp]), \
+                 patch.object(gate, "_run", side_effect=KeyError("core_url")):
+                self.assertEqual(gate.main(), 1)
+            records = list(Path(temp).glob("p1-t10-run-*.json"))
+            self.assertEqual(len(records), 1)
+            report = json.loads(records[0].read_text())
+            self.assertEqual((report["verdict"], report["failure_class"]), ("FAIL", "KeyError"))
+
     def test_explicit_model_is_passed_to_initial_and_resume(self) -> None:
         gate = module()
         for session in (None, "component-session"):
@@ -300,6 +311,25 @@ class RealGateRunner(unittest.TestCase):
                     {**common, "hook_event_name": "PostToolUse", "result": "captured",
                      "tool_use_id": "component-tool", "tool_input_sha256": input_hash,
                      "event_id": recorded["result_event"]["event_id"]}]}
+                # Reach _real_turn's genuine HTTP origin lookup using exactly
+                # the prepare-generated manifest (which has port, no core_url).
+                self.assertNotIn("core_url", manifest)
+                nonce = "component-only-nonce"
+                gate._write_private(Path(manifest["binding"] + ".lease"), {
+                    "session_id": "component-session",
+                    "run_nonce_sha256": hashlib.sha256(nonce.encode()).hexdigest()})
+                prompt_trace = turn["hook_traces"][0]
+                def simulated_turn(*args, **kwargs):
+                    gate._write_private(out / "hook-trace.jsonl", json.dumps(prompt_trace) + "\n")
+                    return subprocess.CompletedProcess([], 0,
+                        b'{"type":"thread.started","thread_id":"component-session"}\n', b"")
+                with patch.object(gate.subprocess, "run", side_effect=simulated_turn):
+                    actual_session, actual_origin = gate._real_turn(
+                        type("Args", (), {"codex_bin": "component-only", "codex_timeout": 1})(),
+                        out, manifest, "component-origin", "Component simulation only", None,
+                        nonce, {"turns": []})
+                self.assertEqual(actual_session, "component-session")
+                self.assertEqual(actual_origin, origin)
                 actual = gate._captured_tool_event(human, manifest, turn, command, {"guard:verify"})
                 self.assertEqual(actual["event_id"], recorded["result_event"]["event_id"])
                 native_command = "/bin/bash -lc " + gate.shlex.quote(command)
