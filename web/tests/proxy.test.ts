@@ -62,12 +62,19 @@ describe('isAllowedCoreRequest', () => {
     expect(isAllowedCoreRequest('POST', '/v1/auth/keys/key_1/revoke')).toBe(false)
   })
 
-  it('is P6-01 read-only: mutations are not forwarded even though the paths exist', () => {
+  it('is P6-01 read-only: no method other than GET is forwarded', () => {
     expect(isAllowedCoreRequest('POST', '/v1/tasks')).toBe(false)
     expect(isAllowedCoreRequest('POST', '/v1/events')).toBe(false)
     expect(isAllowedCoreRequest('POST', '/v1/rules/proposals')).toBe(false)
     expect(isAllowedCoreRequest('POST', '/v1/tasks/tsk_1/transition')).toBe(false)
     expect(isAllowedCoreRequest('DELETE', '/v1/projects/prj_1')).toBe(false)
+    // The browser is same-origin, so no preflight is needed; forwarding OPTIONS
+    // only widened the surface (it reached Core and produced a real audit row).
+    expect(isAllowedCoreRequest('OPTIONS', '/v1/health')).toBe(false)
+    expect(isAllowedCoreRequest('OPTIONS', '/v1/tasks/tsk_1/transition')).toBe(false)
+    for (const method of ['PUT', 'PATCH', 'HEAD', 'TRACE']) {
+      expect(isAllowedCoreRequest(method, '/v1/health'), method).toBe(false)
+    }
   })
 
   it('refuses traversal, absolute and non-Core targets', () => {

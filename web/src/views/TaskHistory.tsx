@@ -70,7 +70,11 @@ export function TaskHistory({ taskId }: { taskId: string }): JSX.Element {
       </Panel>
 
       <Panel title="Step 历史">
-        {steps.data && steps.data.steps.length === 0 ? (
+        {steps.status === 'loading' && steps.data === null ? <Loading what="Steps" /> : null}
+        {steps.error ? (
+          <ErrorPanel error={steps.error} what="Steps" onRetry={steps.reload} />
+        ) : null}
+        {steps.error ? null : steps.data && steps.data.steps.length === 0 ? (
           <Empty what="Step" hint="没有 Step 就没有 Step 历史。" />
         ) : null}
         {steps.data && steps.data.steps.length > 0 ? (

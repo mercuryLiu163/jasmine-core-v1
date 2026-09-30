@@ -45,16 +45,13 @@ export function ProjectView({ projectId }: { projectId: string }): JSX.Element {
     offsetLoader<{ session_id: string; status: string; task_id: string | null }>({
       limit: LIMIT,
       fetch: async (offset, limit, signal) => {
-        const page = await endpoints.listSessions({ limit, offset }, signal)
+        const page = await endpoints.listSessions(projectId, { limit, offset }, signal)
         return {
-          items: page.sessions
-            .filter((session) => session.project_id === projectId)
-            .map((session) => ({
-              session_id: session.session_id,
-              status: session.status,
-              task_id: session.task_id,
-            })),
-          // Core pages sessions globally; the count reported is what was read.
+          items: page.sessions.map((session) => ({
+            session_id: session.session_id,
+            status: session.status,
+            task_id: session.task_id,
+          })),
           count: page.count,
         }
       },
@@ -154,7 +151,7 @@ export function ProjectView({ projectId }: { projectId: string }): JSX.Element {
         <Pager paged={tasks} noun="Task" limit={LIMIT} />
       </Panel>
 
-      <Panel title="Last activity(来自真实 Event 读取)">
+      <Panel title="Event 窗口(升序读取的前 100 条)">
         {events.status === 'loading' && events.data === null ? <Loading what="Events" /> : null}
         {events.error ? (
           <ErrorPanel error={events.error} what="Events" onRetry={events.reload} />
@@ -185,11 +182,14 @@ export function ProjectView({ projectId }: { projectId: string }): JSX.Element {
               {events.loadedAt ? (
                 <StaleBanner
                   loadedAt={events.loadedAt}
-                  scope={`Project ${projectId} 最近 ${events.data.events.length} 条 Event`}
+                  scope={`Project ${projectId} 的前 ${events.data.events.length} 条 Event(按 seq 升序)`}
                 />
               ) : null}
-              <p className="muted">
-                “最新”仅在本页读取的 {events.data.events.length} 条 Event 范围内成立。
+              <p className="state state--meta">
+                Core 按 <code>seq</code> 升序返回 Event,且本页只读取前 {DEFAULT_EVENT_LIMIT} 条。
+                因此上面的 seq 是<strong>这一窗口内</strong>最大的一个,不是该项目全局的最新活动;
+                事件超过 {DEFAULT_EVENT_LIMIT} 条时,更新的 Event 不在本读取范围内。Core 没有降序或
+                “最新 N 条”参数,本页不会伪造一个。
               </p>
             </>
           )
@@ -213,7 +213,7 @@ export function ProjectView({ projectId }: { projectId: string }): JSX.Element {
         )}
         <Pager paged={sessions} noun="Session" limit={LIMIT} />
         <p className="state state--meta">
-          Core 没有专用的 session 过滤参数,这里按 project_id 在已读页内过滤;count 是本页长度。
+          过滤在服务端完成:<code>GET /v1/sessions?project_id=…</code>;count 是本页长度,不是总数。
         </p>
       </Panel>
 

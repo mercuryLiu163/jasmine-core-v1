@@ -37,25 +37,49 @@ interface GateRecord {
   occurredAt: string
 }
 
+function idsFrom(...values: unknown[]): string[] {
+  const collected = values.flatMap((value) => (Array.isArray(value) ? value : []))
+  return [...new Set(collected.filter((value): value is string => typeof value === 'string'))]
+}
+
+/**
+ * Core's authoritative "what satisfied the gate" records.
+ *
+ * They are written on more than one event type and all of them must be read:
+ * `step.transitioned` carries `to: VERIFIED|ACCEPTED` plus `evidence_ids`;
+ * `task.accepted` (`state.py: accept_task`) is the acceptance command and carries
+ * `evidence_ids` both at the payload top level and under `result`; a plain
+ * `task.transitioned` never carries evidence. Reading only the first two would
+ * leave a real `POST /v1/tasks/{id}/accept` invisible behind an empty panel.
+ */
 function gateRecords(events: RawEvent[]): GateRecord[] {
   const records: GateRecord[] = []
   for (const event of events) {
-    if (event.event_type !== 'step.transitioned' && event.event_type !== 'task.transitioned') continue
     const payload = event.payload as Record<string, unknown>
+    const nested = payload['result']
+    const result =
+      typeof nested === 'object' && nested !== null ? (nested as Record<string, unknown>) : {}
+
+    if (event.event_type === 'task.accepted') {
+      records.push({
+        stepId: null,
+        to: 'ACCEPTED',
+        eventId: event.event_id,
+        evidenceIds: idsFrom(payload['evidence_ids'], result['evidence_ids']),
+        ruleVersions: result['rule_versions'] ?? payload['rule_versions'] ?? null,
+        occurredAt: event.occurred_at,
+      })
+      continue
+    }
+    if (event.event_type !== 'step.transitioned' && event.event_type !== 'task.transitioned') continue
     const to = payload['to']
     if (to !== 'VERIFIED' && to !== 'ACCEPTED') continue
-    const result = payload['result']
-    const nested =
-      typeof result === 'object' && result !== null ? (result as Record<string, unknown>) : {}
-    const ids = [payload['evidence_ids'], nested['evidence_ids']]
-      .flatMap((value) => (Array.isArray(value) ? value : []))
-      .filter((value): value is string => typeof value === 'string')
     records.push({
       stepId: typeof payload['step_id'] === 'string' ? payload['step_id'] : null,
       to: String(to),
       eventId: event.event_id,
-      evidenceIds: [...new Set(ids)],
-      ruleVersions: nested['rule_versions'] ?? payload['rule_versions'] ?? null,
+      evidenceIds: idsFrom(payload['evidence_ids'], result['evidence_ids']),
+      ruleVersions: result['rule_versions'] ?? payload['rule_versions'] ?? null,
       occurredAt: event.occurred_at,
     })
   }
@@ -218,7 +242,11 @@ export function TaskEvidence({ taskId }: { taskId: string }): JSX.Element {
       </Panel>
 
       <Panel title="criteria → Evidence 参考矩阵(前端匹配,仅供参考)">
-        {requirements.length === 0 ? (
+        {steps.status === 'loading' && steps.data === null ? <Loading what="Step criteria" /> : null}
+        {steps.error ? (
+          <ErrorPanel error={steps.error} what="Step criteria" onRetry={steps.reload} />
+        ) : null}
+        {steps.error ? null : requirements.length === 0 ? (
           <Empty what="Step acceptance requirements" hint="没有 requirements 就没有矩阵。" />
         ) : (
           <TableScroll label="criteria 与 Evidence 参考矩阵">

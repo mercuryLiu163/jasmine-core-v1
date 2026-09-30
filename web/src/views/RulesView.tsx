@@ -239,7 +239,7 @@ function RuleDetail({
               <SourceLink
                 kind="event"
                 id={rule.origin_event_id}
-                label={`${rule.origin_event_type}(${rule.origin_actor_kind})`}
+                label={`${rule.origin_event_type ?? '未知类型'}(${rule.origin_actor_kind ?? '未知 actor'})`}
                 projectId={projectId}
                 taskId={taskId}
               />
@@ -247,20 +247,30 @@ function RuleDetail({
           },
           {
             label: 'change Event',
-            value: (
-              <SourceLink kind="event" id={rule.change_event_id} label="change" projectId={projectId} taskId={taskId} />
+            value: rule.change_event_id ? (
+              <SourceLink
+                kind="event"
+                id={rule.change_event_id}
+                label="change"
+                projectId={projectId}
+                taskId={taskId}
+              />
+            ) : (
+              '—(Core 未返回 change_event_id)'
             ),
           },
           {
             label: 'status Event',
-            value: (
+            value: rule.status_event_id ? (
               <SourceLink
                 kind="event"
                 id={rule.status_event_id}
-                label={`status(${rule.status_actor_kind})`}
+                label={`status(${rule.status_actor_kind ?? '未知 actor'})`}
                 projectId={projectId}
                 taskId={taskId}
               />
+            ) : (
+              '—(Core 未返回 status_event_id)'
             ),
           },
         ]}

@@ -89,6 +89,47 @@ def snapshot(core: str, token: str, project_id: str | None, task_id: str | None,
     return result
 
 
+def dev_proxy_check(ui: str, token: str) -> str:
+    """Reproduce the dev-proxy allowlist checks as a recorded artefact."""
+    lines = [
+        "# P6-A02 dev-proxy check (operator-configured loopback Core, frozen allowlist)",
+        f"# ui: {ui}  core: (see manifest)  {now()}",
+        "",
+    ]
+
+    def call(method: str, path: str, *, auth: bool) -> tuple[int, str]:
+        request = urllib.request.Request(ui + path, method=method)
+        request.add_header("Accept", "application/json")
+        if auth:
+            request.add_header("Authorization", "Bearer " + token)
+        if method == "POST":
+            request.add_header("Content-Type", "application/json")
+            request.data = b"{}"
+        try:
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return response.status, response.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as error:
+            return error.code, error.read().decode("utf-8", "replace")
+
+    for label, method, path, auth in (
+        ("GET / (shell)", "GET", "/", False),
+        ("GET /v1/health (public)", "GET", "/v1/health", False),
+        ("GET /v1/projects?limit=1 (read token)", "GET", "/v1/projects?limit=1", True),
+        ("GET /v1/auth/keys (admin surface)", "GET", "/v1/auth/keys", True),
+        ("GET /v1/audit (admin surface)", "GET", "/v1/audit", True),
+        ("POST /v1/tasks (write)", "POST", "/v1/tasks", True),
+        ("OPTIONS /v1/projects (preflight)", "OPTIONS", "/v1/projects", True),
+        ("GET /v1/../../etc/passwd (traversal)", "GET", "/v1/../../etc/passwd", True),
+    ):
+        status, body = call(method, path, auth=auth)
+        lines.append(f"## {label}")
+        lines.append(f"{method} {path} -> status={status}")
+        if path != "/":
+            lines.append(body[:400])
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
 def run(command: list[str], cwd: Path) -> str:
     completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
     return (
@@ -124,11 +165,18 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--evidence")
     parser.add_argument("--event")
     parser.add_argument("--skip-tests", action="store_true")
+    parser.add_argument("--dev-ui", help="also record the allowlist checks against a Vite dev server")
     args = parser.parse_args(argv)
 
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     token = json.loads(Path(args.token_file).read_text(encoding="utf-8"))[args.token_key]
+
+    started_commit = git("rev-parse", "HEAD")
+    started_dirty = [line[3:] for line in git("status", "--porcelain").splitlines() if line.strip()]
+    if started_dirty:
+        print(json.dumps({"warning": "worktree is dirty; the evidence binds to this commit but not to "
+                                      "the exact tree", "dirty": started_dirty}, indent=2))
 
     before = snapshot(args.core, token, args.project, args.task, args.evidence, args.rule)
 
@@ -177,6 +225,10 @@ def main(argv: list[str] | None = None) -> int:
         (out / "api-responses.jsonl").write_text(
             "\n".join(json.dumps(row) for row in responses) + "\n", encoding="utf-8")
 
+    if args.dev_ui:
+        check = dev_proxy_check(args.dev_ui, token)
+        (out / "dev-proxy-check.txt").write_text(check, encoding="utf-8")
+
     tests = ""
     if not args.skip_tests:
         tests += run([str(WEB / "node_modules" / ".bin" / "tsc"), "--noEmit", "--pretty", "false"], WEB)
@@ -190,14 +242,18 @@ def main(argv: list[str] | None = None) -> int:
         steps = [json.loads(line) for line in trace_log.read_text(encoding="utf-8").splitlines() if line.strip()]
 
     failed = [step for step in steps if not step.get("ok")]
-    manifest = {
+    manifest: dict[str, object] = {
         "run_id": out.name,
         "created_at_utc": now(),
         "phase": "P6-01",
         "mode": "real-browser-against-scratch-fixture" if "p6-scratch" in args.core else "real-browser",
-        "commit": git("rev-parse", "HEAD"),
+        "commit": started_commit,
+        "commit_at_end": git("rev-parse", "HEAD"),
+        "commit_changed_during_run": started_commit != git("rev-parse", "HEAD"),
         "branch": git("rev-parse", "--abbrev-ref", "HEAD"),
-        "worktree_clean": git("status", "--porcelain") == "",
+        "worktree_clean_at_start": not started_dirty,
+        "worktree_dirty_at_start": started_dirty,
+        "worktree_dirty_at_end": [line[3:] for line in git("status", "--porcelain").splitlines() if line.strip()],
         "implementation_baseline_commit": "9059625",
         "core": {"url": args.core, "schema_version": before["health"]["body"]["schema_version"],
                  "core_version": before["health"]["body"]["core_version"]},
@@ -211,10 +267,7 @@ def main(argv: list[str] | None = None) -> int:
         "browser_steps": {"total": len(steps), "passed": len(steps) - len(failed),
                           "failed": [step.get("step") for step in failed]},
         "truth_changed_reads": changed,
-        "artifacts": sorted(path.name for path in out.glob("*") if path.is_file()),
     }
-    (out / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
-                                       encoding="utf-8")
 
     (out / "scenario.md").write_text(
         f"""# P6-01 scenario — {out.name}
@@ -230,8 +283,11 @@ def main(argv: list[str] | None = None) -> int:
 
 The browser trace performs these actions against the running dashboard:
 
-1. open the sign-in page and type the read-only token;
-2. assert the token is accepted only after a real `GET /v1/health` succeeds;
+1. open the sign-in page, type a **bogus** token and assert it is refused (the
+   public `/v1/health` answers 200 for any token, so this is what proves sign-in
+   validates against an authenticated read);
+2. type the real read-only token and assert it is accepted after an
+   authenticated `GET /v1/projects?limit=1`;
 3. assert the token appears in no DOM node, storage or cookie;
 4. click Overview → Project and read `GET /v1/tasks?project_id=…`;
 5. click 看板 and assert Step columns render separately from the Task status;
@@ -270,7 +326,7 @@ The browser trace performs these actions against the running dashboard:
         "| --- | --- | --- |",
         "| P6-T01 P1 source trace | Project → Task → board → source Event by click and by keyboard; deep link re-read after refresh; Rule detail/history; Evidence detail | "
         + ("PASS (scratch fixture)" if not failed else "FAIL") + " |",
-        "| P6-T02 permissions and secrets | token absent from DOM/storage/cookies; proxy refuses `/v1/auth/keys` and all non-GET paths (unit + curl); no Truth write across the run | "
+        "| P6-T02 permissions and secrets | token absent from DOM/storage/cookies; proxy forwards GET only and never `/v1/auth/*` or `/v1/audit` (unit + curl); a bogus token is refused at sign-in; no Truth write across the run | "
         + ("PASS (unit + trace)" if not failed else "FAIL") + " |",
         "| P6-T07 maintainability | scope switch drops the previous project's rows (component test); pagination appends by cursor; unknown route is loud; failure/unknown are not shown as empty | "
         + ("PARTIAL — no long-list/throttling run yet") + " |",
@@ -294,8 +350,14 @@ The browser trace performs these actions against the running dashboard:
         ] + [""]
     (out / "result.md").write_text("\n".join(gate_lines), encoding="utf-8")
 
+    # Written last so `artifacts` lists everything this run produced.
+    manifest["artifacts"] = sorted(path.name for path in out.glob("*") if path.is_file())
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n",
+                                       encoding="utf-8")
+
     print(json.dumps({"out": str(out), "browser_steps": manifest["browser_steps"],
-                      "truth_changed": changed, "commit": manifest["commit"]}, indent=2))
+                      "truth_changed": changed, "commit": manifest["commit"],
+                      "commit_changed_during_run": manifest["commit_changed_during_run"]}, indent=2))
     return 1 if failed or changed else 0
 
 

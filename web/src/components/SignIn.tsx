@@ -29,13 +29,17 @@ export function SignIn(): JSX.Element {
     if (!candidateToken || checking) return
     setChecking(true)
     setError(null)
-    // The token is accepted only after a real authenticated read succeeds, and
-    // the session is not opened until it does. A successful parse of the box is
-    // not evidence that the token works; a token Core refuses never becomes the
-    // session token, so no later view can run with unvalidated credentials.
+    // The token is accepted only after a genuinely *authenticated* read, and the
+    // session is not opened until it does.
+    //
+    // `GET /v1/health` is deliberately public (`handlers.Route(public=True)`) and
+    // ignores Authorization, so it cannot validate anything: a bogus token gets
+    // 200 from it. `GET /v1/projects?limit=1` needs `objects:read`, which every
+    // P6-01 view also needs, so a wrong or under-scoped token is refused here
+    // instead of silently opening a dashboard that 401s on every panel.
     try {
       const candidate = makeEndpoints(new CoreClient({ getToken: () => candidateToken }))
-      await candidate.health()
+      await candidate.listProjects({ limit: 1, offset: 0 })
       signIn(candidateToken)
       setValue('')
     } catch (caught) {
@@ -81,6 +85,10 @@ export function SignIn(): JSX.Element {
           <code key={scope}>{scope}</code>
         ))}
         。缺少任一 scope 时,对应视图会明确显示 forbidden,而不会改用更高权限的凭据。
+      </p>
+      <p className="muted">
+        “使用此 token”会先做一次<strong>需要鉴权</strong>的读取(<code>GET /v1/projects?limit=1</code>)
+        来校验 token:健康检查是公开端点,用它判断等于没有校验。校验失败不会进入 Dashboard。
       </p>
       <p className="muted">
         本页不会代你铸造 key、不会使用 admin bootstrap,也不会调用 fingerprint 扫描。

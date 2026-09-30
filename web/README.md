@@ -33,22 +33,31 @@ its own loud column; nothing is folded into "other".
 
 ## Security posture
 
-* **Token in memory only.** It is typed into a password field, used for a real
-  `GET /v1/health` check, and then held in React state. There is no
-  `localStorage`, `sessionStorage`, `IndexedDB`, service worker or cache write in
-  the bundle, and the token never enters the URL, a log line or an error message.
-  A refresh returns to the sign-in form — by design.
+* **Token in memory only, validated by an authenticated read.** It is typed into
+  a password field and checked with `GET /v1/projects?limit=1`, which requires
+  `objects:read`; only then does it become the session token. (`GET /v1/health`
+  is a public endpoint that answers 200 for *any* token, so it is deliberately
+  not used for validation — the browser trace proves a bogus token is refused.)
+  The token is held in React state only: no `localStorage`, `sessionStorage`,
+  `IndexedDB`, service worker or cache write exists in `web/src`, and it never
+  enters the URL, a log line or an error message. A refresh returns to the
+  sign-in form — by design.
 * **Same-origin only.** The page calls `/v1/...` on its own origin. The dev
   proxy and the static host forward that to the operator-configured loopback
   Core (`P6_CORE_ORIGIN`, default `http://127.0.0.1:8787`), which is validated at
   start-up to be loopback HTTP with no credentials and no path.
 * **Path allowlist.** `server/core-paths.json` lists the frozen paths the proxy
   will forward. `/v1/auth/keys` and `/v1/audit` are deliberately absent, and only
-  `GET`/`OPTIONS` are forwarded in P6-01, so the browser cannot mint a key, read
-  audit, or write Truth even if its token carried wider scopes.
+  `GET` is forwarded in P6-01 (same-origin, so no preflight is needed; forwarding
+  `OPTIONS` was removed after review), so the browser cannot mint a key, read
+  audit, issue a write, or even probe a mutation path through this channel.
 * **Untrusted text is data.** Event and Evidence content is rendered as React
-  text nodes — there is no `dangerouslySetInnerHTML` in this bundle. Link targets
-  pass `safeHref`, which accepts only `#/…`, `http:`, `https:` and `mailto:`.
+  text nodes; `web/src` contains no `dangerouslySetInnerHTML` and no `innerHTML`
+  assignment (the occurrences in `dist/assets/*.js` are React DOM internals).
+  No link target is built from Core data — every link is an internal `#/…` route
+  with a percent-encoded ID. `safeHref` (only `#/…`, `http:`, `https:`, `mailto:`)
+  is the unit-tested policy any future external link must pass; today it guards
+  the `artifact_uri` note, which is rendered as inert text and never opened.
   Credential-shaped text is masked by default with a per-field "显示原文" toggle.
 * **Honest failure states.** Loading, empty, refused and not-implemented are four
   different things on screen. `count` from Core is described as *this page's*
@@ -115,6 +124,12 @@ node scripts/p6/browser_trace.mjs --ui http://127.0.0.1:5180 \
 
 The trace never writes the Authorization header value; it records only
 `present(redacted)`/`absent`.
+
+## Requirement trace
+
+`P6-01-COMPLIANCE.md` maps every P6-01 work item (P6-A01…A08) and every
+applicable negative case to its implementation, its evidence, and what is
+explicitly *not* delivered.
 
 ## Deliberately not implemented here
 

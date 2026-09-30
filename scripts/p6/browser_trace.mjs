@@ -313,14 +313,50 @@ async function main() {
       }
     })
 
-    // 1. sign-in
+    // 1. sign-in. First prove the negative: a bogus token must be refused, which
+    // is only possible because sign-in validates with an *authenticated* read.
+    // `GET /v1/health` is public and answers 200 for any token, so a sign-in that
+    // trusted it would accept this bogus value.
     await waitFor(cdp, `document.querySelector('input[type=password]') !== null`, { label: 'sign-in form' })
     trace.record('sign-in form renders with a labelled password field', true)
     await trace.screenshot(cdp, '01-signin')
+    await typeInto(cdp, 'input[type=password]', 'ui-bogus-token-used-by-the-trace')
+    await clickByText(cdp, 'button', '使用此 token')
+    const refusal = await waitFor(
+      cdp,
+      `(() => { const node = document.querySelector('[role=alert]'); return node ? node.textContent : '' })()`,
+      { label: 'sign-in refusal for a bogus token' },
+    ).catch(() => '')
+    const stillOnSignIn = await evaluate(cdp, `document.querySelector('input[type=password]') !== null`)
+    trace.record(
+      'a bogus token is refused instead of opening the dashboard',
+      stillOnSignIn === true && String(refusal).includes('unauthenticated'),
+      `alert=${String(refusal).replace(/\s+/g, ' ').slice(0, 120)}`,
+    )
+    await trace.screenshot(cdp, '01b-signin-refused')
+
+    // Now the real read-only token.
+    await evaluate(
+      cdp,
+      `(() => {
+        const el = document.querySelector('input[type=password]')
+        const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+        setter.call(el, '')
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        return el.value === ''
+      })()`,
+    )
     await typeInto(cdp, 'input[type=password]', token)
     await clickByText(cdp, 'button', '使用此 token')
     await waitFor(cdp, `document.body.textContent.includes('Core 健康与 Schema')`, { label: 'Overview' })
-    trace.record('token accepted only after a real authenticated read', true)
+    const authProbe = requests.find(
+      (request) => request.path === '/v1/projects' && request.query.includes('limit=1'),
+    )
+    trace.record(
+      'token accepted only after a real authenticated read',
+      authProbe !== undefined && authProbe.authorization !== 'absent',
+      authProbe ? `probe=${authProbe.method} ${authProbe.path}${authProbe.query}` : 'no /v1/projects?limit=1 probe seen',
+    )
     await trace.screenshot(cdp, '02-overview')
 
     // The token field must be gone and the raw token must not be in the DOM.
@@ -526,7 +562,18 @@ async function main() {
     )
     await trace.screenshot(cdp, '09-signed-out')
 
-    trace.record('no console errors during the walkthrough', consoleErrors.length === 0, consoleErrors.join(' | '))
+    // The walkthrough deliberately provokes one 401 (the bogus-token sign-in), and
+    // Chrome logs every failed network response at error level. Those lines are
+    // evidence, not defects; anything else is an unexpected error.
+    const expectedRefusals = consoleErrors.filter((line) => /Failed to load resource.*(401|403)/.test(line))
+    const unexpectedErrors = consoleErrors.filter((line) => !expectedRefusals.includes(line))
+    trace.record(
+      'no unexpected console errors during the walkthrough',
+      unexpectedErrors.length === 0,
+      `expectedRefusals=${expectedRefusals.length} unexpected=${unexpectedErrors.length}${
+        unexpectedErrors.length ? ` ${unexpectedErrors.join(' | ')}` : ''
+      }`,
+    )
 
     const maskedRequests = requests.map((request) => {
       const response = responses.get(request.requestId) ?? {}

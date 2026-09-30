@@ -86,7 +86,12 @@ describe('sign-in and Overview', () => {
 
     expect(await screen.findByText('Core 健康与 Schema')).toBeTruthy()
     expect(await screen.findByText('Jasmine Core V1')).toBeTruthy()
-    expect(fake.callsTo('GET', '/v1/health')[0]?.authorization).toBe('Bearer tok_read_only')
+    // Sign-in itself must have performed an authenticated read. `GET /v1/health`
+    // is public and cannot prove anything, so a request to /v1/projects carrying
+    // the bearer token is the actual evidence.
+    const probe = fake.callsTo('GET', '/v1/projects')[0]
+    expect(probe?.authorization).toBe('Bearer tok_read_only')
+    expect(probe?.query.get('limit')).toBe('1')
     expect(setItem).not.toHaveBeenCalled()
     // jsdom in this configuration may not expose Storage at all; the assertion
     // that matters is that nothing ever calls setItem, checked above.
@@ -97,10 +102,14 @@ describe('sign-in and Overview', () => {
     expect(window.location.href).not.toContain('tok_read_only')
   })
 
-  it('shows a 401 refusal instead of an empty database', async () => {
+  it('refuses a bogus token that the public health check would have accepted', async () => {
     const user = userEvent.setup()
+    // Exactly what real Core does: /v1/health is public (200 for any token) and
+    // the authenticated read is what refuses. This is the regression test for
+    // "sign-in validates with a public endpoint".
     fake = installFakeCore({
-      'GET /v1/health': coreError(401, 'unauthenticated', 'missing or unknown token'),
+      'GET /v1/health': { body: HEALTH },
+      'GET /v1/projects': coreError(401, 'unauthenticated', 'missing or unknown token'),
     })
     render(
       <SessionProvider>
@@ -109,6 +118,25 @@ describe('sign-in and Overview', () => {
     )
     await signIn(user)
     expect((await screen.findByRole('alert')).textContent).toContain('unauthenticated')
+    // Still on the sign-in form: no dashboard was opened with a bad token.
+    expect(screen.getByLabelText('Core API token')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /退出/ })).toBeNull()
+  })
+
+  it('treats a missing scope as a refusal, naming the scope Core asked for', async () => {
+    const user = userEvent.setup()
+    fake = installFakeCore({
+      'GET /v1/health': { body: HEALTH },
+      'GET /v1/projects': coreError(403, 'forbidden_scope', 'this key lacks objects:read'),
+    })
+    render(
+      <SessionProvider>
+        <App />
+      </SessionProvider>,
+    )
+    await signIn(user)
+    expect((await screen.findByRole('alert')).textContent).toContain('forbidden_scope')
+    expect(screen.getByLabelText('Core API token')).toBeTruthy()
   })
 
   it('stops sending Authorization after 退出', async () => {
@@ -189,6 +217,7 @@ describe('Task board', () => {
     const user = userEvent.setup()
     fake = installFakeCore({
       'GET /v1/health': { body: HEALTH },
+      'GET /v1/projects': { body: { projects: [], count: 0 } },
       'GET /v1/tasks/tsk_1': {
         body: {
           task: {
@@ -237,6 +266,7 @@ describe('project isolation', () => {
     const user = userEvent.setup()
     fake = installFakeCore({}, (request) => {
       if (request.path === '/v1/health') return { body: HEALTH }
+      if (request.path === '/v1/projects') return { body: { projects: [], count: 0 } }
       if (request.path === '/v1/tasks') {
         const project = request.query.get('project_id')
         if (project === 'prj_a') {
@@ -370,6 +400,7 @@ describe('untrusted text rendering', () => {
       },
       'GET /v1/sessions': { body: { sessions: [], count: 0 } },
       'GET /v1/tasks': { body: { tasks: [], count: 0 } },
+      'GET /v1/projects': { body: { projects: [], count: 0 } },
     })
     render(
       <SessionProvider>

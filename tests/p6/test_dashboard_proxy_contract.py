@@ -98,9 +98,9 @@ class DashboardProxyContract(unittest.TestCase):
             )
 
     def test_p6_01_is_read_only(self) -> None:
-        self.assertEqual({"GET", "OPTIONS"}, self.methods)
+        self.assertEqual({"GET"}, self.methods)
         for sample in self.core_samples():
-            for method in ("POST", "PUT", "PATCH", "DELETE"):
+            for method in ("POST", "PUT", "PATCH", "DELETE", "OPTIONS"):
                 self.assertNotIn(
                     method,
                     self.methods,

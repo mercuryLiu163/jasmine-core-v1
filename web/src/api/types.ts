@@ -120,11 +120,14 @@ export interface Rule {
   matcher: JsonObject
   verification_requirements: AcceptanceCriteria | null
   origin_event_id: string
-  origin_actor_kind: string
-  origin_event_type: string
-  change_event_id: string
-  status_event_id: string
-  status_actor_kind: string
+  // `authority.get` returns null when the origin/status Event is absent, so
+  // these are typed nullable and rendered defensively rather than printed as
+  // the literal string "null".
+  origin_actor_kind: string | null
+  origin_event_type: string | null
+  change_event_id: string | null
+  status_event_id: string | null
+  status_actor_kind: string | null
 }
 
 export interface RuleHistoryEntry {

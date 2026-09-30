@@ -83,9 +83,12 @@ export function makeEndpoints(client: CoreClient) {
     stepHistory: (stepId: string, signal?: AbortSignal) =>
       client.get<EventList>(`/steps/${id(stepId)}/history`, { signal }),
 
-    listSessions: (window: Window, signal?: AbortSignal) =>
+    listSessions: (projectId: string | null, window: Window, signal?: AbortSignal) =>
       client.get<SessionPage>('/sessions', {
-        query: { limit: window.limit, offset: window.offset },
+        // Core supports project_id on the sessions collection
+        // (`objects.ObjectStore.list`), so the filter belongs on the server: a
+        // client-side filter over one page reports a wrong "no sessions" state.
+        query: { project_id: projectId, limit: window.limit, offset: window.offset },
         signal,
       }),
 

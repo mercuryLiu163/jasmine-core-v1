@@ -70,9 +70,17 @@ export function loadAllowlist(directory = HERE) {
 
 export function resolveCoreOrigin(raw) {
   const value = (raw ?? '').trim() || 'http://127.0.0.1:8787'
-  const origin = new URL(value)
+  let origin
+  try {
+    origin = new URL(value)
+  } catch {
+    throw new Error(`P6_CORE_ORIGIN is not a URL: ${JSON.stringify(value)}`)
+  }
   if (origin.protocol !== 'http:') throw new Error('P6_CORE_ORIGIN must be http')
   if (!LOOPBACK.has(origin.hostname)) throw new Error('P6_CORE_ORIGIN must be loopback')
+  if (origin.username || origin.password) {
+    throw new Error('P6_CORE_ORIGIN must not embed credentials')
+  }
   if (origin.pathname !== '/' || origin.search) throw new Error('P6_CORE_ORIGIN must be a bare origin')
   return origin
 }
@@ -92,7 +100,13 @@ function sendJson(res, status, body) {
 }
 
 export function proxy(req, res, origin, allowlist) {
-  const target = new URL(req.url, 'http://ui.invalid')
+  let target
+  try {
+    target = new URL(req.url, 'http://ui.invalid')
+  } catch {
+    sendJson(res, 400, { error: { code: 'proxy_bad_target', message: 'unparsable request target' } })
+    return
+  }
   if (!isAllowed(allowlist, req.method, target.pathname)) {
     sendJson(res, 404, {
       error: {
@@ -142,8 +156,17 @@ export function proxy(req, res, origin, allowlist) {
 }
 
 export function serveStatic(req, res, root) {
-  const target = new URL(req.url, 'http://ui.invalid')
-  const relative = normalize(decodeURIComponent(target.pathname)).replace(/^[/\\]+/, '')
+  let target
+  let relative
+  try {
+    target = new URL(req.url, 'http://ui.invalid')
+    // A malformed percent-escape must be a 400, not an exception inside the
+    // request handler (which would surface as an opaque 500/socket error).
+    relative = normalize(decodeURIComponent(target.pathname)).replace(/^[/\\]+/, '')
+  } catch {
+    sendJson(res, 400, { error: { code: 'static_bad_path', message: 'unparsable request path' } })
+    return
+  }
   const base = resolve(root)
   let filePath = resolve(base, relative)
   if (filePath !== base && !filePath.startsWith(base + sep)) {

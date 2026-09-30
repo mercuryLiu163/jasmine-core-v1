@@ -70,11 +70,8 @@ export function ConversationView({
     offsetLoader<Session>({
       limit: DEFAULT_OBJECT_LIMIT,
       fetch: async (offset, limit, signal) => {
-        const page = await endpoints.listSessions({ limit, offset }, signal)
-        const filtered = page.sessions.filter(
-          (session) => projectId === null || session.project_id === projectId,
-        )
-        return { items: filtered, count: page.count }
+        const page = await endpoints.listSessions(projectId, { limit, offset }, signal)
+        return { items: page.sessions, count: page.count }
       },
     }),
     [projectId],

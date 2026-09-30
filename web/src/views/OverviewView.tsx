@@ -194,6 +194,10 @@ export function OverviewView(): JSX.Element {
             </ul>
           )
         ) : null}
+        {actors.status === 'loading' && actors.data === null ? <Loading what="Actors" /> : null}
+        {actors.error ? (
+          <ErrorPanel error={actors.error} what="Actors" onRetry={actors.reload} />
+        ) : null}
         {actors.data ? (
           <p className="muted">
             已注册 actor {actors.data.actors.length}:{' '}

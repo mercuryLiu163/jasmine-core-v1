@@ -56,7 +56,8 @@ describe('every dashboard endpoint call is forwarded by the proxy', () => {
       endpoints.getStep('stp_x', signal),
       endpoints.taskHistory('tsk_x', signal),
       endpoints.stepHistory('stp_x', signal),
-      endpoints.listSessions({ limit: 50, offset: 0 }, signal),
+      endpoints.listSessions(null, { limit: 50, offset: 0 }, signal),
+      endpoints.listSessions('prj_x', { limit: 50, offset: 0 }, signal),
       endpoints.listEvents({ project_id: 'prj_x', limit: 100 }, signal),
       endpoints.listEvents({ session_id: 'ses_x', after_seq: 7, limit: 100 }, signal),
       endpoints.getEvent('evt_x', signal),
@@ -72,7 +73,14 @@ describe('every dashboard endpoint call is forwarded by the proxy', () => {
     const paths = fake.requests.map((request) => `${request.method} ${request.path}`)
     const refused = fake.requests.filter((request) => !isAllowed(request.method, request.path))
     expect(refused.map((request) => `${request.method} ${request.path}`)).toEqual([])
-    expect(paths.length).toBe(22)
+    expect(paths.length).toBe(23)
+
+    // The sessions filter must be server-side, not a client-side slice.
+    const filtered = fake.requests.find(
+      (request) => request.path === '/v1/sessions' && request.query.get('project_id') === 'prj_x',
+    )
+    expect(filtered).toBeDefined()
+    expect(filtered?.query.get('limit')).toBe('50')
 
     // The UI must never ask for an admin surface, even by accident.
     for (const request of fake.requests) {
