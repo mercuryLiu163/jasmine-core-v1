@@ -23,7 +23,7 @@
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -609,7 +609,20 @@ async function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+/**
+ * Resolve symlinks before comparing: a trace run through a symlinked path must
+ * not exit 0 without testing anything (macOS `/tmp` -> `/private/tmp`).
+ */
+function isEntryPoint() {
+  if (!process.argv[1]) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+  } catch {
+    return false
+  }
+}
+
+if (isEntryPoint()) {
   main().catch((error) => {
     process.stderr.write(`browser trace failed: ${error.stack ?? error.message}\n`)
     process.exitCode = 1

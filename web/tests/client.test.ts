@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
 import { CoreClient, buildQuery, parseErrorBody } from '../src/api/client'
-import { CoreApiError } from '../src/api/errors'
+import { CoreApiError, describeError } from '../src/api/errors'
 import { coreError, installFakeCore, type FakeCore } from './helpers/fakeCore'
 
 let fake: FakeCore | null = null
@@ -36,7 +36,10 @@ describe('parseErrorBody', () => {
   it('does not crash on a non-JSON body from the proxy', () => {
     const error = parseErrorBody(502, '<html>bad gateway</html>')
     expect(error.code).toBe('http_502')
-    expect(error.kind).toBe('unknown')
+    // A gateway status means the proxy answered and Core did not: that is the
+    // same condition as "the dashboard could not reach Core", not "unknown".
+    expect(error.kind).toBe('unreachable')
+    expect(describeError(error)).toContain('无法连接 Core')
   })
 
   it('classifies 401/404/409/422/503 distinctly', () => {
@@ -45,6 +48,20 @@ describe('parseErrorBody', () => {
     expect(parseErrorBody(409, '{}').kind).toBe('conflict')
     expect(parseErrorBody(422, '{}').kind).toBe('invalid')
     expect(parseErrorBody(503, '{}').kind).toBe('degraded')
+  })
+
+  it('treats a stopped Core behind the proxy as unreachable, not unclassified', () => {
+    const error = parseErrorBody(
+      502,
+      JSON.stringify({
+        error: { code: 'proxy_core_unreachable', message: '127.0.0.1:8789: ECONNREFUSED' },
+      }),
+    )
+    expect(error.kind).toBe('unreachable')
+    expect(describeError(error)).toContain('无法连接 Core')
+    // A plain 502 without the proxy code is still a gateway failure.
+    expect(parseErrorBody(504, '{}').kind).toBe('unreachable')
+    expect(parseErrorBody(502, '{}').kind).toBe('unreachable')
   })
 })
 

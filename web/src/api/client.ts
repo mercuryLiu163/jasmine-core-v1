@@ -15,7 +15,13 @@
  *   operator switched to project B.
  */
 
-import { CoreApiError, isAbortError, kindForStatus, type CoreErrorEnvelope } from './errors'
+import {
+  CoreApiError,
+  isAbortError,
+  kindForEnvelope,
+  kindForStatus,
+  type CoreErrorEnvelope,
+} from './errors'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
 
@@ -65,7 +71,7 @@ export function parseErrorBody(status: number, body: string): CoreApiError {
       : null
   if (envelope && typeof envelope.code === 'string') {
     return new CoreApiError({
-      kind: kindForStatus(status),
+      kind: kindForEnvelope(status, envelope.code),
       status,
       code: envelope.code,
       message: typeof envelope.message === 'string' ? envelope.message : envelope.code,

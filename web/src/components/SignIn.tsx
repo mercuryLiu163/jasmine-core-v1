@@ -93,7 +93,9 @@ export function SignIn(): JSX.Element {
       <p className="muted">
         本页不会代你铸造 key、不会使用 admin bootstrap,也不会调用 fingerprint 扫描。
       </p>
-      {error ? <ErrorPanel error={error} what="健康检查" onRetry={() => setError(null)} /> : null}
+      {error ? (
+        <ErrorPanel error={error} what="鉴权校验(GET /v1/projects)" onRetry={() => setError(null)} />
+      ) : null}
     </main>
   )
 }

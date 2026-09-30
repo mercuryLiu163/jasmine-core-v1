@@ -14,7 +14,7 @@
  */
 
 import http from 'node:http'
-import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs'
+import { createReadStream, existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
@@ -206,4 +206,18 @@ function main() {
   })
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
+/**
+ * Compare resolved paths: `pathToFileURL('/tmp/x.mjs')` is not `import.meta.url`
+ * when the file was reached through a symlink (macOS `/tmp` -> `/private/tmp`),
+ * and the mismatch makes this entry point exit 0 without serving anything.
+ */
+function isEntryPoint() {
+  if (!process.argv[1]) return false
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href
+  } catch {
+    return false
+  }
+}
+
+if (isEntryPoint()) main()

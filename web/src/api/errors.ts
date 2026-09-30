@@ -56,7 +56,19 @@ export function kindForStatus(status: number): ErrorKind {
   if (status === 409) return 'conflict'
   if (status === 400 || status === 413 || status === 415 || status === 422) return 'invalid'
   if (status === 503) return 'degraded'
+  // A gateway status means the proxy answered but Core did not: the same
+  // condition as a refused connection, and it must not be shown as
+  // "unclassified" when the operator's Core is simply stopped.
+  if (status === 502 || status === 504) return 'unreachable'
   return 'unknown'
+}
+
+/** Codes the dashboard's own proxy emits when Core is not answering. */
+const PROXY_UNREACHABLE_CODES = new Set(['proxy_core_unreachable', 'proxy_bad_target'])
+
+export function kindForEnvelope(status: number, code: string): ErrorKind {
+  if (PROXY_UNREACHABLE_CODES.has(code)) return 'unreachable'
+  return kindForStatus(status)
 }
 
 export function isAbortError(error: unknown): boolean {

@@ -51,6 +51,9 @@ its own loud column; nothing is folded into "other".
   `GET` is forwarded in P6-01 (same-origin, so no preflight is needed; forwarding
   `OPTIONS` was removed after review), so the browser cannot mint a key, read
   audit, issue a write, or even probe a mutation path through this channel.
+  The allowlist is read **once at start-up** (`createDashboardServer` ->
+  `loadAllowlist()`), so editing `server/core-paths.json` requires restarting the
+  host: a long-running process keeps the allowlist it booted with.
 * **Untrusted text is data.** Event and Evidence content is rendered as React
   text nodes; `web/src` contains no `dangerouslySetInnerHTML` and no `innerHTML`
   assignment (the occurrences in `dist/assets/*.js` are React DOM internals).

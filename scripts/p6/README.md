@@ -66,3 +66,35 @@ The `result.md` it writes is the **implementer's** result. An independent
 reviewer and an independent validator must add their own reports next to it
 before the run counts as a reviewed Gate.
 
+
+## `p6_t07_checks.mjs` — the T07 actions a single trace does not cover
+
+Headless-Chrome phases, one per run, against an isolated fixture:
+
+```bash
+node scripts/p6/p6_t07_checks.mjs --phase paginate --ui http://127.0.0.1:5190 \
+  --token-file /private/tmp/p6-scratch-t07/tokens.json --token-key read --out <dir>
+node scripts/p6/p6_t07_checks.mjs --phase longtext --event evt_… (same flags)
+node scripts/p6/p6_t07_checks.mjs --phase accept --task tsk_… --event evt_… --evidence evd_… (same flags)
+# offline/recover are orchestrated: the phase writes `ready-for-core-stop`, the
+# caller stops Core and touches `core-is-down`, then restarts it and touches
+# `core-is-up` before the recover phase runs.
+```
+
+- `paginate` — pages through a 259-Event list and asserts no duplicate and no
+  missing `seq`;
+- `longtext` — a 216,015-character Event must render collapsed without hiding the
+  source controls;
+- `offline` / `recover` — with Core stopped, the failure is visible and is never
+  an empty list; after restart the UI reads Core Truth again;
+- `accept` — a real `task.accepted` must appear as a gate record with the
+  `evidence_ids` Core recorded.
+
+## `p6_accept_fixture.py` — produce a real `task.accepted`
+
+Drives one Task to acceptance through the frozen API (respecting the ADR 0006/
+0007 confirmation rules) so the `accept` phase above has something real to read:
+
+```bash
+python3 scripts/p6/p6_accept_fixture.py /private/tmp/p6-scratch-accept 8899
+```
