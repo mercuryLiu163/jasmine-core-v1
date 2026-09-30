@@ -33,7 +33,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from jasmine_core import SCHEMA_VERSION, auth, clock, db, ids, registry  # noqa: E402
 from jasmine_core.api.server import Application, _Handler  # noqa: E402
 from jasmine_core.events import EventStore  # noqa: E402
-from jasmine_core.migrations import discover, migrate  # noqa: E402
+from jasmine_core.migrations import current_version, discover, migrate  # noqa: E402
 from jasmine_core.models import NewEvent  # noqa: E402
 from jasmine_core.db import set_meta  # noqa: E402
 
@@ -246,9 +246,10 @@ DEVICE = {"requirements": [{"key": "device", "kind": "DEVICE_TEST", "required_re
 
 
 def case_t01(f: Fixture) -> None:
-    check(SCHEMA_VERSION == 6, "P1-03 must ship schema version 6")
+    check(SCHEMA_VERSION >= 6, "P1-03 schema version 6 must remain supported by this build")
     applied = expect(f.call("GET", "/v1/meta/schema"), 200)["migrations"]
-    check([m["version"] for m in applied] == [1, 2, 3, 4, 5, 6], "empty DB migration sequence")
+    check([m["version"] for m in applied] == list(range(1, SCHEMA_VERSION + 1)),
+          "empty DB exact contiguous migration sequence through current Schema")
     conn = db.connect(f.root / "old.db")
     try:
         with db.transaction(conn):
@@ -278,13 +279,16 @@ def case_t01(f: Fixture) -> None:
                          "created_at,updated_at) VALUES(?,?,?,'open',7,?,?,?)",
                          (task_id, project_id, "old task", task_event["event_id"],
                           clock.now_rfc3339(), clock.now_rfc3339()))
-        check([m for m in migrate(conn)] == ["m0003_authority", "m0004_task_step_state",
-                                              "m0005_evidence_fingerprint",
-                                              "m0006_codex_exec_observations"], "old DB migration list")
+        expected_upgrade = [migration.name for migration in discover() if migration.version > 2]
+        check(expected_upgrade[:4] == ["m0003_authority", "m0004_task_step_state",
+                                       "m0005_evidence_fingerprint", "m0006_codex_exec_observations"],
+              "released P1 migration prefix must remain unchanged")
+        check(migrate(conn) == expected_upgrade, "old DB exact migration list through current Schema")
+        check(current_version(conn) == SCHEMA_VERSION, "old DB must reach current Schema")
         row = conn.execute("SELECT status,revision FROM tasks WHERE task_id=?", (task_id,)).fetchone()
         check((row["status"], row["revision"]) == ("ACTIVE", 7), "P0 open maps ACTIVE without revision loss")
         check(migrate(conn) == [], "second migrate must be no-op")
-        check(EventStore(conn, schema_version=6).get(task_event["event_id"]) is not None,
+        check(EventStore(conn, schema_version=current_version(conn)).get(task_event["event_id"]) is not None,
               "P0 Event remains readable")
     finally:
         conn.close()

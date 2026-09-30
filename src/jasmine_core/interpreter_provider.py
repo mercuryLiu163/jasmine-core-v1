@@ -48,7 +48,7 @@ def _base_config():
         'default_mode_request_user_input':False,'allowed_inactive_declarations':['request_user_input'],
         'native_protocol_version':'reasoning-and-final.v1','catalog_tool_mode':None,
         'skills_include_instructions':False,'bundled_skills_enabled':False,
-        'inference_provider_id':'interpreter-openai','wire_api':'responses',
+        'inference_provider_id':'interpreter-openai','inference_provider_name':'OpenAI','wire_api':'responses',
         'requires_openai_auth':True,'supports_websockets':False,'transport':'https-sse'}
 
 
