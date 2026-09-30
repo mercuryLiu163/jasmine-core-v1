@@ -85,7 +85,8 @@ class CodexProvider:
             # optional tools. No replacement model is ever selected.
             entry=models[0]
             if (entry.get('apply_patch_tool_type') is not None or entry.get('experimental_supported_tools')!=[]
-                or entry.get('supports_search_tool') is not False or entry.get('tool_mode') is not None):
+                or entry.get('supports_search_tool') is not False or 'tool_mode' not in entry
+                or entry['tool_mode'] is not None):
                 raise ValueError('catalog exposes tools')
             self.catalog_bytes=raw.encode('utf-8')
             self.config.update(version='codex-cli/0.159.0',executable_sha256=digest,

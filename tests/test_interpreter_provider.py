@@ -76,3 +76,18 @@ print(json.dumps({'type':'turn.completed'}))
             self.assertEqual(raised.exception.code,"provider_timeout")
             time.sleep(.55)
             self.assertFalse(marker.exists(),"descendant survived process-group cancellation")
+
+    def test_catalog_requires_explicit_null_tool_mode(self):
+        with tempfile.TemporaryDirectory(prefix="jasmine-catalog-component-") as temp:
+            path=Path(temp)/"catalog.json"
+            binary=Path(sys.executable)
+            fingerprint=hashlib.sha256(binary.read_bytes()).hexdigest()
+            entry={"slug":"gpt-6.1-sol","apply_patch_tool_type":None,
+                   "experimental_supported_tools":[],"supports_search_tool":False}
+            with patch.object(CodexProvider,"SUPPORTED_EXECUTABLE_SHA256",fingerprint):
+                for mode in ("missing","code_mode_only",None):
+                    current=dict(entry)
+                    if mode!="missing":current["tool_mode"]=mode
+                    path.write_text(json.dumps({"models":[current]}))
+                    provider=CodexProvider(str(binary),str(path))
+                    self.assertEqual(provider.valid,mode is None)
