@@ -1,4 +1,4 @@
-"""Operator-configured local Codex provider, with a fixed tool-free profile."""
+"""Operator-configured local Codex provider, with a fixed execution-free profile."""
 from __future__ import annotations
 import hashlib
 import json
