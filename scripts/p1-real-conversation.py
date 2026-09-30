@@ -216,10 +216,15 @@ def _db_binding(path: Path, binding: dict[str, Any]) -> dict[str, Any]:
                 scopes_required={"guard:check", "evidence:write", "fingerprint:scan",
                                  "objects:read", "state:read", "authority:read"})
             human = _token_identity(conn, Path(binding["human_token_file"]), kind="human",
-                scopes_required={"events:write", "evidence:confirm", "state:read", "authority:read"})
+                scopes_required={"objects:read", "events:read", "events:write",
+                                 "state:read", "state:write", "state:accept",
+                                 "evidence:read", "evidence:confirm", "authority:read"})
+            agent = _token_identity(conn, path.parent / "agent.token", kind="agent",
+                scopes_required={"objects:read", "state:read", "state:write"})
             return {"schema_version": SCHEMA_VERSION,
                     "event_seq_before": int(conn.execute("SELECT COALESCE(MAX(seq),0) FROM events").fetchone()[0]),
-                    "system_actor_id": system["actor_id"], "human_actor_id": human["actor_id"]}
+                    "system_actor_id": system["actor_id"], "human_actor_id": human["actor_id"],
+                    "agent_actor_id": agent["actor_id"]}
         finally:
             conn.close()
     except sqlite3.Error as exc:
@@ -312,7 +317,8 @@ def _prepare(args: argparse.Namespace, report: dict[str, Any]) -> None:
                 "guard:check", "evidence:write", "evidence:read", "fingerprint:scan",
                 "fingerprint:read", "objects:read", "state:read", "authority:read"])["token"],
             "agent": issuer.issue_key(actor_id=agent, label="p1-gate-agent", scopes=[
-                "state:read", "state:write", "events:write", "authority:propose"])["token"],
+                "objects:read", "state:read", "state:write", "events:write",
+                "authority:propose"])["token"],
         }
     finally:
         conn.close()

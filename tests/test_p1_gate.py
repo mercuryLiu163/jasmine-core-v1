@@ -85,6 +85,31 @@ class RealGateRunner(unittest.TestCase):
             self.assertEqual(len(list(out.glob("p1-t10-run-*.json"))), 2,
                              "retry overwrote original Gate failure")
 
+    def test_prepared_agent_can_read_state_and_start_step_over_real_http(self) -> None:
+        gate = module()
+        with tempfile.TemporaryDirectory(prefix="p1-gate-agent-route-") as temp:
+            out = Path(temp) / "gate"
+            prepared = subprocess.run([sys.executable, str(SCRIPT), "--prepare", "--out",
+                                       str(out), "--project-root", str(ROOT)],
+                                      cwd=ROOT, capture_output=True, text=True, timeout=30)
+            report = json.loads((out / "p1-t10-prepare.json").read_text())
+            self.assertEqual((prepared.returncode, report["phase"]), (2, "prepared"),
+                             f"prepare reason: {report.get('reason')}; stdout: {prepared.stdout}")
+            manifest = json.loads((out / "manifest.json").read_text())
+            binding = json.loads((out / "binding.json").read_text())
+            gate._db_binding(Path(manifest["db"]), binding)
+            core = gate._start_core(Path(manifest["db"]), Path(manifest["workspace"]),
+                                    manifest["port"], out)
+            try:
+                agent = gate.CoreClient(binding["core_url"], (out / "agent.token").read_text().strip())
+                transitioned = gate._transition(agent, manifest, "IN_PROGRESS")
+                self.assertEqual(transitioned["step"]["status"], "IN_PROGRESS")
+                self.assertEqual(transitioned["step"]["revision"], 2)
+                _, step = gate._state(agent, manifest["task_id"], manifest["step_id"])
+                self.assertEqual(step["status"], "IN_PROGRESS")
+            finally:
+                gate._stop_core(core, manifest["port"])
+
     def test_failure_after_start_stops_only_owned_core(self) -> None:
         gate = module()
         with tempfile.TemporaryDirectory(prefix="p1-gate-cleanup-") as temp:
