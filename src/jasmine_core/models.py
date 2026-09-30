@@ -31,6 +31,7 @@ EVENT_HASH_FIELDS = (
 )
 
 EVENT_TYPES = frozenset({
+    "context.built",
     "checkpoint.created",
     "resume.built",
     "user.prompt",

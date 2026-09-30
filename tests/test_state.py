@@ -270,7 +270,7 @@ class UpgradeFromP0(unittest.TestCase):
                 payload={"text": ""}, occurred_at=clock.now()))
             conn.execute("INSERT INTO tasks (task_id,project_id,title,status,revision,source_event_id,created_at,updated_at) VALUES (?,?,?,'open',7,?,?,?)",
                          (task_id, project_id, "t", task_event["event_id"], clock.now_rfc3339(), clock.now_rfc3339()))
-        self.assertEqual([migration for migration in migrate(conn)], ["m0004_task_step_state", "m0005_evidence_fingerprint", "m0006_codex_exec_observations", "m0007_interpretations", "m0008_resolutions", "m0009_continuity"])
+        self.assertEqual([migration for migration in migrate(conn)], ["m0004_task_step_state", "m0005_evidence_fingerprint", "m0006_codex_exec_observations", "m0007_interpretations", "m0008_resolutions", "m0009_continuity", "m0010_context"])
         task = conn.execute("SELECT status,revision,acceptance_criteria_json FROM tasks WHERE task_id=?", (task_id,)).fetchone()
         self.assertEqual((task["status"], task["revision"], json.loads(task["acceptance_criteria_json"])),
                          ("ACTIVE", 7, {"requirements": []}))

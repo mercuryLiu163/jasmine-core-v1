@@ -20,6 +20,7 @@ from jasmine_core.migrations import (  # noqa: E402
 )
 
 EXPECTED_TABLES = {
+    "context_packs", "context_request_keys",
     "checkpoints", "checkpoint_request_keys", "resume_results", "resume_request_keys",
     "core_meta",
     "schema_migrations",
@@ -73,7 +74,7 @@ class MigrationFromEmptyDatabase(DbTestCase):
 
     def test_migrate_creates_the_full_baseline_schema(self) -> None:
         applied = migrate(self.conn)
-        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority", "m0004_task_step_state", "m0005_evidence_fingerprint", "m0006_codex_exec_observations", "m0007_interpretations", "m0008_resolutions", "m0009_continuity"])
+        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority", "m0004_task_step_state", "m0005_evidence_fingerprint", "m0006_codex_exec_observations", "m0007_interpretations", "m0008_resolutions", "m0009_continuity", "m0010_context"])
         self.assertEqual(_tables(self.conn), EXPECTED_TABLES)
         self.assertEqual(current_version(self.conn), expected_version())
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)

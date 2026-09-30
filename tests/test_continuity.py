@@ -122,7 +122,9 @@ class ContinuityHttp(ApiTestCase):
         with patch('jasmine_core.continuity.scan_workspace',return_value=partial):
             # Constructor default is bound at definition; replace the instance scan boundary instead.
             original=ContinuityStore.__init__
-            def setup(store,conn,**kwargs):original(store,conn,scanner=lambda *a,**k:copy.deepcopy(partial),**kwargs)
+            def setup(store,conn,**kwargs):
+                kwargs["scanner"]=lambda *a,**k:copy.deepcopy(partial)
+                original(store,conn,**kwargs)
             with patch.object(ContinuityStore,'__init__',setup):
                 status,cp=self.call('POST','/v1/checkpoints',body,token=token);self.assertEqual(status,201,cp)
                 status,replayed=self.call('POST','/v1/checkpoints',body,token=token);self.assertEqual(status,200,replayed)

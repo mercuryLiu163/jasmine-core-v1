@@ -19,6 +19,7 @@ from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, 
 from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from ..continuity import ContinuityStore
+from ..context.builder import ContextBuilder
 from .request import Request, Response
 
 Handler = Callable[[Request, "Core", auth.Principal | None, "re.Match[str]"], Response]
@@ -44,6 +45,7 @@ class Core:
         self.resolver = resolver.ResolverStore(self.interpretations)
         self.reviews = reviews.ReviewStore(self.resolver)
         self.continuity = ContinuityStore(conn,schema_version=self.schema_version)
+        self.context = ContextBuilder(conn,schema_version=self.schema_version)
         self.registry = registry.Registry(conn)
         self.auth = auth.Auth(conn)
         self.audit = audit.AuditLog(conn)
@@ -77,6 +79,9 @@ def _collection_routes() -> list[Route]:
 
 def _base_routes() -> list[Route]:
     return [
+        Route("POST", re.compile(r"^/v1/context/build$"), build_context, "context:build"),
+        Route("GET", re.compile(r"^/v1/context/([^/]+)$"), get_context, "context:read"),
+        Route("POST", re.compile(r"^/v1/context/([^/]+)/check-current$"), check_context_current, "context:build"),
         Route("POST", re.compile(r"^/v1/checkpoints$"), create_checkpoint, "checkpoint:write"),
         Route("GET", re.compile(r"^/v1/tasks/([^/]+)/checkpoints/latest$"), latest_checkpoint, "checkpoint:read"),
         Route("GET", re.compile(r"^/v1/checkpoints/([^/]+)$"), get_checkpoint, "checkpoint:read"),
@@ -712,6 +717,30 @@ def get_resume(request,core,principal,match):
     _continuity_read(principal);principal.require('checkpoint:read')
     if request.query:raise errors.InvalidRequest('resume GET accepts no query')
     return Response(200,{'resume':core.continuity.get_resume(match.group(1))})
+
+
+def _context_read(principal):
+    _continuity_read(principal)
+    principal.require('checkpoint:read')
+
+
+def build_context(request,core,principal,match):
+    _context_read(principal)
+    if request.query:raise errors.InvalidRequest('context POST accepts no query')
+    result=core.context.build(request.json_body(),actor_id=principal.actor_id)
+    return Response(200 if result['replayed'] else 201,result)
+
+
+def get_context(request,core,principal,match):
+    _context_read(principal)
+    if request.query:raise errors.InvalidRequest('context GET accepts no query')
+    return Response(200,{'context':core.context.get(match.group(1))})
+
+
+def check_context_current(request,core,principal,match):
+    _context_read(principal);principal.require('context:read')
+    if request.query:raise errors.InvalidRequest('context current check accepts no query')
+    return Response(200,core.context.check_current(match.group(1),request.json_body(),actor_id=principal.actor_id))
 
 
 ROUTES = tuple(_base_routes()) + tuple(_collection_routes())

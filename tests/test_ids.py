@@ -19,7 +19,7 @@ class IdFormat(unittest.TestCase):
     def test_every_public_object_prefix_is_reserved(self) -> None:
         self.assertEqual(
             ids.PREFIXES,
-            {"prj", "tsk", "stp", "ses", "hst", "act", "evt", "evd", "aud", "key", "rul", "int", "res", "rvw", "ckp", "rms"},
+            {"prj", "tsk", "stp", "ses", "hst", "act", "evt", "evd", "aud", "key", "rul", "int", "res", "rvw", "ckp", "rms", "ctx"},
         )
 
     def test_prefix_appears_in_the_identifier(self) -> None:
