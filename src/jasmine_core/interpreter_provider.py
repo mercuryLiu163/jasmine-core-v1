@@ -44,7 +44,49 @@ MAX_STREAM_BYTES=256*1024
 class ProviderFailure(Exception):
     def __init__(self,code,raw=None):
         super().__init__(code)
-        self.code=code;self.raw=raw
+        self.code=code;self.raw=raw;self.cleanup_errors=()
+
+
+def _cancel_owned_process(proc):
+    """Best effort for only this invocation; denial never proves descendants dead."""
+    diagnostics=[]
+    def signal_group(sig):
+        try:
+            os.killpg(proc.pid,sig)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            diagnostics.append('cleanup_permission_denied')
+        except OSError:
+            diagnostics.append('cleanup_incomplete')
+    def signal_parent(method):
+        if proc.poll() is not None:
+            return
+        try:
+            method()
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            diagnostics.append('cleanup_permission_denied')
+        except OSError:
+            diagnostics.append('cleanup_incomplete')
+    def bounded_wait(*, final=False):
+        try:
+            proc.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            if final:diagnostics.append('cleanup_incomplete')
+        except OSError:
+            diagnostics.append('cleanup_incomplete')
+    signal_group(signal.SIGTERM)
+    # Popen checks this exact owned child before signalling, never a chosen PID.
+    if 'cleanup_permission_denied' in diagnostics:
+        signal_parent(proc.terminate)
+    bounded_wait()
+    signal_group(signal.SIGKILL)
+    if proc.poll() is None:
+        signal_parent(proc.kill)
+    bounded_wait(final=True)
+    return tuple(dict.fromkeys(diagnostics))
 
 
 def _base_config():
@@ -52,7 +94,7 @@ def _base_config():
         'prompt_version':PROMPT_VERSION,'prompt_digest':sha256_hex(PROMPT),
         'output_schema_version':SCHEMA_VERSION,'schema_digest':sha256_hex(canonical_json(OUTPUT_SCHEMA)),
         'timeout_seconds':120,'max_input_bytes':48*1024,'max_output_bytes':64*1024,
-        'max_stream_bytes':MAX_STREAM_BYTES,'disabled_features':list(DISABLED_FEATURES),
+        'cleanup_protocol_version':'owned-group-bounded.v2','max_stream_bytes':MAX_STREAM_BYTES,'disabled_features':list(DISABLED_FEATURES),
         'web_search':'disabled','agents_enabled':False,'project_doc_max_bytes':0,'tool_profile':'no-execution.v2','execution_mode':'default',
         'default_mode_request_user_input':False,'allowed_inactive_declarations':['request_user_input'],
         'native_protocol_version':'reasoning-and-final.v1','catalog_tool_mode':None,
@@ -190,21 +232,10 @@ class CodexProvider:
             finally:
                 selector.close()
                 if failure or proc.poll() is None:
-                    # A parent may have exited while a child retains its pipes.
-                    # Cancel the invocation's group even when the parent is done.
-                    try:
-                        os.killpg(proc.pid,signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
-                    try:
-                        proc.wait(timeout=1)
-                    except subprocess.TimeoutExpired:
-                        pass
-                    try:
-                        os.killpg(proc.pid,signal.SIGKILL)
-                    except ProcessLookupError:
-                        pass
-                    proc.wait(timeout=1)
+                    cleanup_errors=_cancel_owned_process(proc)
+                    if cleanup_errors:
+                        failure=failure or ProviderFailure('provider_cleanup_failed')
+                        failure.cleanup_errors=cleanup_errors
                 for stream in (proc.stdin,proc.stdout,proc.stderr):
                     stream.close()
             def bounded_final():

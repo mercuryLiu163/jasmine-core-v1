@@ -193,6 +193,8 @@ class InterpretationStore:
             error='invalid_output:'+str(exc)
         except ProviderFailure as exc:
             error=exc.code
+            if exc.cleanup_errors:
+                error+=':'+','.join(exc.cleanup_errors)
             raw=exc.raw
         except Exception:
             error='provider_error'

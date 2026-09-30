@@ -192,3 +192,16 @@ class Resolutions(DbTestCase):
         raw,ident,pending=self._new_correction(task,kind='RULE')
         with self.assertRaises(errors.InvalidRequest):self.reviews.change(pending['review_id'],'approve',self._approve_correction_body(ident,rule),actor_id=self.human,scopes=self.scopes)
         self.assertEqual(self.resolver.authority.get(rule['target_id'])['version'],1)
+
+    def test_provider_cleanup_denial_is_persisted_without_losing_primary_failure(self):
+        from jasmine_core.interpreter_provider import ProviderFailure
+        def denied(source):
+            failure=ProviderFailure('provider_output_too_large','bounded invalid output')
+            failure.cleanup_errors=('cleanup_permission_denied','cleanup_incomplete')
+            raise failure
+        self.fake.action=denied
+        result=self.interpretations.process({'event_id':self.event,'idempotency_key':'cleanup-denied'},actor_id=self.system)['interpretation']
+        self.assertEqual(result['status'],'FAILED')
+        self.assertEqual(result['error_code'],'provider_output_too_large:cleanup_permission_denied,cleanup_incomplete')
+        self.assertEqual(result['raw_result_json'],'bounded invalid output')
+        self.assertEqual(self.conn.execute('SELECT count(*) FROM tasks').fetchone()[0],0)
