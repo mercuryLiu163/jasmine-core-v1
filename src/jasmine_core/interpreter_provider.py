@@ -170,12 +170,22 @@ class CodexProvider:
                 failure=exc if isinstance(exc,ProviderFailure) else ProviderFailure('provider_timeout')
             finally:
                 selector.close()
-                if proc.poll() is None:
-                    os.killpg(proc.pid,signal.SIGTERM)
+                if failure or proc.poll() is None:
+                    # A parent may have exited while a child retains its pipes.
+                    # Cancel the invocation's group even when the parent is done.
+                    try:
+                        os.killpg(proc.pid,signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
                     try:
                         proc.wait(timeout=1)
                     except subprocess.TimeoutExpired:
-                        os.killpg(proc.pid,signal.SIGKILL);proc.wait(timeout=1)
+                        pass
+                    try:
+                        os.killpg(proc.pid,signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    proc.wait(timeout=1)
                 for stream in (proc.stdin,proc.stdout,proc.stderr):
                     stream.close()
             def bounded_final():

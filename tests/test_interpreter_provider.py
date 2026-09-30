@@ -64,3 +64,14 @@ print(json.dumps({'type':'turn.completed'}))
         self.assertFalse(p.valid)
         with self.assertRaises(ProviderFailure) as raised:p.extract({'text':'do not execute'})
         self.assertEqual(raised.exception.code,'provider_unavailable')
+
+    def test_exited_parent_with_child_holding_pipes_is_cancelled(self):
+        with tempfile.TemporaryDirectory(prefix="jasmine-child-receipt-") as temp:
+            marker=Path(temp)/"still-running"
+            child="import time,pathlib,signal;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(.5);pathlib.Path("+repr(str(marker))+").write_text('leaked')"
+            script="import subprocess,sys;subprocess.Popen([sys.executable,'-c',"+repr(child)+"])"
+            with self.assertRaises(ProviderFailure) as raised:
+                self.run_script(script,timeout=.15)
+            self.assertEqual(raised.exception.code,"provider_timeout")
+            time.sleep(.55)
+            self.assertFalse(marker.exists(),"descendant survived process-group cancellation")
