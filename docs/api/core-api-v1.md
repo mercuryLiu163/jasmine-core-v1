@@ -221,6 +221,7 @@ immutable Evidence. All Evidence writes keep source and command Events distinct.
 
 | Method | Path | Scope and Registry actor | Purpose |
 | --- | --- | --- | --- |
+| POST | `/v1/codex-exec-observations` | `evidence:attest`, system | Independent native CLI result linked to immutable Post INFO |
 | POST | `/v1/tool-results` | `evidence:write`, system | Tool call/result Raw Events and Evidence in one transaction |
 | POST | `/v1/evidence/confirm` | `evidence:confirm`, human | Explicit confirmation with genuine current human prompt source |
 | GET | `/v1/evidence/{evidence_id}` | `evidence:read` | Evidence plus current reference status |
@@ -240,6 +241,23 @@ requires a matching private operator producer mapping as described in ADR 0007.
 `reference_status` is rechecked on GET and validation: `NONE`, `OK` or
 `BROKEN_REFERENCE`. `BROKEN_REFERENCE` cannot satisfy criteria.
 
+`POST /v1/codex-exec-observations` accepts exactly `task_id`, `step_id`,
+`host_id`, `origin_prompt_event_id`, `related_posttool_event_id`, `codex_jsonl`,
+`codex_jsonl_sha256`, `hook_trace_jsonl`, `hook_trace_sha256`, and
+`codex_executable` with exact `path`, `version`, `sha256` fields. Sources are
+complete UTF-8 captures with matching lowercase SHA-256 digests; executable
+path is resolved and absolute. The trusted local runner attests that both
+sources came from the same invocation. Core checks a unique completed native
+command and complete three-record prompt/Pre/Post trace against stored Events,
+original INFO Evidence, unchanged revisions and complete workspace fingerprint.
+The original Post remains INFO. A separate native result yields PASS only for
+strict integer zero and FAIL for other integers. New writes return 201 with
+`evidence`, `result_event`, `related_posttool_event_id`, `replayed=false`;
+identical replay by the same actor returns the original snapshot with 200 and
+`replayed=true`. Changed observations for the same Post return 409. JSONL and
+trace limits are 192 KiB and 32 KiB; full text is retained in the immutable
+Event. See ADR 0007 for exact lifecycle and shell wrapper restrictions.
+
 `POST /v1/evidence/confirm` takes `task_id`, optional `step_id`, `host_id`,
 `origin_event_id`, positive integer `expected_revision`, optional `event_id`,
 and optional paired `confirmed_rule_id`/`confirmed_rule_version`. The origin
@@ -249,7 +267,7 @@ prompt payload to name that Step. The command Event carries the actor's
 structured confirmation, exact revision, fingerprint and optional Rule version.
 A human may replay an identical `event_id` to get its original Evidence; old
 prompts cannot be reused for a later revision. Agent keys cannot carry
-`evidence:confirm` or `evidence:write`.
+`evidence:confirm`, `evidence:write`, or `evidence:attest`.
 
 `POST /v1/workspaces/fingerprint` takes only `project_id` and `host_id`; the
 response includes `fingerprint_sha256`, server `snapshot`, and `staled_steps`.

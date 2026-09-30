@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shlex
 import sqlite3
 import stat
 from pathlib import Path
@@ -25,6 +26,8 @@ KINDS = frozenset({"COMMAND_RESULT", "BUILD", "TEST", "DEVICE_TEST",
                    "FILE_CHANGE", "ARTIFACT", "REVIEW", "USER_CONFIRMATION"})
 RESULTS = frozenset({"PASS", "FAIL", "INFO"})
 TOOL_KINDS = KINDS - {"USER_CONFIRMATION"}
+MAX_CODEX_JSONL_BYTES = 192 * 1024
+MAX_HOOK_TRACE_BYTES = 32 * 1024
 
 
 def _fields(body: dict[str, Any], allowed: set[str]) -> None:
@@ -103,6 +106,109 @@ def _tool_result(raw: Any) -> tuple[str, dict[str, Any]]:
     else:
         status = "PASS"
     return status, {"exit_code": exit_code, "is_error": is_error if type(is_error) is bool else None}
+
+
+def _sha256(value: Any, field: str) -> str:
+    if (not isinstance(value, str) or len(value) != 64 or
+            any(char not in "0123456789abcdef" for char in value)):
+        raise errors.InvalidRequest(f"{field} must be lowercase SHA-256 hex", field=field)
+    return value
+
+
+def _raw_jsonl(value: Any, digest: Any, field: str, maximum: int) -> list[dict[str, Any]]:
+    if not isinstance(value, str) or not value or len(value.encode("utf-8")) > maximum:
+        raise errors.InvalidRequest(f"{field} must be nonempty UTF-8 text within its size cap", field=field)
+    if hashlib.sha256(value.encode("utf-8")).hexdigest() != _sha256(digest, field + "_sha256"):
+        raise errors.InvalidRequest(f"{field} digest does not match its bytes", field=field)
+    try:
+        lines = [json.loads(line) for line in value.splitlines()]
+    except (ValueError, TypeError) as exc:
+        raise errors.InvalidRequest(f"{field} contains malformed JSONL", field=field) from exc
+    if not lines or any(not isinstance(item, dict) for item in lines):
+        raise errors.InvalidRequest(f"{field} must contain JSON objects", field=field)
+    return lines
+
+
+def _observed_command(raw: Any) -> str:
+    if not isinstance(raw, str):
+        raise errors.InvalidRequest("Codex command_execution.command must be text")
+    try:
+        envelope = shlex.split(raw, posix=True)
+    except ValueError as exc:
+        raise errors.InvalidRequest("Codex command envelope has invalid quoting") from exc
+    if len(envelope) != 3 or envelope[0] != "/bin/bash" or envelope[1] not in ("-c", "-lc"):
+        raise errors.InvalidRequest("Codex command must use the supported three-argument Bash envelope")
+    return envelope[2]
+
+
+def _codex_execution(lines: list[dict[str, Any]], session: str,
+                     command: str) -> tuple[str, int]:
+    thread = [(i, item) for i, item in enumerate(lines) if item.get("type") == "thread.started"]
+    started_turn = [i for i, item in enumerate(lines) if item.get("type") == "turn.started"]
+    finished_turn = [i for i, item in enumerate(lines) if item.get("type") == "turn.completed"]
+    if (len(thread) != 1 or thread[0][1].get("thread_id") != session or
+            len(started_turn) != 1 or len(finished_turn) != 1 or
+            not thread[0][0] < started_turn[0] < finished_turn[0] or
+            any(item.get("type") in ("turn.failed", "turn.cancelled") for item in lines)):
+        raise errors.InvalidRequest("Codex JSONL lacks one completed session turn")
+    calls: list[tuple[int, str, dict[str, Any]]] = []
+    for index, event in enumerate(lines):
+        phase = event.get("type")
+        if phase not in ("thread.started", "turn.started", "turn.completed",
+                         "item.started", "item.completed"):
+            raise errors.InvalidRequest("Codex JSONL contains an unexpected event type")
+        if phase in ("thread.started", "turn.started", "turn.completed"):
+            if "item" in event:
+                raise errors.InvalidRequest("Codex lifecycle event contains an unexpected item")
+            continue
+        item = event.get("item")
+        if not isinstance(item, dict):
+            raise errors.InvalidRequest("Codex item event must contain an item object")
+        kind = item.get("type")
+        if kind not in ("agent_message", "command_execution"):
+            raise errors.InvalidRequest("Codex JSONL contains an unexpected item type")
+        if kind == "command_execution":
+            phase = event.get("type")
+            if phase not in ("item.started", "item.completed"):
+                raise errors.InvalidRequest("Codex command has an unsupported lifecycle phase")
+            calls.append((index, phase, item))
+    if len(calls) != 2 or [entry[1] for entry in calls] != ["item.started", "item.completed"]:
+        raise errors.InvalidRequest("Codex JSONL must contain one command start/completion pair")
+    first, last = calls[0][2], calls[1][2]
+    item_id = first.get("id")
+    if (not isinstance(item_id, str) or not item_id or last.get("id") != item_id or
+            first.get("command") != last.get("command") or
+            _observed_command(first.get("command")) != command or
+            first.get("status") != "in_progress" or last.get("status") != "completed" or
+            type(last.get("exit_code")) is not int or
+            not started_turn[0] < calls[0][0] < calls[1][0] < finished_turn[0]):
+        raise errors.InvalidRequest("Codex command does not match one completed prepared Bash call")
+    return item_id, last["exit_code"]
+
+
+def _hook_chain(lines: list[dict[str, Any]], *, prompt_event_id: str,
+                post_event_id: str, session: str, turn: str, use: str,
+                input_sha256: str) -> None:
+    if any(item.get("session_id") != session or item.get("turn_id") != turn for item in lines):
+        raise errors.InvalidRequest("hook trace includes another session or turn")
+    prompt = [item for item in lines if item.get("hook_event_name") == "UserPromptSubmit"]
+    pre = [item for item in lines if item.get("hook_event_name") == "PreToolUse"]
+    post = [item for item in lines if item.get("hook_event_name") == "PostToolUse"]
+    matching_pre = [item for item in pre if item.get("tool_input_sha256") == input_sha256]
+    if (len(prompt) != 1 or prompt[0].get("result") != "captured" or
+            prompt[0].get("event_id") != prompt_event_id or len(matching_pre) != 1 or
+            matching_pre[0].get("tool_use_id") != use or
+            matching_pre[0].get("result") not in ("guard:allow", "guard:verify") or
+            len(post) != 1 or post[0].get("result") != "captured" or
+            post[0].get("event_id") != post_event_id or
+            post[0].get("tool_use_id") != use or
+            post[0].get("tool_input_sha256") != input_sha256 or
+            any(item.get("tool_input_sha256") == input_sha256 and item is not matching_pre[0]
+                for item in pre)):
+        raise errors.InvalidRequest("hook trace does not contain one linked prompt/Pre/Post chain")
+    if len(pre) != 1 or len(lines) != 3 or [item.get("hook_event_name") for item in lines] != [
+            "UserPromptSubmit", "PreToolUse", "PostToolUse"]:
+        raise errors.InvalidRequest("hook trace contains another tool attempt")
 
 
 def _producer_kind(kind: str, tool_name: str, command_sha256: str | None) -> str | None:
@@ -372,19 +478,21 @@ class EvidenceStore:
                 tool_use_id: str | None = None, tool_name: str | None = None,
                 command_sha256: str | None = None, producer_config_sha256: str | None = None,
                 confirmed_rule_id: str | None = None,
-                confirmed_rule_version: int | None = None) -> dict[str, Any]:
+                confirmed_rule_version: int | None = None,
+                related_posttool_event_id: str | None = None) -> dict[str, Any]:
         self.conn.execute(
             "INSERT INTO evidence (evidence_id,task_id,step_id,kind,status,result_json,"
             "source_event_id,change_event_id,fingerprint_sha256,artifact_uri,artifact_sha256,"
             "actor_id,host_id,session_id,turn_id,tool_use_id,tool_name,command_sha256,producer_config_sha256,"
-            "confirmed_rule_id,confirmed_rule_version,task_revision,step_revision,created_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "confirmed_rule_id,confirmed_rule_version,task_revision,step_revision,created_at,"
+            "related_posttool_event_id)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (evidence_id, task["task_id"], step["step_id"] if step else None,
              kind, status, canonical_json(result), source_event_id, change_event_id,
              fingerprint_sha256, artifact_uri, artifact_sha256, actor_id, host_id,
              session_id, turn_id, tool_use_id, tool_name, command_sha256, producer_config_sha256,
              confirmed_rule_id, confirmed_rule_version, task["revision"],
-             step["revision"] if step else None, clock.now_rfc3339()),
+             step["revision"] if step else None, clock.now_rfc3339(), related_posttool_event_id),
         )
         return self._evidence(evidence_id)
 
@@ -477,6 +585,150 @@ class EvidenceStore:
                                   producer_config_sha256=producer_config_sha256)
             return {"evidence": record, "call_event": call_event,
                     "result_event": result_event, "replayed": False}
+
+    def record_codex_exec_observation(self, body: dict[str, Any], *, actor_id: str) -> dict[str, Any]:
+        """Attest one complete native CLI turn against one existing Post INFO result.
+
+        The CLI item has no Hook use ID. The caller is a trusted local runner
+        asserting that both full captures came from the same invocation; Core
+        refuses every ambiguous chain within those captures.
+        """
+        _fields(body, {"task_id", "step_id", "host_id", "origin_prompt_event_id",
+                       "related_posttool_event_id", "codex_jsonl", "codex_jsonl_sha256",
+                       "hook_trace_jsonl", "hook_trace_sha256", "codex_executable"})
+        task_id = _id(body.get("task_id"), "tsk", "task_id")
+        step_id = _id(body.get("step_id"), "stp", "step_id")
+        host_id = _id(body.get("host_id"), "hst", "host_id")
+        prompt_id = _id(body.get("origin_prompt_event_id"), "evt", "origin_prompt_event_id")
+        post_id = _id(body.get("related_posttool_event_id"), "evt", "related_posttool_event_id")
+        executable = body.get("codex_executable")
+        if not isinstance(executable, dict) or set(executable) != {"path", "version", "sha256"}:
+            raise errors.InvalidRequest("codex_executable requires path, version, sha256")
+        path = _text(executable["path"], "codex_executable.path", limit=4096)
+        if not Path(path).is_absolute() or os.path.normpath(path) != path or os.path.realpath(path) != path:
+            raise errors.InvalidRequest("codex_executable.path must be a resolved absolute path")
+        _text(executable["version"], "codex_executable.version")
+        _sha256(executable["sha256"], "codex_executable.sha256")
+        cli = _raw_jsonl(body.get("codex_jsonl"), body.get("codex_jsonl_sha256"),
+                         "codex_jsonl", MAX_CODEX_JSONL_BYTES)
+        trace = _raw_jsonl(body.get("hook_trace_jsonl"), body.get("hook_trace_sha256"),
+                           "hook_trace_jsonl", MAX_HOOK_TRACE_BYTES)
+        request_digest = body_hash(body)
+        with db.translate_lock_errors(), db.transaction(self.conn):
+            task, step = self._task_step(task_id, step_id)
+            if self._actor_host(actor_id, host_id) != "system":
+                raise errors.ForbiddenActorKind("native observation requires a system actor")
+            existing = self.conn.execute(
+                "SELECT evidence_id,source_event_id FROM evidence WHERE related_posttool_event_id=?",
+                (post_id,)).fetchone()
+            if existing is not None:
+                event = self.events.get(existing["source_event_id"])
+                if (event is None or event["payload"].get("observation_request_sha256") != request_digest or
+                        event["actor_id"] != actor_id or event["host_id"] != host_id or
+                        event["task_id"] != task_id or event["project_id"] != task["project_id"] or
+                        event["payload"].get("step_id") != step_id):
+                    raise errors.EventIdConflict("PostToolUse already has another native observation")
+                return {"evidence": self._evidence(existing["evidence_id"]),
+                        "result_event": event, "related_posttool_event_id": post_id,
+                        "replayed": True}
+
+            prompt, post = self.events.get(prompt_id), self.events.get(post_id)
+            if prompt is None or post is None:
+                raise errors.InvalidRequest("prompt or PostToolUse Event is missing")
+            pp, rp = prompt["payload"], post["payload"]
+            if (prompt["event_type"] != "user.prompt" or prompt["source_system"] != "codex-p1-bound" or
+                    prompt["actor_kind"] != "human" or prompt["task_id"] != task_id or
+                    prompt["project_id"] != task["project_id"] or prompt["host_id"] != host_id or
+                    pp.get("step_id") != step_id or
+                    post["event_type"] != "tool.result" or post["source_system"] != "codex-posttool" or
+                    post["actor_kind"] != "system" or post["actor_id"] != actor_id or
+                    post["task_id"] != task_id or post["project_id"] != task["project_id"] or
+                    post["host_id"] != host_id or rp.get("step_id") != step_id or
+                    post["seq"] <= prompt["seq"]):
+                raise errors.InvalidRequest("prompt and PostToolUse are not one bound task chain")
+            session = pp.get("source_session_id")
+            turn = pp.get("turn_id")
+            use = rp.get("tool_use_id")
+            if (not all(isinstance(x, str) and x for x in (session, turn, use)) or
+                    rp.get("codex_session_id") != session or rp.get("turn_id") != turn):
+                raise errors.InvalidRequest("PostToolUse session/turn does not match prompt")
+            call = self.events.get(rp.get("call_event_id")) if ids.is_id(rp.get("call_event_id"), "evt") else None
+            if call is None or call["event_type"] != "tool.call" or call["source_system"] != "codex-posttool" or \
+                    call["actor_id"] != actor_id or call["task_id"] != task_id or \
+                    call["project_id"] != task["project_id"] or call["host_id"] != host_id or \
+                    call["seq"] >= post["seq"]:
+                raise errors.InvalidRequest("PostToolUse linked call is invalid")
+            cp = call["payload"]
+            if any(cp.get(key) != rp.get(key) for key in ("codex_session_id", "turn_id", "tool_use_id", "tool_name", "step_id")):
+                raise errors.InvalidRequest("PostToolUse call/result identity differs")
+            tool_input = cp.get("tool_input")
+            command = tool_input.get("command") if isinstance(tool_input, dict) else None
+            if cp.get("tool_name") != "Bash" or not isinstance(command, str) or not command:
+                raise errors.InvalidRequest("linked call is not a Bash command")
+            input_sha = hashlib.sha256(canonical_json(tool_input).encode()).hexdigest()
+            _hook_chain(trace, prompt_event_id=prompt_id, post_event_id=post_id,
+                        session=session, turn=turn, use=use, input_sha256=input_sha)
+            item_id, exit_code = _codex_execution(cli, session, command)
+            old = self.conn.execute("SELECT * FROM evidence WHERE source_event_id=?", (post_id,)).fetchall()
+            if len(old) != 1 or old[0]["kind"] != "COMMAND_RESULT" or old[0]["status"] != "INFO" or \
+                    old[0]["step_id"] != step_id or old[0]["task_id"] != task_id or \
+                    old[0]["actor_id"] != actor_id or old[0]["host_id"] != host_id or \
+                    old[0]["turn_id"] != turn or old[0]["tool_use_id"] != use or \
+                    old[0]["tool_name"] != "Bash" or \
+                    old[0]["command_sha256"] != hashlib.sha256(command.encode()).hexdigest():
+                raise errors.InvalidRequest("original PostToolUse INFO Evidence does not match")
+            if (task["revision"] != old[0]["task_revision"] or
+                    step["revision"] != old[0]["step_revision"]):
+                raise errors.RevisionConflict("task or step changed since PostToolUse")
+            stored = self.conn.execute("SELECT snapshot_json FROM workspace_fingerprints WHERE fingerprint_sha256=?",
+                                       (old[0]["fingerprint_sha256"],)).fetchone()
+            current = fingerprint.capture()
+            if stored is None or fingerprint.compare(json.loads(stored["snapshot_json"]), current) != "SAME":
+                raise errors.MissingEvidence("workspace changed since PostToolUse")
+            status = "PASS" if exit_code == 0 else "FAIL"
+            command_sha = hashlib.sha256(command.encode()).hexdigest()
+            # The full source bytes live in the immutable Event. A smaller
+            # semantic hash keeps the Event identity stable on exact replay.
+            payload = {"origin_prompt_event_id": prompt_id, "related_posttool_event_id": post_id,
+                       "call_event_id": call["event_id"], "native_item_id": item_id,
+                       "codex_session_id": session, "turn_id": turn, "tool_use_id": use,
+                       "tool_name": "Bash", "command_sha256": command_sha,
+                       "exit_code": exit_code, "codex_executable": executable,
+                       "codex_jsonl": body["codex_jsonl"], "codex_jsonl_sha256": body["codex_jsonl_sha256"],
+                       "hook_trace_jsonl": body["hook_trace_jsonl"],
+                       "hook_trace_sha256": body["hook_trace_sha256"],
+                       "observation_request_sha256": request_digest, "step_id": step_id}
+            if len(canonical_json({"text": "", **payload}).encode()) > 256 * 1024:
+                raise errors.InvalidRequest("native observation exceeds Event body cap")
+            seed = ("codex-exec-jsonl-v1", post_id)
+            result_event, replayed = self._event(
+                event_type="tool.result", actor_id=actor_id, actor_kind="system", host_id=host_id,
+                task=task, source_system="codex-exec-jsonl", session_id=post["session_id"],
+                source_event_id=canonical_json(seed), event_id=_deterministic_event_id(*seed), payload=payload)
+            if replayed:
+                raise errors.EventIdConflict("native result replay state is inconsistent")
+            fp_sha, _ = self._snapshot(task["project_id"], result_event["event_id"], current)
+            evidence_id = ids.new_id("evd")
+            evidence_event, _ = self._event(
+                event_type="evidence.recorded", actor_id=actor_id, actor_kind="system",
+                host_id=host_id, task=task, session_id=post["session_id"],
+                source_system="codex-exec-jsonl", source_event_id=canonical_json([*seed, "evidence"]),
+                event_id=_deterministic_event_id(*seed, "evidence"),
+                payload={"evidence_id": evidence_id, "source_event_id": result_event["event_id"],
+                         "related_posttool_event_id": post_id, "kind": "COMMAND_RESULT",
+                         "status": status, "step_id": step_id, "fingerprint_sha256": fp_sha})
+            record = self._insert(
+                evidence_id=evidence_id, task=task, step=step, kind="COMMAND_RESULT", status=status,
+                result={"exit_code": exit_code, "native_item_id": item_id,
+                        "codex_jsonl_sha256": body["codex_jsonl_sha256"],
+                        "hook_trace_sha256": body["hook_trace_sha256"]},
+                source_event_id=result_event["event_id"], change_event_id=evidence_event["event_id"],
+                fingerprint_sha256=fp_sha, artifact_uri=None, artifact_sha256=None,
+                actor_id=actor_id, host_id=host_id, session_id=post["session_id"], turn_id=turn,
+                tool_use_id=use, tool_name="Bash", command_sha256=command_sha,
+                producer_config_sha256=None, related_posttool_event_id=post_id)
+            return {"evidence": record, "result_event": result_event,
+                    "related_posttool_event_id": post_id, "replayed": False}
 
     def record_confirmation(self, body: dict[str, Any], *, actor_id: str) -> dict[str, Any]:
         _fields(body, {"task_id", "step_id", "host_id", "origin_event_id",
@@ -601,8 +853,63 @@ class CurrentEvidenceValidator:
         if (event["event_type"] != "tool.result" or event["actor_kind"] != "system" or
                 event["actor_id"] != row["actor_id"]):
             return False
+        if row.get("related_posttool_event_id") is not None:
+            return self._native_source_valid(row, event)
         source_status, _ = _tool_result(event["payload"].get("tool_response"))
         return source_status == row["status"]
+
+    def _native_source_valid(self, row: dict[str, Any], event: dict[str, Any]) -> bool:
+        """Reparse the stored complete sources before a State write trusts PASS."""
+        if event["source_system"] != "codex-exec-jsonl":
+            return False
+        p = event["payload"]
+        post = self.store.events.get(row["related_posttool_event_id"])
+        prompt = self.store.events.get(p.get("origin_prompt_event_id")) if ids.is_id(
+            p.get("origin_prompt_event_id"), "evt") else None
+        call = self.store.events.get(p.get("call_event_id")) if ids.is_id(
+            p.get("call_event_id"), "evt") else None
+        if (post is None or prompt is None or call is None or
+                post["event_type"] != "tool.result" or post["source_system"] != "codex-posttool" or
+                prompt["event_type"] != "user.prompt" or prompt["source_system"] != "codex-p1-bound" or
+                call["event_type"] != "tool.call" or call["source_system"] != "codex-posttool" or
+                post["payload"].get("call_event_id") != call["event_id"] or
+                p.get("related_posttool_event_id") != post["event_id"] or
+                p.get("step_id") != row["step_id"] or
+                any(item["task_id"] != row["task_id"] or item["project_id"] != event["project_id"]
+                    for item in (post, prompt, call)) or
+                any(item["host_id"] != row["host_id"] for item in (post, prompt, call)) or
+                post["actor_id"] != row["actor_id"] or call["actor_id"] != row["actor_id"]):
+            return False
+        cp, rp, pp = call["payload"], post["payload"], prompt["payload"]
+        command = cp.get("tool_input", {}).get("command") if isinstance(cp.get("tool_input"), dict) else None
+        if (not isinstance(command, str) or cp.get("tool_name") != "Bash" or
+                rp.get("tool_name") != "Bash" or
+                any(cp.get(k) != rp.get(k) for k in ("codex_session_id", "turn_id", "tool_use_id", "step_id")) or
+                pp.get("source_session_id") != rp.get("codex_session_id") or
+                pp.get("turn_id") != rp.get("turn_id") or
+                p.get("codex_session_id") != rp.get("codex_session_id") or
+                p.get("turn_id") != rp.get("turn_id") or p.get("tool_use_id") != rp.get("tool_use_id") or
+                row["turn_id"] != rp.get("turn_id") or row["tool_use_id"] != rp.get("tool_use_id") or
+                row["command_sha256"] != hashlib.sha256(command.encode()).hexdigest()):
+            return False
+        old = self.conn.execute("SELECT * FROM evidence WHERE source_event_id=?", (post["event_id"],)).fetchall()
+        if len(old) != 1 or old[0]["status"] != "INFO" or old[0]["kind"] != "COMMAND_RESULT" or \
+                old[0]["fingerprint_sha256"] != row["fingerprint_sha256"]:
+            return False
+        try:
+            cli = _raw_jsonl(p.get("codex_jsonl"), p.get("codex_jsonl_sha256"),
+                             "codex_jsonl", MAX_CODEX_JSONL_BYTES)
+            trace = _raw_jsonl(p.get("hook_trace_jsonl"), p.get("hook_trace_sha256"),
+                               "hook_trace_jsonl", MAX_HOOK_TRACE_BYTES)
+            _hook_chain(trace, prompt_event_id=prompt["event_id"], post_event_id=post["event_id"],
+                        session=rp["codex_session_id"], turn=rp["turn_id"],
+                        use=rp["tool_use_id"], input_sha256=hashlib.sha256(
+                            canonical_json(cp["tool_input"]).encode()).hexdigest())
+            item_id, code = _codex_execution(cli, rp["codex_session_id"], command)
+        except (errors.InvalidRequest, KeyError, TypeError):
+            return False
+        return (item_id == p.get("native_item_id") and code == p.get("exit_code") and
+                row["status"] == ("PASS" if code == 0 else "FAIL"))
 
     def _fresh(self, row: dict[str, Any], current: dict[str, Any], project_id: str,
                expected_revision: int, task_revision: int,

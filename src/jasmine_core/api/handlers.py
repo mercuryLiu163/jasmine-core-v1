@@ -92,6 +92,7 @@ def _base_routes() -> list[Route]:
         Route("POST", re.compile(r"^/v1/rules/([^/]+)/retire$"), retire_rule, "authority:manage"),
         Route("POST", re.compile(r"^/v1/guard/check$"), guard_check, "guard:check"),
         Route("POST", re.compile(r"^/v1/tool-results$"), record_tool_result, "evidence:write"),
+        Route("POST", re.compile(r"^/v1/codex-exec-observations$"), record_codex_exec_observation, "evidence:attest"),
         Route("POST", re.compile(r"^/v1/evidence/confirm$"), confirm_evidence, "evidence:confirm"),
         Route("GET", re.compile(r"^/v1/evidence/([^/]+)$"), get_evidence, "evidence:read"),
         Route("GET", re.compile(r"^/v1/tasks/([^/]+)/evidence$"), list_task_evidence, "evidence:read"),
@@ -305,6 +306,14 @@ def record_tool_result(request: Request, core: Core, principal: auth.Principal,
     if core.actor_kind(principal.actor_id) != "system":
         raise errors.ForbiddenActorKind("tool Evidence requires a trusted system actor")
     result = core.evidence.record_tool_result(request.json_body(), actor_id=principal.actor_id)
+    return Response(200 if result["replayed"] else 201, result)
+
+
+def record_codex_exec_observation(request: Request, core: Core, principal: auth.Principal,
+                                  match: re.Match[str]) -> Response:
+    if core.actor_kind(principal.actor_id) != "system":
+        raise errors.ForbiddenActorKind("native observation requires a trusted system actor")
+    result = core.evidence.record_codex_exec_observation(request.json_body(), actor_id=principal.actor_id)
     return Response(200 if result["replayed"] else 201, result)
 
 
