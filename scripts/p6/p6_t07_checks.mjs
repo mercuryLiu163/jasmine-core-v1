@@ -31,7 +31,12 @@ function parseArgs(argv) {
 }
 
 class Cdp {
-  constructor(url) { this.url = url; this.nextId = 1; this.pending = new Map() }
+  constructor(url) {
+    this.url = url
+    this.nextId = 1
+    this.pending = new Map()
+    this.handlers = []
+  }
   async connect() {
     this.socket = new WebSocket(this.url)
     await new Promise((res, rej) => {
@@ -44,9 +49,12 @@ class Cdp {
         const { resolve: res, reject: rej } = this.pending.get(message.id)
         this.pending.delete(message.id)
         message.error ? rej(new Error(message.error.message)) : res(message.result)
+        return
       }
+      for (const handler of this.handlers) handler(message)
     })
   }
+  on(handler) { this.handlers.push(handler) }
   send(method, params = {}) {
     const id = this.nextId++
     return new Promise((res, rej) => {
@@ -229,6 +237,52 @@ async function main() {
         Boolean(state) && state.emptyState === false, state ? state.text : '')
       const screenshot = await cdp.send('Page.captureScreenshot', { format: 'png' })
       await writeFile(join(out, 'screenshots', 'accept-panel.png'), Buffer.from(screenshot.data, 'base64'))
+    })
+  }
+
+  if (args.phase === 'rapidswitch') {
+    // The last T07 action earlier rounds covered only with a component test: a
+    // slow response for project A must never land after the operator switched to
+    // project B. Core is not touched - only the browser's delivery of that one
+    // response is delayed, using the CDP Fetch domain at the response stage.
+    await withChrome(args.ui, out, async (cdp) => {
+      await signIn(cdp, token)
+      const delayed = []
+      cdp.on((message) => {
+        if (message.method !== 'Fetch.requestPaused') return
+        const { requestId, request } = message.params
+        delayed.push(`${request.method} ${new URL(request.url).pathname}${new URL(request.url).search}`)
+        // Hold the response past the switch, then release it.
+        setTimeout(() => { cdp.send('Fetch.continueRequest', { requestId }).catch(() => {}) }, 1800)
+      })
+      await cdp.send('Fetch.enable', {
+        patterns: [{ urlPattern: `*project_id=${args.slowProject}*`, requestStage: 'Response' }],
+      })
+
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/project/${args.slowProject}` })
+      await new Promise((r) => setTimeout(r, 400)) // let A's reads go out and get paused
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/project/${args.fastProject}` })
+      await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(args.fastTitle)})`,
+        { label: 'project B rendered' })
+      const duringSwitch = await evaluate(cdp,
+        `document.body.textContent.includes(${JSON.stringify(args.slowTitle)})`)
+      // Let A's delayed responses arrive, then look again.
+      await new Promise((r) => setTimeout(r, 2600))
+      const after = await evaluate(cdp, `({
+        hasSlow: document.body.textContent.includes(${JSON.stringify(args.slowTitle)}),
+        hasFast: document.body.textContent.includes(${JSON.stringify(args.fastTitle)}),
+        hash: location.hash,
+      })`)
+
+      record('rapid switch: project A reads really were delayed past the switch',
+        delayed.length > 0, `paused=${delayed.length} ${JSON.stringify([...new Set(delayed)].slice(0, 3))}`)
+      record('rapid switch: project A rows never render under project B (also after A lands)',
+        duringSwitch === false && after.hasSlow === false, JSON.stringify(after))
+      record('rapid switch: project B keeps its own rows', after.hasFast === true, `hash=${after.hash}`)
+
+      await cdp.send('Fetch.disable')
+      const shot = await cdp.send('Page.captureScreenshot', { format: 'png' })
+      await writeFile(join(out, 'screenshots', 't07-rapidswitch.png'), Buffer.from(shot.data, 'base64'))
     })
   }
 

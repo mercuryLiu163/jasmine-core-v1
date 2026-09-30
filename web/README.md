@@ -148,10 +148,11 @@ explicitly *not* delivered.
 
 ## Phase status
 
-`P6-01: PASS on the scratch fixture for T01/T02/T07`, confirmed by an
-independent validator on `f7addbf` (see `P6-01-COMPLIANCE.md` for the commit
-binding of each verdict). It is **not** `P6` done: P6-02 (audited human writes)
-and P6-03a/b/c (P3/P4/P7-01 inspectors) are not delivered, no Gate ran against
-the operator's own Core or a real captured conversation, and throttling plus an
+`P6-01: T01 PASS, T02 PASS, T07 PARTIAL` on an isolated scratch fixture — the
+independent r3 verdict on `f7addbf`, whose product code and built bundle are
+byte-identical to the tip (see `P6-01-COMPLIANCE.md` for the commit binding of
+each verdict). It is **not** `P6` done: P6-02 (audited human writes) and
+P6-03a/b/c (P3/P4/P7-01 inspectors) are not delivered, no Gate ran against the
+operator's own Core or a real captured conversation, and throttling plus an
 automated contrast sweep remain uncovered. See the run directories under
 `validation-runs/p6/` for raw evidence.

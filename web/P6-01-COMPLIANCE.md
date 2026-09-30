@@ -63,12 +63,26 @@ Legend: **D** = delivered, **P** = partially delivered (the gap is named),
   `validation-runs/p6/20260930T060437Z-p6-01-gate/` (20/20 browser steps, no Truth
   write) and `validation-runs/p6/20260930T060050Z-p6-t07/` (11/11: 259-Event
   pagination, 216,015-character Event, API-down/restore, real `task.accepted`).
-- Independent re-check of `f7addbf` (r3): see `validation-runs/p6/20260930T060528Z-p6-01-independent-r3/validation-independent-r3.md`.
+- Independent re-validation of `f7addbf` (r3): **P6-T01 PASS, P6-T02 PASS,
+  P6-T07 PARTIAL**; the commit did not move during the run and every finding
+  above is recorded as closed. It then verified that the docs-and-tooling commit
+  after it touches no product path and leaves the built bundle byte-identical, so
+  the same verdict carries to the tip. Report:
+  `validation-runs/p6/20260930T060528Z-p6-01-independent-r3/validation-independent-r3.md`.
+- r3 held T07 at PARTIAL for one taskbook action it did not run itself (a real
+  rapid project switch) plus throttling/back-pressure. The rapid switch now has
+  real-browser evidence: `scripts/p6/p6_t07_checks.mjs --phase rapidswitch` delays
+  project A's `tasks`/`sessions`/`events` responses by 1.8 s past a switch to
+  project B and asserts A never renders under B, before or after those responses
+  land (3/3 pass). Throttling/back-pressure remains unexercised, so the
+  independent verdict of record stays **PARTIAL** until a validator runs that
+  phase.
 
 ## Status
 
-`P6-01: PASS on the scratch fixture for T01/T02/T07` as of the r3 verdict on
-`f7addbf`; **`P6` as a stage is not complete** and nothing here releases V1.
+`P6-01: T01 PASS, T02 PASS, T07 PARTIAL` — the r3 verdict on `f7addbf`, whose
+code is byte-identical to the tip. **`P6` as a stage is not complete** and
+nothing here releases V1.
 
 Still open, and deliberately not claimed:
 
@@ -77,7 +91,8 @@ Still open, and deliberately not claimed:
   frozen; those views are explicit `未接入` panels.
 - The operator's own Core and a real captured conversation were not used; every
   Gate ran against an isolated scratch fixture.
-- Throttling/back-pressure and an automated colour-contrast sweep are still not
-  exercised (A08 remains `P`).
+- T07 is PARTIAL: throttling/back-pressure is not exercised, and the rapid
+  project-switch phase added after r3 has implementer evidence only.
+- An automated colour-contrast sweep is still missing (A08 remains `P`).
 - The independent verdicts bind their commits: `4a4ee17` (r1), `a5a92ca` (r2),
   `f7addbf` (r3). A later docs-only commit does not inherit them.
