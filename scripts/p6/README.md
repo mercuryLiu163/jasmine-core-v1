@@ -1,0 +1,68 @@
+# P6 scripts
+
+Two local-only tools for the P6 dashboard. Neither is a product feature and
+neither is evidence of a passing Gate on its own.
+
+## `p6_scratch.py` — throwaway Core with realistic data
+
+Builds a private scratch database (schema v6) and workspace, mints a human /
+agent / system actor plus a **read-only** token, and seeds projects, Tasks,
+Steps in every state, sessions, raw Events, an ACTIVE and a PROPOSED Rule,
+PASS/FAIL Evidence and one confirmed Evidence — all through the real HTTP API of
+the real Core build.
+
+```bash
+python3 scripts/p6/p6_scratch.py build --out /private/tmp/p6-scratch
+python3 scripts/p6/p6_scratch.py serve --out /private/tmp/p6-scratch --port 8789
+```
+
+`build` writes `descriptor.json` and `tokens.json` (mode 0600) under `--out`.
+It never touches the operator's database, hooks, accounts or global config, and
+`descriptor.json` is what the verification steps below read for IDs.
+
+## `browser_trace.mjs` — real Chrome walkthrough
+
+Drives headless Chrome over the DevTools Protocol against a running dashboard:
+sign-in, Overview → Project → Task board, keyboard activation of a source link,
+deep-link refresh, Rule and Evidence detail, the explicit `未接入` panels, an
+unknown-route check, an accessibility name scan, and sign-out.
+
+```bash
+node scripts/p6/browser_trace.mjs \
+  --ui http://127.0.0.1:5180 \
+  --token-file /private/tmp/p6-scratch/tokens.json --token-key read \
+  --project prj_… --task tsk_… --rule rul_… --evidence evd_… \
+  --out validation-runs/p6/<run-id>
+```
+
+It writes `click-trace.jsonl`, `browser-requests.jsonl` (Authorization recorded
+only as `present(redacted)`/`absent`), `screenshots/`, `chrome-stderr.log` and
+`browser-trace.md`. The Chrome profile is created in the system temp directory
+and deleted afterwards, so cookies and history never enter the evidence bundle.
+
+Exit code is non-zero if any step failed, which is what makes the script usable
+as a Gate command.
+
+## `p6_verify.py` — assemble the §8 evidence bundle
+
+Runs the browser trace, snapshots the Core objects it touches **before and
+after** (to show no Truth was written), records the raw `tsc` / `vitest` /
+`vite build` output, and writes `manifest.json`, `scenario.md`,
+`api-requests.jsonl`, `api-responses.jsonl`, `truth-before-after.json` and
+`result.md`.
+
+```bash
+python3 scripts/p6/p6_verify.py \
+  --ui http://127.0.0.1:5180 --core http://127.0.0.1:8789 \
+  --token-file /private/tmp/p6-scratch/tokens.json --token-key read \
+  --project prj_… --task tsk_… --rule rul_… --evidence evd_… \
+  --out validation-runs/p6/<run-id>
+```
+
+Exit code is non-zero when a browser step failed or when any before/after Core
+read differs — a Truth write during a read-only Gate is a failure, not a detail.
+
+The `result.md` it writes is the **implementer's** result. An independent
+reviewer and an independent validator must add their own reports next to it
+before the run counts as a reviewed Gate.
+

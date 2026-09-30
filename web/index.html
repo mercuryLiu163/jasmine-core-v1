@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!--
+      No external origins are needed: the bundle is self-contained and every API
+      call goes to this origin, which the dev proxy or static host forwards to
+      loopback Core. A restrictive CSP keeps a hostile Event body from becoming
+      a script or an outbound request. `frame-ancestors` is deliberately absent
+      here: browsers ignore it in a meta element, so the static host sends it as
+      a real response header instead.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <title>Jasmine Core Dashboard (P6-01, 只读)</title>
+  </head>
+  <body>
+    <noscript>这个 Dashboard 需要 JavaScript 才能读取 Core API。</noscript>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "comment": "P6-A02 frozen Core path allowlist. Single source of truth for the Vite dev proxy and the standalone static server. Admin surfaces (/v1/auth/keys, /v1/audit) are deliberately absent: the browser proxy must not be able to mint keys or read audit even if a token carried admin.",
+  "methods": ["GET", "OPTIONS"],
+  "paths": [
+    "^/v1/health$",
+    "^/v1/meta/schema$",
+    "^/v1/hosts$",
+    "^/v1/actors$",
+    "^/v1/projects$",
+    "^/v1/projects/[A-Za-z0-9_]+$",
+    "^/v1/tasks$",
+    "^/v1/tasks/[A-Za-z0-9_]+$",
+    "^/v1/tasks/[A-Za-z0-9_]+/(steps|history|evidence|transition|criteria|accept)$",
+    "^/v1/sessions$",
+    "^/v1/sessions/[A-Za-z0-9_]+$",
+    "^/v1/steps/[A-Za-z0-9_]+$",
+    "^/v1/steps/[A-Za-z0-9_]+/(history|transition|criteria)$",
+    "^/v1/events$",
+    "^/v1/events/[A-Za-z0-9_]+$",
+    "^/v1/rules/active$",
+    "^/v1/rules/proposals$",
+    "^/v1/rules/[A-Za-z0-9_]+$",
+    "^/v1/rules/[A-Za-z0-9_]+/(history|approve|supersede|retire)$",
+    "^/v1/evidence/confirm$",
+    "^/v1/evidence/[A-Za-z0-9_]+$"
+  ],
+  "phase_note": "P6-01 only issues GET. Mutation paths are listed for the later P6-02/P6-03 PRs; the method allowlist is what actually gates them, and Core still enforces scopes and actor kind per request."
+}
