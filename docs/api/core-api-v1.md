@@ -331,3 +331,8 @@ non-Plan execution mode. The CLI may declare one Plan-only question meta tool;
 independent forced-call verification must prove it is unavailable in this mode.
 This is not a claim that the platform declares zero tools. Model weights/build version is not
 attested by this CLI; extractor_version records the CLI version and its digest.
+
+The local provider fixes official saved-auth Responses HTTP/SSE transport using
+`interpreter-openai` as a local configuration name, `requires_openai_auth=true`
+and `supports_websockets=false`. It supplies no custom base URL or API key.
+The 120-second deadline is unchanged; network failures remain recorded failures.

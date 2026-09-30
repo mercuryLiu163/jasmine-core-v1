@@ -47,7 +47,9 @@ def _base_config():
         'web_search':'disabled','agents_enabled':False,'project_doc_max_bytes':0,'tool_profile':'no-execution.v2','execution_mode':'default',
         'default_mode_request_user_input':False,'allowed_inactive_declarations':['request_user_input'],
         'native_protocol_version':'reasoning-and-final.v1','catalog_tool_mode':None,
-        'skills_include_instructions':False,'bundled_skills_enabled':False}
+        'skills_include_instructions':False,'bundled_skills_enabled':False,
+        'inference_provider_id':'interpreter-openai','wire_api':'responses',
+        'requires_openai_auth':True,'supports_websockets':False,'transport':'https-sse'}
 
 
 class UnavailableProvider:
@@ -104,6 +106,8 @@ class CodexProvider:
     def _argv(self,root):
         argv=[str(self.executable),'exec','--ignore-user-config','--ephemeral','--skip-git-repo-check',
               '--sandbox','read-only','-m',MODEL,'-c','web_search="disabled"','-c','agents.enabled=false',
+              '-c','model_provider="interpreter-openai"',
+              '-c','model_providers.interpreter-openai={name="OpenAI",wire_api="responses",requires_openai_auth=true,supports_websockets=false}',
               '-c','project_doc_max_bytes=0','-c','skills.include_instructions=false',
               '-c','skills.bundled.enabled=false','-c','features.default_mode_request_user_input=false',
               '-c','memories.use_memories=false','-c','memories.generate_memories=false',

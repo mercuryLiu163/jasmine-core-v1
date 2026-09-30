@@ -67,3 +67,7 @@ Provider额外设置project_doc_max_bytes=0并写入config digest，阻止全局
 用户要求Interpreter只抽取数据、不执行工具/命令。CLI当前固定catalog tool_mode=null后仍声明一个Plan-only request_user_input元工具，因此撤回任何literal tools=[]/绝对无声明的旧结论，保留初始preflight与真实HTTP FAILED证据。本版本名称为no-execution.v2，不能写成no-tools。完整实际请求仅可有该唯一元声明，不可有exec/shell/code-mode/MCP/browser/file/网络动作工具。CLI固定`codex exec`默认非Plan模式、ignore-user-config、private无配置目录，禁default_mode_request_user_input；HTTP及model数据不能选择/切换mode。该执行模式、meta声明白名单和default-mode禁调用flag均入config digest。
 
 独立验收必须让component模型响应实际调用request_user_input，检查完整后续请求/CLI日志：默认模式明确拒绝、不会弹用户问询、不会切Plan、不会执行命令/其他操作。只有这一拒绝证据和完整工具面检查成立，才能冻结此provider；描述中的Plan-only本身不是证明。任何额外native工具/错误项仍fail closed；reasoning仅数据whitelist。随后在相同candidateSHA跑真实LLM/API并确认Truth不变。若元工具可以实际询问用户、改变模式或执行操作，此路线BLOCKED。
+
+## 9 固定官方 saved-auth HTTP/SSE transport
+
+候选467e736真实HTTP120秒达到截止，保留FAILED/provider_timeout，不延长deadline。实际CLI此前WebSocket多次reset后才HTTPS降级；root允许固定官方支持的HTTP/SSE传输。CLI拒绝override保留的built-in openai标识，独立probe用配置名interpreter-openai，固定{name="OpenAI",wire_api="responses",requires_openai_auth=true,supports_websockets=false}，不设base_url/API key，仍复用相同官方saved-auth路由；probe真实调用成功且无降级error项。该标识及四项配置与transport进入digest。新配置的最终同SHA真实API仍须独立验收，初始FAIL不覆写。支持参数依据[官方config Schema](https://learn.chatgpt.com/docs/config-schema.json) ModelProviderInfo。
