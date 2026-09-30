@@ -18,6 +18,7 @@ import { usePagedResource, offsetLoader } from '../app/usePagedResource'
 import { useResource } from '../app/useResource'
 import { KeyValue, SourceLink } from '../components/Trace'
 import { Pager } from '../components/Pager'
+import { TableScroll } from '../components/TableScroll'
 import { Empty, ErrorPanel, Loading, Panel, Unavailable } from '../components/States'
 import { formatTimestamp } from '../lib/text'
 
@@ -114,6 +115,7 @@ export function OverviewView(): JSX.Element {
           <Empty what="Projects" hint="空库为空,不是错误。" />
         ) : null}
         {projects.items.length > 0 ? (
+          <TableScroll label="Project 列表">
           <table className="table">
             <caption className="sr-only">Project 列表</caption>
             <thead>
@@ -155,6 +157,7 @@ export function OverviewView(): JSX.Element {
               ))}
             </tbody>
           </table>
+          </TableScroll>
         ) : null}
         <Pager paged={projects} noun="Project" limit={LIMIT} />
         {selected ? (

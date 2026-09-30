@@ -24,6 +24,7 @@ import { useSession } from '../app/session'
 import { useResource } from '../app/useResource'
 import { StatusBadge } from '../components/StatusBadge'
 import { Empty, ErrorPanel, Loading, Panel, StaleBanner, Unavailable } from '../components/States'
+import { TableScroll } from '../components/TableScroll'
 import { SourceLink } from '../components/Trace'
 import { formatTimestamp } from '../lib/text'
 
@@ -153,6 +154,7 @@ export function TaskEvidence({ taskId }: { taskId: string }): JSX.Element {
         ) : null}
         {evidence.data && items.length === 0 ? <Empty what="Evidence" /> : null}
         {items.length > 0 ? (
+          <TableScroll label="Task Evidence 列表">
           <table className="table">
             <caption className="sr-only">Task Evidence</caption>
             <thead>
@@ -208,6 +210,7 @@ export function TaskEvidence({ taskId }: { taskId: string }): JSX.Element {
               ))}
             </tbody>
           </table>
+          </TableScroll>
         ) : null}
         {evidence.loadedAt ? (
           <StaleBanner loadedAt={evidence.loadedAt} scope={`Task ${taskId} 的 Evidence`} />
@@ -218,6 +221,7 @@ export function TaskEvidence({ taskId }: { taskId: string }): JSX.Element {
         {requirements.length === 0 ? (
           <Empty what="Step acceptance requirements" hint="没有 requirements 就没有矩阵。" />
         ) : (
+          <TableScroll label="criteria 与 Evidence 参考矩阵">
           <table className="table">
             <caption className="sr-only">criteria 与已载入 Evidence 的参考匹配</caption>
             <thead>
@@ -259,6 +263,7 @@ export function TaskEvidence({ taskId }: { taskId: string }): JSX.Element {
               })}
             </tbody>
           </table>
+          </TableScroll>
         )}
         <p className="state state--meta">
           这是前端按 requirement 字段做的只读匹配,不是验收结论。真正的判定发生在 Core:

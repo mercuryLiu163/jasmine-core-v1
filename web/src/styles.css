@@ -53,6 +53,11 @@ code,
 pre,
 .mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere;
+}
+
+pre {
+  overflow-wrap: normal;
 }
 
 a {
@@ -158,6 +163,27 @@ summary:focus-visible {
 main {
   padding: 16px;
   flex: 1;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* A wide table must scroll inside its own container instead of widening the
+   whole document on a small window (P6-A08). */
+.tablescroll {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.tablescroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.stack,
+.panel,
+.panel__body,
+.split > * {
+  min-width: 0;
 }
 
 .stack {

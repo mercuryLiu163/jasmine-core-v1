@@ -383,6 +383,55 @@ async function main() {
       unnamed.length === 0 ? '' : unnamed.map((node) => node.role?.value).join(', '),
     )
 
+    // 3c. status must not be conveyed by colour alone: every board badge has a
+    // glyph next to its literal token.
+    const badges = await evaluate(
+      cdp,
+      `[...document.querySelectorAll('.badge')].map((node) => ({
+        text: node.textContent ?? '',
+        glyph: node.querySelector('.badge__glyph')?.textContent ?? '',
+      }))`,
+    )
+    const colourOnly = badges.filter((badge) => badge.glyph.trim() === '' || badge.text.trim() === '')
+    trace.record(
+      'every status badge carries a glyph and its literal Core token',
+      badges.length > 0 && colourOnly.length === 0,
+      `${badges.length} badges`,
+    )
+
+    // 3d. A08: a narrow viewport must not hide the source-trace controls. The
+    // columns reflow; the source link inside a card stays visible and clickable.
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: 480,
+      height: 900,
+      deviceScaleFactor: 1,
+      mobile: false,
+    })
+    await new Promise((r) => setTimeout(r, 300))
+    const narrow = await evaluate(
+      cdp,
+      `(() => {
+        const link = document.querySelector('.stepcard a[data-kind="event"]')
+        if (!link) return { found: false }
+        const box = link.getBoundingClientRect()
+        return {
+          found: true,
+          width: box.width,
+          height: box.height,
+          inViewportHorizontally: box.left >= 0 && box.right <= window.innerWidth + 1,
+          docScrollWidth: document.documentElement.scrollWidth,
+          innerWidth: window.innerWidth,
+        }
+      })()`,
+    )
+    trace.record(
+      'narrow viewport keeps the source link visible and inside the page width',
+      narrow.found === true && narrow.height > 0 && narrow.width > 0 && narrow.inViewportHorizontally === true,
+      JSON.stringify(narrow),
+    )
+    await trace.screenshot(cdp, '04b-board-narrow')
+    await cdp.send('Emulation.clearDeviceMetricsOverride')
+
     // 4. keyboard: focus a source-trace link and activate it with Enter
     await evaluate(
       cdp,

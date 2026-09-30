@@ -16,7 +16,6 @@ import { useId, useMemo, useState } from 'react'
 
 import { DEFAULT_EVENT_LIMIT, DEFAULT_OBJECT_LIMIT } from '../api/endpoints'
 import type { RawEvent, Session } from '../api/types'
-import { useHashRoute } from '../app/useHashRoute'
 import { sourceHref } from '../app/router'
 import { useSession } from '../app/session'
 import { afterSeqLoader, offsetLoader, usePagedResource } from '../app/usePagedResource'
@@ -62,7 +61,6 @@ export function ConversationView({
   sessionId: string | null
 }): JSX.Element {
   const { endpoints } = useSession()
-  const route = useHashRoute()
   const [eventType, setEventType] = useState('')
   const [sourceSystem, setSourceSystem] = useState('')
   const eventTypeId = useId()
@@ -124,8 +122,6 @@ export function ConversationView({
     if (projectId) return `project ${projectId}`
     return '全部 Event(无过滤)'
   }, [projectId, taskId, sessionId])
-
-  if (route.name !== 'conversation') return <p className="muted">路由不是 conversation。</p>
 
   return (
     <div className="stack">
