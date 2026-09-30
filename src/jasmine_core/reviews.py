@@ -32,7 +32,7 @@ class ReviewStore:
         items=[self.get(r['review_id']) for r in rows[:limit]]
         return {'items':items,'next_after_id':items[-1]['review_id'] if len(rows)>limit else None}
 
-    def _plan(self, original, supplied, source, scopes):
+    def _plan(self, original, supplied, source, scopes, *, review_correction=False):
         if not isinstance(supplied,list) or len(supplied)!=len(original['items']) or len(supplied)>16:raise errors.InvalidRequest('actions must cover each candidate')
         mapped={}
         for action in supplied:
@@ -75,7 +75,9 @@ class ReviewStore:
                 if canonical:linked.append(self.resolver.applied_result(canonical))
                 for row in self.conn.execute('SELECT new_resolution_id FROM source_application_changes WHERE source_event_id=?',(source['event_id'],)):
                     linked.append(self.resolver.get(row['new_resolution_id'])['result'])
-                if not any(any(a['target_id']==rule['rule_id'] for a in result['actions']) for result in linked):raise errors.InvalidRequest('supersede target must belong to source application')
+                same_source=any(any(a['target_id']==rule['rule_id'] for a in result['actions']) for result in linked)
+                cross_source_correction=(review_correction and candidate['kind']=='CORRECTION' and scope['kind']=='TASK' and bound_task is not None and rule['scope']['task_id']==bound_task)
+                if not same_source and not cross_source_correction:raise errors.InvalidRequest('supersede target must belong to source application or explicit same-Task correction review')
             else:
                 fields(payload,{'target_id','expected_revision','acceptance_criteria'},{'target_id','expected_revision','acceptance_criteria'});revision(payload['expected_revision'])
                 target=payload['target_id'];task,_=self.resolver.bound_task(source)
@@ -113,7 +115,7 @@ class ReviewStore:
                 self.resolver.maintenance.check_current(intid)
                 canonical=self.resolver._canonical(source)
                 self.resolver._validate_revisions(body)
-                validated_plan=self._plan(plan,body['actions'],source,set(scopes))
+                validated_plan=self._plan(plan,body['actions'],source,set(scopes),review_correction=True)
                 if canonical:disposition='SOURCE_REPLAYED';actions=self.resolver.applied_result(canonical)['actions']
                 else:
                     self.resolver._check_context(body,source,intid)

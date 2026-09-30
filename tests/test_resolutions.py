@@ -153,3 +153,42 @@ class Resolutions(DbTestCase):
         with self.assertRaises(errors.ActorMismatch):self.resolver.resolve(ident,self.request('mismatch',ident),actor_id=self.human)
         self.assertEqual(self.conn.execute('SELECT count(*) FROM tasks').fetchone()[0],0)
         self.assertEqual(self.conn.execute('SELECT count(*) FROM resolutions').fetchone()[0],0)
+
+    def _new_correction(self, task_id, *, kind='CORRECTION'):
+        raw=EventStore(self.conn,schema_version=SCHEMA_VERSION).append(NewEvent(event_type='user.prompt',source_system='component-correction',occurred_at=self.clock.now(),actor_id=self.human,actor_kind='human',host_id=self.host,project_id=self.project,task_id=task_id,payload={'text':'Change the requirement to the corrected capability.'}))[0]
+        def correction(source):
+            result=output(source);result['candidates'][0].update(kind=kind,content='Corrected capability',impact='MEDIUM');return json.dumps(result)
+        self.fake.action=correction
+        ident=self.interpretations.process({'event_id':raw['event_id'],'idempotency_key':'correction'+raw['event_id']},actor_id=self.human)['interpretation']['interpretation_id']
+        pending=self.resolver.resolve(ident,self.request('correction'+ident,ident),actor_id=self.human)['resolution']['result']
+        return raw,ident,pending
+    def _approve_correction_body(self, ident, target):
+        preview=self.resolver.preview(ident)
+        return {'idempotency_key':'approve'+ident,'host_id':self.host,'reason':'explicit correction','expected_revision':1,'expected_revisions':preview['expected_revisions'],'expected_context_digest':preview['expected_context_digest'],'actions':[{'candidate_index':0,'action':'SUPERSEDE_RULE','payload':{'target_rule_id':target['target_id'],'expected_revision':target['after_revision'],'kind':'RULE','severity':'NORMAL','enforcement':'CONTEXT','content':'Corrected capability','matcher':{}}}]}
+    def test_new_source_same_task_correction_review_preserves_both_sources(self):
+        first=self.resolver.resolve(self.ident,self.request(),actor_id=self.human)['resolution']['result']
+        task=next(a['target_id'] for a in first['actions'] if a['target_type']=='task');rule=next(a for a in first['actions'] if a['target_type']=='rule')
+        old=self.resolver.authority.get(rule['target_id'])
+        raw,ident,pending=self._new_correction(task)
+        self.assertEqual(pending['disposition'],'PENDING_REVIEW');self.assertEqual(self.resolver.authority.get(rule['target_id'])['version'],1)
+        body=self._approve_correction_body(ident,rule)
+        with self.assertRaises(errors.ForbiddenScope):self.reviews.change(pending['review_id'],'approve',body,actor_id=self.human,scopes={'authority:propose'})
+        approved=self.reviews.change(pending['review_id'],'approve',body,actor_id=self.human,scopes=self.scopes)
+        action=approved['result']['actions'][0];self.assertEqual(action['rule_version'],2);self.assertEqual(action['previous_rule_version'],1)
+        self.assertEqual(action['previous_origin_event_id'],old['origin_event_id']);self.assertEqual(action['previous_source_event_id'],self.event)
+        current=self.resolver.authority.get(rule['target_id']);self.assertEqual(current['scope']['task_id'],task)
+        origin=self.resolver.events.get(current['origin_event_id']);self.assertEqual(origin['event_type'],'review.approved');self.assertEqual(origin['payload']['source_event_id'],raw['event_id'])
+        self.assertEqual(self.resolver.authority.get(rule['target_id'],version=1)['origin_event_id'],old['origin_event_id'])
+        with self.assertRaises(Conflict):self.reviews.manual_reapply(first['resolution_id'],{'idempotency_key':'not-manual','host_id':self.host,'reason':'must not bypass','current_interpretation_id':ident,'expected_head_revision':1,'expected_revisions':body['expected_revisions'],'expected_context_digest':body['expected_context_digest'],'expected_latest_resolution_id':first['resolution_id'],'actions':body['actions']},actor_id=self.human,scopes=self.scopes)
+    def test_new_source_correction_other_task_rejected(self):
+        first=self.resolver.resolve(self.ident,self.request(),actor_id=self.human)['resolution']['result'];rule=next(a for a in first['actions'] if a['target_type']=='rule')
+        other=self.objects.create(NewObject.task({'title':'other','project_id':self.project,'host_id':self.host}),actor_id=self.human)['object']['task_id']
+        raw,ident,pending=self._new_correction(other)
+        with self.assertRaises(errors.InvalidRequest):self.reviews.change(pending['review_id'],'approve',self._approve_correction_body(ident,rule),actor_id=self.human,scopes=self.scopes)
+        self.assertEqual(self.resolver.authority.get(rule['target_id'])['version'],1)
+        self.assertEqual(self.reviews.get(pending['review_id'])['status'],'PENDING')
+    def test_new_source_noncorrection_cannot_target_other_source_rule(self):
+        first=self.resolver.resolve(self.ident,self.request(),actor_id=self.human)['resolution']['result'];rule=next(a for a in first['actions'] if a['target_type']=='rule');task=next(a['target_id'] for a in first['actions'] if a['target_type']=='task')
+        raw,ident,pending=self._new_correction(task,kind='RULE')
+        with self.assertRaises(errors.InvalidRequest):self.reviews.change(pending['review_id'],'approve',self._approve_correction_body(ident,rule),actor_id=self.human,scopes=self.scopes)
+        self.assertEqual(self.resolver.authority.get(rule['target_id'])['version'],1)

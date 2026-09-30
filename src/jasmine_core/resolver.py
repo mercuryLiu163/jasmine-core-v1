@@ -176,7 +176,10 @@ class ResolverStore:
                 output=self.authority.transition(target,'supersede',{'expected_revision':payload['expected_revision'],'host_id':host,
                     'kind':'DECISION' if candidate['kind']=='DECISION' else 'RULE','severity':'NORMAL','enforcement':'CONTEXT','content':candidate['content'],'matcher':{},
                     'scope':{'kind':old['scope']['kind'],'project_id':old['scope']['project_id'],'task_id':old['scope']['task_id']},'origin_event_id':item_origin,**{k:v for k,v in payload.items() if k not in ('target_rule_id','expected_revision')}},actor_id=executor,unit_of_work=uow)
-                rule=output['rule'];actions.append(self._action_result(item,'rule',target,old['revision'],rule['revision'],rule['version'],[output['event']['event_id']],binding));continue
+                rule=output['rule'];action_result=self._action_result(item,'rule',target,old['revision'],rule['revision'],rule['version'],[output['event']['event_id']],binding)
+                old_origin=self.events.get(old['origin_event_id'])
+                action_result.update(previous_origin_event_id=old['origin_event_id'],previous_rule_version=old['version'],previous_source_event_id=old_origin['payload'].get('source_event_id',old['origin_event_id']))
+                actions.append(action_result);continue
             if action in ('SET_TASK_CRITERIA','SET_STEP_CRITERIA'):
                 target=payload['target_id'];kind='task' if action=='SET_TASK_CRITERIA' else 'step'
                 old=self.state.task(target) if kind=='task' else self.state.step(target)
