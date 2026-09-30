@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, evidence, ids, objects, registry, state
+from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, evidence, ids, interpretations, objects, registry, state
 from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from .request import Request, Response
@@ -39,6 +39,7 @@ class Core:
         self.evidence = evidence.EvidenceStore(conn, schema_version=self.schema_version)
         self.state = state.StateStore(conn, schema_version=self.schema_version,
                                       evidence_validator=evidence.CurrentEvidenceValidator(conn))
+        self.interpretations = interpretations.InterpretationStore(conn, schema_version=self.schema_version)
         self.registry = registry.Registry(conn)
         self.auth = auth.Auth(conn)
         self.audit = audit.AuditLog(conn)
@@ -74,6 +75,9 @@ def _base_routes() -> list[Route]:
     return [
         Route("GET", re.compile(r"^/v1/health$"), health, None, public=True),
         Route("GET", re.compile(r"^/v1/meta/schema$"), meta_schema, None, public=True),
+        Route("POST", re.compile(r"^/v1/interpret$"), interpret_event, "interpretations:process"),
+        Route("GET", re.compile(r"^/v1/interpretations$"), list_interpretations, "interpretations:read"),
+        Route("GET", re.compile(r"^/v1/interpretations/([^/]+)$"), get_interpretation, "interpretations:read"),
         Route("GET", re.compile(r"^/v1/hosts$"), list_hosts, "objects:read"),
         Route("GET", re.compile(r"^/v1/actors$"), list_actors, "objects:read"),
         Route("POST", re.compile(r"^/v1/auth/keys$"), create_key, "admin"),
@@ -536,5 +540,41 @@ def accept_task(request: Request, core: Core, principal: auth.Principal,
     body = _state_body(request, {"expected_revision", "host_id", "event_id"})
     return Response(200, core.state.accept_task(task_id, body, actor_id=principal.actor_id,
         actor_kind=core.actor_kind(principal.actor_id), can_accept=True))
+
+def _interpretation_read(principal):
+    principal.require("events:read")
+    principal.require("interpretations:read")
+
+
+def interpret_event(request, core, principal, match):
+    _interpretation_read(principal)
+    if request.query:
+        raise errors.InvalidRequest("POST interpret takes no query parameters")
+    result = core.interpretations.process(request.json_body(), actor_id=principal.actor_id)
+    return Response(200 if result["replayed"] else 201, result)
+
+
+def get_interpretation(request, core, principal, match):
+    _interpretation_read(principal)
+    if request.query:
+        raise errors.InvalidRequest("GET interpretation takes no query parameters")
+    return Response(200, {"interpretation":core.interpretations.get(match.group(1))})
+
+
+def list_interpretations(request, core, principal, match):
+    _interpretation_read(principal)
+    allowed={"event_id","project_id","task_id","status","after_id","limit"}
+    if set(request.query)-allowed or any(len(v)!=1 for v in request.query.values()):
+        raise errors.InvalidRequest("unknown or duplicate interpretation query parameters")
+    params={k:v[0] for k,v in request.query.items()}
+    if "limit" in params:
+        try:
+            if not re.fullmatch(r"[0-9]+",params["limit"]):
+                raise ValueError()
+            params["limit"]=int(params["limit"])
+        except ValueError:
+            raise errors.InvalidRequest("limit must be an integer")
+    return Response(200,core.interpretations.list(**params))
+
 
 ROUTES = tuple(_base_routes()) + tuple(_collection_routes())

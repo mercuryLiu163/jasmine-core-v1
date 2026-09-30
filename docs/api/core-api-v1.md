@@ -288,3 +288,43 @@ native deny response for Guard DENY/CONFIRM and unresolved calls; VERIFY lets
 the tool execute but does not mark the Step VERIFIED. Unbound sessions receive
 advisory `{}`. Hook trust and real-tool coverage are decided by the separate
 P1-T10 Gate, never inferred from a successful API call or synthetic test.
+
+## P2-01 Interpretation candidate extension
+
+See [ADR 0008](../adr/0008-p2-interpretation-candidate-chain.md). Candidate
+processing never applies Truth. Scopes are `interpretations:read` and
+`interpretations:process`; both require `events:read` on these routes, and
+process also requires read. These remain instance-wide scopes, not project ACLs.
+
+| Method | Path | Scope | Result |
+| --- | --- | --- | --- |
+| POST | `/v1/interpret` | process + read + events:read | 201 new interpretation (including recorded failure), 200 replay |
+| GET | `/v1/interpretations` | read + events:read | items, next_after_id |
+| GET | `/v1/interpretations/{interpretation_id}` | read + events:read | provenance, processing status and terminal result |
+
+POST exact fields: `event_id`, `idempotency_key`, optional `extractor_id`
+(default `codex-local-v1`). No source text, model, credentials or scope override.
+Response: `interpretation`, `replayed`. Status is `PROCESSING`, `EXTRACTED`,
+`FAILED` or `INTERRUPTED`; EXTRACTED remains a non-authoritative candidate.
+The same key and changed request returns 409 `interpretation_idempotency_conflict`.
+Same actor/event/config processing with another key replays the original record.
+Failures return a fixed error_code in the record, preserving the source Event.
+Lists accept `event_id`, `project_id`, `task_id`, `status`, `after_id`, `limit`.
+Source type/actor identity derive from stored Event, never from model claims.
+
+The exact model output contract is [interpretation-v1 JSON Schema](../schemas/interpretation-v1.json).
+`source_span.start/end` are zero-based Unicode code points with an exclusive end;
+`quote` must equal that exact source slice. IDs in candidate scope can only refer
+to the source Event's current project/task. Candidate task_id may be null for a
+new Task proposal. Status recovery of expired PROCESSING appends an immutable
+INTERRUPTED outcome during an authorized read/replay; it does not retry a model.
+
+The local provider is opt-in: the operator sets absolute
+`JASMINE_CORE_INTERPRETER_CODEX` and `JASMINE_CORE_INTERPRETER_CATALOG` paths.
+The catalog must retain the actual `gpt-6.1-sol` entry and have
+`apply_patch_tool_type: null`, `experimental_supported_tools: []`, and
+`supports_search_tool: false`. This release supports only the independently
+verified CLI0.159.0 binary fingerprint recorded in the provider. Other binaries
+or missing configuration return a recorded `FAILED/provider_unavailable`.
+The request body cannot alter this profile. Model weights/build version is not
+attested by this CLI; extractor_version records the CLI version and its digest.
