@@ -336,3 +336,25 @@ The local provider fixes official saved-auth Responses HTTP/SSE transport using
 `interpreter-openai` as a local configuration name, `requires_openai_auth=true`
 and `supports_websockets=false`. It supplies no custom base URL or API key.
 The 120-second deadline is unchanged; network failures remain recorded failures.
+
+## P2-02 Resolver / Review / Maintenance (ADR0009, Schema8)
+
+All reads require events:read and interpretations:read plus the named read scope. Writes reject query parameters and unknown/nested fields. Additional actor rules and bounds are in ADR0009; admin does not substitute for required scopes. Operator executor configuration is not an HTTP body field.
+
+|Endpoint|Scope|Body / result|
+|---|---|---|
+|GET /v1/resolutions/preview?interpretation_id=int_|resolutions:read|Consistent plan, policy_version, expected_revisions, expected_context_digest, maintenance_head, source_application|
+|POST /v1/resolve/{int_id}|resolutions:process + resolutions:read|idempotency_key, host_id, policy_version, expected_revisions, expected_context_digest → resolution snapshot|
+|GET /v1/resolutions/{res_id}|resolutions:read|Immutable command/plan/result, source/binding and manual application history|
+|GET /v1/reviews/pending|reviews:read|limit1..200, after_id, project_id, task_id; stable created_at/id cursor|
+|GET /v1/reviews/{rvw_id}|reviews:read|CAS revision, pending Resolution, history, current preview or explicit preview_error|
+|POST /v1/reviews/{rvw_id}/approve|reviews:manage + reviews:read + action P1 scopes|idempotency_key, host_id, reason, expected_revision, expected_revisions, expected_context_digest, actions|
+|POST /v1/reviews/{rvw_id}/reject|reviews:manage + reviews:read|idempotency_key, host_id, reason, expected_revision|
+|POST /v1/interpretations/{int_id}/correct|interpretations:manage|idempotency_key, host_id, reason, expected_revision, result (complete interpretation-v1 schema against original Raw) → immutable manual child|
+|POST /v1/interpretations/{int_id}/reject|interpretations:manage|idempotency_key, host_id, reason, expected_revision; keeps Raw/Truth|
+|POST /v1/interpretations/{int_id}/rerun|interpretations:manage + interpretations:process|same reject body; bounded real provider, child/operation refs, default no Truth|
+|POST /v1/resolutions/{canonical_res_id}/manual-reapply|reviews:manage + interpretations:manage + resolutions:read + action P1 scopes|idempotency_key, host_id, reason, current_interpretation_id, expected_head_revision, expected_latest_resolution_id, expected_revisions, expected_context_digest, actions|
+
+expected_revisions is an exact array of `{object_type:project|task|step|rule,object_id,revision}`. actions is an exact array `{candidate_index,action,payload}`. NO_ACTION/CREATE_TASK/ATTACH_TASK payload is `{}`. CREATE_RULE accepts `{}` for NORMAL/CONTEXT semantic mapping or complete P1 `{kind,severity,enforcement,content,matcher}` (content equals candidate). SUPERSEDE_RULE requires those rule fields plus target_rule_id/expected_revision. Criteria actions require target_id/expected_revision/acceptance_criteria. Scope and origin are server-derived from the candidate and trusted source bindings; caller cannot supply other Task/Project. CREATE_RULE requires authority:propose+authority:manage, supersede authority:manage, criteria state:accept, Task creation objects:write. Human/system role is checked again in the business store.
+
+New command201; exact historical replay200; source replay200. Review source-race loser is SOURCE_REPLAYED and preserves original applied action refs. Bad syntax400, wrong role/scope403, missing resource404, stale head409 interpretation_not_current, unready processing409 interpretation_not_ready, key conflict409 idempotency_conflict, stale full context409 context_conflict, latest application conflict409 application_conflict. Existing GET Interpretation adds maintenance_head/history/operation_completions while preserving original processing fields. Unsupported PATH/TOOL manual mappings return400 and keep pending; no silently changed scope or claimed application.

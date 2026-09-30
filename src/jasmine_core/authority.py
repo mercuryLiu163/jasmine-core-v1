@@ -253,7 +253,7 @@ class AuthorityStore:
                             "changed_at": row["changed_at"]})
         return history
 
-    def propose(self, body: dict[str, Any], *, actor_id: str) -> dict[str, Any]:
+    def propose(self, body: dict[str, Any], *, actor_id: str, unit_of_work=None) -> dict[str, Any]:
         _fields(body, {"rule_key", "kind", "severity", "enforcement", "content", "matcher",
                        "scope", "origin_event_id", "host_id", "event_id",
                        "verification_requirements"})
@@ -271,7 +271,7 @@ class AuthorityStore:
         host_id = _id(body, "host_id", "hst")
         origin_event_id = _id(body, "origin_event_id", "evt")
         event_id = _id(body, "event_id", "evt", required=False)
-        with db.translate_lock_errors(), db.transaction(self.conn):
+        with db.translate_lock_errors(), db.transaction(self.conn, unit_of_work=unit_of_work):
             scope = self._scope(body.get("scope"))
             self._origin(origin_event_id, scope)
             actor_kind = self._actor(actor_id, host_id)
@@ -330,7 +330,7 @@ class AuthorityStore:
                                           current=self.get(row["rule_id"]))
 
     def transition(self, rule_id: str, action: str, body: dict[str, Any],
-                   *, actor_id: str) -> dict[str, Any]:
+                   *, actor_id: str, unit_of_work=None) -> dict[str, Any]:
         if action not in ("approve", "retire", "supersede"):
             raise ValueError(action)
         allowed = {"expected_revision", "host_id", "event_id"}
@@ -348,7 +348,7 @@ class AuthorityStore:
         if requirements is not None and new_content["kind"] != "ACCEPTANCE" and new_content["enforcement"] != "VERIFY":
             raise errors.InvalidRequest("verification_requirements requires ACCEPTANCE or VERIFY")
         origin_event_id = _id(body, "origin_event_id", "evt") if action == "supersede" else None
-        with db.translate_lock_errors(), db.transaction(self.conn):
+        with db.translate_lock_errors(), db.transaction(self.conn, unit_of_work=unit_of_work):
             row = self.conn.execute("SELECT * FROM rules WHERE rule_id=?", (rule_id,)).fetchone()
             if row is None:
                 raise errors.NotFound("rule", rule_id)

@@ -20,7 +20,7 @@ TOKEN_BYTES = 32
 SCOPES = ("admin", "objects:read", "objects:write", "events:read", "events:write",
           "authority:read", "authority:propose", "authority:manage", "guard:check",
           "state:read", "state:write", "state:accept", "evidence:read",
-          "evidence:write", "evidence:attest", "evidence:confirm", "fingerprint:scan", "fingerprint:read", "interpretations:read", "interpretations:process")
+          "evidence:write", "evidence:attest", "evidence:confirm", "fingerprint:scan", "fingerprint:read", "interpretations:read", "interpretations:process", "interpretations:manage", "resolutions:read", "resolutions:process", "reviews:read", "reviews:manage")
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,8 @@ class Auth:
         if self._conn.execute("SELECT 1 FROM actors WHERE actor_id = ?", (actor_id,)).fetchone() is None:
             raise errors.NotFound("actor", actor_id)
         kind = self._conn.execute("SELECT kind FROM actors WHERE actor_id = ?", (actor_id,)).fetchone()["kind"]
+        if kind == "agent" and ({"interpretations:manage", "reviews:manage"} & set(scopes)):
+            raise errors.ForbiddenActorKind("agents cannot manage interpretations or reviews")
         if kind == "agent" and "authority:manage" in scopes:
             raise errors.ForbiddenActorKind("agent keys cannot carry authority:manage")
         if kind == "agent" and "state:accept" in scopes:

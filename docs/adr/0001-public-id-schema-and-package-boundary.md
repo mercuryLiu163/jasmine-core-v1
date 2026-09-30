@@ -60,6 +60,8 @@ key_01K742SG00B7GYRYEY5KC27M41
 | `evd_` | evidence | Core 服务端（P1 起启用） | 全局唯一主键；P0 只冻结格式 |
 | `rul_` | rule | Core 服务端（P1-01 起启用） | 全局唯一稳定 Rule ID；内容以 `(rule_id, version)` 标识，见 ADR 0005 |
 | `int_` | interpretation | Core 服务端（P2-01） | 不可变候选处理记录，引用源 Event；不授予 Truth 权限 |
+| `res_` | resolution | Core 服务端（P2-02） | 原子计划及不可变结果 |
+| `rvw_` | review | Core 服务端（P2-02） | 人工审查 CAS 投影及不可变历史 |
 | `aud_` | audit record | Core 服务端 | 只追加，不可改 |
 | `key_` | API key | Core 服务端 | 只存哈希，明文仅在创建时返回一次 |
 

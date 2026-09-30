@@ -15,7 +15,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
-from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, evidence, ids, interpretations, objects, registry, state
+from .. import SCHEMA_VERSION, __version__, audit, auth, authority, db, errors, evidence, ids, interpretations, objects, registry, state, resolver, reviews
 from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from .request import Request, Response
@@ -40,6 +40,8 @@ class Core:
         self.state = state.StateStore(conn, schema_version=self.schema_version,
                                       evidence_validator=evidence.CurrentEvidenceValidator(conn))
         self.interpretations = interpretations.InterpretationStore(conn, schema_version=self.schema_version)
+        self.resolver = resolver.ResolverStore(self.interpretations)
+        self.reviews = reviews.ReviewStore(self.resolver)
         self.registry = registry.Registry(conn)
         self.auth = auth.Auth(conn)
         self.audit = audit.AuditLog(conn)
@@ -73,6 +75,14 @@ def _collection_routes() -> list[Route]:
 
 def _base_routes() -> list[Route]:
     return [
+        Route("GET", re.compile(r"^/v1/resolutions/preview$"), resolution_preview, "resolutions:read"),
+        Route("POST", re.compile(r"^/v1/resolve/([^/]+)$"), resolve_interpretation, "resolutions:process"),
+        Route("GET", re.compile(r"^/v1/resolutions/([^/]+)$"), get_resolution, "resolutions:read"),
+        Route("POST", re.compile(r"^/v1/resolutions/([^/]+)/manual-reapply$"), manual_reapply, "reviews:manage"),
+        Route("GET", re.compile(r"^/v1/reviews/pending$"), pending_reviews, "reviews:read"),
+        Route("GET", re.compile(r"^/v1/reviews/([^/]+)$"), get_review, "reviews:read"),
+        Route("POST", re.compile(r"^/v1/reviews/([^/]+)/(approve|reject)$"), review_change, "reviews:manage"),
+        Route("POST", re.compile(r"^/v1/interpretations/([^/]+)/(correct|reject|rerun)$"), maintenance_change, "interpretations:manage"),
         Route("GET", re.compile(r"^/v1/health$"), health, None, public=True),
         Route("GET", re.compile(r"^/v1/meta/schema$"), meta_schema, None, public=True),
         Route("POST", re.compile(r"^/v1/interpret$"), interpret_event, "interpretations:process"),
@@ -558,7 +568,7 @@ def get_interpretation(request, core, principal, match):
     _interpretation_read(principal)
     if request.query:
         raise errors.InvalidRequest("GET interpretation takes no query parameters")
-    return Response(200, {"interpretation":core.interpretations.get(match.group(1))})
+    return Response(200, {"interpretation":core.resolver.maintenance.get(match.group(1))})
 
 
 def list_interpretations(request, core, principal, match):
@@ -575,6 +585,79 @@ def list_interpretations(request, core, principal, match):
         except ValueError:
             raise errors.InvalidRequest("limit must be an integer")
     return Response(200,core.interpretations.list(**params))
+
+
+
+def _p2_read(principal, scope):
+    _interpretation_read(principal)
+    principal.require(scope)
+
+
+def _p2_write(request):
+    if request.query:raise errors.InvalidRequest('write takes no query parameters')
+    return request.json_body()
+
+
+def resolution_preview(request,core,principal,match):
+    _p2_read(principal,'resolutions:read')
+    if set(request.query)!={'interpretation_id'} or len(request.query['interpretation_id'])!=1:raise errors.InvalidRequest('interpretation_id query required')
+    _require_id(request.query['interpretation_id'][0],'int','interpretation_id')
+    return Response(200,core.resolver.preview(request.query['interpretation_id'][0]))
+
+
+def resolve_interpretation(request,core,principal,match):
+    _require_id(match.group(1),"int","id")
+    _p2_read(principal,'resolutions:read')
+    result=core.resolver.resolve(match.group(1),_p2_write(request),actor_id=principal.actor_id)
+    return Response(200 if result['replayed'] or result['resolution']['result']['disposition']=='SOURCE_REPLAYED' else 201,result)
+
+
+def get_resolution(request,core,principal,match):
+    _require_id(match.group(1),"res","id")
+    _p2_read(principal,'resolutions:read')
+    if request.query:raise errors.InvalidRequest('unexpected query')
+    return Response(200,{'resolution':core.resolver.get(match.group(1))})
+
+
+def pending_reviews(request,core,principal,match):
+    _p2_read(principal,'reviews:read')
+    allowed={'project_id','task_id','limit','after_id'}
+    if set(request.query)-allowed or any(len(v)!=1 for v in request.query.values()):raise errors.InvalidRequest('unknown or duplicate query')
+    args={k:v[0] for k,v in request.query.items()}
+    if 'limit' in args:
+        if not re.fullmatch(r'[0-9]+',args['limit']):raise errors.InvalidRequest('invalid limit')
+        args['limit']=int(args['limit'])
+    return Response(200,core.reviews.list(**args))
+
+
+def get_review(request,core,principal,match):
+    _require_id(match.group(1),"rvw","id")
+    _p2_read(principal,'reviews:read')
+    if request.query:raise errors.InvalidRequest('unexpected query')
+    return Response(200,{'review':core.reviews.get(match.group(1))})
+
+
+def review_change(request,core,principal,match):
+    _require_id(match.group(1),"rvw","id")
+    _p2_read(principal,'reviews:read')
+    result=core.reviews.change(match.group(1),match.group(2),_p2_write(request),actor_id=principal.actor_id,scopes=principal.scopes)
+    return Response(200 if result['replayed'] or result['result']['disposition']=='SOURCE_REPLAYED' else 201,result)
+
+
+def manual_reapply(request,core,principal,match):
+    _require_id(match.group(1),"res","id")
+    _p2_read(principal,'resolutions:read')
+    principal.require('interpretations:manage')
+    result=core.reviews.manual_reapply(match.group(1),_p2_write(request),actor_id=principal.actor_id,scopes=principal.scopes)
+    return Response(200 if result['replayed'] else 201,result)
+
+
+def maintenance_change(request,core,principal,match):
+    _require_id(match.group(1),"int","id")
+    _interpretation_read(principal)
+    if match.group(2)=='rerun':principal.require('interpretations:process')
+    result=core.resolver.maintenance.change(match.group(1),match.group(2),_p2_write(request),actor_id=principal.actor_id)
+    return Response(200 if result['replayed'] else 201,result)
 
 
 ROUTES = tuple(_base_routes()) + tuple(_collection_routes())

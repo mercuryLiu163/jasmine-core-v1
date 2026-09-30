@@ -90,7 +90,7 @@ class CandidateHttp(ApiTestCase):
         code,result=self.process(event=changed);self.assertEqual(code,409,result)
         self.assertEqual(result['error']['code'],'interpretation_idempotency_conflict')
         code,result=self.call('GET',f'/v1/interpretations/{i["interpretation_id"]}',token=self.token)
-        self.assertEqual(code,200,result);self.assertEqual(result['interpretation'],i)
+        self.assertEqual(code,200,result);self.assertEqual({k:result['interpretation'][k] for k in i},i)
 
     def test_scopes_and_body_cannot_replace_source(self):
         before=self.truth()
