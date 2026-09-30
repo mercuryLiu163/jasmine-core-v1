@@ -22,7 +22,7 @@ from unittest.mock import patch
 from support import DbTestCase  # noqa: E402
 
 from jasmine_core import SCHEMA_VERSION, db, registry  # noqa: E402
-from jasmine_core.api.server import Application, _Handler  # noqa: E402
+from jasmine_core.api.server import Application, _Handler, _LoopbackHTTPServer, serve  # noqa: E402
 from jasmine_core.api.dispatch import dispatch  # noqa: E402
 from jasmine_core.api.request import Request  # noqa: E402
 from jasmine_core.migrations import migrate  # noqa: E402
@@ -31,6 +31,42 @@ from http.server import ThreadingHTTPServer
 HOST = "hst_01K742SG00BMSDET9BTP151RAR"
 ACTOR = "act_01K742SG00CBKP25A9ETPBTRMJ"
 TEXT = "P0 真实对话固定测试短句，无敏感数据。"
+
+
+class LoopbackServerBinding(unittest.TestCase):
+    def test_actual_serve_path_answers_health_without_reverse_dns(self) -> None:
+        logs = []
+        def exercise(server):
+            worker = threading.Thread(target=ThreadingHTTPServer.serve_forever,
+                                      args=(server,), kwargs={"poll_interval": 0.01})
+            worker.start()
+            try:
+                url = f"http://127.0.0.1:{server.server_port}/v1/health"
+                with urllib.request.urlopen(url, timeout=2) as response:
+                    self.assertEqual(json.load(response)["status"], "ok")
+                self.assertTrue(any(f":{server.server_port} " in text for text in logs))
+            finally:
+                server.shutdown()
+                worker.join(timeout=2)
+        with tempfile.TemporaryDirectory(prefix="jasmine-no-rdns-") as temp, \
+             patch("socket.getfqdn", side_effect=AssertionError("reverse DNS must not run")) as resolver, \
+             patch.object(_LoopbackHTTPServer, "serve_forever", autospec=True, side_effect=exercise):
+            serve(Path(temp) / "core.db", port=0, log=logs.append)
+            resolver.assert_not_called()
+
+    def test_binding_listens_without_reverse_dns(self) -> None:
+        with patch("socket.getfqdn", side_effect=AssertionError("reverse DNS must not run")) as resolver:
+            server = _LoopbackHTTPServer(("127.0.0.1", 0), _Handler)
+        try:
+            resolver.assert_not_called()
+            self.assertEqual(server.server_name, "127.0.0.1")
+            self.assertEqual(server.server_port, server.server_address[1])
+            self.assertGreater(server.server_port, 0)
+            self.assertEqual(server.address_family, socket.AF_INET)
+            with socket.create_connection(server.server_address, timeout=1):
+                pass
+        finally:
+            server.server_close()
 
 
 def free_port() -> int:
