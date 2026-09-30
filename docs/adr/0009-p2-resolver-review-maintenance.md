@@ -1,6 +1,6 @@
 # ADR 0009 — Atomic Resolver, Review and Interpretation Maintenance
 
-Status: Accepted contract. Implementation and independent P2-02 validation are in progress. This does not assert the P2 capture Gate or P3 acceptance.
+Status: Accepted and implemented. Independent P2 scoped admission-only acceptance is recorded in [P2 results](../p2-results.md). This does not assert P3 continuity or actual Playwright execution.
 
 ## 1. Policy and identities
 

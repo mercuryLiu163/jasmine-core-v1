@@ -1,6 +1,6 @@
 # Jasmine Core V1
 
-Private repository for the Jasmine Core V1 implementation and validation.
+Repository for the Jasmine Core V1 implementation and validation.
 
 ## Status
 
@@ -13,7 +13,7 @@ does not establish the stage verdict.
 | Capability | Current state |
 | --- | --- |
 | Public ID contract, package boundary | implemented (ADR 0001) |
-| `core.db` versioned schema v6, WAL, forward-only migration | implemented (ADRs 0001–0007) |
+| `core.db` versioned schema v8, WAL, forward-only migration | implemented (ADRs 0001–0010) |
 | Transaction / `revision` / atomicity contract | implemented (ADRs 0002, 0006) |
 | Core API, error and idempotency contract | implemented ([ADR 0003](docs/adr/0003-core-api-errors-and-idempotency.md), [API doc](docs/api/core-api-v1.md)) |
 | Raw text retention, bearer auth, append-only audit | implemented (ADR 0004) |
@@ -35,11 +35,15 @@ Interpreter/Resolver, Context Pack/Hindsight, the full Agent lifecycle
 adapter, offline sync, Dashboard, and the 30-scenario acceptance suite remain
 outside P1.
 
+P2 is independently accepted as **PASS_P2_SCOPED_ADMISSION_ONLY** at implementation commit `468918a803dc8bb44700d6d6043afd5e3c7c4204`: actual Raw-first capture, real Interpreter, atomic Policy/review, same-Task correction, current typed state injection and maintenance/replay/restart. See the [P2 results and scope](docs/p2-results.md). Main remains execution-free; actual Playwright execution and P3 Context Pack/compact are not claimed. User instruction: whole-stage local completion and one publication, no per-milestone push or CI gate.
+
 ## Planning documents
 
 - [Multi-stage PR plan](docs/Jasmine-Core-V1-多阶段PR计划.md)
 - [P0 Baseline implementation and validation taskbook](docs/Jasmine-Core-V1-P0-阶段任务书.md)
 - [P1 Truth Core implementation and validation taskbook](docs/Jasmine-Core-V1-P1-阶段任务书.md)
+- [P2 implementation and acceptance scope](docs/p2-results.md)
+- [P3 continuity taskbook (not implemented)](docs/Jasmine-Core-V1-P3-阶段任务书.md)
 
 The design documents are planning inputs and are not proof of implemented
 features.
@@ -53,6 +57,10 @@ features.
 - [ADR 0005 — Authority and Guard](docs/adr/0005-p1-authority-and-guard.md)
 - [ADR 0006 — Task and Step state](docs/adr/0006-task-step-state-and-evidence-boundaries.md)
 - [ADR 0007 — Evidence, fingerprint and bounded Codex hooks](docs/adr/0007-p1-evidence-fingerprint-and-codex-hook.md)
+
+- [ADR 0008 — immutable Interpreter candidates](docs/adr/0008-p2-interpretation-candidate-chain.md)
+- [ADR 0009 — Resolver, review and maintenance](docs/adr/0009-p2-resolver-review-maintenance.md)
+- [ADR 0010 — admission-only Codex capture](docs/adr/0010-p2-codex-admission.md)
 
 ## Getting started
 

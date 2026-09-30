@@ -7,6 +7,10 @@
 
 P2/P3 由当前调度线程顺序负责，P4 Memory 和 P6 Dashboard 委派其他 Agent 按依赖并行。可执行文档：[并行协作说明](Jasmine-Core-V1-P2-P3-P4-P6-并行协作说明.md)、[P2](Jasmine-Core-V1-P2-阶段任务书.md)、[P3](Jasmine-Core-V1-P3-阶段任务书.md)、[P4](Jasmine-Core-V1-P4-阶段任务书.md)、[P6](Jasmine-Core-V1-P6-阶段任务书.md)。文档交付本身不构成这些阶段的实现或验收。
 
+## 当前实施记录（2026-09-30）
+
+P2-01/P2-02 已合历史保留；P2-03 在 `468918a803dc8bb44700d6d6043afd5e3c7c4204`、Schema8 完成本地独立验收，结论 PASS_P2_SCOPED_ADMISSION_ONLY，详见[P2结果摘要](p2-results.md)。以下逐 PR 条件按顶部用户覆盖解释为本地实施/Review/validation 里程碑，whole-stage 完成后一次发布，不执行 CI 门禁。P3 尚未实施，实际 compact、完整 Context Pack 与 Playwright 执行联合 Gate 仍待后续阶段。
+
 ## 依据与边界
 
 - 《Jasmine-Core-V1-实施与验证任务书》§1–3、§7–10 给出 P0–P7 顺序、WS-A–J、真实对话验收和发布门禁。

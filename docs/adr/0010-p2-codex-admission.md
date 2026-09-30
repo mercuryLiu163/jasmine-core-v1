@@ -1,6 +1,6 @@
 # ADR 0010 — Real Codex capture and synchronous semantic admission
 
-Status: Accepted contract; implementation and independent validation in progress. Actual project/hook trust and real capture Gate have not been verified. Schema remains 8. User override removes CI and per-stage push requirements; one publication occurs after P2 completion.
+Status: Accepted and implemented; actual trusted capture and scoped admission-only Gate independently approved at `468918a803dc8bb44700d6d6043afd5e3c7c4204`, Schema8. See [P2 results](../p2-results.md) for real/component evidence and limits. User override removes CI and per-milestone push requirements; one publication occurs after whole-P2 completion.
 
 ## 1. Bound scope and independent barrier
 
