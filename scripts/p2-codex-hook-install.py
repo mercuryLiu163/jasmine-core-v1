@@ -56,6 +56,7 @@ def plan(project, binding, python):
         kept.append({**({'matcher': '.*'} if event != 'UserPromptSubmit' else {}),
             'hooks': [{'type': 'command', 'command': command,
                 'timeout': 150 if event == 'UserPromptSubmit' else 12,
+                **({'additionalContextLimit': 0} if event == 'UserPromptSubmit' else {}),
                 'statusMessage': 'Jasmine P2 semantic admission ' + event}]})
         document['hooks'][event] = kept
     new = (json.dumps(document, ensure_ascii=False, indent=2) + '\n').encode()
