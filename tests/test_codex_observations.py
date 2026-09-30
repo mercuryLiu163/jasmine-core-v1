@@ -3,6 +3,8 @@ import copy
 import hashlib
 import json
 import shlex
+import sys
+from pathlib import Path
 
 import test_evidence
 from test_evidence import SYSTEM
@@ -56,7 +58,7 @@ class CodexObservationHttp(test_evidence.EvidenceHttp):
         body = dict(task_id=self.task, step_id=self.step, host_id=HOST,
                     origin_prompt_event_id=prompt['event']['event_id'],
                     related_posttool_event_id=post['result_event']['event_id'],
-                    codex_executable=dict(path='/bin/codex-test', version='test', sha256='a'*64))
+                    codex_executable=dict(path=str(Path(sys.executable).resolve()), version='test', sha256='a'*64))
         for field, lines in [('codex_jsonl', cli), ('hook_trace_jsonl', trace)]:
             body[field] = ''.join(json.dumps(item) + '\n' for item in lines)
             body[('hook_trace_sha256' if field == 'hook_trace_jsonl' else field+'_sha256')] = hashlib.sha256(body[field].encode()).hexdigest()
