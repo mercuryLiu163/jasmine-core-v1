@@ -45,7 +45,7 @@ def _base_config():
         'timeout_seconds':120,'max_input_bytes':48*1024,'max_output_bytes':64*1024,
         'max_stream_bytes':MAX_STREAM_BYTES,'disabled_features':list(DISABLED_FEATURES),
         'web_search':'disabled','agents_enabled':False,'project_doc_max_bytes':0,'tool_profile':'no-tools.v1',
-        'native_protocol_version':'reasoning-and-final.v1'}
+        'native_protocol_version':'reasoning-and-final.v1','catalog_tool_mode':None}
 
 
 class UnavailableProvider:
@@ -85,7 +85,7 @@ class CodexProvider:
             # optional tools. No replacement model is ever selected.
             entry=models[0]
             if (entry.get('apply_patch_tool_type') is not None or entry.get('experimental_supported_tools')!=[]
-                or entry.get('supports_search_tool') is not False):
+                or entry.get('supports_search_tool') is not False or entry.get('tool_mode') is not None):
                 raise ValueError('catalog exposes tools')
             self.catalog_bytes=raw.encode('utf-8')
             self.config.update(version='codex-cli/0.159.0',executable_sha256=digest,

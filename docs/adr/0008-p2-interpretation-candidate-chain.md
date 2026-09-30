@@ -1,6 +1,6 @@
 # ADR 0008 — P2-01 Interpretation 候选链
 
-- 状态：Accepted（合同与provider能力已独立评审；候选实现验收另行记录，不宣称 P2 验收）。
+- 状态：候选数据合同 Accepted；provider完整工具面验证待冻结；候选实现验收另行记录，不宣称 P2 验收。
 - 日期：2026-09-29
 - 基线：`9de00fe`，Schema 6；本 PR 独占新增 `m0007_interpretations` / Schema 7。
 
@@ -48,12 +48,14 @@ P0/P1 tokens是整个Core实例的scope，尚无project ACL；过滤是查询上
 
 ## 7 Provider合同评审附录
 
-独立验证已捕获CLI0.159.0发往component preflight Responses endpoint的实际请求，tools字段缺省（没有工具），model精确gpt-6.1-sol、strict json_schema；同配置真实saved-auth调用13.8167秒成功。固定actual catalog条目只清除apply_patch_tool_type/experimental_supported_tools/supports_search_tool，模型slug保持原值。禁用features与进程env whitelist以src/jasmine_core/interpreter_provider.py为准；CLI二进制SHA固定，其他版本拒绝直到重新评审。operator用JASMINE_CORE_INTERPRETER_CODEX和JASMINE_CORE_INTERPRETER_CATALOG显式启用；HTTP不可设置。catalog内容/hash与绝对executable路径/hash记录config digest；每调用重新核二进制hash，实际临时catalog由冻结字节生成。继承环境仅HOME/PATH/TMPDIR/LANG/LC_ALL/SYSTEMROOT和固定saved-auth CODEX_HOME，清除API key/BASE_URL/nonce/proxy/provider覆盖。没有修改全局config/hooks/trust。
+初始独立component preflight捕获CLI0.159.0实际请求，顶层tools字段缺省、model精确gpt-6.1-sol、strict json_schema；同配置真实saved-auth调用13.8167秒产出结构候选。但后续完整检查发现input.additional_tools仍含code-mode functions.exec，因此初始记录不证明工具面为空。固定actual catalog条目清除apply_patch_tool_type/experimental_supported_tools/supports_search_tool及tool_mode（null），模型slug保持原值。禁用features与进程env whitelist以src/jasmine_core/interpreter_provider.py为准；CLI二进制SHA固定，其他版本拒绝直到重新评审。operator用JASMINE_CORE_INTERPRETER_CODEX和JASMINE_CORE_INTERPRETER_CATALOG显式启用；HTTP不可设置。catalog内容/hash与绝对executable路径/hash记录config digest；每调用重新核二进制hash，实际临时catalog由冻结字节生成。继承环境仅HOME/PATH/TMPDIR/LANG/LC_ALL/SYSTEMROOT和固定saved-auth CODEX_HOME，清除API key/BASE_URL/nonce/proxy/provider覆盖。没有修改全局config/hooks/trust。
 
 不同processor actor同源Event各有解释；后续Resolver必须按源Event及已应用历史去重，不能仅按interpretation_id。human assistant.message映射AGENT_PROPOSED（非用户明确），仅human user.prompt可标USER_EXPLICIT。schema版本不由model输出。
 
 P2-02/03续接验收须包含project已知但task为空的真实原话，之后由Resolver创建Task及requirement；P2-01允许TASK scope task_id=null。P1旧hook的task/step固定绑定保持兼容，project-only输入到后续Task绑定过渡留给P2-03，不由本PR预造Task替代自然语言创建Gate。
 
-Provider额外设置project_doc_max_bytes=0并写入config digest，阻止全局/目录AGENTS正文进入实际解释prompt；独立preflight按候选相同flags验证无额外用户文档。timeout取消包括已退出父进程但仍持pipe的所有本调用processgroup子进程（TERM后KILL）；不触已有服务。
+Provider额外设置project_doc_max_bytes=0并写入config digest，阻止全局/目录AGENTS正文进入实际解释prompt；独立preflight必须按候选相同flags验证无额外用户文档和完整工具面（含input.additional_tools）。timeout取消包括已退出父进程但仍持pipe的所有本调用processgroup子进程（TERM后KILL）；不触已有服务。
 
-真实HTTP首轮保留FAILED/provider_tool_use：CLI可发送非工具reasoning完成项。协议reasoning-and-final.v1严格允许thread.started→turn.started→零或多条指定reasoning文本→唯一agent_message→turn.completed；reasoning仅接受id/type/text且text是字符串。任何其他item或晚到reasoning仍fail closed，实际模型请求无工具的边界不变。reasoning协议版本进入config digest，首轮FAILED不覆写，最终独立重试用新配置provenance。
+真实HTTP首轮保留FAILED/provider_tool_use：CLI可发送非工具reasoning完成项。协议reasoning-and-final.v1严格允许thread.started→turn.started→零或多条指定reasoning文本→唯一agent_message→turn.completed；reasoning仅接受id/type/text且text是字符串。任何其他item或晚到reasoning仍fail closed，实际模型请求无工具的边界必须通过完整preflight确认。reasoning协议版本进入config digest，首轮FAILED不覆写，最终独立重试用新配置provenance。
+
+真实失败进一步定位为Code Mode不可用startup error项，并非已证实reasoning项；保留拒绝error项，不把启动降级视为无工具成功。provider强制actual catalog tool_mode=null以避免code_mode_only在input.additional_tools注入functions.exec，模型slug保持gpt-6.1-sol。最终必须验证顶层tools、input.additional_tools、所有namespace/exec面均为空且真实调用无降级error；尚未成立时仍BLOCKED，不将之前结构结果标为安全providerGate PASS。

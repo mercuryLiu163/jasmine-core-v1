@@ -323,7 +323,7 @@ The local provider is opt-in: the operator sets absolute
 `JASMINE_CORE_INTERPRETER_CODEX` and `JASMINE_CORE_INTERPRETER_CATALOG` paths.
 The catalog must retain the actual `gpt-6.1-sol` entry and have
 `apply_patch_tool_type: null`, `experimental_supported_tools: []`, and
-`supports_search_tool: false`. This release supports only the independently
+`supports_search_tool: false`, and `tool_mode: null`. This release supports only the independently
 verified CLI0.159.0 binary fingerprint recorded in the provider. Other binaries
 or missing configuration return a recorded `FAILED/provider_unavailable`.
 The request body cannot alter this profile. Model weights/build version is not
