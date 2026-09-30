@@ -33,11 +33,6 @@ CHARS_PER_TOKEN = 4
 #: engine is never asked for, or handed, more than the local budget.
 SAFETY_MARGIN = 0.96
 
-#: Refuse to even measure beyond this. A result this large is a remote anomaly,
-#: not a memory, and counting it would let one row consume a whole partition.
-MAX_COUNTED_CHARS = 64 * 1024
-
-
 def estimate(text: str) -> int:
     """Local token estimate for one string. 0 for empty, >=1 for anything else."""
     if not text:
@@ -85,18 +80,15 @@ def split_budget(total: int, weights: list[int]) -> list[int]:
     """Divide `total` across banks proportionally, giving the remainder to the first.
 
     Largest-remainder is overkill for two banks; what matters is that the parts
-    sum to exactly `total` so the merged result cannot exceed the allocation.
+    sum to exactly `total` so the merged result cannot exceed the allocation,
+    which is why the remainder goes to the first part rather than being dropped.
+    Zero or negative weights cannot be weighted, so they share the budget evenly.
     """
     if not weights:
         return []
     if total <= 0:
         return [0] * len(weights)
     weight_sum = sum(weights)
-    if weight_sum <= 0:
-        share = total // len(weights)
-        parts = [share] * len(weights)
-        parts[0] += total - share * len(weights)
-        return parts
     parts = [total * weight // weight_sum for weight in weights]
     parts[0] += total - sum(parts)
     return parts

@@ -86,6 +86,15 @@ class MemoryAdapter:
             raise TransportError("engine_not_configured",
                                  "no Hindsight endpoint is configured for this Core",
                                  retryable=False)
+        if self._conn.in_transaction:
+            # Structural, not a convention: the invariant is that no engine call
+            # happens while the SQLite write lock is held. Checking it here as
+            # well as in the worker means an in-process caller cannot bypass it
+            # by calling the adapter directly.
+            raise RuntimeError(
+                "refusing to call the engine during a database transaction: the write lock "
+                "would be held across a network call"
+            )
         metadata = provenance.build_metadata(
             memory_id=request.metadata[provenance.MEMORY_ID_KEY],
             document_id=request.document_id,
@@ -311,7 +320,7 @@ class MemoryAdapter:
                 )
                 self._store.mark_recalled([item.memory_id for item in outcome.items], stamp)
                 if self._transport is not None:
-                    self._store.note_engine_success(stamp)
+                    self._record_engine_outcome(outcome, stamp)
         except db.errors.DatabaseBusy:
             # Losing the trace must not turn a successful recall into a failure
             # of the Context Pack. The answer is still correct; only the
@@ -319,6 +328,25 @@ class MemoryAdapter:
             # absent trace id.
             return outcome
         return RecallOutcome(**{**outcome.__dict__, "trace_id": trace_id})
+
+    def _record_engine_outcome(self, outcome: RecallOutcome, at: str) -> None:
+        """Keep the engine's last-success/last-error pair honest.
+
+        A success is recorded only when a bank actually answered, so a recall
+        where every bank failed cannot clear the last error and make the health
+        report say Memory is fine while every job fails. A failure is recorded
+        whenever a bank failed, including a partial one, because "one bank
+        answered" is not the same fact as "the engine is healthy".
+        """
+        answered = any(bank.status == "ok" for bank in outcome.banks)
+        failed = [bank for bank in outcome.banks if bank.status == "failed"]
+        if answered:
+            self._store.note_engine_success(at)
+        if failed:
+            self._store.note_engine_failure(
+                error_code=failed[0].error_code or "engine_error",
+                safe_error_summary=failed[0].safe_error_summary or "", at=at,
+            )
 
     # -- reflect -----------------------------------------------------------
 

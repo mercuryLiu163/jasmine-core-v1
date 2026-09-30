@@ -54,7 +54,7 @@ from typing import Any
 from .. import clock, db, errors, ids
 from ..canonical import canonical_json, sha256_hex
 from . import eligibility, filtering, scope as scope_module
-from .store import ATTEMPT_ID_PREFIX, JOB_ID_PREFIX, MemoryStore
+from .store import ATTEMPT_ID_PREFIX, JOB_ID_PREFIX, MemoryStore, _scope_clause
 from .types import JOB_KINDS, JOB_STATUSES
 
 #: Key in `core_meta` holding the recovery scan cursor. A `core_meta` row rather
@@ -96,6 +96,28 @@ class ClaimedJob:
     job: dict[str, Any]
     item: dict[str, Any]
     bank: scope_module.BankRef
+
+
+#: Which `engine_state` values each job kind may be written *from*.
+#:
+#: This is the guard against a late worker overwriting a terminal result. A
+#: worker whose lease expired mid-`retain` can still come back holding a failure;
+#: if a `fail()` were allowed to write from `RETAINED`, that worker would rewrite
+#: a successful item as `RETAIN_FAILED` while its job row said `DONE` — the
+#: remote document exists and the Inspector would deny it. A retain failure is
+#: therefore only writable from the two states a retain can leave behind, and a
+#: delete failure only from the two a delete can leave behind.
+ENGINE_STATES_FOR_RETAIN_FAILURE = ("PENDING_RETAIN", "RETAIN_FAILED")
+ENGINE_STATES_FOR_DELETE_FAILURE = ("DELETE_PENDING", "DELETED", "DELETE_FAILED")
+ENGINE_STATES_FOR_INVALIDATE_FAILURE = ("PENDING_RETAIN", "RETAINED", "RETAIN_FAILED")
+
+
+def failure_predecessors(kind: str) -> tuple[str, ...]:
+    if kind == "retain":
+        return ENGINE_STATES_FOR_RETAIN_FAILURE
+    if kind == "delete":
+        return ENGINE_STATES_FOR_DELETE_FAILURE
+    return ENGINE_STATES_FOR_INVALIDATE_FAILURE
 
 
 def is_retryable(error_code: str | None) -> bool:
@@ -192,36 +214,47 @@ class JobStore:
                              at: str | None = None) -> dict[str, Any]:
         """The recovery scan: eligible committed sources → PENDING jobs.
 
-        One short transaction covers the window scan, the job inserts and the
-        cursor update. There is no code path in P4 that enqueues a job from
-        inside another domain's transaction, and none is needed: the scan reads
-        *committed* Events, so a rolled-back write is invisible to it and a
-        committed write is visible to the next run.
+        The scan runs *outside* the write transaction and the transaction covers
+        only the job inserts and the cursor update. Two reasons, both learned the
+        hard way:
+
+        * **Lock duration.** The eligibility check resolves Evidence artifact
+          references, which reads and hashes workspace files. Doing that inside
+          `BEGIN IMMEDIATE` holds the SQLite write lock for as long as the I/O
+          takes — measured at 8 s for 24 × 1 GiB artifacts, against a 5 s
+          `busy_timeout` — so an ordinary scan makes every concurrent Truth write
+          fail with `database_busy`. A read of committed data needs no lock, and
+          correctness does not depend on the read being inside the transaction:
+          the unique index on `(source_event_id, kind)` is what makes a
+          duplicate impossible, and a rolled-back Event is invisible to a reader
+          either way.
+        * **The cursor.** It advances to the highest `seq` the window *examined*,
+          not to the highest candidate. Advancing only past candidates livelocks
+          on any window with no eligible source, and silently strands every
+          eligible Event behind it.
         """
         stamp = at or clock.now_rfc3339()
         after_seq = int(db.get_meta(self._conn, CURSOR_KEY, 0) or 0)
-        highest = int(self._conn.execute("SELECT COALESCE(MAX(seq), 0) AS m FROM events").fetchone()["m"])
+        reasons: list[dict[str, Any]] = []
+        window = eligibility.Window(after_seq=after_seq, limit=limit)
+        candidates = registry.scan(self._conn, window=window, reasons=reasons)
+        created: list[str] = []
+        skipped: list[str] = []
         with db.translate_lock_errors(), db.transaction(self._conn):
-            # Re-read inside the transaction: another worker may have advanced
-            # the cursor between the read above and the lock being granted.
-            after_seq = int(db.get_meta(self._conn, CURSOR_KEY, 0) or 0)
-            reasons: list[dict[str, Any]] = []
-            candidates = registry.scan(self._conn, after_seq=after_seq, limit=limit,
-                                       reasons=reasons)
-            created: list[str] = []
-            skipped: list[str] = []
+            # Re-read the cursor inside the transaction: another worker may have
+            # advanced it between the read above and the lock being granted, and
+            # rewinding it would only cost a re-scan.
+            cursor_after = max(int(db.get_meta(self._conn, CURSOR_KEY, 0) or 0),
+                               window.cursor_after)
             for candidate in candidates:
-                row = self._conn.execute("SELECT seq FROM events WHERE event_id=?",
-                                         (candidate.source_event_id,)).fetchone()
-                cursor_seq = int(row["seq"]) if row else highest
                 _job, made = self.enqueue(candidate, max_attempts=max_attempts, at=stamp)
                 if made:
                     created.append(candidate.document_id)
                 else:
                     skipped.append(candidate.document_id)
-                after_seq = max(after_seq, cursor_seq)
-            db.set_meta(self._conn, CURSOR_KEY, after_seq)
-        return {"cursor_after": after_seq, "scanned": len(candidates),
+            db.set_meta(self._conn, CURSOR_KEY, cursor_after)
+        return {"cursor_after": cursor_after, "events_examined": window.highest_examined,
+                "candidates": len(candidates),
                 "created": created, "already_present": skipped,
                 "ineligible": reasons,
                 "sources": registry.names}
@@ -287,34 +320,47 @@ class JobStore:
                 else scope_module.project_bank(item["project_id"]))
         return ClaimedJob(job=claimed, item=item, bank=bank)
 
+    def _finish(self, job: ClaimedJob, *, receipt: dict[str, Any], at: str) -> None:
+        """Move a claimed job to DONE, or refuse if it is no longer RUNNING.
+
+        The rowcount check is the point. Without it a `DONE` written by another
+        worker and a `DONE` written here are indistinguishable, so a stale
+        worker could attach its own receipt to a job somebody else finished.
+        """
+        cursor = self._conn.execute(
+            "UPDATE memory_jobs SET status='DONE', lease_owner=NULL, lease_expires_at=NULL,"
+            " last_error_code=NULL, safe_error_summary=NULL, receipt_json=?, completed_at=?,"
+            " updated_at=? WHERE job_id=? AND status='RUNNING'",
+            (canonical_json(receipt), at, at, job.job["job_id"]),
+        )
+        if cursor.rowcount != 1:
+            raise errors.InvalidStateTransition(
+                "this Memory job is no longer running; another worker completed it",
+                job_id=job.job["job_id"],
+            )
+
     def _attempt(self, job_id: str, attempt_number: int, phase: str, outcome: str, *,
                  owner: str, at: str, receipt: dict[str, Any] | None = None,
                  error_code: str | None = None,
                  safe_error_summary: str | None = None) -> None:
         """Append one immutable attempt record.
 
-        `INSERT OR REPLACE` would be wrong here: a retried lease for the same
-        attempt number must not overwrite the earlier record of what the first
-        attempt actually did.
+        Plain `INSERT`, never `INSERT OR REPLACE` and never an `UPDATE`: a retried
+        lease for the same attempt number must not overwrite the earlier record of
+        what the first attempt did. A duplicate `(job, attempt, phase)` is a
+        genuine conflict and is raised — the table is append-only by trigger, so
+        the previous version of this method tried to "recover" with an `UPDATE`
+        that the trigger always aborts, converting a clear conflict into an
+        opaque `IntegrityError` at COMMIT.
         """
-        try:
-            self._conn.execute(
-                "INSERT INTO memory_job_attempts (attempt_id, job_id, attempt_number, phase,"
-                " outcome, error_code, safe_error_summary, receipt_json, lease_owner, started_at,"
-                " finished_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-                (ids.new_id(ATTEMPT_ID_PREFIX), job_id, attempt_number, phase, outcome,
-                 error_code, safe_error_summary,
-                 canonical_json(receipt) if receipt else None, owner, at, at),
-            )
-        except sqlite3.IntegrityError:
-            # Same (job, attempt, phase) twice: the lease was recovered for the
-            # same attempt number, which is a legal recovery, not a conflict.
-            self._conn.execute(
-                "UPDATE memory_job_attempts SET finished_at=?, error_code=COALESCE(?, error_code),"
-                " safe_error_summary=COALESCE(?, safe_error_summary), lease_owner=?"
-                " WHERE job_id=? AND attempt_number=? AND phase=?",
-                (at, error_code, safe_error_summary, owner, job_id, attempt_number, phase),
-            )
+        self._conn.execute(
+            "INSERT INTO memory_job_attempts (attempt_id, job_id, attempt_number, phase,"
+            " outcome, error_code, safe_error_summary, receipt_json, lease_owner, started_at,"
+            " finished_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (ids.new_id(ATTEMPT_ID_PREFIX), job_id, attempt_number, phase, outcome,
+             error_code, safe_error_summary,
+             canonical_json(receipt) if receipt else None, owner, at, at),
+        )
 
     # -- completion --------------------------------------------------------
 
@@ -322,12 +368,7 @@ class JobStore:
         stamp = at or clock.now_rfc3339()
         with db.translate_lock_errors(), db.transaction(self._conn):
             self._store.note_retained(job.job["memory_id"], receipt)
-            self._conn.execute(
-                "UPDATE memory_jobs SET status='DONE', lease_owner=NULL, lease_expires_at=NULL,"
-                " last_error_code=NULL, safe_error_summary=NULL, receipt_json=?, completed_at=?,"
-                " updated_at=? WHERE job_id=? AND status='RUNNING'",
-                (canonical_json(receipt), stamp, stamp, job.job["job_id"]),
-            )
+            self._finish(job, receipt=receipt, at=stamp)
             self._attempt(job.job["job_id"], int(job.job["retry_count"]), "RETAINED", "SUCCESS",
                           owner=job.job["lease_owner"] or "", at=stamp, receipt=receipt)
 
@@ -339,38 +380,60 @@ class JobStore:
         second query. An exhausted attempt budget is `FAILED` even when the error
         was retryable: an indefinitely retried job is how a queue looks healthy
         while nothing is retained.
+
+        Two refusals, both of which a stale worker can provoke:
+
+        * The engine state may only be written from the states *this job kind*
+          can fail from. A worker whose lease expired mid-retain and which comes
+          back holding a failure must not rewrite a `RETAINED` item as
+          `RETAIN_FAILED` while its job row says `DONE` — the remote document
+          exists and the Inspector would deny it.
+        * The job row update must actually match. If another worker finished the
+          job in the meantime, its result is the truth and this failure is stale.
         """
         stamp = at or clock.now_rfc3339()
+        summary = filtering.safe_summary(safe_error_summary)
         attempts = int(job.job["retry_count"])
         budget = int(job.job["max_attempts"])
         retry = is_retryable(error_code) and attempts < budget
         status = "PENDING" if retry else "FAILED"
         next_at = _next_attempt_at(backoff_seconds(attempts, rng=rng), at=stamp) if retry else stamp
+        # A soft retire failing changes nothing about what the engine holds, so
+        # the item's engine state stays whatever it already was.
+        target_state = {"retain": "RETAIN_FAILED", "delete": "DELETE_FAILED"}.get(
+            job.job["kind"])
+        if error_code == "document_deleted_locally":
+            # The item was obsoleted or deleted between the scan and the claim.
+            # There is nothing to send and nothing to retry, and the item's
+            # engine state is whatever the lifecycle command set it to. Writing
+            # a retain failure over `DELETE_PENDING` would be a regression, and
+            # refusing the write would surface as an unhandled error on every
+            # tick. The job is simply permanently FAILED.
+            target_state = None
         with db.translate_lock_errors(), db.transaction(self._conn):
-            self._store.set_engine_state(
-                job.job["memory_id"],
-                engine_state=("RETAIN_FAILED" if job.job["kind"] == "retain"
-                              else "DELETE_FAILED" if job.job["kind"] == "delete"
-                              else "RETAINED"),
-                expected=("PENDING_RETAIN", "RETAINED", "RETAIN_FAILED", "DELETE_PENDING", "DELETED"),
-                error_code=error_code, safe_error_summary=filtering.safe_summary(safe_error_summary),
-                at=stamp,
-            )
-            self._conn.execute(
+            if target_state is not None:
+                self._store.set_engine_state(
+                    job.job["memory_id"], engine_state=target_state,
+                    expected=failure_predecessors(job.job["kind"]),
+                    error_code=error_code, safe_error_summary=summary, at=stamp,
+                )
+            cursor = self._conn.execute(
                 "UPDATE memory_jobs SET status=?, lease_owner=NULL, lease_expires_at=NULL,"
                 " last_error_code=?, safe_error_summary=?, next_attempt_at=?, completed_at=?,"
                 " updated_at=? WHERE job_id=? AND status='RUNNING'",
-                (status, error_code, filtering.safe_summary(safe_error_summary), next_at,
-                 None if retry else stamp, stamp, job.job["job_id"]),
+                (status, error_code, summary, next_at, None if retry else stamp, stamp,
+                 job.job["job_id"]),
             )
-            self._attempt(job.job["job_id"], attempts,
-                          "DELETED" if job.job["kind"] == "delete" else
-                          "INVALIDATED" if job.job["kind"] == "invalidate" else "FAILED",
-                          "RETRY" if retry else "FAILED", owner=job.job["lease_owner"] or "",
-                          at=stamp, error_code=error_code,
-                          safe_error_summary=filtering.safe_summary(safe_error_summary))
-            self._store.note_engine_failure(error_code=error_code,
-                                            safe_error_summary=filtering.safe_summary(safe_error_summary),
+            if cursor.rowcount != 1:
+                raise errors.InvalidStateTransition(
+                    "this Memory job is no longer running; another worker completed it",
+                    job_id=job.job["job_id"], error_code=error_code,
+                )
+            self._attempt(job.job["job_id"], attempts, "FAILED",
+                          "RETRY" if retry else "FAILED",
+                          owner=job.job["lease_owner"] or "", at=stamp,
+                          error_code=error_code, safe_error_summary=summary)
+            self._store.note_engine_failure(error_code=error_code, safe_error_summary=summary,
                                             at=stamp)
         return status
 
@@ -448,12 +511,23 @@ class JobStore:
                     "this Memory job is claimed by a worker; wait for its lease to expire",
                     job_id=job_id, status=job["status"],
                 )
+            if job["status"] == "PENDING":
+                # It is already queued. Accepting the command would append an
+                # audit Event that records a transition which did not happen.
+                raise errors.InvalidStateTransition(
+                    "this Memory job is already queued", job_id=job_id, status=job["status"],
+                )
             stamp = stored["recorded_at"]
-            self._conn.execute(
-                "UPDATE memory_jobs SET status='PENDING', next_attempt_at=?, lease_owner=NULL,"
-                " lease_expires_at=NULL, updated_at=? WHERE job_id=? AND status='FAILED'",
+            cursor = self._conn.execute(
+                "UPDATE memory_jobs SET status='PENDING', retry_count=0, next_attempt_at=?,"
+                " lease_owner=NULL, lease_expires_at=NULL, updated_at=?"
+                " WHERE job_id=? AND status='FAILED'",
                 (stamp, stamp, job_id),
             )
+            if cursor.rowcount != 1:
+                raise errors.InvalidStateTransition(
+                    "this Memory job is no longer FAILED", job_id=job_id,
+                )
             updated = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?",
                                          (job_id,)).fetchone()
         return {"job": job_row(updated), "event": stored, "replayed": False}
@@ -461,6 +535,7 @@ class JobStore:
     # -- lifecycle jobs ----------------------------------------------------
 
     def enqueue_invalidate(self, *, memory_id: str, source_event_id: str,
+                           max_attempts: int = DEFAULT_MAX_ATTEMPTS,
                            at: str | None = None) -> dict[str, Any]:
         """Queue the engine's soft retire for an obsoleted item.
 
@@ -489,7 +564,7 @@ class JobStore:
             " VALUES (?,'invalidate',?,?,?,?,?,?,?,?,'PENDING',0,?,?,?,?)",
             (job_id, memory_id, source_event_id, item["project_id"], item["task_id"],
              item["memory_type"], item["bank_id"], item["document_id"],
-             item["content_sha256"], DEFAULT_MAX_ATTEMPTS, stamp, stamp, stamp),
+             item["content_sha256"], max_attempts, stamp, stamp, stamp),
         )
         row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
         return job_row(row)
@@ -504,18 +579,15 @@ class JobStore:
         """
         stamp = at or clock.now_rfc3339()
         with db.translate_lock_errors(), db.transaction(self._conn):
-            self._conn.execute(
-                "UPDATE memory_jobs SET status='DONE', lease_owner=NULL, lease_expires_at=NULL,"
-                " last_error_code=NULL, safe_error_summary=NULL, receipt_json=?, completed_at=?,"
-                " updated_at=? WHERE job_id=? AND status='RUNNING'",
-                (canonical_json(receipt), stamp, stamp, job.job["job_id"]),
-            )
+            self._finish(job, receipt=receipt, at=stamp)
             self._attempt(job.job["job_id"], int(job.job["retry_count"]), "INVALIDATED",
                           "SUCCESS", owner=job.job["lease_owner"] or "", at=stamp, receipt=receipt)
 
     # -- delete jobs -------------------------------------------------------
 
-    def enqueue_delete(self, *, memory_id: str, source_event_id: str, at: str | None = None) -> dict[str, Any]:
+    def enqueue_delete(self, *, memory_id: str, source_event_id: str,
+                       max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+                       at: str | None = None) -> dict[str, Any]:
         """Queue the remote document deletion for a tombstoned item.
 
         The tombstone and the exclusion from Recall happen locally and
@@ -541,7 +613,7 @@ class JobStore:
             " VALUES (?,'delete',?,?,?,?,?,?,?,?,'PENDING',0,?,?,?,?)",
             (job_id, memory_id, source_event_id, item["project_id"], item["task_id"],
              item["memory_type"], item["bank_id"], item["document_id"],
-             item["content_sha256"], DEFAULT_MAX_ATTEMPTS, stamp, stamp, stamp),
+             item["content_sha256"], max_attempts, stamp, stamp, stamp),
         )
         row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
         return job_row(row)
@@ -550,15 +622,18 @@ class JobStore:
                               at: str | None = None) -> None:
         stamp = at or clock.now_rfc3339()
         with db.translate_lock_errors(), db.transaction(self._conn):
-            self._store.set_engine_state(job.job["memory_id"], engine_state="DELETED",
-                                         expected=("DELETE_PENDING", "DELETE_FAILED", "RETAINED"),
-                                         receipt=receipt, remote_deleted=True, at=stamp)
-            self._conn.execute(
-                "UPDATE memory_jobs SET status='DONE', lease_owner=NULL, lease_expires_at=NULL,"
-                " last_error_code=NULL, safe_error_summary=NULL, receipt_json=?, completed_at=?,"
-                " updated_at=? WHERE job_id=? AND status='RUNNING'",
-                (canonical_json(receipt), stamp, stamp, job.job["job_id"]),
-            )
+            # An operator may delete an item whose retain never ran, or whose
+            # retain failed. The tombstone and the exclusion from Recall are
+            # already correct in both cases, and the remote document is either
+            # absent or about to be removed — so every of these predecessors is
+            # legitimate, and refusing any of them would wedge the queue with a
+            # crash rather than remove the document.
+            self._store.set_engine_state(
+                job.job["memory_id"], engine_state="DELETED",
+                expected=("DELETE_PENDING", "DELETE_FAILED", "RETAINED", "PENDING_RETAIN",
+                          "RETAIN_FAILED"),
+                receipt=receipt, remote_deleted=True, at=stamp)
+            self._finish(job, receipt=receipt, at=stamp)
             self._attempt(job.job["job_id"], int(job.job["retry_count"]), "DELETED", "SUCCESS",
                           owner=job.job["lease_owner"] or "", at=stamp, receipt=receipt)
 
@@ -570,9 +645,10 @@ class JobStore:
         row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
         return None if row is None else job_row(row)
 
-    def jobs(self, *, project_id: str | None = None, status: str | None = None,
-             kind: str | None = None, memory_type: str | None = None,
-             limit: int = 100, after_job_id: str | None = None) -> list[dict[str, Any]]:
+    def jobs(self, *, project_id: str | None = None, projects: tuple[str, ...] | None = None,
+             status: str | None = None, kind: str | None = None,
+             memory_type: str | None = None, limit: int = 100,
+             after_job_id: str | None = None) -> list[dict[str, Any]]:
         if status is not None and status not in JOB_STATUSES:
             raise errors.InvalidRequest(f"status must be one of {', '.join(JOB_STATUSES)}",
                                         field="status", value=status)
@@ -581,12 +657,10 @@ class JobStore:
                                         field="kind", value=kind)
         clauses: list[str] = []
         params: list[Any] = []
-        if project_id is not None:
-            # Project jobs *plus* global-bank jobs: the global bank is shared by
-            # every project in this Core, so its jobs belong in every project's
-            # view. Project A's own jobs are never in project B's list.
-            clauses.append("(project_id = ? OR bank_id = ?)")
-            params.extend([project_id, scope_module.GLOBAL_BANK_ID])
+        # Project jobs *plus* global-bank jobs: the global bank is shared by
+        # every project in this Core, so its jobs belong in every project's
+        # view. Project A's own jobs are never in project B's list.
+        _scope_clause(clauses, params, project_id=project_id, projects=projects)
         if status is not None:
             clauses.append("status = ?")
             params.append(status)
@@ -615,12 +689,11 @@ class JobStore:
             )
         ]
 
-    def counts(self, *, project_id: str | None = None) -> dict[str, int]:
+    def counts(self, *, project_id: str | None = None,
+               projects: tuple[str, ...] | None = None) -> dict[str, int]:
         clauses: list[str] = []
         params: list[Any] = []
-        if project_id is not None:
-            clauses.append("(project_id = ? OR bank_id = ?)")
-            params.extend([project_id, scope_module.GLOBAL_BANK_ID])
+        _scope_clause(clauses, params, project_id=project_id, projects=projects)
         where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
         result: dict[str, int] = {}
         for status in JOB_STATUSES:

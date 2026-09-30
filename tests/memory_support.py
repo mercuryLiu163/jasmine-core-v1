@@ -46,6 +46,11 @@ from jasmine_core.memory.store import MemoryStore  # noqa: E402
 from jasmine_core.memory.transport import TransportError  # noqa: E402
 from jasmine_core.memory.types import BankRef, EngineResult  # noqa: E402
 
+#: Sentinel for "use the default transport". `None` is a meaningful value — a
+#: Core with no engine configured — and a default of `None` made it impossible to
+#: ask for that, which is a whole class of bug the tests then failed to reach.
+_UNSET = object()
+
 HOST = "hst_01K742SG00BMSDET9BTP151RAR"
 HUMAN = "act_01K742SG00CBKP25A9ETPBTRMJ"
 SYSTEM = "act_01K742SG00CBKP25A9ETPBTRMJ"
@@ -158,7 +163,11 @@ class FakeTransport:
                 source_event_ids=(item["source_event_id"],) if item else ("evt_" + "0" * 26,),
                 evidence_ids=tuple(item["evidence_ids"]) if item else (),
                 origin_rule_id=item["origin_rule_id"] if item else None,
-                origin_rule_version=item["origin_rule_version"] if item else None),
+                origin_rule_version=item["origin_rule_version"] if item else None,
+                # The worker writes this from the item's own source Event; the
+                # double must do the same or a test that exercises the recall
+                # path diverges from the retain path for no reason.
+                origin_event_id=item["source_event_id"] if item else None),
             content_sha256=item["content_sha256"] if item else "0" * 64,
             retained_at=item["created_at"] if item else clock.now_rfc3339(),
         ))
@@ -610,11 +619,11 @@ class MemoryTestCase(unittest.TestCase):
 
     # -- P4 wiring ---------------------------------------------------------
 
-    def adapter(self, *, mode: str = scope.SINGLE_USER, transport=None):
+    def adapter(self, *, mode: str = scope.SINGLE_USER, transport=_UNSET):
         from jasmine_core.memory.adapter import MemoryAdapter
 
         return MemoryAdapter(self.conn, self.store,
-                             self.transport if transport is None else transport,
+                             self.transport if transport is _UNSET else transport,
                              mode=mode, schema_version=8)
 
     def job_store(self):
@@ -627,11 +636,11 @@ class MemoryTestCase(unittest.TestCase):
 
         return MemoryLifecycle(self.conn, self.store)
 
-    def worker(self, *, transport=None, **kwargs):
+    def worker(self, *, transport=_UNSET, **kwargs):
         from jasmine_core.memory.worker import MemoryWorker
 
         return MemoryWorker(self.conn, self.store,
-                            self.transport if transport is None else transport,
+                            self.transport if transport is _UNSET else transport,
                             lease_owner=kwargs.pop("lease_owner", "worker-1"), **kwargs)
 
     def scan(self) -> dict[str, Any]:

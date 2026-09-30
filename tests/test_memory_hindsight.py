@@ -81,7 +81,30 @@ class Wire(unittest.TestCase):
         self.assertFalse(hindsight.check_supported({"api_version": "9.9"})[0])
         self.assertFalse(hindsight.check_supported(
             {"api_version": "0.10.2", "features": {"store_document_text": False}})[0])
-        self.assertTrue(hindsight.check_supported({"api_version": None})[0])
+        # Positive matching: an engine that says nothing about its version has not
+        # been verified, and "it said nothing" is not "it is the right one".
+        for unstated in ({"api_version": None}, {}, {"api_version": ""}):
+            ok, reason = hindsight.check_supported(unstated)
+            self.assertFalse(ok, unstated)
+            self.assertIn("api_version", reason)
+        self.assertTrue(hindsight.check_supported({"api_version": "0.10.2"})[0])
+        self.assertTrue(hindsight.check_supported({"api_version": "0.10.11"})[0])
+
+    def test_a_malformed_engine_url_is_a_typed_configuration_refusal(self) -> None:
+        from jasmine_core import errors
+
+        with self.assertRaises(errors.InvalidRequest) as caught:
+            hindsight.config_from_env({hindsight.URL_ENV_VAR: "not-a-url"})
+        self.assertEqual(caught.exception.code, "invalid_request")
+        self.assertIn(hindsight.URL_ENV_VAR, caught.exception.message)
+
+    def test_the_reflect_budget_is_capped_before_it_reaches_the_engine(self) -> None:
+        server = self.server
+        self.transport.reflect(bank=self.bank, query="what changed?", max_tokens=10 ** 9)
+        # The stub records nothing, so the assertion is on the cap itself: a
+        # request for 10**9 tokens must not become 10**9 tokens of LLM spend.
+        self.assertEqual(hindsight.MAX_REQUEST_TOKENS, 8192)
+        del server
 
     # -- retain ------------------------------------------------------------
 

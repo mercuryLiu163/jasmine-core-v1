@@ -34,7 +34,6 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Any
 
-from .. import errors
 from .store import MemoryStore
 from .types import BankRef, EngineResult, FilteredItem, Provenance
 
@@ -47,6 +46,7 @@ SOURCE_EVENT_IDS_KEY = "jasmine_source_event_ids"
 EVIDENCE_IDS_KEY = "jasmine_evidence_ids"
 ORIGIN_RULE_ID_KEY = "jasmine_origin_rule_id"
 ORIGIN_RULE_VERSION_KEY = "jasmine_origin_rule_version"
+ORIGIN_EVENT_ID_KEY = "jasmine_origin_event_id"
 CONTENT_SHA256_KEY = "jasmine_content_sha256"
 RETAINED_AT_KEY = "jasmine_retained_at"
 SOURCE_VERSION_KEY = "jasmine_source_version"
@@ -78,6 +78,11 @@ def build_metadata(*, memory_id: str, document_id: str, memory_type: str,
         metadata[ORIGIN_RULE_ID_KEY] = provenance.origin_rule_id
     if provenance.origin_rule_version is not None:
         metadata[ORIGIN_RULE_VERSION_KEY] = str(provenance.origin_rule_version)
+    if provenance.origin_event_id:
+        # Written and read through one constant. An inline literal here was
+        # readable while the key was never written, so every recalled item
+        # reported `origin_event_id: None` and nothing noticed.
+        metadata[ORIGIN_EVENT_ID_KEY] = provenance.origin_event_id
     return metadata
 
 
@@ -143,15 +148,17 @@ class ProvenanceChecker:
             # The engine returned a row from a bank this call may not read. The
             # bank was chosen by the engine's own response, so this is the check
             # that stops a cross-project leak arriving through the response body
-            # rather than through the request.
-            return Verification(False, "foreign_project", item=item)
+            # rather than through the request. The item is deliberately *not*
+            # attached: nothing downstream may record its identity.
+            return Verification(False, "foreign_project")
         claimed_document = result.metadata.get(DOCUMENT_ID_KEY) or result.document_id
         if item["document_id"] != claimed_document:
-            return Verification(False, "unverified_provenance", item=item)
+            return Verification(False, "unverified_provenance")
         if item["bank_id"] != result.bank_id:
             # A row in the project bank claiming to be the global document (or
-            # the reverse) is a bank confusion, not a duplicate.
-            return Verification(False, "foreign_project", item=item)
+            # the reverse) is a bank confusion, not a duplicate. The item is
+            # resolved but not attached, for the reason above.
+            return Verification(False, "foreign_project")
         if item["status"] == "DELETED":
             return Verification(False, "deleted", item=item,
                                 memory_type=item["memory_type"])
@@ -180,7 +187,7 @@ class ProvenanceChecker:
             evidence_ids=split_ids(result.metadata.get(EVIDENCE_IDS_KEY)) or tuple(item["evidence_ids"]),
             origin_rule_id=item["origin_rule_id"],
             origin_rule_version=item["origin_rule_version"],
-            origin_event_id=result.metadata.get("jasmine_origin_event_id"),
+            origin_event_id=result.metadata.get(ORIGIN_EVENT_ID_KEY),
         )
         return Verification(True, item=item, provenance=provenance,
                             memory_type=item["memory_type"], historical=True)
@@ -217,20 +224,26 @@ class ProvenanceChecker:
         return None
 
 
+#: Reasons whose filtered record must not name the item it refers to.
+#:
+#: The text is already withheld, but the *identifier* is information too. Writing
+#: a foreign project's `memory_id` into this project's trace — and the trace is
+#: readable through `GET /v1/memory/traces/{id}` — turns a refused result into a
+#: project-enumeration oracle, which is the one thing the deployment-mode
+#: contract says it will not create.
+_OPAQUE_REASONS = frozenset({"foreign_project", "unverified_provenance", "source_missing",
+                             "evidence_missing"})
+
+
 def filtered_from(result: EngineResult, verification: Verification) -> FilteredItem:
+    reason = verification.reason or "unverified_provenance"
     item = verification.item or {}
+    opaque = reason in _OPAQUE_REASONS
     return FilteredItem(
         engine_result_id=result.engine_result_id,
         bank_id=result.bank_id,
-        reason=verification.reason or "unverified_provenance",
-        memory_id=item.get("memory_id"),
-        document_id=result.document_id,
-        memory_type=verification.memory_type or item.get("memory_type"),
+        reason=reason,
+        memory_id=None if opaque else item.get("memory_id"),
+        document_id=None if opaque else result.document_id,
+        memory_type=None if opaque else (verification.memory_type or item.get("memory_type")),
     )
-
-
-def require_document_id(value: object) -> str:
-    """A document id Core generated, for an internal caller that must not guess."""
-    if not isinstance(value, str) or not value or len(value) > 200:
-        raise errors.InvalidRequest("document_id is required", field="document_id")
-    return value

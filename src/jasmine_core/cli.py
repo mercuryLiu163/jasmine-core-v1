@@ -237,6 +237,17 @@ def cmd_memory(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def _job_kinds() -> list[str]:
+    """The frozen job kinds, read from the module rather than restated here.
+
+    Restating them in argparse is how `--kind invalidate` ends up missing from
+    a CLI that supports it, which is exactly what happened.
+    """
+    from .memory.types import JOB_KINDS
+
+    return list(JOB_KINDS)
+
+
 def cmd_memory_worker(args: argparse.Namespace) -> int:
     """Run the Memory worker: the only process that writes to the engine."""
     from .memory.store import MemoryStore
@@ -326,7 +337,9 @@ def build_parser() -> argparse.ArgumentParser:
     jobs_parser = memory_sub.add_parser("jobs", help="list durable Memory jobs")
     jobs_parser.add_argument("--project-id")
     jobs_parser.add_argument("--status", choices=["PENDING", "RUNNING", "DONE", "FAILED"])
-    jobs_parser.add_argument("--kind", choices=["retain", "delete"])
+    jobs_parser.add_argument(
+        "--kind", choices=_job_kinds(),
+        help="which engine operation the job performs")
     jobs_parser.add_argument("--limit", type=int, default=100)
 
     attempts_parser = memory_sub.add_parser("attempts",

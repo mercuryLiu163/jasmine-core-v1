@@ -33,7 +33,7 @@ class EligibleSources(MemoryTestCase):
         self.evidence(task_id=task, status="FAIL")                    # FAILURE_LESSON
         self.failed_step(project_id=project, task_id=task)            # FAILURE_LESSON
         report = self.scan()
-        self.assertEqual(report["scanned"], 5)
+        self.assertEqual(report["candidates"], 5)
         self.assertEqual(len(report["created"]), 5)
         by_type = {item["memory_type"]: item for item in self.store.items(limit=50)}
         self.assertEqual(sorted(by_type), [
@@ -58,7 +58,7 @@ class EligibleSources(MemoryTestCase):
                                      "reason": "the workspace moved under the result", "host_id": HOST},
                               actor_id=HUMAN, actor_kind="human", can_accept=False)
         report = self.scan()
-        self.assertEqual(report["scanned"], 1)
+        self.assertEqual(report["candidates"], 1)
         item = self.store.items()[0]
         self.assertEqual(item["memory_type"], "RESOLVED_ISSUE",
                          "a STALE step is an issue that got resolved, not a failure lesson")
@@ -77,10 +77,10 @@ class EligibleSources(MemoryTestCase):
             "origin_event_id": origin, "host_id": HOST,
         }, actor_id=HUMAN)
         # PROPOSED only: an unapproved agent proposal is not a stable fact.
-        self.assertEqual(self.scan()["scanned"], 0)
+        self.assertEqual(self.scan()["candidates"], 0)
         authority.transition(proposed["rule"]["rule_id"], "approve",
                              {"expected_revision": 1, "host_id": HOST}, actor_id=HUMAN)
-        self.assertEqual(self.scan()["scanned"], 1)
+        self.assertEqual(self.scan()["candidates"], 1)
         self.assertEqual(self.store.items()[0]["memory_type"], "STABLE_PROJECT_FACT")
 
     def test_a_task_scoped_rule_is_never_a_stable_fact(self) -> None:
@@ -98,7 +98,7 @@ class EligibleSources(MemoryTestCase):
         }, actor_id=HUMAN)
         authority.transition(proposed["rule"]["rule_id"], "approve",
                              {"expected_revision": 1, "host_id": HOST}, actor_id=HUMAN)
-        self.assertEqual(self.scan()["scanned"], 0,
+        self.assertEqual(self.scan()["candidates"], 0,
                          "current step/task state is not long-term memory (design §7)")
 
     def test_info_evidence_is_not_a_verified_outcome(self) -> None:
@@ -117,7 +117,7 @@ class EligibleSources(MemoryTestCase):
                 " '{}', source_event_id, change_event_id, fingerprint_sha256, actor_id, host_id,"
                 " 1, created_at FROM evidence LIMIT 1",
                 (ids.new_id("evd"),))
-        self.assertEqual(self.scan()["scanned"], 0)
+        self.assertEqual(self.scan()["candidates"], 0)
         del AuthorityEvidenceSource
 
     def test_a_broken_artifact_reference_is_not_a_verified_outcome(self) -> None:
@@ -130,7 +130,7 @@ class EligibleSources(MemoryTestCase):
         # The report the result cited is rewritten. `reference_status` is P1's
         # own verdict, recomputed from the file, and the Evidence row is
         # append-only so this is the only way the reference can break.
-        self.assertEqual(self.scan()["scanned"], 1)
+        self.assertEqual(self.scan()["candidates"], 1)
         root = Path(os.environ["JASMINE_CORE_WORKSPACE_ROOT"])
         (root / "report.txt").write_text("different content\n")
         self.job_store().reset_cursor(0)
@@ -142,7 +142,8 @@ class EligibleSources(MemoryTestCase):
         reasons = []
         from jasmine_core.memory.eligibility import SourceRegistry
 
-        SourceRegistry().scan(self.conn, after_seq=0, limit=200, reasons=reasons)
+        SourceRegistry().scan(self.conn, window=eligibility.Window(after_seq=0, limit=200),
+                                reasons=reasons)
         self.assertIn("evidence_broken_reference", {r["reason"] for r in reasons})
 
     def test_a_secret_only_lesson_is_refused_rather_than_redacted_into_junk(self) -> None:

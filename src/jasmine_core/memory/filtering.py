@@ -54,11 +54,23 @@ _PEM_RE = re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----")
 #: Assignment-shaped secrets are redacted rather than rejected. The names mirror
 #: `canonical._SECRET_NAME` so the audit log and the memory filter agree on what
 #: a secret looks like.
-_ASSIGNMENT_RE = re.compile(
-    r"(?P<name>(?<![A-Za-z0-9])(?:[A-Za-z0-9]+[-_.])*"
-    r"(?:password|passwd|apikey|api[-_]?key|secret|access[-_]?token|refresh[-_]?token"
-    r"|auth[-_]?token|token|client[-_]?secret|private[-_]?key|authorization|bearer|credential))"
-    r"(?P<sep>[\"']?\s*[:=]\s*)(?P<q>[\"'`])(?P<value>[^\"'`]*?)(?P=q)"
+#: Case-insensitive, deliberately. Environment variables and config keys are
+#: conventionally upper case (`DB_PASSWORD`, `API_KEY`, `GITHUB_TOKEN`), and
+#: `canonical.redact_text` — the log filter on this same codebase — is not
+#: case-insensitive, so `DB_PASSWORD=…` passed both. The engine is a different
+#: reader from a log file and a different reader from a recall, so the stricter
+#: of the two behaviours is the one used here.
+_NAME = (r"(?i)(?P<name>(?<![A-Za-z0-9])(?:[A-Za-z0-9]+[-_.])*"
+         r"(?:password|passwd|apikey|api[-_]?key|secret|access[-_]?token|refresh[-_]?token"
+         r"|auth[-_]?token|token|client[-_]?secret|private[-_]?key|authorization|bearer|credential))")
+#: Quoted: `password="…"` in JSON, YAML, an env dump or a log line.
+_ASSIGNMENT_RE = re.compile(_NAME + r"(?P<sep>[\"']?\s*[:=]\s*)(?P<q>[\"'`])(?P<value>[^\"'`]*?)(?P=q)")
+#: Bare: `PASSWORD=hunter2` in a shell command, a `.env` file or a `curl -d`
+#: body. This is the form real captured text takes, and matching only the quoted
+#: form let `DB_PASSWORD=s3cr3t-prod` through to the engine verbatim — while
+#: `canonical.redact_text`, used for logs, already handled both.
+_BARE_ASSIGNMENT_RE = re.compile(
+    _NAME + r"(?P<sep>[\"']?\s*[:=]\s*)(?P<q>)(?P<value>[^\s,;)}\]\"'`]+)"
 )
 _BEARER_RE = re.compile(r"(?i)\bbearer(?:%20|%09|\+|\s)+(?!\$\{?\$?)[A-Za-z0-9._~%+-]{8,}")
 
@@ -162,20 +174,21 @@ def sanitize(text: str) -> Sanitized:
         masked.append(1)
         return _mask(match)
 
-    redacted = _ASSIGNMENT_RE.sub(_repl, text)
+    redacted = _BARE_ASSIGNMENT_RE.sub(_repl, text)
+    quoted = _ASSIGNMENT_RE.sub(_repl, redacted)
     count = len(masked)
     if count:
         findings.append(Finding("secret_assignment", "redact",
                                 f"{count} secret-shaped assignment(s) replaced with {REDACTED}"))
         action = "redact"
-    bearer_count = len(_BEARER_RE.findall(redacted))
+    bearer_count = len(_BEARER_RE.findall(quoted))
     if bearer_count:
-        redacted = canonical.redact_text(redacted)
+        quoted = canonical.redact_text(quoted)
         findings.append(Finding("bearer_credential", "redact",
                                 f"{bearer_count} bearer credential(s) replaced with {REDACTED}"))
         action = "redact"
 
-    return Sanitized(redacted, action, tuple(findings), canonical.sha256_hex(redacted))
+    return Sanitized(quoted, action, tuple(findings), canonical.sha256_hex(quoted))
 
 
 #: Values that are documentation, not secrets. `$VAR` and `${VAR}` are how a

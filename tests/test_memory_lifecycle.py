@@ -144,7 +144,7 @@ class Delete(LifecycleCase):
         # Not yet claimed as removed: the remote copy is still there.
         self.assertIsNone(self.store.item(self.memory_id)["remote_deleted_at"])
         self.assertIn("queued job will remove", self.lifecycle().detail(
-            self.memory_id, actor_id=HUMAN, mode="single_user")["engine_claim"])
+            self.memory_id, actor_id=HUMAN)["engine_claim"])
 
     def test_the_worker_removes_the_remote_document_and_confirms(self) -> None:
         self.worker().tick()
@@ -163,7 +163,7 @@ class Delete(LifecycleCase):
         self.assertEqual(stored["engine_state"], "DELETED")
         self.assertIsNotNone(stored["remote_deleted_at"])
         self.assertIn("were removed", self.lifecycle().detail(
-            self.memory_id, actor_id=HUMAN, mode="single_user")["engine_claim"])
+            self.memory_id, actor_id=HUMAN)["engine_claim"])
 
     def test_a_failed_remote_delete_still_excludes_the_item(self) -> None:
         from jasmine_core.memory.transport import TransportError
@@ -180,7 +180,7 @@ class Delete(LifecycleCase):
         self.assertIsNone(stored["remote_deleted_at"],
                           "a failed deletion must never be reported as done")
         self.assertIn("may still exist", self.lifecycle().detail(
-            self.memory_id, actor_id=HUMAN, mode="single_user")["engine_claim"])
+            self.memory_id, actor_id=HUMAN)["engine_claim"])
 
     def test_the_source_of_truth_survives_a_delete(self) -> None:
         from jasmine_core.authority import AuthorityStore
@@ -214,8 +214,7 @@ class Pin(LifecycleCase):
         self.assertEqual(result["memory"]["pinned"], True)
         self.assertEqual(result["memory"]["status"], "ACTIVE")
         self.assertEqual(result["memory"]["engine_state"], "PENDING_RETAIN")
-        summary = self.lifecycle().detail(self.memory_id, actor_id=HUMAN,
-                                          mode="single_user")["lifecycle"]
+        summary = self.lifecycle().detail(self.memory_id, actor_id=HUMAN)["lifecycle"]
         self.assertEqual(summary["pin_affects"], "inspector_ordering_only")
 
     def test_pin_does_not_change_the_budget_or_the_observation_about_a_rule(self) -> None:
@@ -276,20 +275,34 @@ class Permissions(LifecycleCase):
         self.assertEqual(result["memory"]["pinned"], True)
         self.assertEqual(result["event"]["actor_kind"], "system")
 
-    def test_acl_mode_gates_the_lifecycle_by_project(self) -> None:
+    def test_acl_mode_gates_both_the_read_and_the_write_path(self) -> None:
         from jasmine_core.memory import scope
+        from jasmine_core.memory.lifecycle import MemoryLifecycle
+        from jasmine_core.memory.store import MemoryStore
 
+        from jasmine_core.memory.jobs import JobStore
+        from jasmine_core.memory.eligibility import SourceRegistry
+
+        store = MemoryStore(self.conn, schema_version=8)
+        acl = MemoryLifecycle(self.conn, store, mode=scope.ACL)
+        # A second project's Memory, and a grant for the first project only.
         other = self.project("other")
+        self.active_decision(project_id=other, rule_key="other.engine")
+        JobStore(self.conn, store).enqueue_from_sources(SourceRegistry())
+        foreign = next(item for item in store.items() if item["project_id"] == other)
         self.grant_project(self.project_id, actor_id=self.agent_actor)
-        access = scope.ProjectAccess(self.conn, mode=scope.ACL)
-        access.require(project_id=self.project_id, actor_id=self.agent_actor)
-        # The agent has no grant for the other project, so a direct fetch of an
-        # item there is refused as missing rather than forbidden: existence is
-        # itself information.
+
+        # Granted: the read succeeds.
+        acl.detail(self.memory_id, actor_id=self.agent_actor)
+        # Not granted: the read is a 404, and so is the write. The actor kind is
+        # `human` so the refusal cannot be mistaken for the actor-kind check.
         with self.assertRaises(errors.NotFound):
-            self.lifecycle().detail(ids.new_id("mem"), actor_id=self.agent_actor, mode=scope.ACL)
+            acl.detail(foreign["memory_id"], actor_id=self.agent_actor)
         with self.assertRaises(errors.NotFound):
-            access.require(project_id=other, actor_id=self.agent_actor)
+            acl.obsolete(foreign["memory_id"], {"expected_revision": 1, "host_id": HOST},
+                         actor_id=self.agent_actor, actor_kind="human", host_id=HOST)
+        self.assertEqual(store.item(foreign["memory_id"])["status"], "ACTIVE",
+                         "an ungranted actor changed the item in acl mode")
 
     def test_the_command_event_records_before_and_after_without_the_text(self) -> None:
         result = self.command("obsolete", reason="wrong")

@@ -67,6 +67,34 @@ _DECISION_KINDS = frozenset({"DECISION"})
 _FACT_KINDS = frozenset({"RULE"})
 
 
+@dataclass
+class Window:
+    """The Event range one scan pass covers, and how far it actually read.
+
+    The cursor has to advance past every Event *examined*, not only past the
+    ones that produced a candidate. Advancing only past the candidates is a
+    livelock: a window containing no eligible source does not move the cursor,
+    so the same window is read again forever and every eligible Event behind it
+    is never enqueued. Since `step.transitioned` is a source Event type and
+    almost every step emits two of them, an ordinary project fills a window with
+    refused Events within a few hundred transitions.
+
+    `note` is called by each source with the highest `seq` it looked at.
+    """
+
+    after_seq: int
+    limit: int
+    highest_examined: int = 0
+
+    def note(self, seq: int) -> None:
+        if seq > self.highest_examined:
+            self.highest_examined = int(seq)
+
+    @property
+    def cursor_after(self) -> int:
+        return max(self.after_seq, self.highest_examined)
+
+
 @dataclass(frozen=True)
 class Candidate:
     """A committed source that is eligible to become one kind of Memory."""
@@ -118,8 +146,15 @@ class Source(Protocol):
 
     name: str
 
-    def scan(self, conn: sqlite3.Connection, *, after_seq: int, limit: int) -> list[Candidate]:
-        """Eligible candidates with `seq > after_seq`, in Event order."""
+    def scan(self, conn: sqlite3.Connection, *, window: Window,
+             reasons: list[dict[str, Any]] | None = None) -> list[Candidate]:
+        """Eligible candidates in `window`, in Event order.
+
+        A source must call `window.note(seq)` for every Event it examines,
+        including the ones it refuses. The cursor is derived from that, and a
+        source that never notes anything cannot move the cursor past its own
+        output.
+        """
 
 
 def evidence_reference_status(conn: sqlite3.Connection, evidence_id: str) -> str:
@@ -137,12 +172,17 @@ def evidence_reference_status(conn: sqlite3.Connection, evidence_id: str) -> str
     store = EvidenceStore(conn, schema_version=int(get_meta(conn, "schema_version", 0) or 0))
     try:
         return store.get(evidence_id)["reference_status"]
-    except (errors.NotFound, OSError, ValueError, RuntimeError):
-        # `reference_status` touches the configured workspace root, which is
-        # absent in a test or a read-only replica. A reference we cannot check is
-        # not a reference we can call broken, and it is not one we promote to a
-        # verified outcome either; callers treat an exception as ineligible.
-        raise Ineligible("evidence_reference_unverifiable", evidence_id)
+    except (errors.CoreError, OSError, ValueError, RuntimeError) as exc:
+        # Every failure mode here is "we cannot check this reference": a missing
+        # Evidence row, an absent `JASMINE_CORE_WORKSPACE_ROOT` (a supported
+        # configuration), an unreadable artifact. None of them is a reason to
+        # promote the result to a verified outcome, and — the part that matters —
+        # none of them may escape as a non-`Ineligible` exception. A `CoreError`
+        # propagating out of one row would reach `SourceRegistry`'s blanket
+        # `except Exception`, discard every *other* candidate in the window, and
+        # leave a scan report whose only clue is a class name.
+        raise Ineligible("evidence_reference_unverifiable",
+                         f"{evidence_id}: {type(exc).__name__}") from exc
 
 
 def document_id_for(source_event_id: str, memory_type: str) -> str:
@@ -169,9 +209,9 @@ class AuthorityEvidenceSource:
 
     name = "p1-authority-evidence"
 
-    def scan(self, conn: sqlite3.Connection, *, after_seq: int, limit: int,
+    def scan(self, conn: sqlite3.Connection, *, window: Window,
              reasons: list[dict[str, Any]] | None = None) -> list[Candidate]:
-        """Eligible candidates above `after_seq`, in Event order.
+        """Eligible candidates in `window`, in Event order.
 
         `reasons`, when given, collects why each rejected Event was rejected.
         Most Events in a healthy stream are not memory sources, so the count of
@@ -186,8 +226,12 @@ class AuthorityEvidenceSource:
             "SELECT event_id, seq, event_type, occurred_at, recorded_at, project_id, task_id,"
             " payload_json FROM events WHERE seq > ? AND event_type IN (%s) ORDER BY seq LIMIT ?"
             % ",".join("?" for _ in SOURCE_EVENT_TYPES),
-            (after_seq, *sorted(SOURCE_EVENT_TYPES), max(1, min(limit, 500))),
+            (window.after_seq, *sorted(SOURCE_EVENT_TYPES),
+             max(1, min(window.limit, 500))),
         ).fetchall()
+        for row in rows:
+            # Every row examined counts towards the cursor, refused or not.
+            window.note(int(row["seq"]))
         candidates: list[Candidate] = []
         for row in rows:
             payload = json.loads(row["payload_json"])
@@ -208,6 +252,12 @@ class AuthorityEvidenceSource:
 
         Not an exception: a scan over a healthy Event stream rejects most Events
         by design, and raising would make the recovery scan useless.
+
+        An *unexpected* exception is also converted into a refusal, for the same
+        reason and with the same consequence if it is not: it would otherwise
+        propagate to `SourceRegistry`, whose blanket handler drops every other
+        candidate in the window. One unreadable Evidence row must not discard the
+        nineteen valid Decisions beside it.
         """
         try:
             handler = {
@@ -224,6 +274,27 @@ class AuthorityEvidenceSource:
             return handler(conn, row, payload), None
         except Ineligible as refusal:
             return None, (refusal.reason, refusal.detail)
+        except errors.CoreError as exc:
+            return None, ("check_failed", f"{type(exc).__name__}: {exc.code}")
+
+    @staticmethod
+    def _version_at(conn: sqlite3.Connection, rule_id: str, change_event_id: str) -> int | None:
+        """The Rule version that was current *when this Event was committed*.
+
+        Read from `rule_changes`, not from `rules.current_version`. The current
+        column answers a different question — "which version is active now" — and
+        using it here meant that a Decision approved at version 1 and later
+        superseded was recorded as a memory of version 2. Both memories then
+        claimed to be the current version, so neither was ever filtered as
+        `superseded_decision` and the old Decision could be rendered as the
+        current answer. That is precisely the VC-14 failure the whole
+        old-Decision mechanism exists to prevent.
+        """
+        row = conn.execute(
+            "SELECT version FROM rule_changes WHERE rule_id=? AND change_event_id=?",
+            (rule_id, change_event_id),
+        ).fetchone()
+        return int(row["version"]) if row else None
 
     def _from_rule_approved(self, conn: sqlite3.Connection, row: sqlite3.Row,
                             payload: dict[str, Any]) -> Candidate:
@@ -233,16 +304,17 @@ class AuthorityEvidenceSource:
         rule = conn.execute("SELECT * FROM rules WHERE rule_id=?", (rule_id,)).fetchone()
         if rule is None:
             raise Ineligible("rule_missing", rule_id)
-        if rule["status"] != "ACTIVE":
-            # A rule that was approved and then retired before the scan reached
-            # it is not "current"; the lifecycle is P1's answer, not P4's.
+        at_version = self._version_at(conn, rule_id, row["event_id"])
+        if at_version is None:
+            raise Ineligible("no_version_recorded", rule_id)
+        if rule["status"] not in ("ACTIVE", "SUPERSEDED", "RETIRED"):
             raise Ineligible("rule_not_active", f"{rule_id} is {rule['status']}")
         version = conn.execute(
             "SELECT * FROM rule_versions WHERE rule_id=? AND version=?",
-            (rule_id, rule["current_version"]),
+            (rule_id, at_version),
         ).fetchone()
         if version is None:
-            raise Ineligible("rule_version_missing", f"{rule_id}:{rule['current_version']}")
+            raise Ineligible("rule_version_missing", f"{rule_id}:{at_version}")
         if not version["origin_event_id"] or conn.execute(
             "SELECT 1 FROM events WHERE event_id=?", (version["origin_event_id"],)
         ).fetchone() is None:
@@ -269,7 +341,7 @@ class AuthorityEvidenceSource:
             title=f"{version['kind']} {payload.get('rule_key', rule['rule_key'])}",
             body=version["content"],
             origin_rule_id=rule_id,
-            origin_rule_version=int(rule["current_version"]),
+            origin_rule_version=at_version,
             origin_event_id=version["origin_event_id"],
             context=f"jasmine {memory_type.lower().replace('_', ' ')}",
         )
@@ -282,11 +354,14 @@ class AuthorityEvidenceSource:
         rule = conn.execute("SELECT * FROM rules WHERE rule_id=?", (rule_id,)).fetchone()
         if rule is None or rule["status"] != "ACTIVE":
             raise Ineligible("rule_not_active", rule_id)
+        at_version = self._version_at(conn, rule_id, row["event_id"])
+        if at_version is None:
+            raise Ineligible("no_version_recorded", rule_id)
         version = conn.execute(
-            "SELECT * FROM rule_versions WHERE rule_id=? AND version=?", (rule_id, rule["current_version"])
+            "SELECT * FROM rule_versions WHERE rule_id=? AND version=?", (rule_id, at_version)
         ).fetchone()
         if version is None:
-            raise Ineligible("rule_version_missing", rule_id)
+            raise Ineligible("rule_version_missing", f"{rule_id}:{at_version}")
         if version["kind"] not in _DECISION_KINDS:
             raise Ineligible("kind_not_memory_eligible", version["kind"])
         return self._candidate(
@@ -296,7 +371,7 @@ class AuthorityEvidenceSource:
             title=f"DECISION {payload.get('rule_key', rule['rule_key'])}",
             body=version["content"],
             origin_rule_id=rule_id,
-            origin_rule_version=int(rule["current_version"]),
+            origin_rule_version=at_version,
             origin_event_id=version["origin_event_id"],
             context="jasmine confirmed decision",
         )
@@ -442,13 +517,12 @@ class SourceRegistry:
     def names(self) -> list[str]:
         return [source.name for source in self._sources]
 
-    def scan(self, conn: sqlite3.Connection, *, after_seq: int, limit: int,
+    def scan(self, conn: sqlite3.Connection, *, window: Window,
              reasons: list[dict[str, Any]] | None = None) -> list[Candidate]:
         candidates: list[Candidate] = []
         for source in self._sources:
             try:
-                candidates.extend(source.scan(conn, after_seq=after_seq, limit=limit,
-                                              reasons=reasons))
+                candidates.extend(source.scan(conn, window=window, reasons=reasons))
             except Exception as exc:  # noqa: BLE001 - one source must not stop the others
                 # A source that raises is reported, not hidden: a P2 candidate
                 # source that is broken should show up in the scan report instead
@@ -460,7 +534,7 @@ class SourceRegistry:
         # Deterministic order by Event, then document id, so two scans over the
         # same window produce the same sequence and the cursor is meaningful.
         candidates.sort(key=lambda c: (c.source_event_id, c.document_id))
-        return candidates[:limit]
+        return candidates[: max(1, window.limit)]
 
 
 def resolve_destination(candidate: Candidate) -> Any:

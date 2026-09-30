@@ -63,7 +63,7 @@ class MemoryServices:
         self.mode = mode or scope_module.deployment_mode()
         self.store = MemoryStore(self.conn, schema_version=self.schema_version)
         self.jobs = jobs_module.JobStore(self.conn, self.store)
-        self.lifecycle = MemoryLifecycle(self.conn, self.store)
+        self.lifecycle = MemoryLifecycle(self.conn, self.store, mode=self.mode)
         self.access = scope_module.ProjectAccess(self.conn, mode=self.mode)
         self._transport = None
         self._probed = False
@@ -89,6 +89,46 @@ class MemoryServices:
 
                 self._transport = HindsightTransport(config)
         return self._transport
+
+    def visible_projects(self, actor_id: str, requested: str | None) -> tuple[str, ...] | None:
+        """Projects this actor may read, or `None` for "every project it may read".
+
+        In `single_user` mode that is every project, and an omitted filter
+        therefore means everything. In `acl` mode an omitted filter is resolved
+        to the actor's granted projects, so "no filter" cannot become a way to
+        read the whole database. `None` is returned only when the actor may read
+        everything, which keeps the single-user query path unchanged.
+        """
+        if requested is not None:
+            self.access.require(project_id=requested, actor_id=actor_id)
+            return (requested,)
+        if self.access.mode == scope_module.SINGLE_USER:
+            return None
+        rows = self.conn.execute(
+            "SELECT project_id FROM memory_project_actors WHERE actor_id=?", (actor_id,)
+        ).fetchall()
+        return tuple(row["project_id"] for row in rows)
+
+    def require_filtered_bank(self, bank_id: str | None, actor_id: str,
+                              projects: tuple[str, ...] | None) -> None:
+        """Refuse a `bank_id` filter the actor's visible scope does not contain.
+
+        A `bank_id` filter is a display filter, but it is still a way to name
+        another project's bank, so it goes through the same gate as the project
+        filter. `require_bank` exists for this and is not decorative.
+        """
+        if bank_id is None:
+            return
+        if not scope_module.is_valid_bank_id(bank_id):
+            raise errors.NotFound("bank", "invalid")
+        if projects is None:
+            return
+        reference = scope_module.scope_of(bank_id)
+        if reference is None or reference.scope_kind == "global":
+            # The global bank is shared across this Core's projects.
+            return
+        if reference.project_id not in projects:
+            raise errors.NotFound("bank", bank_id)
 
     def adapter(self) -> MemoryAdapter:
         return MemoryAdapter(self.conn, self.store, self.transport, mode=self.mode,
@@ -124,10 +164,13 @@ def list_jobs(request: Request, core: "Core", principal: auth.Principal,
     svc = services(core)
     project_id = _optional(request, "project_id")
     actor_kind = core.actor_kind(principal.actor_id)
-    if project_id is not None:
-        svc.access.require(project_id=project_id, actor_id=principal.actor_id)
+    projects = svc.visible_projects(principal.actor_id, project_id)
+    if projects is not None and not projects:
+        # An actor with no grants gets an empty list, not the whole database.
+        return Response(200, {"jobs": [], "count": 0, "counts": _empty_counts()})
     jobs = svc.jobs.jobs(
         project_id=project_id,
+        projects=projects,
         status=_optional(request, "status"),
         kind=_optional(request, "kind"),
         memory_type=_optional(request, "memory_type"),
@@ -136,10 +179,11 @@ def list_jobs(request: Request, core: "Core", principal: auth.Principal,
     )
     if actor_kind not in ("human", "system"):
         # An agent key may read jobs, but only for a project it may read, and the
-        # error summaries can carry engine text, so they are withheld.
-        jobs = [{**job, "safe_error_summary": None} for job in jobs]
+        # error summaries can carry engine text, so they are withheld. Applied to
+        # every job-returning path, not only this one.
+        jobs = [_redact_job_for_agent(job) for job in jobs]
     return Response(200, {"jobs": jobs, "count": len(jobs),
-                          "counts": svc.jobs.counts(project_id=project_id)})
+                          "counts": svc.jobs.counts(project_id=project_id, projects=projects)})
 
 
 def get_job(request: Request, core: "Core", principal: auth.Principal,
@@ -177,10 +221,13 @@ def list_items(request: Request, core: "Core", principal: auth.Principal,
     """The Memory Inspector list: non-authoritative, with source links."""
     svc = services(core)
     project_id = _optional(request, "project_id")
-    if project_id is not None:
-        svc.access.require(project_id=project_id, actor_id=principal.actor_id)
+    projects = svc.visible_projects(principal.actor_id, project_id)
+    svc.require_filtered_bank(_optional(request, "bank_id"), principal.actor_id, projects)
+    if projects is not None and not projects:
+        return Response(200, {"items": [], "count": 0, "non_authoritative": True})
     items = svc.store.items(
         project_id=project_id,
+        projects=projects,
         status=_optional(request, "status"),
         memory_type=_optional(request, "memory_type"),
         bank_id=_optional(request, "bank_id"),
@@ -197,7 +244,7 @@ def get_item(request: Request, core: "Core", principal: auth.Principal,
     svc = services(core)
     memory_id = match.group(1)
     _require_id(memory_id, "mem", "memory_id")
-    detail = svc.lifecycle.detail(memory_id, actor_id=principal.actor_id, mode=svc.mode)
+    detail = svc.lifecycle.detail(memory_id, actor_id=principal.actor_id)
     return Response(200, {**detail, "non_authoritative": True})
 
 
@@ -224,11 +271,12 @@ def list_traces(request: Request, core: "Core", principal: auth.Principal,
     svc = services(core)
     project_id = _optional(request, "project_id")
     task_id = _optional(request, "task_id")
-    if project_id is not None:
-        svc.access.require(project_id=project_id, actor_id=principal.actor_id)
-    elif task_id is not None and not ids.is_id(task_id, "tsk"):
+    if task_id is not None and not ids.is_id(task_id, "tsk"):
         raise errors.InvalidRequest("task_id must be a tsk_ id", field="task_id", value=task_id)
-    traces = svc.store.traces(project_id=project_id, task_id=task_id,
+    projects = svc.visible_projects(principal.actor_id, project_id)
+    if projects is not None and not projects:
+        return Response(200, {"traces": [], "count": 0})
+    traces = svc.store.traces(project_id=project_id, projects=projects, task_id=task_id,
                               limit=_int(request, "limit", 50),
                               after_trace_id=_optional(request, "after_trace_id"))
     return Response(200, {"traces": traces, "count": len(traces)})
@@ -310,6 +358,26 @@ def _int(request: Request, name: str, default: int) -> int:
 def _require_id(value: str, prefix: str, field: str) -> None:
     if not ids.is_id(value, prefix):
         raise errors.InvalidRequest(f"{field} must be a {prefix}_ id", field=field, value=value)
+
+
+def _empty_counts() -> dict[str, int]:
+    from .types import JOB_STATUSES
+
+    return {status.lower(): 0 for status in JOB_STATUSES}
+
+
+def _redact_job_for_agent(job: dict[str, Any]) -> dict[str, Any]:
+    """Engine text reaches job rows; an Agent key does not get it.
+
+    `safe_error_summary` is redacted and clipped, but it is still text the engine
+    produced about Core's own request. Withholding it is what the design intends
+    and it has to be withheld on *every* job-returning path, not just the list.
+    """
+    return {**job, "safe_error_summary": None}
+
+
+def _redact_attempt_for_agent(attempt: dict[str, Any]) -> dict[str, Any]:
+    return {**attempt, "safe_error_summary": None}
 
 
 def _may_see(svc: MemoryServices, principal: auth.Principal, *, project_id: str | None,

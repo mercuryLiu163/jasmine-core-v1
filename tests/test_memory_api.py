@@ -156,7 +156,7 @@ class InspectorEndpoints(MemoryApiTestCase):
     def test_traces_are_listed_and_addressable(self) -> None:
         status, body = self.call("GET", f"/v1/memory/traces?project_id={self.project_id}",
                                  token=self.reader)
-        self.assertEqual(status, 200)
+        self.assertEqual(status, 200, body)
         self.assertEqual(body["traces"], [])
         status, body = self.call("GET", f"/v1/memory/traces/{ids.new_id('mtr')}",
                                  token=self.reader)

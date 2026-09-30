@@ -9,6 +9,13 @@ The lifecycle rules that are not expressible as a CHECK live in
 `migrations/m0008_memory.py` as triggers: no `DELETE` on an item, no `UPDATE` of
 an identity column, and append-only traces. This module therefore never issues a
 `DELETE` and never updates `document_id`, `content_sha256` or `source_event_id`.
+
+`items(projects=...)` is the *only* filter a caller may pass and it is not
+optional in the acl lifecycle mode. A grant is not a preference: an actor that
+can see one project must not be able to omit the filter and read the others, so
+`scope.visible_projects` is consulted first and its tuple is what reaches the
+`IN (...)` here. Under the `single_user` lifecycle mode the filter is omitted and
+every project is visible by design.
 """
 
 from __future__ import annotations
@@ -19,7 +26,6 @@ from typing import Any, Iterable
 
 from .. import clock, errors, ids
 from ..canonical import canonical_json, sha256_hex
-from . import tokens
 from .types import (
     ENGINE_STATES,
     GLOBAL_BANK_ID,
@@ -60,14 +66,6 @@ def _row_to_item(row: sqlite3.Row) -> dict[str, Any]:
     return item
 
 
-def _row_to_job(row: sqlite3.Row) -> dict[str, Any]:
-    job = dict(row)
-    receipt = job.get("receipt_json")
-    job["receipt"] = json.loads(receipt) if receipt else None
-    job.pop("receipt_json", None)
-    return job
-
-
 class MemoryStore:
     """Reads and writes for the P4 tables. Never opens its own transaction."""
 
@@ -95,9 +93,9 @@ class MemoryStore:
         ).fetchone()
         return None if row is None else _row_to_item(row)
 
-    def items(self, *, project_id: str | None = None, status: str | None = None,
-              memory_type: str | None = None, bank_id: str | None = None,
-              task_id: str | None = None, limit: int = 100,
+    def items(self, *, project_id: str | None = None, projects: tuple[str, ...] | None = None,
+              status: str | None = None, memory_type: str | None = None,
+              bank_id: str | None = None, task_id: str | None = None, limit: int = 100,
               after_memory_id: str | None = None) -> list[dict[str, Any]]:
         """Keyset pagination on `memory_id`.
 
@@ -111,9 +109,7 @@ class MemoryStore:
                                         field="status", value=status)
         clauses: list[str] = []
         params: list[Any] = []
-        if project_id is not None:
-            clauses.append("(project_id = ? OR bank_id = ?)")
-            params.extend([project_id, GLOBAL_BANK_ID])
+        _scope_clause(clauses, params, project_id=project_id, projects=projects)
         if task_id is not None:
             clauses.append("task_id = ?")
             params.append(task_id)
@@ -486,13 +482,15 @@ class MemoryStore:
             item.pop("evidence_ids_json", None)
         return trace
 
-    def traces(self, *, project_id: str | None = None, task_id: str | None = None,
-               limit: int = 50, after_trace_id: str | None = None) -> list[dict[str, Any]]:
+    def traces(self, *, project_id: str | None = None, projects: tuple[str, ...] | None = None,
+               task_id: str | None = None, limit: int = 50,
+               after_trace_id: str | None = None) -> list[dict[str, Any]]:
         clauses: list[str] = []
         params: list[Any] = []
-        if project_id is not None:
-            clauses.append("project_id = ?")
-            params.append(project_id)
+        # A trace belongs to exactly one project and has no bank column, so the
+        # global-bank arm of the shared scope clause does not apply to it.
+        _scope_clause(clauses, params, project_id=project_id, projects=projects,
+                      include_global_bank=False)
         if task_id is not None:
             clauses.append("task_id = ?")
             params.append(task_id)
@@ -512,6 +510,43 @@ class MemoryStore:
                      banks=json.loads(row["banks_json"])) for row in rows]
 
 
+def _scope_clause(clauses: list[str], params: list[Any], *, project_id: str | None,
+                  projects: tuple[str, ...] | None,
+                  include_global_bank: bool = True) -> None:
+    """Restrict a list query to the projects the caller may read.
+
+    A named project is an exact match, plus the shared global bank where the
+    table has a `bank_id` column at all. A *set* of projects — what `acl` mode
+    resolves an omitted filter to — is an `IN` over the same shape, so the global
+    bank stays visible in both and no project's own rows appear in another's list.
+    `projects=None` means "no restriction", which only `single_user` mode ever
+    produces.
+    """
+    if project_id is not None:
+        if include_global_bank:
+            clauses.append("(project_id = ? OR bank_id = ?)")
+            params.extend([project_id, GLOBAL_BANK_ID])
+        else:
+            clauses.append("project_id = ?")
+            params.append(project_id)
+        return
+    if projects is None:
+        return
+    if not projects:
+        clauses.append("0 = 1")
+        return
+    # Parameter order must follow the clause text: the `IN` list comes first,
+    # and the global-bank comparison last.
+    marks = ", ".join("?" for _ in projects)
+    if include_global_bank:
+        clauses.append(f"(project_id IN ({marks}) OR bank_id = ?)")
+        params.extend(list(projects))
+        params.append(GLOBAL_BANK_ID)
+    else:
+        clauses.append(f"project_id IN ({marks})")
+        params.extend(list(projects))
+
+
 def _now_ms(at: str | None) -> int | None:
     """Reuse the row's timestamp for the id, so ids sort with the rows."""
     if not at:
@@ -523,11 +558,7 @@ def _now_ms(at: str | None) -> int | None:
     return int(parsed.timestamp() * 1000)
 
 
-def budget_used(items: Iterable[RecallItem]) -> int:
-    return sum(tokens.estimate(item.text) for item in items)
-
-
 __all__ = [
     "MemoryStore", "ATTEMPT_ID_PREFIX", "JOB_ID_PREFIX", "MEMORY_ID_PREFIX",
-    "RESULT_ID_PREFIX", "TRACE_ID_PREFIX", "BankOutcome", "budget_used",
+    "RESULT_ID_PREFIX", "TRACE_ID_PREFIX", "BankOutcome",
 ]

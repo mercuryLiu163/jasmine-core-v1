@@ -72,6 +72,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+from .. import errors
 from . import filtering
 from .transport import TransportError
 from .types import BankRef, EngineResult
@@ -94,6 +95,12 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 #: Hindsight rejects a recall query over 500 tokens. Core checks first so the
 #: refusal is a Core 400 with a clear field name instead of a remote 422.
 MAX_QUERY_CHARS = 2000
+
+#: Hindsight's own default recall budget is 4096 tokens. A reflect request is an
+#: LLM call over the whole bank, so an unbounded `max_tokens` from an operator
+#: body would be an unbounded bill. The Memory Context-Pack budget is 400-600
+#: (design §8), so this is generous for any legitimate use.
+MAX_REQUEST_TOKENS = 8192
 
 #: The engine's own fact vocabulary, in the order Core prefers to receive them.
 #: `observation` is absent on purpose; see the module docstring, point 3.
@@ -210,12 +217,21 @@ def config_from_env(env: dict[str, str] | None = None) -> HindsightConfig | None
         timeout = float(source.get(TIMEOUT_ENV_VAR) or DEFAULT_TIMEOUT_SECONDS)
     except ValueError:
         timeout = DEFAULT_TIMEOUT_SECONDS
-    return HindsightConfig(
-        base_url,
-        api_prefix=(source.get(API_PREFIX_ENV_VAR) or DEFAULT_API_PREFIX),
-        timeout_seconds=timeout,
-        api_key=(source.get(API_KEY_ENV_VAR) or None),
-    )
+    try:
+        return HindsightConfig(
+            base_url,
+            api_prefix=(source.get(API_PREFIX_ENV_VAR) or DEFAULT_API_PREFIX),
+            timeout_seconds=timeout,
+            api_key=(source.get(API_KEY_ENV_VAR) or None),
+        )
+    except ValueError as exc:
+        # A typo in the operator's URL is a configuration error with a code and a
+        # message the operator can act on, not an unhandled `ValueError` that
+        # surfaces as a 500 on whichever endpoint happened to touch it.
+        raise errors.InvalidRequest(
+            f"{URL_ENV_VAR} is not a usable engine URL: {exc}",
+            field=URL_ENV_VAR,
+        ) from exc
 
 
 def recall_fact_types(memory_types: tuple[str, ...]) -> tuple[str, ...]:
@@ -371,12 +387,20 @@ class HindsightTransport:
             return {"reachable": False, "engine_id": ENGINE_ID,
                     "origin_host": self._config.origin_host,
                     "error_code": exc.code, "safe_error_summary": exc.safe_error_summary}
+        if not isinstance(payload, dict):
+            # A reachable engine that answered with something other than an
+            # object is not a usable engine, and health must be reportable.
+            return {"reachable": False, "engine_id": ENGINE_ID,
+                    "origin_host": self._config.origin_host,
+                    "error_code": "engine_protocol_error",
+                    "safe_error_summary": "the version response was not a JSON object"}
         features = payload.get("features")
         return {
             "reachable": True,
             "engine_id": ENGINE_ID,
             "origin_host": self._config.origin_host,
-            "api_version": payload.get("api_version") if isinstance(payload, dict) else None,
+            "api_version": payload.get("api_version")
+            if isinstance(payload.get("api_version"), str) else None,
             "features": features if isinstance(features, dict) else {},
         }
 
@@ -430,7 +454,7 @@ class HindsightTransport:
                                  retryable=False)
         body: dict[str, Any] = {
             "query": query,
-            "max_tokens": max_tokens,
+            "max_tokens": min(max(1, int(max_tokens)), MAX_REQUEST_TOKENS),
             "include": {"entities": None, "chunks": None, "source_facts": None},
         }
         if fact_types:
@@ -477,7 +501,8 @@ class HindsightTransport:
         """`POST /v1/default/banks/{bank_id}/reflect`."""
         payload = self._request(
             "POST", self._bank_path(bank, "/reflect"),
-            body={"query": query, "max_tokens": max_tokens},
+            body={"query": query, "max_tokens": min(max(1, int(max_tokens)),
+                                                  MAX_REQUEST_TOKENS)},
         )
         if not isinstance(payload, dict):
             raise TransportError("engine_protocol_error",
@@ -554,8 +579,15 @@ def check_supported(version_payload: dict[str, Any]) -> tuple[bool, str | None]:
     delete read-back, so it is reported rather than accepted.
     """
     api_version = version_payload.get("api_version")
-    if isinstance(api_version, str) and not any(api_version.startswith(v) for v in VERIFIED_API_VERSIONS):
-        return False, f"engine reports api_version {api_version!r}, this adapter was verified against {VERIFIED_API_VERSIONS[0]}"
+    if not isinstance(api_version, str) or not api_version:
+        # Positive matching. An engine that omits the field has not told us it is
+        # the version this adapter was written against, and "it said nothing" is
+        # not "it is the right one".
+        return False, ("the engine did not report an api_version, so this adapter's "
+                       f"assumptions are unverified (it was checked against {VERIFIED_API_VERSIONS[0]})")
+    if not any(api_version.startswith(v) for v in VERIFIED_API_VERSIONS):
+        return False, (f"engine reports api_version {api_version!r}, this adapter was verified "
+                       f"against {VERIFIED_API_VERSIONS[0]}")
     features = version_payload.get("features")
     if isinstance(features, dict) and features.get("store_document_text") is False:
         return False, "the deployment does not store document text, so document read-back is unavailable"

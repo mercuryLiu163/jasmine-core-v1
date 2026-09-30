@@ -226,11 +226,16 @@ def resolve_scope_for_item(conn: sqlite3.Connection, *, project_id: str | None,
                            scope_kind: str) -> tuple[BankRef, ...]:
     """The banks a *retain* may write to, from the item's own scope.
 
-    `global` here means the item was produced by an explicitly global-eligible
-    source and was approved as global by a human/system actor. The worker never
-    widens a project-scoped source to the global bank, and this function is the
-    place that says so: a project source can only ever reach the project bank.
+    `global` here means the item was produced by a source whose own committed
+    scope is global. A project-scoped source can only ever reach the project
+    bank, which is the property `eligibility.resolve_destination` relies on
+    when it builds a Memory item.
+
+    `conn` is accepted for symmetry with the other accessors and is not used: a
+    bank is derived from ids, never from a row, so this needs no lock and cannot
+    observe a half-written item.
     """
+    del conn
     if scope_kind == "global":
         return (global_bank(),)
     if scope_kind != "project":

@@ -103,11 +103,3 @@ def report(conn: sqlite3.Connection, store: MemoryStore, transport: MemoryTransp
                             if k in ("reachable", "api_version", "error_code",
                                      "safe_error_summary", "credential_present")}
     return payload
-
-
-def persist_probe(conn: sqlite3.Connection, store: MemoryStore,
-                  transport: MemoryTransport | None) -> None:
-    """Record a probe without building a report. Used by the worker each tick."""
-    from .worker import record_engine_probe
-
-    record_engine_probe(conn, store, transport)

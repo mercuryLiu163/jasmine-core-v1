@@ -43,6 +43,8 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from .. import clock
+from .. import db
+from . import filtering
 from . import jobs as jobs_module
 from . import provenance
 from .adapter import MemoryAdapter
@@ -61,7 +63,8 @@ DEFAULT_IDLE_SLEEP_SECONDS = 2.0
 class WorkerReport:
     """What one pass did. Returned so a test and the CLI can both assert on it."""
 
-    scanned: int = 0
+    events_examined: int = 0
+    candidates: int = 0
     created: list[str] | None = None
     claimed: str | None = None
     outcome: str | None = None       # "retained" | "deleted" | "retry" | "failed" | "idle"
@@ -70,7 +73,8 @@ class WorkerReport:
 
     def as_dict(self) -> dict[str, Any]:
         return {
-            "scanned": self.scanned, "created": self.created or [],
+            "events_examined": self.events_examined, "candidates": self.candidates,
+            "created": self.created or [],
             "claimed": self.claimed, "outcome": self.outcome, "error_code": self.error_code,
             "receipt": self.receipt,
         }
@@ -85,8 +89,10 @@ class MemoryWorker:
                  lease_owner: str | None = None,
                  lease_seconds: int = jobs_module.DEFAULT_LEASE_SECONDS,
                  max_attempts: int = jobs_module.DEFAULT_MAX_ATTEMPTS,
-                 scan_limit: int = 200) -> None:
+                 scan_limit: int = 200,
+                 log: Callable[[str], None] | None = None) -> None:
         self._conn = conn
+        self._log = log
         self._store = store
         self._transport = transport
         self._registry = registry or SourceRegistry()
@@ -108,23 +114,53 @@ class MemoryWorker:
         """
         report = WorkerReport()
         if scan:
-            scan_report = self._jobs.enqueue_from_sources(
-                self._registry, limit=self.scan_limit, max_attempts=self.max_attempts
-            )
-            report.scanned = int(scan_report["scanned"])
+            try:
+                scan_report = self._jobs.enqueue_from_sources(
+                    self._registry, limit=self.scan_limit, max_attempts=self.max_attempts
+                )
+            except db.errors.DatabaseBusy:
+                # A concurrent writer is normal for a background worker against a
+                # live Core. It is not a reason to exit: the next tick retries.
+                report.outcome = "busy"
+                report.error_code = "database_busy"
+                return report
+            report.events_examined = int(scan_report["events_examined"])
+            report.candidates = int(scan_report["candidates"])
             report.created = list(scan_report["created"])
-        claimed = self._jobs.claim_due(owner=self.lease_owner, lease_seconds=self.lease_seconds)
+        try:
+            claimed = self._jobs.claim_due(owner=self.lease_owner,
+                                            lease_seconds=self.lease_seconds)
+        except db.errors.DatabaseBusy:
+            report.outcome = "busy"
+            report.error_code = "database_busy"
+            return report
         if claimed is None:
             report.outcome = "idle"
             return report
         report.claimed = claimed.job["job_id"]
         kind = claimed.job["kind"]
-        if kind == "delete":
-            self._process_delete(claimed, report)
-        elif kind == "invalidate":
-            self._process_invalidate(claimed, report)
-        else:
-            self._process_retain(claimed, report)
+        try:
+            if kind == "delete":
+                self._process_delete(claimed, report)
+            elif kind == "invalidate":
+                self._process_invalidate(claimed, report)
+            else:
+                self._process_retain(claimed, report)
+        except db.errors.DatabaseBusy:
+            # The engine call already happened; the local write did not. The job
+            # stays RUNNING and its lease expires, so the next worker re-sends
+            # the same document — which is the idempotent path, not a lost job.
+            report.outcome = "busy"
+            report.error_code = "database_busy"
+        except Exception as exc:  # noqa: BLE001 - one bad job must not stop the service
+            # A defect in the handling of one job is not a reason to exit: the
+            # remaining queue still has to drain, and a crash loop on a single
+            # job is the worst possible outcome for a background service.
+            report.outcome = "error"
+            report.error_code = f"unhandled_{type(exc).__name__}"
+            if self._log is not None:
+                self._log(f"memory-worker {self.lease_owner}: job {report.claimed} raised "
+                          f"{type(exc).__name__}: {filtering.safe_summary(str(exc))}")
         return report
 
     def _process_retain(self, claimed: jobs_module.ClaimedJob, report: WorkerReport) -> None:
@@ -150,6 +186,9 @@ class MemoryWorker:
                 evidence_ids=tuple(item["evidence_ids"]),
                 origin_rule_id=item["origin_rule_id"],
                 origin_rule_version=item["origin_rule_version"],
+                # The Event this item was actually created from, which is the one
+                # an Inspector walks back to. Carrying the Rule version without
+                # it produced an item whose `origin_event_id` was always None.
                 origin_event_id=item["source_event_id"],
             ),
             context=_retain_context(item),
@@ -184,10 +223,11 @@ class MemoryWorker:
         """
         self._assert_no_transaction("delete")
         try:
-            units = self._transport.list_document_memories(  # type: ignore[union-attr]
+            transport = self._require_transport("delete")
+            units = transport.list_document_memories(
                 bank=claimed.bank, document_id=claimed.job["document_id"]
             )
-            receipt = self._transport.delete_document(  # type: ignore[union-attr]
+            receipt = transport.delete_document(
                 bank=claimed.bank, document_id=claimed.job["document_id"]
             )
         except TransportError as exc:
@@ -201,6 +241,22 @@ class MemoryWorker:
         self._jobs.mark_document_deleted(claimed, receipt=receipt)
         report.outcome = "deleted"
         report.receipt = receipt
+
+    def _require_transport(self, phase: str) -> MemoryTransport:
+        """The engine, or a `TransportError` that the retry machinery understands.
+
+        Every engine path goes through here. Without it, `self._transport` being
+        `None` produces an `AttributeError` on `NoneType`, which is not a
+        `TransportError`, so it escapes the failure classification and takes the
+        whole worker service down on its second tick.
+        """
+        if self._transport is None:
+            raise TransportError(
+                "engine_not_configured",
+                "no Hindsight endpoint is configured for this Core",
+                retryable=False,
+            )
+        return self._transport
 
     def _process_invalidate(self, claimed: jobs_module.ClaimedJob,
                             report: WorkerReport) -> None:

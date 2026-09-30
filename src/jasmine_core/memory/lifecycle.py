@@ -49,7 +49,6 @@ import sqlite3
 from typing import Any
 
 from .. import clock, db, errors, ids
-from ..canonical import canonical_json
 from ..events import EventStore
 from ..models import NewEvent
 from . import jobs as jobs_module
@@ -72,11 +71,19 @@ _ALLOWED_ACTIONS = frozenset(_EVENT_BY_ACTION)
 class MemoryLifecycle:
     """The four operator commands, plus the shared event/revision machinery."""
 
-    def __init__(self, conn: sqlite3.Connection, store: MemoryStore) -> None:
+    def __init__(self, conn: sqlite3.Connection, store: MemoryStore, *,
+                 mode: str = scope_module.SINGLE_USER) -> None:
         self._conn = conn
         self._store = store
         self._events = EventStore(conn, schema_version=0)
         self._jobs = jobs_module.JobStore(conn, store)
+        # The mode belongs here, not only in `detail()`. Constructing a
+        # `ProjectAccess` with the default inside the write path is how an
+        # `acl` deployment ends up enforcing the ACL on the read path and not on
+        # the write path — and a mode enforced on GET and absent on POST is worse
+        # than no mode, because the documentation says it is enforced.
+        self.mode = mode
+        self._access = scope_module.ProjectAccess(conn, mode=mode)
 
     # -- public commands ---------------------------------------------------
 
@@ -129,9 +136,8 @@ class MemoryLifecycle:
             self._require_item(memory_id)
             item = self._store.item(memory_id)
             assert item is not None
-            access = scope_module.ProjectAccess(self._conn)
             if item["project_id"] is not None:
-                access.require(project_id=item["project_id"], actor_id=actor_id)
+                self._access.require(project_id=item["project_id"], actor_id=actor_id)
 
             before = _snapshot(item)
             declared = _project(before, action)
@@ -299,7 +305,7 @@ class MemoryLifecycle:
             raise errors.NotFound("memory", memory_id)
         return row
 
-    def detail(self, memory_id: str, *, actor_id: str, mode: str) -> dict[str, Any]:
+    def detail(self, memory_id: str, *, actor_id: str) -> dict[str, Any]:
         """The Inspector's read of one item, with provenance and last recall."""
         if not ids.is_id(memory_id, "mem"):
             raise errors.NotFound("memory", memory_id)
@@ -307,9 +313,7 @@ class MemoryLifecycle:
         if item is None:
             raise errors.NotFound("memory", memory_id)
         if item["project_id"] is not None:
-            scope_module.ProjectAccess(self._conn, mode=mode).require(
-                project_id=item["project_id"], actor_id=actor_id
-            )
+            self._access.require(project_id=item["project_id"], actor_id=actor_id)
         return {
             "memory": item,
             "sources": self._store.sources_of(memory_id),
@@ -406,17 +410,6 @@ def lifecycle_summary(item: dict[str, Any]) -> dict[str, Any]:
         "last_recalled_at": item["last_recalled_at"],
         "recall_count": item["recall_count"],
         "lifecycle_reason": item["lifecycle_reason"],
-        "remote_invalidate_job": None,
-    }
-
-
-def state_transitions() -> dict[str, tuple[str, ...]]:
-    """The allowed lifecycle moves, for documentation and for the tests."""
-    return {
-        "obsolete": ("ACTIVE",),
-        "delete": ("ACTIVE", "OBSOLETE"),
-        "pin": ("ACTIVE",),
-        "unpin": ("ACTIVE", "OBSOLETE"),
     }
 
 
@@ -446,7 +439,3 @@ def describe_engine_claim(item: dict[str, Any], *, invalidated: bool = False) ->
     if state == "RETAIN_FAILED":
         return "never confirmed as retained by the engine"
     return "not yet sent to the engine"
-
-
-def item_projection_json(item: dict[str, Any]) -> str:  # pragma: no cover - diagnostics
-    return canonical_json(_snapshot(item))

@@ -122,6 +122,17 @@ retired Rule is `retired_decision`; both keep the row out of the Context Pack an
 keep it visible in the trace and the Inspector. This is VC-14, decided by
 comparing Authority, not by reading the memory's prose.
 
+The stored version is read from `rule_changes` at the source Event's `seq`, never
+from `rules.current_version` at scan time. The current column answers a different
+question — "which version is active *now*" — and reading it during a scan of
+history made a Decision approved at version 1 and later superseded record itself
+as version 2. Both memories then claimed to be current, neither was ever filtered,
+and the superseded Decision was rendered as the live answer. Because a scan runs
+after the fact, the version that was current for an Event can only be recovered
+from that Event's own change record. Consequently a `rule.approved` Event is
+eligible even when the Rule is now `SUPERSEDED` or `RETIRED`: the approval is
+committed history, and the two filters above are what stop it being served.
+
 **Injection guard.** Engine text has its Context Pack section delimiters
 neutralised, and an item whose text tries to *instruct* — ignore previous rules,
 the rule no longer binds, bypass the guard, this memory supersedes the authority,
