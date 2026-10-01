@@ -16,6 +16,28 @@ class NativeFake:
     def send_notification(self,method,params,budget):self.messages.append((method,params))
 
 class OrchestrationTests(unittest.TestCase):
+    def test_explicit_turn_limit_blocks_before_third_native_request(self):
+        native=NativeFake();runner=NativeRunner(native,None,max_turns=2)
+        runner.start(None,cwd='/private/tmp/fixture')
+        runner.submit('first',None);runner.submit('second',None)
+        requests=list(native.messages)
+        with self.assertRaisesRegex(ValueError,'native turn limit exceeded'):
+            runner.submit('third',None)
+        self.assertEqual(native.messages,requests)
+        self.assertEqual(sum(method=='turn/start' for method,_ in native.messages),2)
+        self.assertEqual(runner.turn_count,2)
+
+    def test_turn_limit_requires_strict_integer_in_reviewed_bounds(self):
+        from jasmine_core.adapter.gate_runner import run
+        for invalid in (True,False,0,25,-1,2.0,'2',None):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError,'bounded native turn limit required'):
+                    NativeRunner(NativeFake(),None,max_turns=invalid)
+                with self.assertRaisesRegex(ValueError,'bounded native turn limit required'):
+                    run(Path('/nonexistent'),'',user_reviewed_trust=True,max_turns=invalid)
+        self.assertEqual(NativeRunner(NativeFake(),None).max_turns,16)
+        self.assertEqual(NativeRunner(NativeFake(),None,max_turns=24).max_turns,24)
+
     def test_lifecycle_attestation_keeps_only_identified_current_turn_and_replays_bytes(self):
         # Collector component regression: no native lifecycle/Gate claim.
         for event in ('Stop','PreCompact'):

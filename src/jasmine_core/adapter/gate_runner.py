@@ -10,6 +10,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -22,10 +23,53 @@ from ..capture.p2_runtime import Deadline,Lease,atomic_json
 from ..capture.p2_profile import environment
 from ..api.client import CoreClient
 
+MAX_TURN_REPORT_BYTES=16*1024*1024
 
-def run(manifest_path,prompt,*,user_reviewed_trust=False,controller=None,total_timeout=240):
+
+def report_atomic_json(path,value):
+    """Bounded private last-turn report; lease writers retain their 64 KiB cap."""
+    path=Path(path)
+    if path.name!='last-turn.json' or path.parent!=path.parent.resolve(strict=True) or path.is_symlink():
+        raise ValueError('noncanonical private report path')
+    metadata=path.parent.stat()
+    if metadata.st_uid!=os.getuid() or metadata.st_mode & 0o077:
+        raise ValueError('private report parent required')
+    # Canonical keys/separators, with non-finite numbers rejected for reports.
+    raw=(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'),
+                    default=str,allow_nan=False)+'\n').encode()
+    if len(raw)>MAX_TURN_REPORT_BYTES:raise ValueError('native turn report exceeds cap')
+    fd,temporary=tempfile.mkstemp(prefix='.turn-report-',dir=path.parent)
+    try:
+        os.fchmod(fd,0o600)
+        with os.fdopen(fd,'wb') as stream:
+            stream.write(raw);stream.flush();os.fsync(stream.fileno())
+        os.replace(temporary,path)
+        directory=os.open(path.parent,os.O_RDONLY)
+        try:os.fsync(directory)
+        finally:os.close(directory)
+    finally:
+        if os.path.exists(temporary):os.unlink(temporary)
+
+
+def write_turn_report(runtime,result):
+    """Report I/O failure cannot erase the controller outcome or raw receipt."""
+    try:
+        report_atomic_json(runtime/'last-turn.json',result)
+    except Exception as error:
+        controller=result.get('controller_result')
+        diagnostic={'status':'REPORT_WRITE_FAILED','error_type':type(error).__name__,
+            'reason':str(error)[:512],'controller_status':controller.get('status') if isinstance(controller,dict) else None,
+            'raw_native_receipt':result.get('raw_native_receipt')}
+        result['report_write']=diagnostic
+        try:atomic_json(runtime/'last-turn-write-failure.json',diagnostic)
+        except Exception as diagnostic_error:
+            diagnostic['diagnostic_write_error_type']=type(diagnostic_error).__name__
+
+
+def run(manifest_path,prompt,*,user_reviewed_trust=False,controller=None,total_timeout=240,max_turns=16):
     if not user_reviewed_trust:raise ValueError('normal user project/exact hook trust is required')
     if type(total_timeout) is not int or not 30<=total_timeout<=1800:raise ValueError('bounded Gate budget required')
+    if type(max_turns) is not int or not 1<=max_turns<=24:raise ValueError('bounded native turn limit required')
     manifest,_=private_json(manifest_path);runtime=Path(manifest['runtime']);code=Path(manifest['profile']['code_root'])
     for relative,digest in manifest['deployment_fingerprints'].items():
         if hashlib.sha256((code/relative).read_bytes()).hexdigest()!=digest:raise ValueError('prepared deployment changed')
@@ -83,7 +127,7 @@ def run(manifest_path,prompt,*,user_reviewed_trust=False,controller=None,total_t
         executor=DynamicExecutor(client,lease,config,worker_inputs=adapter['executor_inputs'],allowed_paths=('callback.js','index.html'))
         native=NativeClient(argv(manifest['profile']),env,manifest['fixture'],receipt_sink=raw_sink)
         first_deadline=Deadline(end=min(deadline.end,time.monotonic()+140))
-        runner=NativeRunner(native,executor);runner.initialize(first_deadline);runner.start(first_deadline,cwd=manifest['fixture'])
+        runner=NativeRunner(native,executor,max_turns=max_turns);runner.initialize(first_deadline);runner.start(first_deadline,cwd=manifest['fixture'])
         response=runner.submit(prompt,first_deadline,skill_path=Path(manifest['fixture'])/'.agents/skills/jasmine-playwright/SKILL.md')
         turn=response['turn']['id']
         runner.drive(first_deadline,until=lambda msg:msg.get('method')=='turn/completed' and msg.get('params',{}).get('threadId')==runner.thread_id and msg.get('params',{}).get('turn',{}).get('id')==turn)
@@ -134,7 +178,7 @@ def run(manifest_path,prompt,*,user_reviewed_trust=False,controller=None,total_t
                 'skill':skill_input(records,proof_turn,skill,native_request=runner.last_turn_request,skill_name='jasmine-playwright',skill_path=manifest['skill_path']),'rollout_path':str(rollout),'reason':'typed_current_turn_only'}
         result={'scope':'ONE_NATIVE_TURN_NOT_PHASE_GATE','typed_input_proof':proof,'lifecycle_attestations':lifecycle,'controller_result':controller_result,'thread_id':runner.thread_id,'turn_id':turn,
             'raw_native_receipt':str(raw_path),'lease':lease.read(),'native_notifications':runner.notifications}
-        atomic_json(runtime/'last-turn.json',result)
+        write_turn_report(runtime,result)
         return result
     finally:
         cleanup={'native':None,'services':[]}

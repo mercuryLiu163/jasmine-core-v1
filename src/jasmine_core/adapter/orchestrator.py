@@ -129,7 +129,10 @@ class NativeRunner:
     Requests are native protocol messages; only actual item/tool/call requests
     enter DynamicExecutor. Compact ACKs and assistant messages prove no lifecycle.
     """
-    def __init__(self,native,executor,*,receipt_sink=None):
+    def __init__(self,native,executor,*,receipt_sink=None,max_turns=16):
+        if type(max_turns) is not int or not 1<=max_turns<=24:
+            raise ValueError('bounded native turn limit required')
+        self.max_turns=max_turns
         self.native,self.executor=native,executor
         self.receipt_sink=receipt_sink
         self.notifications=[]
@@ -165,7 +168,7 @@ class NativeRunner:
     def submit(self,text,budget,*,skill_path=None):
         if not self.thread_id or not isinstance(text,str) or not text:
             raise ValueError('genuine nonempty user input and native thread required')
-        if self.turn_count>=16:raise ValueError('native turn limit exceeded')
+        if self.turn_count>=self.max_turns:raise ValueError('native turn limit exceeded')
         self.turn_count+=1
         self.turn_deadline=Deadline(end=min(budget.end,time.monotonic()+140)) if budget is not None else None
         budget=self.turn_deadline if self.turn_deadline is not None else budget
