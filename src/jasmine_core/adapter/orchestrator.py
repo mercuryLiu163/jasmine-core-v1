@@ -224,7 +224,24 @@ def attest_completed_lifecycle(client,config,notifications,*,deadline):
         callback,callback_sha=config.receipt(relation['callback_id'])
         report=callback['report']
         if report['hook_event_name'] not in ('PreCompact','Stop'):continue
-        relevant=[n for n in notifications if n.get('method') in ('hook/started','hook/completed','item/started','item/completed','turn/completed') and n.get('params',{}).get('threadId')==report['native_thread_id'] and n.get('params',{}).get('turnId',report['native_turn_id'])==report['native_turn_id']]
+        relevant=[]
+        for notification in notifications:
+            if notification.get('method') not in ('hook/started','hook/completed','item/started','item/completed','turn/completed'):
+                continue
+            params=notification.get('params')
+            if not isinstance(params,dict) or params.get('threadId')!=report['native_thread_id']:
+                continue
+            direct=params.get('turnId')
+            turn=params.get('turn')
+            nested=turn.get('id') if isinstance(turn,dict) else None
+            # Native turn/completed carries params.turn.id. Never attribute a
+            # missing identity to the report, or accept contradictory identities.
+            if direct is not None and nested is not None and direct!=nested:
+                continue
+            actual_turn=direct if direct is not None else nested
+            if not isinstance(actual_turn,str) or not actual_turn or actual_turn!=report['native_turn_id']:
+                continue
+            relevant.append(notification)
         if len(relevant)>512:raise ValueError('native lifecycle notification cap')
         if not relevant:continue
         receipt={'kind':'lifecycle_native','callback_id':relation['callback_id'],'callback_receipt_sha256':callback_sha,

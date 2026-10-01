@@ -40,7 +40,8 @@ def run(manifest_path,prompt,*,user_reviewed_trust=False,controller=None,total_t
     helper=importlib.util.module_from_spec(spec);spec.loader.exec_module(helper)
     for port in (manifest['port'],manifest['page_port']):
         if helper._port_owners(port):raise ValueError('prepared port occupied; no existing service touched')
-    env=environment(binding['run_nonce']);env.update(PYTHONPATH=str(code/'src'),TIKTOKEN_CACHE_DIR=str(cache))
+    env=environment(binding['run_nonce']);env.update(PYTHONPATH=str(code/'src'),TIKTOKEN_CACHE_DIR=str(cache),
+        PYTHONDONTWRITEBYTECODE='1')
     core_env=dict(env);core_env.update(JASMINE_CORE_WORKSPACE_ROOT=adapter['work_root'],
         JASMINE_CORE_ADAPTER_CONFIG=str(runtime/'adapter.json'),JASMINE_CORE_EVIDENCE_PRODUCERS=str(runtime/'evidence-producers.json'),
         JASMINE_CORE_INTERPRETER_CODEX=manifest['profile']['provider']['executable_path'],
@@ -48,8 +49,8 @@ def run(manifest_path,prompt,*,user_reviewed_trust=False,controller=None,total_t
         JASMINE_CORE_RESOLVER_ACTOR_ID=manifest['system_actor_id'],JASMINE_CORE_RESOLVER_HOST_ID=manifest['host_id'])
     processes=[];native=None;deadline=Deadline(total_timeout)
     try:
-        for name,commands in [('core',[sys.executable,'-m','jasmine_core.cli','serve','--db',str(runtime/'core.db'),'--host','127.0.0.1','--port',str(manifest['port'])]),
-            ('page',[sys.executable,str(code/'scripts/p3-fixture-server.py'),'--root',adapter['work_root'],'--port',str(manifest['page_port'])])]:
+        for name,commands in [('core',[sys.executable,'-B','-m','jasmine_core.cli','serve','--db',str(runtime/'core.db'),'--host','127.0.0.1','--port',str(manifest['port'])]),
+            ('page',[sys.executable,'-B',str(code/'scripts/p3-fixture-server.py'),'--root',adapter['work_root'],'--port',str(manifest['page_port'])])]:
             with (runtime/(name+'.log')).open('ab') as log:
                 processes.append(subprocess.Popen(commands,env=core_env if name=='core' else env,cwd=code,stdout=log,stderr=subprocess.STDOUT))
         for attempt in range(80):
@@ -100,7 +101,7 @@ def run(manifest_path,prompt,*,user_reviewed_trust=False,controller=None,total_t
             helper._stop_core(processes[0],manifest['port'])
             if helper._port_owners(manifest['port']):raise ValueError('owned restart port occupied')
             with (runtime/'core.log').open('ab') as log:
-                processes[0]=subprocess.Popen([sys.executable,'-m','jasmine_core.cli','serve','--db',str(runtime/'core.db'),'--host','127.0.0.1','--port',str(manifest['port'])],env=replacement,cwd=code,stdout=log,stderr=subprocess.STDOUT)
+                processes[0]=subprocess.Popen([sys.executable,'-B','-m','jasmine_core.cli','serve','--db',str(runtime/'core.db'),'--host','127.0.0.1','--port',str(manifest['port'])],env=replacement,cwd=code,stdout=log,stderr=subprocess.STDOUT)
             for attempt in range(80):
                 deadline.remaining()
                 if processes[0].poll() is not None:raise ValueError('owned Core restart exited')
