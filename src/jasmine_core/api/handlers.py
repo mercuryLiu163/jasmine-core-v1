@@ -20,6 +20,7 @@ from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from ..continuity import ContinuityStore
 from ..context.builder import ContextBuilder
+from ..adapter.requirements import NativeAdapterStore
 from .request import Request, Response
 
 Handler = Callable[[Request, "Core", auth.Principal | None, "re.Match[str]"], Response]
@@ -45,7 +46,9 @@ class Core:
         self.resolver = resolver.ResolverStore(self.interpretations)
         self.reviews = reviews.ReviewStore(self.resolver)
         self.continuity = ContinuityStore(conn,schema_version=self.schema_version)
-        self.context = ContextBuilder(conn,schema_version=self.schema_version)
+        from ..context.memory_provider import MemoryProvider
+        self.context = ContextBuilder(conn,schema_version=self.schema_version,memory=MemoryProvider.from_deployment())
+        self.adapter = NativeAdapterStore(self)
         self.registry = registry.Registry(conn)
         self.auth = auth.Auth(conn)
         self.audit = audit.AuditLog(conn)
@@ -79,6 +82,14 @@ def _collection_routes() -> list[Route]:
 
 def _base_routes() -> list[Route]:
     return [
+        Route("POST",re.compile(r"^/v1/adapter/lifecycle/report$"),adapter_report,"adapter:report"),
+        Route("POST",re.compile(r"^/v1/adapter/lifecycle/attest$"),adapter_attest,"adapter:attest"),
+        Route("POST",re.compile(r"^/v1/adapter/operations/reserve$"),adapter_reserve,"adapter:report"),
+        Route("GET",re.compile(r"^/v1/adapter/operations/([^/]+)$"),adapter_get,"adapter:read"),
+        Route("POST",re.compile(r"^/v1/adapter/operations/([^/]+)/check-current$"),adapter_check,"adapter:report"),
+        Route("POST",re.compile(r"^/v1/adapter/operations/([^/]+)/complete$"),adapter_complete,"adapter:report"),
+        Route("POST",re.compile(r"^/v1/adapter/requirements/bind$"),adapter_bind,"adapter:report"),
+        Route("POST",re.compile(r"^/v1/evidence/codex-dynamic-observation$"),adapter_evidence,"evidence:write"),
         Route("POST", re.compile(r"^/v1/context/build$"), build_context, "context:build"),
         Route("GET", re.compile(r"^/v1/context/([^/]+)$"), get_context, "context:read"),
         Route("POST", re.compile(r"^/v1/context/([^/]+)/check-current$"), check_context_current, "context:build"),
@@ -741,6 +752,58 @@ def check_context_current(request,core,principal,match):
     _context_read(principal);principal.require('context:read')
     if request.query:raise errors.InvalidRequest('context current check accepts no query')
     return Response(200,core.context.check_current(match.group(1),request.json_body(),actor_id=principal.actor_id))
+
+
+def _adapter_request(request,principal,*,context=False):
+    _continuity_read(principal)
+    if request.query:raise errors.InvalidRequest('adapter protocol accepts no query')
+    if context:
+        for scope in ('context:build','context:read','checkpoint:read','guard:check'):principal.require(scope)
+
+
+def adapter_report(request,core,principal,match):
+    _adapter_request(request,principal)
+    result=core.adapter.report(request.json_body(),principal=principal)
+    return Response(200 if result['replayed'] else 201,result)
+
+
+def adapter_attest(request,core,principal,match):
+    _adapter_request(request,principal);principal.require('checkpoint:read')
+    result=core.adapter.attest(request.json_body(),principal=principal)
+    return Response(200 if result['replayed'] else 201,result)
+
+
+def adapter_reserve(request,core,principal,match):
+    _adapter_request(request,principal,context=True)
+    result=core.adapter.reserve(request.json_body(),principal=principal)
+    return Response(200 if result['replayed'] or result['operation']['status']=='DENIED' else 201,result)
+
+
+def adapter_get(request,core,principal,match):
+    _adapter_request(request,principal)
+    return Response(200,core.adapter.get(match.group(1),principal=principal))
+
+
+def adapter_check(request,core,principal,match):
+    _adapter_request(request,principal,context=True)
+    return Response(200,core.adapter.check_current(match.group(1),request.json_body(),principal=principal))
+
+
+def adapter_complete(request,core,principal,match):
+    _adapter_request(request,principal,context=True)
+    result=core.adapter.complete(match.group(1),request.json_body(),principal=principal)
+    return Response(200 if result['replayed'] else 201,result)
+
+
+def adapter_bind(request,core,principal,match):
+    _adapter_request(request,principal);principal.require('authority:manage');principal.require('state:accept')
+    result=core.adapter.bind_requirement(request.json_body(),principal=principal)
+    return Response(200 if result['replayed'] else 201,result)
+
+
+def adapter_evidence(request,core,principal,match):
+    _adapter_request(request,principal);principal.require('adapter:read')
+    return Response(200,core.adapter.dynamic_observation(request.json_body(),principal=principal))
 
 
 ROUTES = tuple(_base_routes()) + tuple(_collection_routes())

@@ -136,6 +136,44 @@ class MemoryProvider:
         self.environment={'PATH':os.defpath,'LANG':'C.UTF-8','PYTHONHASHSEED':'0','PYTHONNOUSERSITE':'1','PYTHONDONTWRITEBYTECODE':'1',**supplied}
         self.config_digest=self.configuration()['config_digest']
 
+    @classmethod
+    def from_deployment(cls):
+        """Opt-in private worker configuration; absent means the original off slot."""
+        name=os.environ.get('JASMINE_CORE_MEMORY_CONFIG')
+        if not name:return cls()
+        from ..adapter.config import private_json
+        from .. import fingerprint,errors
+        path=Path(name)
+        if not path.is_absolute() or path.is_relative_to(fingerprint.configured_root()):
+            raise errors.InvalidRequest('Memory deployment config must be outside work root')
+        value,digest=private_json(path,cap=65536)
+        if not isinstance(value,dict) or set(value)!={'argv','provider_id','global_bank','environment'} or type(value['global_bank']) is not bool or not isinstance(value['provider_id'],str) or not 1<=len(value['provider_id'])<=128:
+            raise errors.InvalidRequest('strict Memory deployment configuration required')
+        try:provider=cls(**value)
+        except (ValueError,TypeError) as exc:raise errors.InvalidRequest('invalid fixed Memory worker configuration') from exc
+        if provider.argv is None:raise errors.InvalidRequest('explicit Memory deployment requires worker argv')
+        work=fingerprint.configured_root().resolve(strict=True)
+        resolved_argv=[]
+        for index,item in enumerate(provider.argv):
+            original=Path(item);resolved=original.resolve(strict=True)
+            if original.is_relative_to(work) or resolved.is_relative_to(work):raise errors.InvalidRequest('Memory worker must be outside model-writable work root')
+            # Keep only the explicitly permitted venv interpreter launcher; its
+            # canonical parent is protected. Scripts execute their pinned target.
+            if index==0:
+                launcher=original.parent.resolve(strict=True)/original.name
+                if launcher.parent.is_relative_to(work):raise errors.InvalidRequest('Memory interpreter parent must be outside work root')
+                resolved_argv.append(str(launcher))
+            else:resolved_argv.append(str(resolved))
+        provider.argv=tuple(resolved_argv)
+        pythonpath=provider.environment.get('PYTHONPATH')
+        if pythonpath is not None:
+            for item in pythonpath.split(os.pathsep):
+                if not item or not Path(item).is_absolute() or Path(item)!=Path(item).resolve(strict=True) or not Path(item).is_dir() or Path(item).is_relative_to(work):
+                    raise errors.InvalidRequest('Memory deployment PYTHONPATH must be absolute and outside work root')
+        provider.deployment_config_sha256=digest
+        provider.config_digest=provider.configuration()['config_digest']
+        return provider
+
     @staticmethod
     def _file_identity(path):
         resolved=Path(path).resolve(strict=True)
@@ -161,6 +199,7 @@ class MemoryProvider:
             except (OSError,ValueError):identity.append({'status':'unavailable'})
         config={'provider_id':self.provider_id,'argv_identity':sha256_hex(self.argv),
             'worker_identity':identity,'environment_digest':sha256_hex(self.environment),
+            'deployment_config_sha256':getattr(self,'deployment_config_sha256',None),
             'global_bank':self.global_bank,'protocol':'jasmine.memory-slot.v1',
             'maximum_bytes':MAX_BYTES,'timeout_seconds':3,'configured':self.argv is not None}
         return {**config,'config_digest':sha256_hex(config)}

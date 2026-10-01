@@ -16,6 +16,7 @@ import sqlite3
 import stat
 from pathlib import Path
 from typing import Any
+from dataclasses import dataclass
 
 from . import clock, db, errors, fingerprint, ids
 from .canonical import body_hash, canonical_json
@@ -246,6 +247,15 @@ def _producer_kind(kind: str, tool_name: str, command_sha256: str | None) -> str
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+@dataclass(frozen=True)
+class _PreparedToolResult:
+    connection_id: int
+    body_sha256: str
+    artifact: tuple
+    producer_config_sha256: str | None
+    snapshot: dict
+
+
 class EvidenceStore:
     def __init__(self, conn: sqlite3.Connection, *, schema_version: int) -> None:
         self.conn = conn
@@ -423,13 +433,13 @@ class EvidenceStore:
             hash_payload={"text": "", **hash_payload} if hash_payload is not None else None,
             client_occurred_at=None))
 
-    def _evidence(self, evidence_id: str) -> dict[str, Any]:
+    def _evidence(self, evidence_id: str, *, check_reference=True) -> dict[str, Any]:
         row = self.conn.execute("SELECT * FROM evidence WHERE evidence_id=?", (evidence_id,)).fetchone()
         if row is None:
             raise errors.NotFound("evidence", evidence_id)
         item = dict(row)
         item["result"] = json.loads(item.pop("result_json"))
-        item["reference_status"] = self._reference_status(item)
+        item["reference_status"] = self._reference_status(item) if check_reference else ("OK" if item["artifact_uri"] else "NONE")
         return item
 
     def _reference_status(self, item: dict[str, Any]) -> str:
@@ -479,7 +489,7 @@ class EvidenceStore:
                 command_sha256: str | None = None, producer_config_sha256: str | None = None,
                 confirmed_rule_id: str | None = None,
                 confirmed_rule_version: int | None = None,
-                related_posttool_event_id: str | None = None) -> dict[str, Any]:
+                related_posttool_event_id: str | None = None, check_reference=True) -> dict[str, Any]:
         self.conn.execute(
             "INSERT INTO evidence (evidence_id,task_id,step_id,kind,status,result_json,"
             "source_event_id,change_event_id,fingerprint_sha256,artifact_uri,artifact_sha256,"
@@ -494,9 +504,16 @@ class EvidenceStore:
              confirmed_rule_id, confirmed_rule_version, task["revision"],
              step["revision"] if step else None, clock.now_rfc3339(), related_posttool_event_id),
         )
-        return self._evidence(evidence_id)
+        return self._evidence(evidence_id,check_reference=check_reference)
 
-    def record_tool_result(self, body: dict[str, Any], *, actor_id: str) -> dict[str, Any]:
+    def prepare_dynamic_tool_result(self,body,snapshot):
+        if self.conn.in_transaction:raise RuntimeError("dynamic producer preparation must be outside transaction")
+        command=body["tool_input"]["command"]
+        producer=_producer_kind(body["kind"],body["tool_name"],hashlib.sha256(command.encode()).hexdigest())
+        return _PreparedToolResult(id(self.conn),body_hash(body),self._artifact(body.get("artifact_uri")),producer,snapshot)
+
+    def record_tool_result(self, body: dict[str, Any], *, actor_id: str, unit_of_work=None,
+                           prepared=None, operation_provenance=None, evidence_id=None) -> dict[str, Any]:
         _fields(body, {"task_id", "step_id", "host_id", "session_id", "codex_session_id",
                        "turn_id", "tool_use_id", "tool_name", "tool_input", "tool_response",
                        "kind", "artifact_uri"})
@@ -508,6 +525,8 @@ class EvidenceStore:
         turn_id = _text(body.get("turn_id"), "turn_id")
         tool_use_id = _text(body.get("tool_use_id"), "tool_use_id")
         tool_name = _text(body.get("tool_name"), "tool_name")
+        if tool_name in ("jasmine_playwright","jasmine_test") and prepared is None:
+            raise errors.InvalidRequest("dynamic producer names require protected adapter observation")
         tool_input, tool_response = body.get("tool_input"), body.get("tool_response")
         if not isinstance(tool_input, dict) or tool_response is None:
             raise errors.InvalidRequest("tool_input must be an object and tool_response is required")
@@ -517,9 +536,19 @@ class EvidenceStore:
         status, parsed = _tool_result(tool_response)
         command = tool_input.get("cmd", tool_input.get("command"))
         command_sha256 = hashlib.sha256(command.encode("utf-8")).hexdigest() if isinstance(command, str) else None
-        producer_config_sha256 = _producer_kind(kind, tool_name, command_sha256)
+        if prepared is not None:
+            if not isinstance(prepared,_PreparedToolResult) or prepared.connection_id!=id(self.conn) or prepared.body_sha256!=body_hash(body) or unit_of_work is None or operation_provenance is None:
+                raise RuntimeError('invalid dynamic producer preparation')
+            producer_config_sha256=prepared.producer_config_sha256
+            from .adapter.dynamic_evidence import validate_provenance
+            validate_provenance(operation_provenance)
+            provenance_payload={'operation_provenance':operation_provenance,'operation_provenance_sha256':hashlib.sha256(canonical_json(operation_provenance).encode()).hexdigest()}
+        else:
+            if unit_of_work is not None or operation_provenance is not None or evidence_id is not None:raise RuntimeError('dynamic producer requires preparation')
+            producer_config_sha256 = _producer_kind(kind, tool_name, command_sha256)
+            provenance_payload={}
         seed = ("codex-posttool-v1", codex_session_id, turn_id, tool_use_id)
-        with db.translate_lock_errors(), db.transaction(self.conn):
+        with db.translate_lock_errors(), db.transaction(self.conn,unit_of_work=unit_of_work):
             task, step = self._task_step(task_id, step_id)
             actor_kind = self._actor_host(actor_id, host_id)
             if actor_kind != "system":
@@ -530,13 +559,13 @@ class EvidenceStore:
                     raise errors.NotFound("session", session_id)
                 if row["task_id"] != task_id:
                     raise errors.InvalidRequest("session does not belong to task")
-            artifact_uri, artifact_sha = self._artifact(body.get("artifact_uri"))
+            artifact_uri, artifact_sha = prepared.artifact if prepared is not None else self._artifact(body.get("artifact_uri"))
             call_event, call_replay = self._event(
                 event_type="tool.call", actor_id=actor_id, actor_kind=actor_kind,
                 host_id=host_id, task=task, session_id=session_id,
                 source_system="codex-posttool", source_event_id=canonical_json([*seed, "call"]),
                 event_id=_deterministic_event_id(*seed, "call"),
-                payload={"codex_session_id": codex_session_id, "turn_id": turn_id,
+                payload={**provenance_payload,"codex_session_id": codex_session_id, "turn_id": turn_id,
                          "tool_use_id": tool_use_id, "tool_name": tool_name,
                          "tool_input": tool_input, "step_id": step_id})
             result_event, result_replay = self._event(
@@ -544,7 +573,7 @@ class EvidenceStore:
                 host_id=host_id, task=task, session_id=session_id,
                 source_system="codex-posttool", source_event_id=canonical_json([*seed, "result"]),
                 event_id=_deterministic_event_id(*seed, "result"),
-                payload={"codex_session_id": codex_session_id, "turn_id": turn_id,
+                payload={**provenance_payload,"codex_session_id": codex_session_id, "turn_id": turn_id,
                          "tool_use_id": tool_use_id, "tool_name": tool_name,
                          "tool_response": tool_response, "step_id": step_id,
                          "call_event_id": call_event["event_id"]})
@@ -558,18 +587,18 @@ class EvidenceStore:
                 return {"evidence": self._evidence(row["evidence_id"]),
                         "call_event": call_event, "result_event": result_event,
                         "replayed": True}
-            fp_sha, snapshot = self._snapshot(task["project_id"], result_event["event_id"])
-            evidence_id = ids.new_id("evd")
+            fp_sha, snapshot = self._snapshot(task["project_id"], result_event["event_id"],prepared.snapshot if prepared is not None else None)
+            evidence_id = evidence_id or ids.new_id("evd")
             evidence_event, _ = self._event(
                 event_type="evidence.recorded", actor_id=actor_id, actor_kind=actor_kind,
                 host_id=host_id, task=task, session_id=session_id,
                 source_system="codex-posttool", source_event_id=canonical_json([*seed, "evidence"]),
                 event_id=_deterministic_event_id(*seed, "evidence"),
-                payload={"evidence_id": evidence_id, "source_event_id": result_event["event_id"],
+                payload={**provenance_payload,"evidence_id": evidence_id, "source_event_id": result_event["event_id"],
                          "kind": kind, "status": status, "step_id": step_id,
                          "fingerprint_sha256": fp_sha, "artifact_uri": artifact_uri,
                          "artifact_sha256": artifact_sha, "parsed_result": parsed},
-                hash_payload={"source_event_id": result_event["event_id"], "kind": kind,
+                hash_payload={**provenance_payload,"source_event_id": result_event["event_id"], "kind": kind,
                               "status": status, "step_id": step_id,
                               "fingerprint_sha256": fp_sha, "artifact_uri": artifact_uri,
                               "artifact_sha256": artifact_sha, "parsed_result": parsed})
@@ -582,7 +611,7 @@ class EvidenceStore:
                                   session_id=session_id, turn_id=turn_id,
                                   tool_use_id=tool_use_id, tool_name=tool_name,
                                   command_sha256=command_sha256,
-                                  producer_config_sha256=producer_config_sha256)
+                                  producer_config_sha256=producer_config_sha256,check_reference=prepared is None)
             return {"evidence": record, "call_event": call_event,
                     "result_event": result_event, "replayed": False}
 
@@ -853,6 +882,9 @@ class CurrentEvidenceValidator:
         if (event["event_type"] != "tool.result" or event["actor_kind"] != "system" or
                 event["actor_id"] != row["actor_id"]):
             return False
+        if "operation_provenance" in event["payload"]:
+            from .adapter.dynamic_evidence import source_valid
+            return source_valid(self.conn,row,event,project_id)
         if row.get("related_posttool_event_id") is not None:
             return self._native_source_valid(row, event)
         source_status, _ = _tool_result(event["payload"].get("tool_response"))
@@ -994,6 +1026,8 @@ class CurrentEvidenceValidator:
 
         task, step = request.task, request.step
         task_id, step_id = task["task_id"], step["step_id"] if step else None
+        from .adapter.requirements import require_current_bindings
+        require_current_bindings(self.conn, task_id, step)
         try:
             current = fingerprint.capture()
         except errors.FingerprintUnavailable as exc:

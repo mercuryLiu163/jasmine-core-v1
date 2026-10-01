@@ -388,3 +388,33 @@ See [ADR 0011](../adr/0011-checkpoint-resume-snapshot.md) for integrity, provena
 - `POST /v1/context/{ctx}/check-current`: exact `host_id`, `source_event_id`, optional `session_id`, `current_step_id`; requires build/read scopes and the original actor. Returns current comparison, not a regenerated pack. Binding, configuration or Truth/selector mismatch returns 409; actor mismatch 403. No query fields are accepted.
 
 Receipts include the genuine command Event, complete snapshot/selector, exact rendered content/hash/byte count, pinned tokenizer identity, total/section counts, omission provenance and read-only Memory diagnostics. A 2,500-token rendered-pack bound uses explicit o200k_base; model encoding remains unverified. Mandatory overflow is `AUTHORITY_TOO_LARGE` or `CONTEXT_MANDATORY_TOO_LARGE`. Missing tokenizer is an explicit dependency failure. See ADR 0012 for offline setup and admission boundaries. Context generation and its component adapter do not establish actual native hook injection or tool execution.
+
+## Native adapter (P3-03)
+
+Schema remains 10. These routes require the exact configured system key and
+Registry home-host binding; `adapter:report`, `adapter:attest` and `adapter:read`
+are purpose scopes, in addition to the existing business read/write scopes.
+
+| Route | Purpose |
+| --- | --- |
+| POST `/v1/adapter/lifecycle/report` | Exact trusted callback report; no native completion claim |
+| POST `/v1/adapter/lifecycle/attest` | Immutable post-collection native lifecycle proof |
+| POST `/v1/adapter/operations/reserve` | One reservation per native thread/turn/call |
+| GET `/v1/adapter/operations/{evt}` | Historical snapshot; UNKNOWN_OUTCOME if effect started without terminal |
+| POST `/v1/adapter/operations/{evt}/check-current` | Read-only fresh admission check; historical receipt is not authorization |
+| POST `/v1/adapter/operations/{evt}/complete` | Terminal once; stale effects do not qualify Evidence |
+| POST `/v1/adapter/requirements/bind` | Explicit P2 Rule-to-P1 criterion binding with exact revisions |
+| POST `/v1/evidence/codex-dynamic-observation` | Read the already committed original dynamic Evidence |
+
+All routes reject query parameters and unknown body fields. GET/observation use
+`adapter:read`; mutations use report or attest. Exact-key replay returns the
+original snapshot (200); fresh immutable mutations return 201. Changed native-call
+arguments or reused keys conflict (409). Private receipt/config input is supplied
+by the adapter deployment, not by model arguments or public Raw Events.
+
+The complete exact request fields are frozen in the implementation's `REPORT`,
+`RESERVE`, `CHECK` and `BIND` constants and the lifecycle/complete validators.
+Operations are the four fixed `jasmine_read`, `jasmine_patch`, `jasmine_test` and
+`jasmine_playwright` names. Guard confirmation/precondition outcomes are blocked
+unless the reviewed path can establish the necessary precondition; no automatic
+confirmation or acceptance is implied. See [ADR 0013](../adr/0013-native-lifecycle-and-typed-execution.md).

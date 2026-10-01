@@ -112,3 +112,32 @@ not import it, reuse its identifiers, read its tables, or reconnect its hooks.
 
 Runtime databases, tokens, raw logs, artifacts, and validation bundles must not
 be committed; see `.gitignore`.
+
+## P3 native validation preparation
+
+P3-01 Checkpoint/Resume and P3-02 Context Builder have local component acceptance.
+P3-03 native lifecycle and typed execution remain subject to independent native
+G01–G07 acceptance. See [ADR0013](docs/adr/0013-native-lifecycle-and-typed-execution.md).
+The phase is published together after local validation; CI and separate milestone
+PRs are not acceptance requirements under the user's current instruction.
+
+Use the isolated, pinned tiktoken 0.14.0 interpreter to prepare a fresh deployment:
+
+```bash
+PYTHONPATH=src artifacts/p2-implementation/p3-02-venv/bin/python \
+  scripts/p3-real-conversation.py --out /absolute/private/fresh-fixture \
+  --catalog /absolute/reviewed/catalog.json \
+  --node /absolute/node --node-modules /absolute/node_modules \
+  --tokenizer-cache "$PWD/artifacts/p2-implementation/p3-02-tokenizer-cache"
+```
+
+Preparation creates an isolated Core database, six project hook definitions,
+reviewed source copies and a local Playwright skill. It does not run native Gates.
+Review the generated manifest and definition diff, then use its normal interactive
+trust command. Trust is user-owned; preparation does not write trust hashes.
+The independent controller calls `jasmine_core.adapter.gate_runner.run` with
+`user_reviewed_trust=True`, and an explicit total timeout up to 1800 seconds for
+seven Gates. Native turns are capped at 16 and 140 seconds per turn; each dynamic
+callback retains its 90-second deadline. Runtime receipts and credentials remain
+private and are excluded from publication. Component reports do not establish
+native compact completion, skill loading or phase acceptance.
