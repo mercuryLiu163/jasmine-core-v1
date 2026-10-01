@@ -1,17 +1,18 @@
 """Purpose-bound adapter identity and private receipt reader."""
 from __future__ import annotations
 import json
+import hashlib
 import os
 import re
 import stat
 from pathlib import Path
 from .. import errors, fingerprint, ids
 from ..canonical import sha256_hex
-from ..resolution_common import actor, fields
+from ..resolution_common import actor, fields, Conflict
 
 RECEIPT_ID=re.compile(r'^[a-zA-Z0-9_-]{1,128}$')
 CONFIG_FIELDS={'actor_id','host_id','key_id','receipt_root','lease_file','work_root','deployment_root',
-               'deployment_sha256','profile_sha256','hook_definition_sha256','executors','executor_inputs'}
+               'deployment_sha256','profile_sha256','hook_definition_sha256','hook_definition_path','executors','executor_inputs'}
 
 
 def _finite_float(value):
@@ -87,6 +88,11 @@ class AdapterConfig:
         if private.st_uid!=os.getuid() or private.st_mode&0o077:raise errors.InvalidRequest('private receipt root required')
         lease=Path(value['lease_file'])
         if not lease.is_absolute() or not lease.is_relative_to(roots[0]):raise errors.InvalidRequest('lease must be in private root')
+        hook=value['hook_definition_path']
+        if not isinstance(hook,str):raise errors.InvalidRequest('hook definition path must be a string')
+        hook=Path(hook)
+        if not hook.is_absolute() or hook.name!='hooks.json' or hook.parent.name!='.codex' or hook.parent!=hook.parent.resolve(strict=True) or hook.is_relative_to(roots[0]) or hook.is_relative_to(roots[1]) or hook.is_relative_to(roots[2]):
+            raise errors.InvalidRequest('canonical deployed hook definition outside adapter roots required')
         if not isinstance(value['executors'],dict):raise errors.InvalidRequest('executor manifests required')
         inputs=value['executor_inputs']
         if not isinstance(inputs,dict) or set(inputs)!=set(value['executors']):raise errors.InvalidRequest('fixed executor stdin required')
@@ -102,6 +108,25 @@ class AdapterConfig:
                 if origin.scheme!='http' or origin.hostname!='127.0.0.1' or not origin.port or origin.path or origin.query or origin.fragment or origin.username or origin.password:raise errors.InvalidRequest('fixed loopback fixture origin required')
                 chrome=Path(stdin['chrome_path'])
                 if chrome!=chrome.resolve(strict=True) or not chrome.is_file():raise errors.InvalidRequest('fixed Chrome executable required')
+
+    def hook_definition(self):
+        """Verify the frozen project definition outside every DB transaction."""
+        path=Path(self.value['hook_definition_path'])
+        if path.parent!=path.parent.resolve(strict=True):raise Conflict('adapter_provenance_mismatch')
+        try:
+            fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+            try:
+                info=os.fstat(fd)
+                if not stat.S_ISREG(info.st_mode) or info.st_size>1048576:raise Conflict('adapter_provenance_mismatch')
+                raw=os.read(fd,1048577)
+                if len(raw)>1048576 or hashlib.sha256(raw).hexdigest()!=self.value['hook_definition_sha256']:
+                    raise Conflict('adapter_provenance_mismatch')
+                current=path.lstat()
+                if (current.st_dev,current.st_ino,current.st_size,current.st_mtime_ns)!=(info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns):
+                    raise Conflict('adapter_provenance_mismatch')
+            finally:os.close(fd)
+        except OSError as exc:raise Conflict('adapter_provenance_mismatch') from exc
+        return str(path)
 
     @classmethod
     def load(cls):

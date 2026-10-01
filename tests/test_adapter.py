@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from jasmine_core import errors,ids
 from jasmine_core.adapter.config import private_json
+from jasmine_core.resolution_common import Conflict
 from jasmine_core.adapter.protocol import event_id
 from jasmine_core.models import NewEvent
 
@@ -44,3 +45,18 @@ class ProtocolIdentity(unittest.TestCase):
         for event_type,source in [('adapter.operation_reserved','ordinary'),('user.prompt','core-native-adapter')]:
             with self.assertRaises(errors.InvalidRequest):NewEvent.from_request({**base,'event_type':event_type,'source_system':source},
                 actor_id=ids.new_id('act'),actor_kind='system')
+
+class HookDefinitionIdentity(unittest.TestCase):
+    def test_project_definition_is_separate_from_work_and_hash_bound(self):
+        from jasmine_core.adapter.config import AdapterConfig
+        with tempfile.TemporaryDirectory() as name:
+            project=Path(name).resolve();(project/'work').mkdir();(project/'.codex').mkdir()
+            path=project/'.codex/hooks.json';path.write_bytes(b'{"hooks":{}}\n')
+            config=AdapterConfig.__new__(AdapterConfig)
+            config.value={'hook_definition_path':str(path),'hook_definition_sha256':hashlib.sha256(path.read_bytes()).hexdigest()}
+            self.assertEqual(config.hook_definition(),str(path))
+            self.assertNotEqual(config.hook_definition(),str(project/'work/.codex/hooks.json'))
+            path.write_bytes(b'{"hooks":{"changed":true}}')
+            with self.assertRaises(Conflict):config.hook_definition()
+            path.unlink();path.symlink_to(project/'work/missing.json')
+            with self.assertRaises(Conflict):config.hook_definition()

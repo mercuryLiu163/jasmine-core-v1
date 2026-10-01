@@ -36,6 +36,7 @@ class LifecycleStore(AdapterStore):
                 if not alias:self._bind_key(kid,digest,ident,body,principal,old['project_id'],'lifecycle-report')
                 return {'report':old['payload']['result'],'replayed':True}
             if alias:raise Conflict('adapter_provenance_mismatch')
+        config.hook_definition()
         callback,raw_sha=config.receipt(body['callback_id'])
         if callback.get('kind')!='hook_callback' or callback.get('report')!=semantic or callback.get('input_sha256')!=body['hook_input_sha256']:
             raise Conflict('adapter_provenance_mismatch')
@@ -79,6 +80,7 @@ class LifecycleStore(AdapterStore):
                 if not alias:self._bind_key(kid,digest,ident,command_body,principal,reported['project_id'],'lifecycle-attestation')
                 return {'attestation':old['payload']['result'],'replayed':True}
             if alias:raise Conflict('adapter_provenance_mismatch')
+        hook_definition_path=config.hook_definition()
         receipt,_=config.receipt(body['receipt_id'],body['receipt_sha256'])
         if receipt.get('kind')!='lifecycle_native' or receipt.get('callback_id')!=request['callback_id'] or \
            receipt.get('callback_receipt_sha256')!=reported['payload']['callback_receipt_sha256']:
@@ -94,7 +96,7 @@ class LifecycleStore(AdapterStore):
             if method in ('hook/started','hook/completed') and isinstance(run,dict) and \
                params.get('threadId')==request['native_thread_id'] and params.get('turnId')==request['native_turn_id'] and \
                run.get('eventName')==NAMES[request['hook_event_name']]:
-                if run.get('source')!='project' or run.get('handlerType')!='command' or run.get('sourcePath')!=str(__import__('pathlib').Path(config.value['work_root'])/'.codex/hooks.json'):raise Conflict('adapter_not_proved')
+                if run.get('source')!='project' or run.get('handlerType')!='command' or run.get('sourcePath')!=hook_definition_path:raise Conflict('adapter_not_proved')
                 (started if method=='hook/started' else completed).append((index,run))
         if len(started)!=1 or len(completed)!=1 or started[0][0]>=completed[0][0] or \
            not isinstance(started[0][1].get('id'),str) or not started[0][1]['id'] or started[0][1].get('id')!=completed[0][1].get('id') or completed[0][1].get('status')!='completed' or \

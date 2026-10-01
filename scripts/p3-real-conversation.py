@@ -100,7 +100,7 @@ def prepare(args):
         adapter={'actor_id':operator,'host_id':host,'key_id':ids.new_id('key'),'receipt_root':str(runtime),
             'lease_file':str(runtime/'binding.json.p2-lease'),'work_root':str(fixture/'work'),
             'deployment_root':str(code),'deployment_sha256':bundle_sha(code),'profile_sha256':profile['config_digest'],
-            'hook_definition_sha256':'0'*64,
+            'hook_definition_sha256':'0'*64,'hook_definition_path':str(fixture/'.codex/hooks.json'),
             'executor_inputs':{'jasmine_test':{'work_root':str(fixture/'work'),'artifact_root':str(fixture/'work/artifacts')},
                 'jasmine_playwright':{'origin':f'http://127.0.0.1:{page_port}','chrome_path':'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome','work_root':str(fixture/'work'),'artifact_root':str(fixture/'work/artifacts')}},'executors':{
                 name:{'argv':[str(args.node.resolve(strict=True)),str(code/'scripts'/script)],'choices':choices,
