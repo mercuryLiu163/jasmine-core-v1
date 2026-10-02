@@ -75,12 +75,16 @@ def report_lifecycle(payload,config,lease,client,deadline,*,raw_input_bytes=None
     if not state or not state.get('task_id') or not state.get('core_session_id'):
         return {'decision':'block','reason':'Jasmine P3 lifecycle pending binding'}
     adapter,_=private_json(Path(config['p3_adapter_config_file']),cap=65536)
-    if state['session_id']!=payload['session_id'] or state['turn_id']!=payload['turn_id']:raise ValueError('lifecycle native binding mismatch')
+    # Independent native compact turns report their real identity without adopting a
+    # source turn or making its READY context valid for the compact turn.
+    compact_turn=name in ('PreCompact','PostCompact')
+    if state['session_id']!=payload['session_id'] or (state['turn_id']!=payload['turn_id'] and not compact_turn):
+        raise ValueError('lifecycle native binding mismatch')
     raw=raw_input_bytes if raw_input_bytes is not None else canonical_json(payload).encode()
     if len(raw)>65536:raise ValueError('hook input exceeds cap')
     if json.loads(raw)!=payload:raise ValueError('raw hook input mismatch')
     input_sha=hashlib.sha256(raw).hexdigest()
-    callback_id='callback_'+hashlib.sha256(canonical_json([state['session_id'],state['turn_id'],name,state['generation'],input_sha]).encode()).hexdigest()
+    callback_id='callback_'+hashlib.sha256(canonical_json([state['session_id'],payload.get('turn_id'),name,state['generation'],input_sha]).encode()).hexdigest()
     report={'event_id':event_id('lifecycle-report',state['session_id'],callback_id),'idempotency_key':'p3-report:'+callback_id,
        'task_id':state['task_id'],'current_step_id':state.get('step_id'),'host_id':config['host_id'],
        'session_id':state['core_session_id'],'source_event_id':state['event_id'],'native_thread_id':state['session_id'],
@@ -93,6 +97,8 @@ def report_lifecycle(payload,config,lease,client,deadline,*,raw_input_bytes=None
     atomic_json(Path(adapter['receipt_root'])/(callback_id+'.json'),receipt)
     reply=client.post('/v1/adapter/lifecycle/report',report,cap=deadline.remaining(3))
     if reply['report']['reported_event_id']!=report['event_id'] or reply['report']['status']!='REPORT_ACCEPTED':raise ValueError('lifecycle report mismatch')
+    if name=='PreCompact':
+        state['last_precompact_report_id']=report['event_id'];lease.write(state)
     if name in ('PreCompact','Stop'):
         checkpoint={'task_id':state['task_id'],'host_id':config['host_id'],'source_event_id':report['event_id'],
           'session_id':state['core_session_id'],'current_step_id':state.get('step_id'),

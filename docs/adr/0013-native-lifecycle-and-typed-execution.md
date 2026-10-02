@@ -30,6 +30,31 @@ same-turn native completion notifications. Compact ACK `{}` alone proves nothing
 Stop completion must occur after its hook completion. No future notification is
 invented while the callback is running.
 
+An independent native compaction may have a different turn ID from the admitted
+source lease. Only PreCompact and PostCompact reports may use that actual callback
+turn while the configured lease still matches native thread, generation, Task,
+Step and host. Exact callback stdin, digest and identity remain required. A
+PostCompact report must match the accepted PreCompact report referenced by the
+current lease, including actor, compact turn, generation, Task, Core session and
+source. An orphan or prior-generation PostCompact is refused. The callback never
+adopts the compact turn into the source lease or its READY Context; typed execution
+still requires the admitted turn. A subsequent genuine UserPromptSubmit creates
+its own source turn and generation through the existing admission path.
+
+The collector validates the complete native proof before persisting or submitting
+an attestation receipt. Legal unfinished notification prefixes remain pending;
+invalid identities, provenance, completion status, orphan completions or invalid
+ordering are refused even before the proof is complete. PreCompact requires the
+same compaction item ID for item start/completion and hook completion before item
+completion; item start may precede hook start. Stop requires turn completion after
+hook completion. Proof validation is shared with Core. Notifications are scoped
+to the actual callback turn and retain only proof fields, leaving conversation
+text in the original append-only native log. Receipts are limited to 512 proof
+notifications and 64 KiB of serialized UTF-8, including the final newline. A
+previous complete receipt is reused with its original bytes and SHA only after
+its callback, deployment/profile/hook identities and full proof validate. A
+trusted report or checkpoint alone still cannot claim NATIVE_PROVED.
+
 PostCompact records a report; it does not promise undocumented stdout context
 injection. The next genuine UserPromptSubmit captures its Raw Event first, admits
 its interpretation/resolution, then emits the sole exact Core Context pack through

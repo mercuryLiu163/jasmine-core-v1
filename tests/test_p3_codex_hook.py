@@ -58,6 +58,105 @@ class HookTests(unittest.TestCase):
       self.assertEqual(receipt['input_sha256'],hashlib.sha256(raw).hexdigest())
       self.assertEqual(receipt['input_raw_utf8'],raw.decode())
       self.assertEqual(len(calls),1 if name=='PostCompact' else 2)
+ def test_independent_compact_turn_keeps_ready_source_binding(self):
+    class Client:
+      def post(self,path,body,**kwargs):
+        if path.endswith('/report'):return {'report':{'reported_event_id':body['event_id'],'status':'REPORT_ACCEPTED'}}
+        return {'checkpoint':{'checkpoint_id':ids.new_id('ckp')}}
+    lease=MemoryLease(dict(self.state))
+    for name in ('PreCompact','PostCompact'):
+      payload={'hook_event_name':name,'session_id':'native-thread','turn_id':'compact-turn'}
+      hook.report_lifecycle(payload,self.config,lease,Client(),Deadline())
+      self.assertEqual(lease.state['turn_id'],'native-turn')
+      self.assertEqual(lease.state['phase'],'READY')
+      self.assertEqual(lease.state['generation'],'1')
+    lease=MemoryLease(dict(self.state));before=dict(lease.state)
+    payload={'hook_event_name':'PreCompact','session_id':'native-thread','turn_id':'compact-turn'}
+    with self.assertRaises(ValueError):hook.report_lifecycle(payload,self.config,lease,Client(),Deadline(),raw_input_bytes=b'{}')
+    self.assertEqual(lease.state,before);self.assertEqual(lease.writes,[])
+    with self.assertRaises(TimeoutError):hook.report_lifecycle(payload,self.config,lease,Client(),Deadline(end=0))
+    self.assertEqual(lease.state,before);self.assertEqual(lease.writes,[])
+
+ def test_compact_report_http_failure_and_checkpoint_failure_do_not_adopt_turn(self):
+    payload={'hook_event_name':'PreCompact','session_id':'native-thread','turn_id':'compact-turn'}
+    class Client:
+      def __init__(self,report_fails):self.report_fails=report_fails
+      def post(self,path,body,**kwargs):
+        if path.endswith('/report') and not self.report_fails:return {'report':{'reported_event_id':body['event_id'],'status':'REPORT_ACCEPTED'}}
+        raise TimeoutError()
+    for fails in (True,False):
+      lease=MemoryLease(dict(self.state))
+      with self.assertRaises(TimeoutError):hook.report_lifecycle(payload,self.config,lease,Client(fails),Deadline())
+      self.assertEqual(lease.state['turn_id'],'native-turn');self.assertEqual(lease.state['phase'],'READY')
+      self.assertEqual(bool(lease.state.get('last_precompact_report_id')),not fails)
+      self.assertNotIn('last_lifecycle_checkpoint_id',lease.state)
+      self.assertFalse(list(self.root.glob('*_checkpoint.json')))
+
+ def test_compact_turn_tool_denied_and_next_prompt_gets_new_generation_without_recovery(self):
+    state={**self.state,'host_id':self.config['host_id'],'project_id':self.config['project_id'],
+        'context_pack_id':ids.new_id('ctx'),'ready_deadline_monotonic':time.monotonic()+30,
+        'last_precompact_report_id':ids.new_id('evt')}
+    lease=MemoryLease(state)
+    def capture(current,*args):
+      self.assertEqual(current['turn_id'],'next-prompt');self.assertEqual(current['generation'],'2')
+      self.assertIsNone(current['previous_ref']);raise TimeoutError()
+    with patch.object(hook,'binding',return_value=self.config),patch.object(hook,'Lease',return_value=lease),patch.object(hook,'_trace'),patch.object(hook,'_capture',side_effect=capture) as captured,patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':'active'}):
+      result=hook.handle({'hook_event_name':'PreToolUse','session_id':'native-thread','turn_id':'compact-turn','tool_name':'jasmine_read'},self.root/'binding')
+      self.assertEqual(result['hookSpecificOutput']['permissionDecision'],'deny')
+      hook.handle({'hook_event_name':'UserPromptSubmit','session_id':'native-thread','turn_id':'next-prompt','prompt':'real next'},self.root/'binding')
+      self.assertEqual(captured.call_count,1)
+      self.assertNotIn('last_precompact_report_id',lease.state)
+
+ def test_next_prompt_completes_real_hook_admit_and_context_ready_component_chain(self):
+    # HTTP replies are synthetic components. Capture/admit/context helpers are real;
+    # this is not extractor/model/native proof or a real Core integration test.
+    from jasmine_core.canonical import sha256_hex
+    from jasmine_core.capture import p2_codex_hook
+    token=self.root/'token';token.write_text('component-token');token.chmod(0o600)
+    config={**self.config,'core_url':'http://127.0.0.1:1','token_file':str(token),
+        'human_token_file':str(token),'p3_operator_token_file':str(token),'trace_file':str(self.root/'trace')}
+    lease=MemoryLease({**self.state,'prompt_sha256':'old','last_precompact_report_id':ids.new_id('evt')})
+    calls=[];interpretation=ids.new_id('int');resolution=ids.new_id('res');pack_id=ids.new_id('ctx')
+    tokenizer=type('Tokenizer',(),{'identity':{'component':'synthetic'},'count':lambda self,text:len(text)})()
+    class Client:
+      def request(self,method,path,body=None,**kwargs):
+        return self.post(path,body,**kwargs) if method=='POST' else self.get(path)
+      def post(self,path,body,**kwargs):
+        calls.append((path,body))
+        if path=='/v1/events':return {'event':{'event_id':body['event_id']}}
+        if path=='/v1/interpret':return {'interpretation':{'interpretation_id':interpretation,'status':'EXTRACTED'}}
+        if path.startswith('/v1/resolve/'):
+          return {'resolution':{'resolution_id':resolution,'result':{'disposition':'NO_ACTION','review_id':None,'actions':[]}}}
+        if path=='/v1/context/build':
+          text='fresh component context'
+          return {'context':{'context_pack_id':pack_id,'rendered_content':text,'actor_id':self_actor,
+            'host_id':body['host_id'],'project_id':config['project_id'],'source_event_id':body['source_event_id'],
+            'task_id':body['task_id'],'session_id':body['session_id'],'current_step_id':body['current_step_id'],
+            'rendered_sha256':sha256_hex(text),'rendered_utf8_bytes':len(text.encode()),'token_count':len(text),
+            'tokenizer':tokenizer.identity,'truth_digest':'truth','selector':{'version':'component'}}}
+        if path.endswith('/check-current'):
+          return {'current':True,'context_pack_id':pack_id,'truth_digest':'truth','selector':{'version':'component'},
+            'rendered_sha256':sha256_hex('fresh component context'),'checked_at':'component-time'}
+        raise AssertionError(path)
+      def get(self,path):
+        if path.startswith('/v1/interpretations/'):
+          return {'interpretation':{'maintenance_head':{'status':'CURRENT','current_interpretation_id':interpretation}}}
+        if path.startswith('/v1/resolutions/preview'):
+          return {'policy_version':'component','expected_revisions':{},'expected_context_digest':'component'}
+        raise AssertionError(path)
+    self_actor=self.adapter['actor_id'];client=Client();factory=lambda *a:client
+    payload={'hook_event_name':'UserPromptSubmit','session_id':'native-thread','turn_id':'next-prompt','prompt':'real next input'}
+    with patch.object(hook,'binding',return_value=config),patch.object(hook,'Lease',return_value=lease),patch.object(hook,'DeadlineClient',side_effect=factory),patch.object(p2_codex_hook,'DeadlineClient',side_effect=factory):
+      result=hook.handle(payload,self.root/'binding',client_factory=factory,tokenizer=tokenizer)
+    self.assertEqual(result['hookSpecificOutput']['additionalContext'],'fresh component context')
+    self.assertEqual(lease.state['phase'],'READY');self.assertEqual(lease.state['generation'],'2')
+    self.assertEqual(lease.state['turn_id'],'next-prompt');self.assertIsNone(lease.state['previous_ref'])
+    self.assertEqual(lease.state['context_pack_id'],pack_id)
+    self.assertEqual(lease.state['transmission_receipt']['turn_id'],'next-prompt')
+    self.assertEqual([path for path,_ in calls],['/v1/events','/v1/interpret','/v1/resolve/'+interpretation,'/v1/context/build','/v1/context/'+pack_id+'/check-current'])
+    self.assertEqual(calls[0][1]['payload']['text'],'real next input')
+    self.assertNotIn('last_precompact_report_id',lease.state)
+
  def test_expired_and_unbound_lifecycle_never_reports(self):
     class Client:
       def post(self,*args,**kwargs):raise AssertionError('must not call')

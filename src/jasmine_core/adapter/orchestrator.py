@@ -8,6 +8,8 @@ from pathlib import Path
 from ..canonical import canonical_json, sha256_hex
 from ..capture.p2_runtime import Deadline, atomic_json
 from ..continuity_scan import scan_workspace
+from .lifecycle_proof import validate_native_lifecycle
+from ..resolution_common import Conflict
 from .config import private_json, RECEIPT_ID
 from .executors import safe_read, safe_patch, run_fixed_worker
 from .protocol import input_fingerprint_sha256
@@ -216,6 +218,32 @@ class NativeRunner:
             if until(message):return message
 
 
+def project_lifecycle_notification(notification,report):
+    """Keep proof fields only; conversation text stays in the raw native log."""
+    if not isinstance(notification,dict):return None
+    method=notification.get('method');params=notification.get('params')
+    if method not in ('hook/started','hook/completed','item/started','item/completed','turn/completed') or not isinstance(params,dict):return None
+    if params.get('threadId')!=report['native_thread_id']:return None
+    direct=params.get('turnId');turn=params.get('turn');nested=turn.get('id') if isinstance(turn,dict) else None
+    if direct is not None and nested is not None and direct!=nested:return None
+    actual=direct if direct is not None else nested
+    if actual!=report['native_turn_id']:return None
+    result={'threadId':params['threadId']}
+    if direct is not None:result['turnId']=direct
+    if method.startswith('hook/'):
+        run=params.get('run')
+        if not isinstance(run,dict):return None
+        result['run']={k:run[k] for k in ('id','eventName','source','handlerType','sourcePath','status') if k in run}
+    elif method.startswith('item/'):
+        item=params.get('item')
+        if not isinstance(item,dict) or item.get('type')!='contextCompaction':return None
+        result['item']={k:item[k] for k in ('id','type') if k in item}
+    else:
+        if not isinstance(turn,dict):return None
+        result['turn']={k:turn[k] for k in ('id','status') if k in turn}
+    return {'method':method,'params':result}
+
+
 def attest_completed_lifecycle(client,config,notifications,*,deadline):
     """Post-collect actual notifications; never invent completion in a hook."""
     results=[]
@@ -227,34 +255,29 @@ def attest_completed_lifecycle(client,config,notifications,*,deadline):
         callback,callback_sha=config.receipt(relation['callback_id'])
         report=callback['report']
         if report['hook_event_name'] not in ('PreCompact','Stop'):continue
-        relevant=[]
-        for notification in notifications:
-            if notification.get('method') not in ('hook/started','hook/completed','item/started','item/completed','turn/completed'):
-                continue
-            params=notification.get('params')
-            if not isinstance(params,dict) or params.get('threadId')!=report['native_thread_id']:
-                continue
-            direct=params.get('turnId')
-            turn=params.get('turn')
-            nested=turn.get('id') if isinstance(turn,dict) else None
-            # Native turn/completed carries params.turn.id. Never attribute a
-            # missing identity to the report, or accept contradictory identities.
-            if direct is not None and nested is not None and direct!=nested:
-                continue
-            actual_turn=direct if direct is not None else nested
-            if not isinstance(actual_turn,str) or not actual_turn or actual_turn!=report['native_turn_id']:
-                continue
-            relevant.append(notification)
-        if len(relevant)>512:raise ValueError('native lifecycle notification cap')
-        if not relevant:continue
-        receipt={'kind':'lifecycle_native','callback_id':relation['callback_id'],'callback_receipt_sha256':callback_sha,
-            **{k:config.value[k] for k in ('hook_definition_sha256','profile_sha256','deployment_sha256')},'notifications':relevant}
         rid='attest_'+relation['callback_id']
         target=Path(config.value['receipt_root'])/(rid+'.json')
+        expected={'kind':'lifecycle_native','callback_id':relation['callback_id'],'callback_receipt_sha256':callback_sha,
+            **{k:config.value[k] for k in ('hook_definition_sha256','profile_sha256','deployment_sha256')}}
         if target.exists():
             original,digest=private_json(target)
-            if original!=receipt:raise ValueError('immutable native attestation receipt conflict')
+            if any(original.get(k)!=v for k,v in expected.items()):
+                raise ValueError('immutable native attestation receipt conflict')
+            validate_native_lifecycle(original,report,config.value['hook_definition_path'])
         else:
+            relevant=[]
+            for notification in notifications:
+                projected=project_lifecycle_notification(notification,report)
+                if projected is None:continue
+                relevant.append(projected)
+                if projected['method']=='turn/completed':break
+            receipt={**expected,'notifications':relevant}
+            if len(relevant)>512:raise ValueError('native lifecycle notification cap')
+            try:validate_native_lifecycle(receipt,report,config.value['hook_definition_path'],allow_pending=True)
+            except Conflict as error:
+                if error.code=='adapter_proof_pending':continue
+                raise
+            if len(canonical_json(receipt).encode())+1>65536:raise ValueError('native lifecycle receipt byte cap')
             atomic_json(target,receipt);digest=hashlib.sha256(target.read_bytes()).hexdigest()
         reply=client.post('/v1/adapter/lifecycle/attest',{'idempotency_key':rid,
             'reported_event_id':relation['reported_event_id'],'checkpoint_id':relation['checkpoint_id'],
