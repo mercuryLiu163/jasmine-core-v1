@@ -1,4 +1,4 @@
-"""The P4 HTTP surface (ADR 0009 §7).
+"""The P4 HTTP surface (ADR 0011 §7).
 
 Two paths are the original design and keep their exact spelling: `GET
 /v1/memory/jobs` and `POST /v1/memory/jobs/{id}/retry` (design module §12). The

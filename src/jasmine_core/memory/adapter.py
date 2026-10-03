@@ -1,4 +1,4 @@
-"""The Core-facing Memory adapter: retain, recall, reflect (ADR 0009 §4, §5).
+"""The Core-facing Memory adapter: retain, recall, reflect (ADR 0011 §4, §5).
 
 `MemoryAdapter` is the only object P3 and the API layer talk to. It is where
 design module §11's processing line actually lives:

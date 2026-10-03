@@ -1,4 +1,4 @@
-# ADR 0009: P4 long-term Memory, durable jobs and the Memory lifecycle
+# ADR 0011: P4 long-term Memory, durable jobs and the Memory lifecycle
 
 Status: implementation candidate. **No P4 Gate is claimed.** `P4-G01`…`P4-G07`
 require a real Hindsight process, a real LLM extractor, a real Agent session and
@@ -49,7 +49,7 @@ committed fact it needs, and §4 implements those checks.
 
 ## 3. Schema
 
-`m0008_memory` adds eight tables and touches nothing that exists. It creates no
+`m0009_memory` adds eight tables and touches nothing that exists. It creates no
 P3 Checkpoint/Context table and no P6 Dashboard table, so the P3 contract stays
 single-sourced.
 
@@ -412,13 +412,14 @@ directly.
 ## 12. Shared files, and what the integration owner owns
 
 P4 changed these files outside `src/jasmine_core/memory/` and
-`src/jasmine_core/migrations/m0008_memory.py`. Each is a proposal the
-integration owner applies serially, and none was applied by pushing to `main`.
+`src/jasmine_core/migrations/m0009_memory.py`. They are all resolved **in this
+branch** as of the rebase onto `850fbec`; none was applied by pushing to
+`main`, and the integration owner still has to take them in the merge.
 
 | File | Change | Action needed |
 | --- | --- | --- |
-| `__init__.py` | `SCHEMA_VERSION` 7 → 8 | renumber with the migration |
-| `migrations/m0008_memory.py` | new | **already renumbered**: this branch was originally cut with `m0008_memory`, and P2 claimed `m0007_interpretations` first. A later rebase may renumber it again. |
+| `__init__.py` | `SCHEMA_VERSION` 8 → **9** (`main` is at 8) | renumber with the migration |
+| `migrations/m0009_memory.py` | new | **renumbered twice**: cut as `m0007_memory`, then `m0008_memory`, then `m0009_memory` as P2 claimed `m0007_interpretations` and `m0008_resolutions`. Ships at `VERSION = 9`. |
 | `ids.py` | five prefixes | register |
 | `models.py` | five `EVENT_TYPES` | register |
 | `auth.py` | three scopes + two actor-kind refusals | register |

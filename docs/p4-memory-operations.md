@@ -1,7 +1,7 @@
 # P4 operations: long-term Memory
 
 Operational notes for the Memory subsystem. Read
-[ADR 0009](../adr/0008-p4-memory-and-durable-jobs.md) for why; this file is what
+[ADR 0011](../adr/0011-p4-memory-and-durable-jobs.md) for why; this file is what
 to type, and what to believe when you read the output.
 
 Everything here is a *core* operation. `jasmine-core` never writes a job or a

@@ -4,30 +4,42 @@ Status: **implementation complete and locally verified; Gate NOT passed.**
 P4 cannot be declared passed from this environment, and nothing here claims it.
 
 - Branch: `p4-memory`
-- Candidate commit: `fede0c9` (the handoff docs land in `fede0c9^{tree}`)
-- Prior commits: `549fd72` (first review round), `378ab02` (previous handoff)
-- Base: `7ac8e94` (P2-01 merged), rebased; schema version 8
+- Base: `850fbec` (P2-01 + P2-02 resolver + P2-03 admission merged); **schema 9**
+- Candidate commits, oldest first: `84ed560` (implementation), `8f397cf`
+  (first review round), `8f8297b` (handoff), `0b3172e` (second review round),
+  `040346b` (this handoff)
 - Design input: `docs/Jasmine-Core-V1-P4-阶段任务书.md`, frozen in
-  `docs/adr/0009-p4-memory-and-durable-jobs.md`
+  `docs/adr/0011-p4-memory-and-durable-jobs.md`
+
+> SHAs above are the ones on this branch **after** rebasing onto `850fbec`. The
+> pre-rebase history is preserved at tag `p4-pre-rebase-850fbec`.
 
 ## What is delivered
 
 - `src/jasmine_core/memory/` — `types`, `tokens`, `filtering`, `scope`, `transport`,
   `hindsight`, `provenance`, `adapter`, `store`, `eligibility`, `jobs`, `worker`,
   `lifecycle`, `health`, `api` (~6.0k lines).
-- `src/jasmine_core/migrations/m0008_memory.py` — P4 schema, version 8.
+- `src/jasmine_core/migrations/m0009_memory.py` — P4 schema, version 9.
 - `scripts/p4-memory-gate.py` — the real G01–G07 runner.
 - HTTP API `/v1/memory/*`, CLI `jasmine-core memory …` and `jasmine-core memory-worker`.
-- Docs: ADR 0009, `docs/p4-memory-operations.md`, `docs/api/core-api-v1.md`.
+- Docs: ADR 0011, `docs/p4-memory-operations.md`, `docs/api/core-api-v1.md`.
 
 The five Memory kinds, the `PENDING/RUNNING/DONE/FAILED` job, lease/retry/backoff,
 append-only attempts, crash recovery, Recall/Reflect, obsolete/delete/pin/unpin, and
 the Inspector all exist and are tested. Memory is a non-authoritative projection: it
 never writes a Rule, State, Evidence, Checkpoint or Task revision.
 
-Renumbering after rebasing onto P2-01: `m0007_memory` → `m0008_memory`,
-`SCHEMA_VERSION = 8`, ADR 0008 → 0009. `m0007_interpretations` and ADR 0008 belong to
-P2 and were left untouched.
+**Renumbering, twice.** P4 was cut as `m0007_memory` at ADR 0008, renumbered to
+`m0008_memory`/ADR 0009 when P2-01 took `m0007_interpretations`, and renumbered
+again to `m0009_memory`/ADR **0011** when P2-02 took `m0008_resolutions` and
+P2-02/P2-03 took ADR 0009 and 0010. `SCHEMA_VERSION` is therefore **9** while
+`main` is at 8. Nothing P2 owns was touched: `m0007_interpretations`,
+`m0008_resolutions`, ADR 0008/0009/0010 are all main's.
+
+The rebase also resolved the shared files against `850fbec` — `ids.py`
+(`res`/`rvw` joined the prefix set, and P4's unused `itr` was dropped),
+`models.py`, `auth.py`, `api/handlers.py`, `core-api-v1.md` and the five test
+files that enumerate migrations.
 
 ## Verification actually performed
 
@@ -36,7 +48,7 @@ P2 and were left untouched.
 | Full suite | `PYTHON=python3.13 ./scripts/run-tests.sh` | `Ran 582 tests … OK` |
 | Byte-compile | `python3.13 -m compileall -q src scripts tests` | clean |
 | Lint | `pyflakes 4.0.0` on all P4 src, tests, gate runner | clean |
-| Gate smoke | `scripts/p4-memory-gate.py` against an unreachable engine | 7/7 `BLOCKED`, 0 `PASS`, commit `fede0c9`, dirty `false` |
+| Gate smoke | `scripts/p4-memory-gate.py` against an unreachable engine | 7/7 `BLOCKED`, 0 `PASS`, dirty `false` |
 
 `pyflakes` also reports one pre-existing `# noqa`-ignored import in
 `tests/test_memory_cli.py` (a deliberate side-effect import for `sys.path`);
@@ -63,7 +75,7 @@ item, never `PASS`. A smoke run against `http://127.0.0.1:1` produced:
 ```
 P4-G01..G07  BLOCKED — the engine at http://127.0.0.1:1 did not answer:
              engine_unreachable … [Errno 61] Connection refused
-overall BLOCKED | commit 549fd721… | dirty false | engine_reachable false
+overall BLOCKED | dirty false | engine_reachable false
 ```
 
 The report contains no secret material — the operator configuration references
@@ -169,7 +181,7 @@ Reported alongside them, both confirmed and fixed:
   substituted `source_event_id`, which for a Decision is the `rule.approved`
   Event, not the Event the content came from. Every recalled Decision reported
   an approval as its origin and the real one was recorded nowhere. The column is
-  added to `m0008_memory.py` (P4's own unmerged migration), the item stores it,
+  added to `m0009_memory.py` (P4's own unmerged migration), the item stores it,
   and the worker and `FakeTransport` both read it back.
 
 ## Other substantive fixes in this commit
@@ -199,7 +211,7 @@ Reported alongside them, both confirmed and fixed:
 - A missing or empty `api_version` was treated as verified; a malformed engine URL
   raised a raw parse error; secret redaction missed case-varied and bare assignments.
 
-Full rationale is in the commit message of `549fd72` and ADR 0009.
+Full rationale is in the commit messages of `8f397cf` and `0b3172e` and in ADR 0011.
 
 ## Two shared fixtures had their own defects
 
@@ -219,9 +231,12 @@ Found while fixing the above, and worth knowing because they silently weakened t
 2. The five review fixes above, each with a reproduction in the section itself.
    Items 2, 3 and 4 are the ones where a plausible-looking green result was
    possible before the fix.
-3. `m0008_memory.py`: `origin_event_id` was added to P4's own *unmerged*
+3. `m0009_memory.py`: `origin_event_id` was added to P4's own *unmerged*
    migration rather than shipped as a new version — confirm no downstream has
-   already applied m0008 at schema 8 without it.
+   already applied it at schema 9 without that column. Note the migration has
+   been renumbered twice and `main` currently ships `m0008_resolutions` at
+   schema 8, so the integration is `m0008_resolutions` **then** `m0009_memory`
+   with `SCHEMA_VERSION = 9`.
 4. `Window` / the recovery cursor: confirm no source can advance the cursor past an
    Event it did not examine.
 5. ACL scoping: confirm no read path can be widened by omitting a filter.

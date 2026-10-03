@@ -478,7 +478,7 @@ class MemoryTestCase(unittest.TestCase):
                                  home_host_id=HOST)
                 reg.upsert_actor(self.agent_actor, kind="agent", display_name="agent",
                                  home_host_id=HOST)
-        self.store = MemoryStore(self.conn, schema_version=8)
+        self.store = MemoryStore(self.conn, schema_version=9)
         self.transport = FakeTransport(self.store)
         self._env = patch.dict("os.environ", {}, clear=False)
         self._env.start()
@@ -505,7 +505,7 @@ class MemoryTestCase(unittest.TestCase):
         from jasmine_core.models import NewObject
 
         # ObjectStore.create opens its own transaction (ADR 0002).
-        result = ObjectStore(self.conn, schema_version=8).create(
+        result = ObjectStore(self.conn, schema_version=9).create(
             NewObject.session({"title": "s", "project_id": project_id, "task_id": task_id,
                                "host_id": HOST}),
             actor_id=HUMAN)
@@ -516,7 +516,7 @@ class MemoryTestCase(unittest.TestCase):
         from jasmine_core.models import NewObject
 
         parser = {"project": NewObject.project, "task": NewObject.task}[kind]
-        result = ObjectStore(self.conn, schema_version=8).create(
+        result = ObjectStore(self.conn, schema_version=9).create(
             parser({"host_id": HOST, **fields}), actor_id=HUMAN)
         return result["object"][f"{kind}_id"]
 
@@ -526,7 +526,7 @@ class MemoryTestCase(unittest.TestCase):
         from jasmine_core.events import EventStore
 
         with db.transaction(self.conn):
-            stored, _ = EventStore(self.conn, schema_version=8).append(NewEvent(
+            stored, _ = EventStore(self.conn, schema_version=9).append(NewEvent(
                 event_type=event_type, source_system="memory-test", source_event_id=None,
                 occurred_at=clock.now(), actor_id=HUMAN, actor_kind="human", host_id=HOST,
                 project_id=project_id, task_id=task_id,
@@ -541,7 +541,7 @@ class MemoryTestCase(unittest.TestCase):
 
         origin = self.event("user.prompt", project_id=project_id, task_id=task_id,
                             text="use hindsight")
-        authority = AuthorityStore(self.conn, schema_version=8)
+        authority = AuthorityStore(self.conn, schema_version=9)
         scope = ({"kind": "project", "project_id": project_id} if task_id is None
                  else {"kind": "task", "project_id": project_id, "task_id": task_id})
         proposed = authority.propose({
@@ -560,7 +560,7 @@ class MemoryTestCase(unittest.TestCase):
         from jasmine_core.authority import AuthorityStore
 
         origin = self.event("user.prompt", text="prefer minimal change")
-        authority = AuthorityStore(self.conn, schema_version=8)
+        authority = AuthorityStore(self.conn, schema_version=9)
         proposed = authority.propose({
             "rule_key": rule_key, "kind": "DECISION", "severity": "NORMAL",
             "enforcement": "CONTEXT", "content": content, "matcher": {},
@@ -583,7 +583,7 @@ class MemoryTestCase(unittest.TestCase):
         from jasmine_core.evidence import EvidenceStore
 
         self.workspace()
-        record = EvidenceStore(self.conn, schema_version=8).record_tool_result(
+        record = EvidenceStore(self.conn, schema_version=9).record_tool_result(
             {"task_id": task_id, "host_id": HOST, "codex_session_id": "cs",
              "turn_id": f"t-{ids.new_id('evt')[-6:]}", "tool_use_id": ids.new_id("evt")[-8:],
              "tool_name": "pytest", "tool_input": {"cmd": "pytest -q"},
@@ -610,7 +610,7 @@ class MemoryTestCase(unittest.TestCase):
     def failed_step(self, *, project_id: str, task_id: str, reason: str = "device test failed") -> str:
         from jasmine_core.state import StateStore
 
-        store = StateStore(self.conn, schema_version=8)
+        store = StateStore(self.conn, schema_version=9)
         created = store.create_step(task_id, {"title": "s", "host_id": HOST,
                                               "expected_revision": 1},
                                     actor_id=HUMAN, actor_kind="human", can_accept=False)
@@ -632,7 +632,7 @@ class MemoryTestCase(unittest.TestCase):
 
         return MemoryAdapter(self.conn, self.store,
                              self.transport if transport is _UNSET else transport,
-                             mode=mode, schema_version=8)
+                             mode=mode, schema_version=9)
 
     def job_store(self):
         from jasmine_core.memory import jobs as jobs_module

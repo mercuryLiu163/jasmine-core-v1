@@ -19,4 +19,4 @@ __version__ = "0.1.0"
 #: `migrate()` refuses to run when the shipped migration count and this constant
 #: disagree, so a forgotten renumber is a startup failure rather than a silent
 #: schema divergence.
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9

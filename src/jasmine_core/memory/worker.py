@@ -1,4 +1,4 @@
-"""The Memory Job Worker: an explicit process that owns every engine write (ADR 0009 §8).
+"""The Memory Job Worker: an explicit process that owns every engine write (ADR 0011 §8).
 
 The worker is started deliberately — `jasmine-core memory-worker` — and never as
 a side effect of an API request. Two reasons, both from the design:

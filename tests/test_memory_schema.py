@@ -1,4 +1,4 @@
-"""P4: the schema guarantees `m0008_memory` is supposed to enforce.
+"""P4: the schema guarantees `m0009_memory` is supposed to enforce.
 
 The P4 tables are only as trustworthy as the constraints behind them, because
 every writer in P4 is a background process and P6 is explicitly forbidden from
@@ -12,7 +12,7 @@ from __future__ import annotations
 import sqlite3
 
 from memory_support import HOST, HUMAN, MemoryTestCase
-from jasmine_core import db, ids
+from jasmine_core import SCHEMA_VERSION, db, ids
 from jasmine_core.migrations import applied_migrations, current_version, migrate
 
 
@@ -39,10 +39,10 @@ def _write(conn, sql: str, params=()) -> None:
 class SchemaShape(MemoryTestCase):
     def test_the_migration_is_recorded_with_a_checksum(self) -> None:
         records = {row["name"]: row for row in applied_migrations(self.conn)}
-        self.assertIn("m0008_memory", records)
-        self.assertEqual(records["m0008_memory"]["version"], 8)
-        self.assertEqual(len(records["m0008_memory"]["checksum"]), 64)
-        self.assertEqual(current_version(self.conn), 8)
+        self.assertIn("m0009_memory", records)
+        self.assertEqual(records["m0009_memory"]["version"], SCHEMA_VERSION)
+        self.assertEqual(len(records["m0009_memory"]["checksum"]), 64)
+        self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
 
     def test_the_expected_triggers_and_unique_indexes_exist(self) -> None:
         self.assertLessEqual({
@@ -251,8 +251,10 @@ class MigrationFromP1(MemoryTestCase):
                                                       home_host_id=HOST)
 
         applied = migrate(self.conn)
-        self.assertEqual(applied, ["m0008_memory"])
-        self.assertEqual(current_version(self.conn), 8)
+        # P2-02 shipped m0008_resolutions, so the upgrade from a P1-era
+        # database has to apply that one as well as P4's.
+        self.assertEqual(applied, ["m0008_resolutions", "m0009_memory"])
+        self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
         self.assertEqual(
             self.conn.execute("SELECT display_name FROM hosts WHERE host_id=?",
                               (HOST,)).fetchone()["display_name"], "p1 host")
@@ -281,7 +283,7 @@ class P0ContractStillHolds(MemoryTestCase):
         from jasmine_core.api.handlers import Core
 
         core = Core(self.conn)
-        self.assertEqual(core.schema_version, 8)
+        self.assertEqual(core.schema_version, SCHEMA_VERSION)
         self.assertEqual(self.conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
         self.assertEqual(self.conn.execute("PRAGMA recursive_triggers").fetchone()[0], 1)
 

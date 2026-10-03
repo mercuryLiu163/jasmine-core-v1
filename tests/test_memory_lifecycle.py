@@ -283,7 +283,7 @@ class Permissions(LifecycleCase):
         from jasmine_core.memory.jobs import JobStore
         from jasmine_core.memory.eligibility import SourceRegistry
 
-        store = MemoryStore(self.conn, schema_version=8)
+        store = MemoryStore(self.conn, schema_version=9)
         acl = MemoryLifecycle(self.conn, store, mode=scope.ACL)
         # A second project's Memory, and a grant for the first project only.
         other = self.project("other")

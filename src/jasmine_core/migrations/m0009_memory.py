@@ -1,6 +1,7 @@
 """Long-term Memory: items, durable async jobs, query traces, engine status.
 
-This migration follows m0007_interpretations. It creates only new P4
+This migration follows m0008_resolutions (P2-02). It was cut as
+m0008_memory and renumbered to m0009 because P2 claimed m0008 first. It creates only new P4
 tables. It does not touch the P0/P1/P2/P3 truth tables, does not reinterpret a
 single historical Event payload, and does not create any table owned by P3
 (Checkpoint / Context Pack) or P6 (Dashboard).
@@ -28,10 +29,10 @@ refusal an out-of-band writer cannot route around:
 
 from __future__ import annotations
 
-NAME = "m0008_memory"
-VERSION = 8
+NAME = "m0009_memory"
+VERSION = 9
 
-#: Frozen by ADR 0009 §2. Repeated here because SQLite cannot CHECK against a
+#: Frozen by ADR 0011 §2. Repeated here because SQLite cannot CHECK against a
 #: constant declared in Python: the constraint has to live in the table.
 _MEMORY_TYPES = ("'CONFIRMED_DECISION'", "'STABLE_PROJECT_FACT'", "'RESOLVED_ISSUE'",
                  "'VERIFIED_OUTCOME'", "'FAILURE_LESSON'")
@@ -100,7 +101,7 @@ STATEMENTS = (
     "CREATE INDEX ix_memory_items_type ON memory_items(memory_type, status, created_at)",
     "CREATE INDEX ix_memory_items_recall ON memory_items(status, pinned, last_recalled_at)",
     # Supporting sources. One retained document may be backed by more than one
-    # committed Event, and ADR 0009 §5 requires a de-duplicated recall hit to
+    # committed Event, and ADR 0011 §5 requires a de-duplicated recall hit to
     # keep *all* of its legal provenance rather than whichever one won the merge.
     """
     CREATE TABLE memory_item_sources (

@@ -1,4 +1,4 @@
-"""Memory lifecycle: obsolete, delete, pin, unpin (ADR 0009 §9; design §9).
+"""Memory lifecycle: obsolete, delete, pin, unpin (ADR 0011 §9; design §9).
 
 Design §9 requires the Memory Inspector to support `obsolete/delete/pin`, and
 the taskbook is explicit that a read-only Inspector does not satisfy it: these
