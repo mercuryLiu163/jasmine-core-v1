@@ -79,6 +79,8 @@ FILTER_REASONS: tuple[str, ...] = (
     "superseded_decision",       # a newer ACTIVE Decision version exists
     "retired_decision",          # the origin Rule was retired
     "source_missing",            # a referenced Raw Event no longer resolves
+    "foreign_source",            # a real Raw Event, but one from another project
+                                 # claimed as this item's source or origin
     "evidence_missing",          # a referenced Evidence no longer resolves
     "type_not_requested",        # outside the requested memory types
     "duplicate",                 # the same statement, already kept from this or

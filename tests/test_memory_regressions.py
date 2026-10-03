@@ -457,9 +457,17 @@ class TraceDoesNotLeakIdentifiers(MemoryTestCase):
         outcome = self.adapter().recall(RecallRequest(
             project_id=self.project_id, actor_id=HUMAN, query="Hindsight", max_tokens=400))
         self.assertEqual(len(outcome.items), 1, outcome.as_dict())
+        # The persisted origin, not `source_event_id`. This fixture is a
+        # Decision, and for a Decision those differ: `source_event_id` is the
+        # `rule.approved` Event that created the row, while `origin_event_id` is
+        # the Event the Rule version's content came from. Asserting the old
+        # equality would pin the bug where the approval was reported as the
+        # origin and the real one was never recorded.
+        self.assertEqual(self.item["origin_event_id"] != self.item["source_event_id"], True,
+                         "this fixture is meant to have an origin that differs from its source")
         self.assertEqual(outcome.items[0].provenance.origin_event_id,
-                         self.item["source_event_id"],
-                         "the origin event key was read but never written")
+                         self.item["origin_event_id"],
+                         "the persisted origin event was not carried to the Recall result")
 
 
 class EngineSuccessIsNotRecordedOnFailure(MemoryTestCase):

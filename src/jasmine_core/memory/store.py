@@ -49,7 +49,8 @@ ATTEMPT_ID_PREFIX = "mja"
 _ITEM_COLUMNS = (
     "memory_id", "bank_id", "scope_kind", "project_id", "task_id", "memory_type",
     "document_id", "source_event_id", "evidence_ids_json", "origin_rule_id",
-    "origin_rule_version", "content_sha256", "sanitized_text", "status", "pinned",
+    "origin_rule_version", "origin_event_id",
+    "content_sha256", "sanitized_text", "status", "pinned",
     "revision", "engine_state", "receipt_json", "last_error_code", "safe_error_summary",
     "remote_deleted_at", "lifecycle_reason", "last_recalled_at", "recall_count",
     "created_at", "updated_at",
@@ -173,13 +174,14 @@ class MemoryStore:
         self._conn.execute(
             "INSERT INTO memory_items (memory_id, bank_id, scope_kind, project_id, task_id,"
             " memory_type, document_id, source_event_id, evidence_ids_json, origin_rule_id,"
-            " origin_rule_version, content_sha256, sanitized_text, status, pinned, revision,"
-            " engine_state, created_at, updated_at)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'ACTIVE',0,1,'PENDING_RETAIN',?,?)",
+            " origin_rule_version, origin_event_id, content_sha256, sanitized_text, status,"
+            " pinned, revision, engine_state, created_at, updated_at)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ACTIVE',0,1,'PENDING_RETAIN',?,?)",
             (memory_id, bank.bank_id, bank.scope_kind, bank.project_id, task_id,
              memory_type, document_id, source_event_id,
              canonical_json(list(provenance.evidence_ids)),
              provenance.origin_rule_id, provenance.origin_rule_version,
+             provenance.origin_event_id,
              content_sha256, sanitized_text, at, at),
         )
         self._conn.execute(

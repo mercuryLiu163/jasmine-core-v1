@@ -108,7 +108,11 @@ class FakeTransport:
             "metadata": dict(metadata), "memory_unit_count": 1,
             "memory_unit_ids": [f"mu_{self.next_memory_id}"],
         }
+        # `success` and `async` are required members of RetainResponse in the
+        # official OpenAPI 0.10.2; a double that omits them would let the code
+        # treat a missing receipt as success without any test noticing.
         return {"document_id": document_id, "bank_id": bank.bank_id, "items_count": 1,
+                "success": True,
                 "engine_api_version": "0.10.2", "operation_id": None, "async": False,
                 "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}}
 
@@ -164,10 +168,14 @@ class FakeTransport:
                 evidence_ids=tuple(item["evidence_ids"]) if item else (),
                 origin_rule_id=item["origin_rule_id"] if item else None,
                 origin_rule_version=item["origin_rule_version"] if item else None,
-                # The worker writes this from the item's own source Event; the
-                # double must do the same or a test that exercises the recall
-                # path diverges from the retain path for no reason.
-                origin_event_id=item["source_event_id"] if item else None),
+                # The worker writes this from the item's persisted
+                # `origin_event_id` — the Event the *content* came from, which
+                # for a Decision is not `source_event_id` (the `rule.approved`
+                # Event that created the row). The double must do the same, or a
+                # test exercising the recall path diverges from the retain path
+                # and reports the approval as the origin.
+                origin_event_id=(item.get("origin_event_id") or item["source_event_id"])
+                if item else None),
             content_sha256=item["content_sha256"] if item else "0" * 64,
             retained_at=item["created_at"] if item else clock.now_rfc3339(),
         ))

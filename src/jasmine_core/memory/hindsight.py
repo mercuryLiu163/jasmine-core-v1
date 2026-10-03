@@ -430,10 +430,32 @@ class HindsightTransport:
         if not isinstance(payload, dict):
             raise TransportError("engine_protocol_error",
                                  "the retain response was not a JSON object", retryable=False)
-        if payload.get("success") is False:
+        # The official OpenAPI 0.10.2 makes `success` and `async` *required*
+        # members of RetainResponse, so a response without them is not a
+        # near-miss — it is a response this adapter cannot interpret. Treating an
+        # absent `success` as success is what let an empty receipt `{}`, a
+        # `"success": null`, and an `async` queued operation all be recorded as
+        # a completed retain: the job goes DONE, the item is `RETAINED`, and the
+        # Inspector reports a document that was never stored.
+        if not isinstance(payload.get("success"), bool):
+            raise TransportError(
+                "engine_protocol_error",
+                "the retain response did not carry the required boolean `success`",
+                retryable=False)
+        if not payload["success"]:
             raise TransportError("engine_retain_failed",
                                  "the engine reported the retain did not succeed",
                                  retryable=True)
+        if payload.get("async") is True:
+            # We asked for `async=false` precisely because a durable worker needs
+            # a receipt it can trust. An operation that is only queued has no
+            # confirmed result yet, and recording it as stored would be the
+            # same lie as an empty receipt.
+            raise TransportError(
+                "engine_retain_unconfirmed",
+                "the engine queued the retain instead of storing it; the document "
+                "has not been confirmed and must not be marked retained",
+                retryable=True)
         usage = payload.get("usage")
         return {
             "document_id": document_id,
@@ -545,10 +567,25 @@ class HindsightTransport:
         if not isinstance(payload, dict):
             raise TransportError("engine_protocol_error",
                                  "the delete response was not a JSON object", retryable=False)
+        # `success` is required by DeleteDocumentResponse and is a boolean. It
+        # used to be read as `bool(payload.get("success", True))`, which means an
+        # absent field and an explicit `false` both came out as success and the
+        # worker recorded `DELETED` over a document the engine refused to remove.
+        if not isinstance(payload.get("success"), bool):
+            raise TransportError(
+                "engine_protocol_error",
+                "the delete response did not carry the required boolean `success`",
+                retryable=False)
+        if not payload["success"]:
+            raise TransportError(
+                "engine_delete_failed",
+                "the engine reported the document was not deleted",
+                retryable=True)
         return {
             "document_id": payload.get("document_id") or document_id,
             "memory_units_deleted": _as_int(payload.get("memory_units_deleted")),
-            "success": bool(payload.get("success", True)),
+            "success": True,
+            "message": payload.get("message") if isinstance(payload.get("message"), str) else "",
         }
 
     def get_document(self, *, bank: BankRef, document_id: str) -> dict[str, Any] | None:

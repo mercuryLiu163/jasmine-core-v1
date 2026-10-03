@@ -145,7 +145,11 @@ class Preconditions(unittest.TestCase):
         # on the *code* of each case rather than on a comment.
         import dis
 
-        self.assertEqual(self.runner.NEEDS_P3_PACK, frozenset(CASES[:4]))
+        # G05 and G07 are in because both prove something about an actual Context
+        # Pack; they were the two that could previously reach a verdict without one.
+        self.assertEqual(self.runner.NEEDS_P3_PACK,
+                         frozenset({"P4-G01", "P4-G02", "P4-G03", "P4-G04",
+                                    "P4-G05", "P4-G07"}))
         self.assertEqual(self.runner.NEEDS_REAL_AGENT, frozenset({"P4-G01"}))
         for case_id in sorted(self.runner.NEEDS_P3_PACK):
             names = {instruction.argval
@@ -186,6 +190,146 @@ class Preconditions(unittest.TestCase):
         self.assertEqual(manifest["phase"], "P4")
         self.assertIsNone(manifest["final_commit"])
         self.assertIn("not Gate evidence", " ".join(manifest["notes"]))
+
+
+class NoCaseReturnsWithoutItsEvidence(unittest.TestCase):
+    """A case that returns normally is a case recorded as PASS.
+
+    G05, G06 and G07 were the three that could return early: each ran a set of
+    checks and fell off the end of the function, so the runner recorded `PASS`
+    even though the Context Pack, the real process restart and the audit evidence
+    their taskbook entries mandate had never been produced. Two shapes are
+    allowed, and both are asserted here:
+
+    * the case ends in `raise Blocked(...)` naming what is still missing; or
+    * the case has actually done the thing it claims — for G06, killed a real
+      worker process inside the retain window and started another.
+    """
+
+    def setUp(self) -> None:
+        import ast
+
+        self.source = GATE.read_text(encoding="utf-8")
+        self.tree = ast.parse(self.source)
+        self.runner = load_runner()
+
+    def _final_statement(self, name: str):
+        import ast
+
+        for node in self.tree.body:
+            if isinstance(node, ast.FunctionDef) and node.name == name:
+                return node.body[-1]
+        raise AssertionError(f"{name} not found in {GATE}")
+
+    def test_only_g06_may_return_normally(self) -> None:
+        import ast
+
+        returning = []
+        for case_id in CASES:
+            final = self._final_statement(self.runner.CASES_BY_ID[case_id].__name__)
+            if isinstance(final, ast.Raise):
+                # `raise Blocked(...)` is an ast.Call whose func names the class;
+                # a bare `raise Blocked` is an ast.Name directly.
+                callee = final.exc.func if isinstance(final.exc, ast.Call) else final.exc
+                name = getattr(callee, "id", None) or getattr(callee, "attr", None)
+                self.assertEqual(
+                    name, "Blocked",
+                    f"{case_id} raises {name}; only Blocked may end a case, "
+                    f"because anything else is swallowed as a failure rather "
+                    f"than as a missing precondition")
+            else:
+                returning.append(case_id)
+        self.assertEqual(returning, ["P4-G06"],
+                         "P4-G06 returns because it performs its evidence in real "
+                         "processes; every other case must end in Blocked")
+
+    def test_the_crash_window_is_crossed_by_processes(self) -> None:
+        for needle, why in (
+            ("spawn_worker(", "the case must start separate processes at all"),
+            ("expect_exit=7", "it must assert the crash exit code, not merely "
+                              "call a helper"),
+            ("os._exit(7)", "the child must die rather than return"),
+            ("DieAfterRemoteWrite", "it must die inside the retain window, after "
+                                    "the remote write and before DONE"),
+            ("label=\"g06-window1-commit\"", "window 1 must be crossed by a process "
+                                               "that commits and leaves"),
+            ("label=\"g06-window2-restart\"", "window 2 must be resumed by a second "
+                                                "real process"),
+            ("g06-attempts", "the local attempt chain must still be recorded"),
+            ("g06-document", "the remote document read-back must still be recorded"),
+        ):
+            self.assertIn(needle, self.source, why)
+
+
+class RealWorkerProcesses(unittest.TestCase):
+    """G06's evidence is carried by child processes, so the plumbing is tested.
+
+    The cases themselves need a real engine and cannot run here. What can be
+    tested without one is everything around them: that a child starts, rebuilds
+    the same Gate with the same identities and a working transport, re-enters a
+    work directory another process created, and that a child which exits with the
+    wrong code is reported as a failure rather than quietly ignored.
+    """
+
+    def setUp(self) -> None:
+        self.runner = load_runner()
+        self._tmp = tempfile.TemporaryDirectory(prefix="p4-gate-child-")
+        self.addCleanup(self._tmp.cleanup)
+        self.work = Path(self._tmp.name) / "work"
+        self.work.mkdir()
+        self._saved = {k: os.environ.get(k) for k in (
+            "JASMINE_HINDSIGHT_URL", "JASMINE_HINDSIGHT_TIMEOUT_SECONDS")}
+        os.environ["JASMINE_HINDSIGHT_URL"] = "http://127.0.0.1:1"
+        os.environ["JASMINE_HINDSIGHT_TIMEOUT_SECONDS"] = "1"
+        os.environ.pop("JASMINE_HINDSIGHT_API_KEY", None)
+        self.addCleanup(self._restore_env)
+        self.gate = self.runner.Gate(self.work, {"run_id": "p4-child-test",
+                                                 "bank_suffix": "p4-child"},
+                                     "P4-CHILD")
+
+    def _restore_env(self) -> None:
+        for key, value in self._saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+    def test_a_child_rebuilds_the_same_gate_with_the_same_identities(self) -> None:
+        proc = self.gate.spawn_worker(
+            """
+            g = boot()
+            conn = g.conn()
+            print(json.dumps({"host": g.host, "human": g.human, "case": g.case_id,
+                              "transport": g.transport is not None,
+                              "reentered": g.root.exists()}))
+            conn.close()
+            """,
+            label="child-identity", expect_exit=0)
+        payload = json.loads(proc.stdout.strip())
+        self.assertEqual(payload["host"], self.gate.host,
+                         "the child invented its own host instead of using the parent's")
+        self.assertEqual(payload["human"], self.gate.human,
+                         "the child invented its own actor instead of using the parent's")
+        self.assertEqual(payload["case"], "P4-CHILD")
+        self.assertTrue(payload["transport"],
+                        "the child could not build a real transport from the environment")
+        self.assertTrue(payload["reentered"])
+
+    def test_a_child_that_exits_wrong_is_reported_not_ignored(self) -> None:
+        with self.assertRaises(self.runner.Failed) as caught:
+            self.gate.spawn_worker("import sys\nsys.exit(7)\n",
+                                   label="child-wrong-exit", expect_exit=0)
+        self.assertIn("exited 7", str(caught.exception))
+        self.assertIn("child-wrong-exit", str(caught.exception))
+
+    def test_a_restarted_process_may_re_enter_an_existing_work_directory(self) -> None:
+        # The first Gate created it; a second construction for the same case is a
+        # restart and must not raise. This is what makes `spawn_worker` usable
+        # more than once per case.
+        self.assertTrue(self.gate.root.exists())
+        again = self.runner.Gate(self.work, {"run_id": "p4-child-test",
+                                             "bank_suffix": "p4-child"}, "P4-CHILD")
+        self.assertEqual(again.root, self.gate.root)
 
 
 class DeploymentModeIsReported(unittest.TestCase):

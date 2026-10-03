@@ -166,12 +166,15 @@ class ProvenanceChecker:
             return Verification(False, "obsolete", item=item,
                                 memory_type=item["memory_type"])
         for source_event_id in split_ids(result.metadata.get(SOURCE_EVENT_IDS_KEY)):
-            if self._conn.execute("SELECT 1 FROM events WHERE event_id=?",
-                                  (source_event_id,)).fetchone() is None:
-                # Raw Events are append-only and cannot be deleted through any
-                # Core path, so this means the engine is echoing an id that was
-                # never in this database.
-                return Verification(False, "source_missing", item=item,
+            reason = self._event_scope_error(source_event_id, item)
+            if reason is not None:
+                return Verification(False, reason, item=item,
+                                    memory_type=item["memory_type"])
+        origin_event_id = result.metadata.get(ORIGIN_EVENT_ID_KEY)
+        if origin_event_id:
+            reason = self._event_scope_error(origin_event_id, item)
+            if reason is not None:
+                return Verification(False, reason, item=item,
                                     memory_type=item["memory_type"])
         for evidence_id in split_ids(result.metadata.get(EVIDENCE_IDS_KEY)):
             if self._conn.execute("SELECT 1 FROM evidence WHERE evidence_id=?",
@@ -191,6 +194,35 @@ class ProvenanceChecker:
         )
         return Verification(True, item=item, provenance=provenance,
                             memory_type=item["memory_type"], historical=True)
+
+    def _event_scope_error(self, event_id: str, item: dict[str, Any]) -> str | None:
+        """Why `event_id` cannot be claimed as this item's origin, or `None`.
+
+        Both halves of the old check mattered and only one was implemented: the
+        Event must *exist*, and it must belong to this item's scope. The engine
+        echoes metadata Core wrote, so an id the local database has never heard
+        of was caught — but an id that is perfectly real and belongs to another
+        project passed straight through, reached `Provenance.source_event_ids`
+        and was written into this project's readable trace. A forged claim that
+        names a *foreign real Event* is therefore not merely unverified, it is a
+        cross-project forgery, and it gets its own reason so an operator can see
+        the difference from an id this deployment never had.
+
+        An Event with no project is a system/global Event, which any item may
+        cite; anything else must match the item's own project.
+        """
+        row = self._conn.execute(
+            "SELECT project_id FROM events WHERE event_id=?", (event_id,)
+        ).fetchone()
+        if row is None:
+            # Raw Events are append-only and cannot be deleted through any Core
+            # path, so this means the engine is echoing an id that was never in
+            # this database.
+            return "source_missing"
+        other = row["project_id"]
+        if other is not None and other != item["project_id"]:
+            return "foreign_source"
+        return None
 
     def _authority_conflict(self, item: dict[str, Any]) -> str | None:
         """Whether current Authority has moved past what this memory says.

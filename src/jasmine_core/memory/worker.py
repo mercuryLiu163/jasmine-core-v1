@@ -186,10 +186,13 @@ class MemoryWorker:
                 evidence_ids=tuple(item["evidence_ids"]),
                 origin_rule_id=item["origin_rule_id"],
                 origin_rule_version=item["origin_rule_version"],
-                # The Event this item was actually created from, which is the one
-                # an Inspector walks back to. Carrying the Rule version without
-                # it produced an item whose `origin_event_id` was always None.
-                origin_event_id=item["source_event_id"],
+                # The Event the *content* came from, persisted on the item. It
+                # used to be substituted with `source_event_id`, which is the
+                # Event that created the row rather than the one the content
+                # came from — for a Decision that is the `rule.approved` Event,
+                # so every recalled Decision claimed an approval as its origin
+                # and the real one was never recorded anywhere.
+                origin_event_id=item.get("origin_event_id") or item["source_event_id"],
             ),
             context=_retain_context(item),
             timestamp=item["created_at"],
@@ -268,13 +271,21 @@ class MemoryWorker:
         """
         self._assert_no_transaction("invalidate")
         try:
-            units = self._transport.list_document_memories(  # type: ignore[union-attr]
+            # The only engine path that still reached for `self._transport`
+            # directly. Retain and delete were both routed through
+            # `_require_transport`, which turns an unconfigured engine into a
+            # `TransportError` the retry machinery understands; this one raised
+            # `AttributeError` instead, so the job got no failure code, no
+            # attempt record and no backoff — it just sat `RUNNING` until its
+            # lease expired, forever. The `type: ignore` was the tell.
+            transport = self._require_transport("invalidate")
+            units = transport.list_document_memories(
                 bank=claimed.bank, document_id=claimed.job["document_id"]
             )
             unit_ids = [u["id"] for u in units
                         if isinstance(u.get("id"), str) and u.get("state") != "invalidated"]
             for unit_id in unit_ids:
-                self._transport.invalidate_memory(  # type: ignore[union-attr]
+                transport.invalidate_memory(
                     bank=claimed.bank, memory_id=unit_id,
                     reason=f"jasmine memory {claimed.item['memory_id']} was obsoleted")
         except TransportError as exc:

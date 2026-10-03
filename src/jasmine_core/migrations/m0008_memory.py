@@ -42,6 +42,13 @@ _MEMORY_TYPE_CHECK = (f"CHECK(memory_type IN ({_MEMORY_TYPE_LIST}))")
 
 STATEMENTS = (
     # -- Memory items ------------------------------------------------------
+    # `origin_event_id` is the Event the *content* came from, which is not always
+    # `source_event_id`: for a Decision the latter is the `rule.approved` Event that
+    # created the row, while the former is the Event the Rule version itself was
+    # written from. Storing only `source_event_id` meant every Decision's provenance
+    # pointed at the approval rather than at where the decision came from, and the
+    # worker papered over the gap by substituting `source_event_id` — so an Inspector
+    # walking back from a Decision always stopped one Event too late.
     """
     CREATE TABLE memory_items (
         memory_id            TEXT PRIMARY KEY,
@@ -57,6 +64,7 @@ STATEMENTS = (
         evidence_ids_json    TEXT NOT NULL CHECK(json_valid(evidence_ids_json)),
         origin_rule_id       TEXT REFERENCES rules(rule_id),
         origin_rule_version  INTEGER,
+        origin_event_id      TEXT REFERENCES events(event_id),
         content_sha256       TEXT NOT NULL CHECK(length(content_sha256)=64),
         sanitized_text       TEXT NOT NULL,
         status               TEXT NOT NULL CHECK(status IN ('ACTIVE','OBSOLETE','DELETED')),

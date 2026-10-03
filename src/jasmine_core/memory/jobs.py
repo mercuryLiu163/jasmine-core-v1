@@ -79,7 +79,8 @@ JITTER = 0.25
 #: rejected document is not.
 RETRYABLE_CODES = frozenset({
     "engine_unreachable", "engine_timeout", "engine_rate_limited", "engine_server_error",
-    "engine_retain_failed", "engine_conflict",
+    "engine_retain_failed", "engine_delete_failed", "engine_retain_unconfirmed",
+    "engine_conflict",
 })
 PERMANENT_CODES = frozenset({
     "engine_unauthorized", "engine_forbidden", "engine_rejected", "engine_not_found",
@@ -280,9 +281,24 @@ class JobStore:
         `BEGIN IMMEDIATE` is the whole concurrency story: the select and the
         update share one write transaction, so a second worker either waits and
         then sees `RUNNING`, or reads the row before the first commits and then
-        blocks on its own update. The `engine_state IN (...)` predicate repeats
-        the guard in the `WHERE` clause so correctness does not depend on the
-        caller having read the row first.
+        blocks on its own update.
+
+        **One in-flight job per `memory_id`.** A `retain` and the `delete` an
+        operator ordered later are two jobs for the same document, and nothing
+        else in the system ordered them. Without this predicate both can be
+        claimed at once: the delete removes the remote document, the slow retain
+        — already past its `item is ACTIVE` check — writes it back, and the
+        local item is a `DELETED` tombstone whose remote copy nobody will ever
+        remove again, because the only job that would have removed it already
+        succeeded. Serialising on `memory_id` makes the ordering total: whichever
+        is claimed first finishes before the other can start, and both end states
+        are consistent.
+
+        The reclaim branch deliberately has no such guard. A `RUNNING` job whose
+        lease expired must always be claimable, or a blocked `PENDING` sibling
+        could be picked first and leave the expired one stranded forever; at most
+        one job per document can be `RUNNING`, so reclaiming cannot re-open the
+        window.
         """
         if not owner:
             raise errors.InvalidRequest("lease owner is required", field="owner")
@@ -290,9 +306,13 @@ class JobStore:
         expires = _next_attempt_at(lease_seconds, at=stamp)
         with db.translate_lock_errors(), db.transaction(self._conn):
             row = self._conn.execute(
-                "SELECT * FROM memory_jobs WHERE (status='PENDING' AND next_attempt_at<=?)"
-                " OR (status='RUNNING' AND lease_expires_at IS NOT NULL AND lease_expires_at<=?)"
-                " ORDER BY next_attempt_at, job_id LIMIT 1",
+                "SELECT * FROM memory_jobs AS j WHERE"
+                " ((j.status='PENDING' AND j.next_attempt_at<=?"
+                "   AND NOT EXISTS (SELECT 1 FROM memory_jobs AS r"
+                "                   WHERE r.status='RUNNING' AND r.memory_id=j.memory_id))"
+                "  OR (j.status='RUNNING' AND j.lease_expires_at IS NOT NULL"
+                "      AND j.lease_expires_at<=?))"
+                " ORDER BY j.next_attempt_at, j.job_id LIMIT 1",
                 (stamp, stamp),
             ).fetchone()
             if row is None:
@@ -320,18 +340,50 @@ class JobStore:
                 else scope_module.project_bank(item["project_id"]))
         return ClaimedJob(job=claimed, item=item, bank=bank)
 
-    def _finish(self, job: ClaimedJob, *, receipt: dict[str, Any], at: str) -> None:
-        """Move a claimed job to DONE, or refuse if it is no longer RUNNING.
+    def _assert_claim_held(self, job: ClaimedJob, *, error_code: str | None = None) -> None:
+        """Refuse to act on a job whose lease this worker no longer holds.
 
-        The rowcount check is the point. Without it a `DONE` written by another
-        worker and a `DONE` written here are indistinguishable, so a stale
-        worker could attach its own receipt to a job somebody else finished.
+        `status='RUNNING'` alone does not identify a claim, because a lease that
+        expires leaves the status exactly as it was. Worker A claims a job, its
+        lease lapses, worker B claims the same job — still `RUNNING`, different
+        `lease_owner`, higher `retry_count` — and A comes back holding a
+        receipt. Matching on status lets A fail or finish B's attempt: it can
+        write `FAILED` over an in-flight retain, or `DONE` over B's result, and
+        the rowcount check passes because the row *is* still RUNNING. The owner
+        and the attempt number are the two fields that changed, so both must
+        match, and they are read in the same transaction that writes.
         """
+        row = self._conn.execute(
+            "SELECT lease_owner, retry_count, status FROM memory_jobs WHERE job_id=?",
+            (job.job["job_id"],),
+        ).fetchone()
+        if row is None:  # pragma: no cover - FK guarantees the row exists
+            raise errors.NotFound("memory_job", job.job["job_id"])
+        held = (row["lease_owner"] == job.job["lease_owner"]
+                and int(row["retry_count"]) == int(job.job["retry_count"]))
+        if not held:
+            raise errors.InvalidStateTransition(
+                "this Memory job was reclaimed by another worker while its lease "
+                "expired; its result belongs to the current attempt",
+                job_id=job.job["job_id"], **({"error_code": error_code} if error_code else {}),
+            )
+
+    def _finish(self, job: ClaimedJob, *, receipt: dict[str, Any], at: str) -> None:
+        """Move a claimed job to DONE, or refuse if it is no longer this job.
+
+        Two independent guards. `_assert_claim_held` rejects a claim this worker
+        lost; the rowcount check rejects a row somebody else finished after the
+        read. Neither is redundant: one identifies *whose* claim this is, the
+        other that it still exists at write time.
+        """
+        self._assert_claim_held(job)
         cursor = self._conn.execute(
             "UPDATE memory_jobs SET status='DONE', lease_owner=NULL, lease_expires_at=NULL,"
             " last_error_code=NULL, safe_error_summary=NULL, receipt_json=?, completed_at=?,"
-            " updated_at=? WHERE job_id=? AND status='RUNNING'",
-            (canonical_json(receipt), at, at, job.job["job_id"]),
+            " updated_at=? WHERE job_id=? AND status='RUNNING' AND lease_owner=?"
+            " AND retry_count=?",
+            (canonical_json(receipt), at, at, job.job["job_id"],
+             job.job["lease_owner"], int(job.job["retry_count"])),
         )
         if cursor.rowcount != 1:
             raise errors.InvalidStateTransition(
@@ -367,6 +419,10 @@ class JobStore:
     def complete(self, job: ClaimedJob, *, receipt: dict[str, Any], at: str | None = None) -> None:
         stamp = at or clock.now_rfc3339()
         with db.translate_lock_errors(), db.transaction(self._conn):
+            # Before the item write: a stale worker must not leave a *successful*
+            # engine state behind on a job somebody else now owns, even if the
+            # job row update would later have been refused.
+            self._assert_claim_held(job)
             self._store.note_retained(job.job["memory_id"], receipt)
             self._finish(job, receipt=receipt, at=stamp)
             self._attempt(job.job["job_id"], int(job.job["retry_count"]), "RETAINED", "SUCCESS",
@@ -411,6 +467,10 @@ class JobStore:
             # tick. The job is simply permanently FAILED.
             target_state = None
         with db.translate_lock_errors(), db.transaction(self._conn):
+            # Checked before `set_engine_state`, not after: a stale worker whose
+            # job was reclaimed would otherwise rewrite the *item* first and only
+            # then discover the job row was not its own to fail.
+            self._assert_claim_held(job, error_code=error_code)
             if target_state is not None:
                 self._store.set_engine_state(
                     job.job["memory_id"], engine_state=target_state,
@@ -420,9 +480,10 @@ class JobStore:
             cursor = self._conn.execute(
                 "UPDATE memory_jobs SET status=?, lease_owner=NULL, lease_expires_at=NULL,"
                 " last_error_code=?, safe_error_summary=?, next_attempt_at=?, completed_at=?,"
-                " updated_at=? WHERE job_id=? AND status='RUNNING'",
+                " updated_at=? WHERE job_id=? AND status='RUNNING' AND lease_owner=?"
+                " AND retry_count=?",
                 (status, error_code, summary, next_at, None if retry else stamp, stamp,
-                 job.job["job_id"]),
+                 job.job["job_id"], job.job["lease_owner"], int(job.job["retry_count"])),
             )
             if cursor.rowcount != 1:
                 raise errors.InvalidStateTransition(
@@ -622,6 +683,7 @@ class JobStore:
                               at: str | None = None) -> None:
         stamp = at or clock.now_rfc3339()
         with db.translate_lock_errors(), db.transaction(self._conn):
+            self._assert_claim_held(job)
             # An operator may delete an item whose retain never ran, or whose
             # retain failed. The tombstone and the exclusion from Recall are
             # already correct in both cases, and the remote document is either

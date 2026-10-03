@@ -116,6 +116,24 @@ without Core metadata is `unverified_provenance` and is never rendered. This is
 the answer to a forged remote source: refused by construction, not by pattern
 matching on text.
 
+The Event check has two halves and originally had one: a referenced Raw Event
+must *exist*, and it must belong to this item's scope. Checking existence alone
+let a forged `jasmine_source_event_ids` claim that names a real Event from
+**another** project through — it resolved, it was written into
+`Provenance.source_event_ids`, and it landed in this project's readable trace,
+which is a cross-project forgery with an identifier attached. A foreign Event
+now yields `foreign_source`, and `jasmine_origin_event_id` is checked the same
+way instead of being trusted outright. An Event with no project is a system or
+global Event and may be cited by anything.
+
+**Where an item's origin came from.** `memory_items.origin_event_id` is the Event
+the *content* came from, which for a Decision is not `source_event_id`: the
+latter is the `rule.approved` Event that created the row, the former is the Event
+the Rule version was written from. Only `source_event_id` used to be persisted
+and the worker substituted it, so every recalled Decision reported an approval as
+its origin and the real one was recorded nowhere. `Candidate.provenance` already
+carried it; it is now stored and carried back out unchanged.
+
 **Old decisions.** For a `CONFIRMED_DECISION` item, the stored Rule *version* is
 compared with the current one. A newer version is `superseded_decision`, a
 retired Rule is `retired_decision`; both keep the row out of the Context Pack and
@@ -185,11 +203,22 @@ Five consequences, each a decision:
    document id, never a unit id, and every lifecycle and read-back path addresses
    units by listing the document. The transport sends `update_mode` explicitly so
    a future engine default cannot turn a retry into a second copy.
-2. **Retain is synchronous.** `usage` and `items_count` exist only for
-   `async=false`; `operation_id` only for `async=true`. A durable worker needs a
-   *completion* receipt, not an acknowledgement that work was queued, so the
-   transport always sends `async=false` and the async path's retry safety is not
-   relied upon.
+2. **Retain is synchronous, and the receipt is read, not assumed.** `usage` and
+   `items_count` exist only for `async=false`; `operation_id` only for
+   `async=true`. A durable worker needs a *completion* receipt, not an
+   acknowledgement that work was queued, so the transport always sends
+   `async=false` — and then holds the response to the same standard: the
+   official schema makes `success` and `async` **required** members of
+   `RetainResponse`, and `success` a required member of `DeleteDocumentResponse`.
+   The check used to be `if payload.get("success") is False`, which means an
+   absent field reads as success, so an empty `{}`, a `"success": null`, and an
+   `async=true` queued operation were all recorded as a completed retain: job
+   `DONE`, item `RETAINED`, an Inspector reporting a document that was never
+   stored. Delete was worse — `bool(payload.get("success", True))` turned an
+   explicit `false` into `true`. A missing or non-boolean `success` is now
+   `engine_protocol_error` (the response does not follow the schema), an explicit
+   `false` is `engine_retain_failed` / `engine_delete_failed`, and a queued
+   `async=true` is `engine_retain_unconfirmed`. None of them can reach `DONE`.
 3. **Recall's `types` is the engine's vocabulary, not ours.** Core's five types
    have no remote equivalent, so they travel as `metadata` (returned on every
    recalled result) and as `tags` (used for the visibility filter). `observation`
@@ -249,6 +278,29 @@ rolled-back write is invisible to it.
 else. Two workers therefore cannot both claim a job, and the write lock is never
 held across a network call. The claim carries a lease; an expired `RUNNING` job is
 claimable again, so a worker killed mid-retain loses nothing.
+
+Two further guards, both found in review and both about a claim that *stopped*
+being yours:
+
+* **One in-flight job per `memory_id`.** A `retain` and the `delete` an operator
+  ordered later are two jobs for the same document and nothing ordered them
+  relative to each other. Claimed concurrently, the delete removes the remote
+  document and the slow retain — already past its `item is ACTIVE` check —
+  writes it back, leaving a local `DELETED` tombstone whose remote copy no job
+  will ever remove again, because the only job that would have removed it already
+  succeeded. `claim_due` therefore only offers a `PENDING` job when no job for
+  that `memory_id` is `RUNNING`. The expired-lease reclaim branch deliberately
+  carries no such guard: a stranded `RUNNING` job must always be claimable, or a
+  blocked sibling picked first would wedge it forever.
+* **`status='RUNNING'` does not identify a claim.** An expired lease leaves the
+  status exactly as it was, so worker A whose lease lapsed can still match
+  `WHERE job_id=? AND status='RUNNING'` after worker B has claimed the same job —
+  and write `FAILED` over B's in-flight retain or `DONE` over B's result, with
+  the rowcount check passing because the row really is `RUNNING`. `_finish`,
+  `fail` and `mark_document_deleted` all now match `lease_owner` *and*
+  `retry_count` in the same transaction, and `_assert_claim_held` runs before the
+  item write as well, so a stale worker cannot leave a changed engine state
+  behind even when the job row update would later have been refused.
 
 **Remote success before DONE.** The document id is deterministic
 (`sha256(source_event_id)`, scoped by engine and type) and the engine upserts on
@@ -398,3 +450,29 @@ Core's own decisions, and `StubHindsightServer` drives the *real* transport over
 real socket against Hindsight 0.10.2's paths, methods and shapes — which is how the
 `/version`-is-not-under-the-prefix and the redirect-credential bugs were found.
 Neither is Gate evidence.
+
+**How a Gate verdict is earned.** `scripts/p4-memory-gate.py` checks preconditions
+first and reports `BLOCKED` naming the exact missing item, and a case that is
+recorded as `PASS` is one whose function *returned*. Three of the seven could
+previously return having produced only part of what their taskbook entry
+mandates, so two shapes are now the only ones allowed, and a test asserts it on
+the parsed source:
+
+* **G05 and G07 end in `raise Blocked(...)`.** Both prove something about an
+  actual Context Pack — G05 that it is marked degraded with an exact pack
+  containing no Memory, G07 that a recalled memory reads non-authoritative and an
+  obsolete one is not injected — and both therefore join `NEEDS_P3_PACK`, so they
+  do not even start without P3. The terminal `Blocked` names what still
+  separates a complete run from a partial one (Context pack, real Tool Evidence,
+  real session, management audit) so a future operator knows exactly what to
+  supply rather than finding a green verdict that means less than it appears to.
+* **G06 returns, and earns it.** Its two windows are crossed by real OS
+  processes: one commits the Truth and dies before ever scanning, another runs
+  the *real* `MemoryWorker` whose transport wrapper calls `os._exit(7)` after
+  `transport.retain` has returned and before `jobs.complete` — so the process is
+  killed inside the retain window with the remote write done and `DONE`
+  unwritten — and a third process claims the expired lease and finishes. A
+  reconnecting in-process connection would have proved nothing: the state a crash
+  discards only ever lived in the dead process. The exit code, the held lease,
+  the single `RETAINED` attempt, the remote read-back and the untouched Rule are
+  all asserted on the parent's side.

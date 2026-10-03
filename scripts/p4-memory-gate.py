@@ -42,6 +42,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import textwrap
 import time
 import traceback
 from dataclasses import dataclass, field
@@ -71,7 +72,15 @@ CASES = ("P4-G01", "P4-G02", "P4-G03", "P4-G04", "P4-G05", "P4-G06", "P4-G07")
 #: Which cases can be decided without a real Agent session and a P3 Context Pack.
 #: The rest are structurally BLOCKED until P2 and P3 are merged, and saying so
 #: precisely is more useful than a partial run that looks like coverage.
-NEEDS_P3_PACK = frozenset({"P4-G01", "P4-G02", "P4-G03", "P4-G04"})
+#: Cases whose mandated evidence includes an actual Context Pack.
+#:
+#: G05 and G07 used to be missing from this set, which is how they could reach a
+#: verdict without it: G05's taskbook entry requires the Context to be marked
+#: degraded with an exact pack containing no Memory, and G07's requires the pack
+#: to show a recalled memory as non-authoritative and an obsolete one as not
+#: injected. Both name Context as part of what they prove, so both belong here.
+NEEDS_P3_PACK = frozenset({"P4-G01", "P4-G02", "P4-G03", "P4-G04",
+                           "P4-G05", "P4-G07"})
 NEEDS_REAL_AGENT = frozenset({"P4-G01"})
 
 
@@ -126,9 +135,12 @@ class Gate:
     def __init__(self, work: Path, config: dict[str, Any], case_id: str) -> None:
         self.case_id = case_id
         self.root = work / case_id
-        self.root.mkdir(mode=0o700)
+        # `exist_ok`: G06 runs real worker *processes*, and a process that
+        # restarts has to re-enter a work directory another process created.
+        # A fresh `Gate` for the same case is a restart, not an error.
+        self.root.mkdir(mode=0o700, exist_ok=True)
         self.workspace = self.root / "workspace"
-        self.workspace.mkdir()
+        self.workspace.mkdir(exist_ok=True)
         (self.workspace / "source.txt").write_text("v1\n", encoding="utf-8")
         self.config = config
         self.run_id = config.get("run_id") or f"p4-{int(time.time())}"
@@ -379,6 +391,70 @@ class Gate:
         finally:
             conn.close()
 
+    # -- real worker processes -------------------------------------------
+
+    def spawn_worker(self, source: str, *, label: str, expect_exit: int | None = None,
+                     extra: dict[str, Any] | None = None
+                     ) -> subprocess.CompletedProcess:
+        """Run `source` as a real OS process and return it.
+
+        G06 asks for a worker process that *exits* between two windows. Reopening
+        a connection in the parent proves nothing about that: the state a crash
+        discards is the state that only ever lived inside the process, and no
+        amount of reconnecting exercises it. So the windows are crossed by
+        starting a process, letting it die, and continuing in another.
+
+        The child inherits this process's environment — including
+        `JASMINE_HINDSIGHT_URL`, which is how it builds a real transport — and
+        is given the parent's host/actor ids so the Events it commits belong to
+        the same identities the rest of the case checks against.
+        """
+        script = self.root / f"{label}.py"
+        script.write_text(textwrap.dedent(self.CHILD_BOOTSTRAP) + textwrap.dedent(source),
+                          encoding="utf-8")
+        os.chmod(script, 0o600)
+        options = json.dumps({
+            "src": str(ROOT / "src"),
+            "gate": str(ROOT / "scripts" / "p4-memory-gate.py"),
+            "work": str(self.root.parent),
+            "case_id": self.case_id,
+            "config": self.config,
+            "host": self.host, "human": self.human, "system": self.system,
+            "db_path": str(self.db_path),
+            **(extra or {}),
+        }, ensure_ascii=False)
+        env = dict(os.environ)
+        env["PYTHONPATH"] = f"{ROOT / 'src'}{os.pathsep}{env.get('PYTHONPATH', '')}".rstrip(
+            os.pathsep)
+        proc = subprocess.run([sys.executable, str(script), options],
+                              capture_output=True, text=True, timeout=180, env=env)
+        if expect_exit is not None and proc.returncode != expect_exit:
+            raise Failed(
+                f"{label}: the worker process exited {proc.returncode}, expected "
+                f"{expect_exit}; stderr={(proc.stderr or '')[-1200:]}"
+            )
+        return proc
+
+    #: Source every child starts with: rebuild this same Gate in its own process.
+    CHILD_BOOTSTRAP = """
+    import json, os, sys
+    opts = json.loads(sys.argv[1])
+    sys.path.insert(0, opts["src"])
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location("p4_memory_gate", opts["gate"])
+    runner = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runner
+    spec.loader.exec_module(runner)
+
+    def boot():
+        g = runner.Gate(Path(opts["work"]), opts["config"], opts["case_id"])
+        g.host, g.human, g.system = opts["host"], opts["human"], opts["system"]
+        g.db_path = Path(opts["db_path"])
+        g.open()
+        return g
+    """
+
     def receipt(self, kind: str, payload: dict[str, Any]) -> dict[str, str]:
         path = self.root / f"{kind}.json"
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -555,6 +631,10 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
 
 def case_g05(gate: Gate, record: CaseRecord) -> None:
     """Truth keeps working while the engine is unreachable, and recovers (VC-22)."""
+    # G05 is not only about the connection: it also requires the Context to be
+    # marked degraded with an exact pack containing no Memory. Declared here so
+    # the case cannot start — let alone return a verdict — without P3.
+    gate.require_p3_pack()
     probed = gate.require_engine()
     project = gate.seed_project("g05")
     record.project_ids.append(project)
@@ -628,90 +708,221 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
     record.engine_evidence["recovered_document_units"] = len(units)
     record.receipts.append(gate.receipt("g05-degraded", {
         "degraded": outcome.as_dict(), "recovered": recovered.as_dict()}))
+    # The connection, Truth-continues and recovery halves are real. G05 also
+    # mandates that the *Context* is marked degraded with an exact pack that
+    # contains no Memory, that a real Tool Evidence is captured, and that a
+    # legal State/Checkpoint flow runs — all of which need a merged P3 and a
+    # real session. Without them this case must not return, because a returning
+    # case is recorded as PASS.
+    raise Blocked(
+        "the unreachable engine, the Truth-continues checks and the recovery with no "
+        "duplicate document are recorded against a real engine. Still missing for G05: "
+        "a Context marked degraded with an exact pack containing no Memory, a real Tool "
+        "Evidence capture, and a legal State/Checkpoint flow. P3 is not merged and no "
+        "real session is declared, so this case is BLOCKED, not PASS."
+    )
 
 
 def case_g06(gate: Gate, record: CaseRecord) -> None:
-    """The two durability windows: commit-to-enqueue, and remote-success-to-DONE."""
+    """The two durability windows, each crossed by a real process that dies.
+
+    The taskbook asks for the worker process itself to exit between
+    commit/enqueue and between remote-success/DONE. Reopening a connection in
+    this process would satisfy the letter of nothing: the state a crash
+    discards is the state that only ever lived in the dead process, and no
+    reconnect exercises it. So both windows are crossed with
+    `Gate.spawn_worker` — one process commits and disappears, another picks up
+    the work — and the assertions are made here, on what a restarted worker
+    actually finds.
+    """
     probed = gate.require_engine()
     project = gate.seed_project("g06")
     record.project_ids.append(project)
 
-    # Window 1: the Truth is committed and the process "dies" before the enqueue.
-    # `job_store.jobs()` on a brand-new connection is what a restarted worker
-    # would see, and it must be empty while the Event is already committed.
-    gate.confirm_decision(project, content="Always run the migration before deploying",
-                          rule_key="migrate.first")
+    # -- Window 1: Truth committed, process gone before the enqueue. --------
+    gate.spawn_worker(
+        """
+        g = boot()
+        g.confirm_decision(opts["project"],
+                           content="Always run the migration before deploying",
+                           rule_key="migrate.first")
+        # The Event is committed and this process never scans. It exits now, so
+        # the enqueue that should follow has to survive being done by somebody
+        # else later, from the persisted cursor.
+        sys.exit(0)
+        """,
+        label="g06-window1-commit", expect_exit=0, extra={"project": project})
+
     conn = gate.conn()
     try:
         job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=8))
-        check(job_store.jobs() == [], "a fresh scan should find nothing before the source commits")
-        check(job_store.cursor() == 0, "the recovery cursor should not have moved")
+        check(job_store.jobs() == [],
+              "a dead process still left a job: the enqueue is not where it should be")
+        check(job_store.cursor() == 0,
+              "a dead process still moved the recovery cursor")
         record.source_event_ids.append(_latest_decision_event(conn, project))
     finally:
         conn.close()
-    # A new process, a new connection: the scan runs from the persisted cursor.
-    restarted = db.connect(gate.db_path)
-    try:
+
+    scan = json.loads(gate.spawn_worker(
+        """
+        from jasmine_core import db
+        from jasmine_core.memory import eligibility, jobs as jobs_module
+        from jasmine_core.memory.store import MemoryStore
+
+        g = boot()
+        conn = db.connect(g.db_path)
         report = jobs_module.JobStore(
-            restarted, MemoryStore(restarted, schema_version=8)).enqueue_from_sources(
+            conn, MemoryStore(conn, schema_version=8)).enqueue_from_sources(
             eligibility.SourceRegistry())
-        check(len(report["created"]) == 1,
-              f"the recovery scan did not create the missing job: {report}")
+        outcomes = [t.outcome for t in g.drain(conn)]
+        store = MemoryStore(conn, schema_version=8)
+        retained = [i for i in store.items(limit=50) if i["engine_state"] == "RETAINED"]
+        jobs = jobs_module.JobStore(conn, store).jobs()
+        print(json.dumps({
+            "created": len(report["created"]),
+            "outcomes": outcomes,
+            "job_statuses": sorted({j["status"] for j in jobs}),
+            "retained": len(retained),
+            "document_ids": [i["document_id"] for i in retained],
+        }))
+        """,
+        label="g06-window1-scan", expect_exit=0, extra={"project": project}).stdout.strip())
+    check(scan["created"] == 1,
+          f"the restarted worker did not create exactly the missing job: {scan}")
+    check(scan["retained"] == 1 and scan["job_statuses"] == ["DONE"],
+          f"the restarted worker did not finish the job cleanly: {scan}")
+    record.document_ids.extend(scan["document_ids"])
+    record.engine_evidence["window1"] = scan
+
+    # -- Window 2: remote success, process gone before DONE. ----------------
+    gate.confirm_decision(project, content="Pin every dependency version",
+                          rule_key="deps.pinned")
+    conn = gate.conn()
+    try:
+        report = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=8)
+                                      ).enqueue_from_sources(eligibility.SourceRegistry())
+        check(len(report["created"]) == 1, f"the second source produced no job: {report}")
+        pending = [j for j in jobs_module.JobStore(conn, MemoryStore(conn, schema_version=8)
+                                                   ).jobs() if j["status"] == "PENDING"]
+        check(len(pending) == 1, f"expected one pending job, got {pending}")
+        interrupted_job = pending[0]["job_id"]
+        document_id = pending[0]["document_id"]
+        bank_id = pending[0]["bank_id"]
     finally:
-        restarted.close()
+        conn.close()
+
+    # A real worker process, killed by the real transport wrapper at the exact
+    # point the remote write has succeeded and DONE has not been written. It
+    # exits 7; reaching the line after `tick` would mean the window was missed.
+    gate.spawn_worker(
+        """
+        from jasmine_core import db
+        from jasmine_core.memory.store import MemoryStore
+        from jasmine_core.memory.worker import MemoryWorker
+
+        class DieAfterRemoteWrite:
+            # Delegates to the real engine, then takes this process down. The
+            # point is to die inside `_process_retain`, after
+            # `transport.retain(...)` has returned and before `jobs.complete(...)`.
+            # (A comment, not a docstring: this source lives inside a triple
+            #  quoted string, where one would end it.)
+            def __init__(self, real):
+                self._real = real
+
+            def __getattr__(self, name):
+                return getattr(self._real, name)
+
+            def retain(self, **kwargs):
+                self._real.retain(**kwargs)
+                os._exit(7)
+
+        g = boot()
+        conn = db.connect(g.db_path)
+        MemoryWorker(conn, MemoryStore(conn, schema_version=8),
+                     DieAfterRemoteWrite(g.transport),
+                     lease_owner="p4-gate-g06-doomed").tick(scan=False)
+        os._exit(99)
+        """,
+        label="g06-window2-crash", expect_exit=7)
+
     conn = gate.conn()
     try:
         job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=8))
-        check(any(t.outcome == "retained" for t in gate.drain(conn)),
-              "the recovered job did not complete")
-        item = gate.retained_item(conn)
-        record.job_ids.append(next(j["job_id"] for j in job_store.jobs()
-                                   if j["memory_id"] == item["memory_id"]))
-        record.document_ids.append(item["document_id"])
-
-        # Window 2: a second source, a successful retain, then a crash before DONE.
-        gate.confirm_decision(project, content="Pin every dependency version",
-                              rule_key="deps.pinned")
-        jobs_module.JobStore(conn, MemoryStore(conn, schema_version=8)).enqueue_from_sources(
-            eligibility.SourceRegistry())
-        pending = [j for j in jobs_module.JobStore(
-            conn, MemoryStore(conn, schema_version=8)).jobs() if j["status"] == "PENDING"]
-        check(bool(pending), "the second source did not produce a second job")
-        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=8))
-        claimed = job_store.claim_due(owner="p4-gate-g06-doomed")
-        check(claimed is not None, "no job to interrupt")
-        assert gate.transport is not None
-        gate.transport.retain(bank=claimed.bank, document_id=claimed.job["document_id"],
-                              content=claimed.item["sanitized_text"],
-                              context="jasmine confirmed decision", metadata={}, tags=(),
-                              memory_type=claimed.item["memory_type"], timestamp=None)
-        units_before = gate.engine_units(claimed.bank, claimed.job["document_id"])
-        check(len(units_before) == 1, "the doomed retain did not reach the engine")
-        # The process dies here: DONE was never written and the lease still holds.
-        interrupted_job = claimed.job["job_id"]
+        crashed = job_store.job(interrupted_job)
+        check(crashed["status"] == "RUNNING",
+              f"a crashed worker did not leave the job RUNNING: {crashed['status']}")
+        check(crashed["lease_owner"] == "p4-gate-g06-doomed",
+              f"the crashed worker does not hold the lease: {crashed['lease_owner']}")
+        from jasmine_core.memory import scope as _scope
+        bank = _scope.project_bank(project)
+        units_before = gate.engine_units(bank, document_id)
+        check(len(units_before) == 1,
+              f"the doomed retain did not reach the engine: {len(units_before)} units")
+        # Time passes; the lease is what makes a second worker allowed to take over.
         with db.transaction(conn):
-            conn.execute("UPDATE memory_jobs SET lease_expires_at='1970-01-01T00:00:00.000000Z'"
-                         " WHERE job_id=?", (interrupted_job,))
-        second = MemoryWorker(conn, MemoryStore(conn, schema_version=8), gate.transport,
-                              lease_owner="p4-gate-g06-recovered")
-        check(second.tick(scan=False).outcome == "retained", "the re-send did not complete")
-        final = job_store.job(interrupted_job)
-        check(final["status"] == "DONE", f"the job is {final['status']} after recovery")
+            conn.execute(
+                "UPDATE memory_jobs SET lease_expires_at='1970-01-01T00:00:00.000000Z'"
+                " WHERE job_id=?", (interrupted_job,))
+    finally:
+        conn.close()
+
+    restarted = json.loads(gate.spawn_worker(
+        """
+        from jasmine_core import db
+        from jasmine_core.memory.store import MemoryStore
+        from jasmine_core.memory.worker import MemoryWorker
+
+        g = boot()
+        conn = db.connect(g.db_path)
+        store = MemoryStore(conn, schema_version=8)
+        report = MemoryWorker(conn, store, g.transport,
+                              lease_owner="p4-gate-g06-restarted").tick(scan=False)
+        job = jobs_module.JobStore(conn, store).job(opts["job_id"])
+        attempts = jobs_module.JobStore(conn, store).attempts(opts["job_id"])
+        print(json.dumps({
+            "outcome": report.outcome,
+            "error_code": report.error_code,
+            "status": job["status"],
+            "retained_attempts": len([a for a in attempts if a["phase"] == "RETAINED"]),
+            "attempt_count": len(attempts),
+            "bank": opts["bank_id"],
+            "document_id": opts["document_id"],
+        }))
+        """,
+        label="g06-window2-restart", expect_exit=0,
+        extra={"job_id": interrupted_job, "document_id": document_id,
+               "bank_id": bank_id}).stdout.strip())
+    check(restarted["outcome"] == "retained",
+          f"the re-send did not complete: {restarted}")
+    check(restarted["status"] == "DONE",
+          f"the job is {restarted['status']} after recovery: {restarted}")
+    check(restarted["retained_attempts"] == 1,
+          f"the crash-then-resend produced {restarted['retained_attempts']} completions, "
+          f"expected 1: {restarted}")
+
+    conn = gate.conn()
+    try:
+        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=8))
         attempts = job_store.attempts(interrupted_job)
-        check(len([a for a in attempts if a["phase"] == "RETAINED"]) == 1,
-              f"the crash-then-resend produced "
-              f"{len([a for a in attempts if a['phase'] == 'RETAINED'])} completions, expected 1")
-        units_after = gate.engine_units(claimed.bank, final["document_id"])
+        bank = scope.project_bank(project)
+        units_after = gate.engine_units(bank, document_id)
         check(len(units_after) == 1,
-              f"the interrupted retain left {len(units_after)} remote memory units, expected 1")
-        document = gate.engine_document(claimed.bank, final["document_id"])
+              f"the interrupted retain left {len(units_after)} remote memory units, "
+              f"expected 1")
+        document = gate.engine_document(bank, document_id)
         check(document is not None, "the remote document is missing after recovery")
         # The Core source is untouched by either window.
         check(conn.execute("SELECT 1 FROM rules WHERE status='ACTIVE'").fetchone() is not None,
               "a Memory crash changed Authority")
+        record.document_ids.append(document_id)
+        record.job_ids.append(interrupted_job)
         record.engine_evidence["remote_document"] = {
             "document_id": document.get("id"), "memory_unit_count": len(units_after)}
         record.engine_evidence["attempt_count"] = len(attempts)
+        record.engine_evidence["windows"] = {
+            "window1": record.engine_evidence.get("window1"),
+            "window2_crash_exit": 7, "window2": restarted}
         record.receipts.append(gate.receipt("g06-attempts", attempts))
         record.receipts.append(gate.receipt("g06-document", document or {}))
     finally:
@@ -730,6 +941,9 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
     """obsolete / delete / pin against a real engine, with real receipts."""
     from jasmine_core import errors
 
+    # G07's Context half — a recalled memory shown non-authoritative, an obsolete
+    # one shown not injected, and the source read back *from the pack* — needs P3.
+    gate.require_p3_pack()
     probed = gate.require_engine()
     project = gate.seed_project("g07")
     record.project_ids.append(project)
@@ -765,6 +979,18 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
     check(all(item.historical for item in before.items),
           "a pinned item stopped being historical")
 
+    # A stale `expected_revision` is a refusal, not a silent overwrite: two
+    # operators acting on the same item cannot clobber each other. The item is
+    # at revision 2 now (pin bumped it), so revision 1 is stale.
+    stale_refused = False
+    try:
+        lifecycle("unpin", 1, "a second operator who read the item before the pin")
+    except errors.RevisionConflict:
+        stale_refused = True
+    check(stale_refused, "a stale expected_revision was accepted")
+    check(MemoryStore(gate.conn(), schema_version=8).item(memory_id)["revision"] == 2,
+          "a refused stale revision still changed the item")
+
     # obsolete: excluded from recall immediately, provenance intact, engine
     # soft-retired by the worker.
     result = lifecycle("obsolete", 2, "wrong lesson")
@@ -790,9 +1016,65 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
     check(deleted["job"]["kind"] == "delete", "delete did not queue the engine work")
     check(MemoryStore(gate.conn(), schema_version=8).item(memory_id)["remote_deleted_at"] is None,
           "delete claimed the remote copy was already gone")
+
+    # Remote delete failure first: the engine becomes unreachable while the
+    # delete is queued. The item must stay excluded locally, the job must not
+    # claim to be done, and the document must still be there — and then a later
+    # attempt must finish the job. This is the "远端删除故障保留排除状态并恢复成功"
+    # half, and it needs a real unreachable endpoint, not a fake exception.
+    live_transport = gate.transport
+    gate.transport = HindsightTransport(HindsightConfig("http://127.0.0.1:1",
+                                                        timeout_seconds=1))
+    try:
+        conn = gate.conn()
+        try:
+            gate.drain(conn)
+        finally:
+            conn.close()
+        during = gate.recall(project, "a lesson the operator", max_tokens=400)
+        check(all(i.memory_id != memory_id for i in during.items),
+              "a failed remote delete stopped excluding the item locally")
+        conn = gate.conn()
+        try:
+            jobs = [j for j in jobs_module.JobStore(
+                conn, MemoryStore(conn, schema_version=8)).jobs()
+                if j["memory_id"] == memory_id and j["kind"] == "delete"]
+            check(len(jobs) == 1, f"expected one delete job, got {jobs}")
+            failed_delete = jobs[0]
+            check(failed_delete["status"] == "PENDING",
+                  f"the delete job is {failed_delete['status']} after an unreachable "
+                  f"engine; it should be waiting to retry, not DONE and not wedged")
+            check(failed_delete["last_error_code"] is not None,
+                  "the failed delete recorded no error code")
+            item = MemoryStore(conn, schema_version=8).item(memory_id)
+            check(item["status"] == "DELETED", f"the item is {item['status']}")
+            check(item["remote_deleted_at"] is None,
+                  "a delete that could not reach the engine claimed it completed")
+        finally:
+            conn.close()
+        check(gate.engine_document(bank, document_id) is not None,
+              "the document was removed by a transport that could not reach the engine")
+    finally:
+        gate.transport = live_transport
+
+    # Recovery: the engine is reachable again and the same job finishes.
     conn = gate.conn()
     try:
+        with db.transaction(conn):
+            conn.execute(
+                "UPDATE memory_jobs SET next_attempt_at='1970-01-01T00:00:00.000000Z'"
+                " WHERE memory_id=? AND kind='delete' AND status='PENDING'", (memory_id,))
         gate.drain(conn)
+        final_job = [j for j in jobs_module.JobStore(
+            conn, MemoryStore(conn, schema_version=8)).jobs()
+            if j["memory_id"] == memory_id and j["kind"] == "delete"][0]
+        check(final_job["status"] == "DONE",
+              f"the delete job is {final_job['status']} after the engine recovered")
+        final_item = MemoryStore(conn, schema_version=8).item(memory_id)
+        check(final_item["engine_state"] == "DELETED",
+              f"the item is {final_item['engine_state']} after a recovered delete")
+        check(final_item["remote_deleted_at"] is not None,
+              "the recovered delete did not record when the remote copy went away")
     finally:
         conn.close()
     check(gate.engine_document(bank, document_id) is None,
@@ -837,8 +1119,29 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
         conn.close()
     record.engine_evidence["probe"] = probed
     record.engine_evidence["units_after_obsolete"] = len(units)
+    record.engine_evidence["delete_fault_then_recovery"] = {
+        "failed_error_code": failed_delete["last_error_code"],
+        "recovered_status": final_job["status"],
+    }
     record.receipts.append(gate.receipt("g07-lifecycle", {
-        "pin": before.as_dict(), "obsolete": result["after"], "delete": deleted["after"]}))
+        "pin": before.as_dict(), "obsolete": result["after"], "delete": deleted["after"],
+        "delete_fault": {"status": failed_delete["status"],
+                         "error_code": failed_delete["last_error_code"],
+                         "recovered": final_job["status"]}}))
+    # The lifecycle and engine halves above are real and recorded. The Context
+    # half is not, and G07's taskbook entry requires it: an actual Context Pack
+    # proving a recalled memory is not authoritative and an obsolete one is not
+    # injected, plus the source read-back *from the pack*. That needs a merged P3
+    # and a real session, neither of which exists here, so this case refuses to
+    # return — a returning case is recorded as PASS.
+    raise Blocked(
+        "the pin/obsolete/delete lifecycle, the remote-delete fault and recovery, the "
+        "stale-revision refusal and the actor refusal are recorded against a real engine. "
+        "Still missing for G07: an actual Context Pack showing a recalled memory marked "
+        "non-authoritative and an obsolete one not injected, the pack-level source "
+        "read-back, and the management audit Event for these lifecycle commands. P3 is "
+        "not merged and no real session is declared, so this case is BLOCKED, not PASS."
+    )
 
 
 CASES_BY_ID = {
