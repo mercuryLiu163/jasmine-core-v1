@@ -169,7 +169,13 @@ class MemoryWorker:
         if item["status"] != "ACTIVE":
             # Obsoleted or deleted between the scan and the claim. There is
             # nothing to send, and sending it would put back content an operator
-            # removed.
+            # removed. An earlier attempt may already have sent it — we cannot
+            # tell from here whether a previous incarnation reached the engine —
+            # so the take-back is queued as well. It costs one indexed SELECT in
+            # the common case, because the lifecycle command has already created
+            # the job and it will be `PENDING`.
+            self._ensure_engine_work(claimed, reason="the item left ACTIVE before "
+                                                      "this retain was sent")
             self._jobs.fail(claimed, error_code="document_deleted_locally",
                             safe_error_summary="the memory item is no longer active")
             report.outcome = "failed"
@@ -206,35 +212,70 @@ class MemoryWorker:
         self._assert_no_transaction("retain")
         try:
             receipt = self._adapter.retain(request)
-            # The engine call can outlive the claim. Fencing stops a stale
-            # worker from writing the *job* or the *item* — but the HTTP request
-            # is already on the wire, and by the time it returns the operator's
-            # delete may have run to completion with no job left to remove
-            # anything. This worker is the only participant that knows it just
-            # wrote, so it is the one that has to take the write back.
-            revoked = self._compensate_revoked_write(claimed)
         except TransportError as exc:
             status = self._jobs.fail(claimed, error_code=exc.code,
                                      safe_error_summary=exc.safe_error_summary)
             report.outcome = "retry" if status == "PENDING" else "failed"
             report.error_code = exc.code
             return
+
+        # The engine call is over; the item may have left `ACTIVE` while it ran.
+        # Everything below is best effort against a claim that may already have
+        # been reclaimed by another worker, so the obligation to take the write
+        # back is recorded *first*, in a job row, before anything that fencing
+        # can refuse.
+        try:
+            revoked = self._compensate_revoked_write(claimed)
+        except TransportError as undo:
+            # One transient timeout is enough to reach here, and `fail()` on an
+            # expired claim would then be rejected — leaving `DELETED` locally,
+            # the document in the bank, and both jobs terminal with nothing left
+            # to retry. The queue carries it instead.
+            self._ensure_engine_work(claimed, reason=undo.safe_error_summary)
+            self._end_retain_job(claimed, summary="the item left ACTIVE while this "
+                                                  "retain was in flight; the remote "
+                                                  "write is queued to be taken back")
+            report.outcome = "failed"
+            report.error_code = "document_deleted_locally"
+            return
         if revoked:
-            try:
-                self._jobs.fail(claimed, error_code="document_deleted_locally",
-                                safe_error_summary="the item left ACTIVE while this "
-                                                   "retain was in flight; the remote "
-                                                   "write was taken back")
-            except errors.InvalidStateTransition:
-                # The job belongs to another attempt now. The undo above is what
-                # mattered, and it is done; refusing to record it here is correct.
-                pass
+            self._end_retain_job(claimed, summary="the item left ACTIVE while this "
+                                                  "retain was in flight; the remote "
+                                                  "write was taken back")
             report.outcome = "failed"
             report.error_code = "document_deleted_locally"
             return
         self._jobs.complete(claimed, receipt=receipt.as_dict())
         report.outcome = "retained"
         report.receipt = receipt.as_dict()
+
+    def _ensure_engine_work(self, claimed: jobs_module.ClaimedJob, *,
+                            reason: str) -> None:
+        """Hand the take-back to a durable job that does not depend on this claim.
+
+        The retain job cannot carry it: `_process_retain` returns early for an
+        item that is no longer `ACTIVE`, so a retry would record
+        `document_deleted_locally` and go terminal without ever retrying the
+        undo — and if the claim has been reclaimed, `fail()` here would be
+        rejected outright. A job row has no owner, so it survives both.
+        """
+        fresh = self._store.item(claimed.item["memory_id"])
+        if fresh is None or fresh["status"] == "ACTIVE":
+            return
+        kind = "delete" if fresh["status"] == "DELETED" else "invalidate"
+        self._jobs.ensure_engine_work(
+            memory_id=fresh["memory_id"], kind=kind,
+            source_event_id=claimed.job["source_event_id"], reason=reason)
+
+    def _end_retain_job(self, claimed: jobs_module.ClaimedJob, *, summary: str) -> None:
+        """Close the retain job, or leave it to whoever holds the claim now."""
+        try:
+            self._jobs.fail(claimed, error_code="document_deleted_locally",
+                            safe_error_summary=summary)
+        except errors.InvalidStateTransition:
+            # Somebody else's claim. They will reach the same conclusion from the
+            # item's status, and the take-back is already queued above.
+            pass
 
     def _compensate_revoked_write(self, claimed: jobs_module.ClaimedJob) -> bool:
         """Take back a remote write the local lifecycle has already revoked.
@@ -267,7 +308,16 @@ class MemoryWorker:
         transport = self._require_transport("retain")
         document_id = claimed.job["document_id"]
         if fresh["status"] == "DELETED":
-            transport.delete_document(bank=claimed.bank, document_id=document_id)
+            receipt = transport.delete_document(bank=claimed.bank, document_id=document_id)
+            if not receipt.get("success"):
+                # `HindsightTransport` refuses this itself, but a compensation
+                # that believed any other `MemoryTransport` would leave the
+                # document in place and report the undo as done.
+                raise TransportError(
+                    "engine_delete_failed",
+                    "the engine reported it did not remove the document this "
+                    "retain had just written",
+                    retryable=True)
             return True
         for unit in transport.list_document_memories(bank=claimed.bank,
                                                      document_id=document_id):
@@ -294,9 +344,20 @@ class MemoryWorker:
             units = transport.list_document_memories(
                 bank=claimed.bank, document_id=claimed.job["document_id"]
             )
-            receipt = transport.delete_document(
-                bank=claimed.bank, document_id=claimed.job["document_id"]
-            )
+            try:
+                receipt = transport.delete_document(
+                    bank=claimed.bank, document_id=claimed.job["document_id"]
+                )
+            except TransportError as gone:
+                if gone.code != "engine_not_found":
+                    raise
+                # The document is already absent, which is what this job exists
+                # to achieve. Recording it as anything else would strand a
+                # re-armed compensation — the retry path this exists for — as a
+                # permanent `FAILED` right after it succeeded in principle.
+                receipt = {"document_id": claimed.job["document_id"],
+                           "memory_units_deleted": 0, "success": True,
+                           "message": "the document was already absent"}
             if not receipt.get("success"):
                 # The transport refuses this before returning, so a reachable
                 # branch means some other `MemoryTransport` did not. Raised

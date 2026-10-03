@@ -350,14 +350,47 @@ next recall returns something an operator deleted.
 A is the only participant that knows it just wrote, so A takes it back. After
 `retain` returns, `_compensate_revoked_write` re-reads the item and, if it has
 left `ACTIVE`, deletes the document (`DELETED`) or soft-retires its units
-(`OBSOLETE`, which keeps the document by design). The job is then failed as
-`document_deleted_locally` rather than marked `DONE`; if the claim has already
-passed to someone else the failure is not recorded, because the take-back is what
-mattered. A compensation that cannot reach the engine surfaces as that retain's
-own `TransportError`, so a worker that could not undo its write reports it
-instead of recording success. What this does **not** close: a process killed
-between the write and the compensation. That residue needs an operator-side
-read-back sweep and is named as not covered rather than assumed away.
+(`OBSOLETE`, which keeps the document by design). A receipt whose `success` is
+falsy is a failed compensation, not a finished one — the undo must not be
+believed on the same terms the delete path refuses to believe it.
+
+**The obligation is a job row, because the participant that owes it cannot be
+trusted to record it.** The first version of this took the write back inline and
+then called `fail()` on the retain job. That is wrong twice over, and a single
+transient timeout is enough to prove it: `fail()` matches `lease_owner` and
+`retry_count`, so once the claim has been reclaimed it is refused outright and
+nothing about the failed undo is recorded — local `DELETED`, document in the
+bank, both jobs terminal, no retry. And even when `fail()` *is* accepted, the
+retain job is the wrong owner: `_process_retain` returns early for an item that
+is no longer `ACTIVE`, so the next claim would record `document_deleted_locally`
+and go terminal without ever retrying the undo.
+
+So the take-back is recorded where it can survive either outcome:
+
+* `_ensure_engine_work` (a `delete` job for a tombstoned item, an `invalidate`
+  job for an obsoleted one) is called **before** anything fencing can refuse,
+  from both the failed-compensation path and the early-exit path;
+* an existing job that is `PENDING` or `RUNNING` is left alone — the queue is
+  already carrying it, and re-arming a `RUNNING` one would steal a lease;
+* a `DONE` or `FAILED` one is re-armed, which is the point: the normal delete
+  can have completed *before* the stale write landed, which is exactly the
+  orphan. Re-arming touches only status, lease and timing columns, none of which
+  `trg_memory_jobs_identity_immutable` guards;
+* `retry_count` is deliberately **not** rewound. Attempt numbers are append-only
+  and `(job_id, attempt_number, phase)` is UNIQUE, so rewinding would collide
+  with records the first run already wrote. The budget continues from where the
+  job stopped, and `request_retry` — which does reset the counter — is the
+  operator's way to widen it;
+* a re-armed delete that finds the document already absent records success
+  rather than `engine_not_found`. The document being absent *is* the objective,
+  and stranding the retry as a permanent failure right after it succeeded in
+  principle would defeat the whole path.
+
+The residue this still does not close is narrower than before: a process killed
+**between** the write and `_ensure_engine_work`. There is no transaction that
+can cover a remote write and a local insert, so that gap is real. It needs an
+operator-side read-back sweep and is named as not covered rather than assumed
+away.
 
 **Retry.** A retryable failure returns to `PENDING` with exponential backoff
 (30 s, doubling, clamped to 3600 s, ±25% jitter, clamped *after* the jitter) and a

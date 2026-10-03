@@ -679,6 +679,91 @@ class JobStore:
         row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
         return job_row(row)
 
+    def ensure_engine_work(self, *, memory_id: str, kind: str, source_event_id: str,
+                           reason: str | None = None,
+                           at: str | None = None) -> dict[str, Any] | None:
+        """Make sure durable engine work exists for this item, and can run again.
+
+        Returns the job, or `None` when the item no longer needs anything done.
+
+        This exists because the participant that owes a take-back is frequently
+        not one that can record it. A worker whose lease expired mid-retain still
+        owes the undo of the write *it* put on the wire, yet every write path it
+        has — `complete`, `fail`, `mark_document_deleted` — is fenced against it
+        once somebody else has claimed the job. A job row carries no claim, so
+        the obligation moves there and retries under the ordinary backoff.
+
+        Three outcomes, and the differences matter:
+
+        * a job already `PENDING` or `RUNNING` is left exactly as it is — the
+          queue is already carrying this obligation, and re-arming a `RUNNING`
+          one would steal a lease;
+        * no job at all is created, keyed on `source_event_id`, so the
+          `(source_event_id, kind)` uniqueness still makes enqueueing idempotent;
+        * a `DONE` or `FAILED` job is re-armed. That is the whole point: the
+          normal `delete` can have completed *before* the stale write landed,
+          which is precisely the orphan this is for. `retry_count` is **not**
+          rewound — attempt numbers are append-only and
+          `(job_id, attempt_number, phase)` is UNIQUE, so restarting the counter
+          would collide with the records the first run already wrote. The
+          remaining budget continues from where the job left off, and an operator
+          can still widen it with `request_retry`, which does reset the counter.
+
+        Status, lease and timing columns are not part of
+        `trg_memory_jobs_identity_immutable`, so this touches no identity column
+        and no `DELETE` — the migration's two hard rules.
+        """
+        if kind not in ("delete", "invalidate"):
+            raise errors.InvalidRequest("kind must be delete or invalidate",
+                                        field="kind", value=kind)
+        stamp = at or clock.now_rfc3339()
+        with db.translate_lock_errors(), db.transaction(self._conn):
+            existing = self._conn.execute(
+                "SELECT * FROM memory_jobs WHERE memory_id=? AND kind=?"
+                " ORDER BY created_at DESC, job_id DESC LIMIT 1",
+                (memory_id, kind),
+            ).fetchone()
+            if existing is not None:
+                job = job_row(existing)
+                if job["status"] in ("PENDING", "RUNNING"):
+                    return job
+                cursor = self._conn.execute(
+                    "UPDATE memory_jobs SET status='PENDING', lease_owner=NULL,"
+                    " lease_expires_at=NULL, next_attempt_at=?,"
+                    " last_error_code=NULL, safe_error_summary=?, completed_at=NULL,"
+                    " updated_at=? WHERE job_id=? AND status=?",
+                    (stamp, filtering.safe_summary(reason or "remote write to be taken back",
+                                                   limit=200) if reason else None,
+                     stamp, job["job_id"], job["status"]),
+                )
+                if cursor.rowcount == 1:
+                    job["status"] = "PENDING"
+                    job["next_attempt_at"] = stamp
+                    job["last_error_code"] = None
+                    job["completed_at"] = None
+                return job
+            item = self._store.item(memory_id)
+            if item is None:  # pragma: no cover - the caller holds the item
+                raise errors.NotFound("memory", memory_id)
+            if kind == "delete" and item["status"] != "DELETED":
+                return None
+            if kind == "invalidate" and item["status"] != "OBSOLETE":
+                return None
+            job_id = ids.new_id(JOB_ID_PREFIX)
+            self._conn.execute(
+                "INSERT INTO memory_jobs (job_id, kind, memory_id, source_event_id,"
+                " project_id, task_id, memory_type, bank_id, document_id, content_sha256,"
+                " status, retry_count, max_attempts, next_attempt_at, created_at,"
+                " updated_at) VALUES (?,?,?,?,?,?,?,?,?,?, 'PENDING',0,?,?,?,?)",
+                (job_id, kind, memory_id, source_event_id, item["project_id"],
+                 item["task_id"], item["memory_type"], item["bank_id"],
+                 item["document_id"], item["content_sha256"],
+                 DEFAULT_MAX_ATTEMPTS, stamp, stamp, stamp),
+            )
+            row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?",
+                                     (job_id,)).fetchone()
+            return job_row(row)
+
     def mark_document_deleted(self, job: ClaimedJob, *, receipt: dict[str, Any],
                               at: str | None = None) -> None:
         stamp = at or clock.now_rfc3339()
@@ -692,8 +777,12 @@ class JobStore:
             # crash rather than remove the document.
             self._store.set_engine_state(
                 job.job["memory_id"], engine_state="DELETED",
+                # `DELETED` is included on purpose: a re-armed delete exists
+                # because a stale retain restored a document the row already
+                # calls deleted, and the retry must be able to record the same
+                # state again rather than fail on a transition it just caused.
                 expected=("DELETE_PENDING", "DELETE_FAILED", "RETAINED", "PENDING_RETAIN",
-                          "RETAIN_FAILED"),
+                          "RETAIN_FAILED", "DELETED"),
                 receipt=receipt, remote_deleted=True, at=stamp)
             self._finish(job, receipt=receipt, at=stamp)
             self._attempt(job.job["job_id"], int(job.job["retry_count"]), "DELETED", "SUCCESS",

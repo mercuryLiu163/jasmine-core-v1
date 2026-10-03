@@ -934,3 +934,144 @@ class ADeliveryReceiptIsNotBelievedOnItsWord(MemoryTestCase):
                             "a receipt saying the delete failed was recorded as a delete")
         self.assertEqual(job["last_error_code"], "engine_delete_failed")
         self.assertNotEqual(self.store.item(item["memory_id"])["engine_state"], "DELETED")
+
+
+class TheTakeBackOutlivesTheClaimThatOwesIt(MemoryTestCase):
+    """A transient timeout must not strand a document the queue has forgotten.
+
+    The failure the review found: the compensation for a stale retain times out,
+    and the `fail()` that would record it is then refused by fencing because
+    the claim has already been reclaimed. Local says `DELETED`, the document is
+    in the bank, both jobs are terminal, and nothing will ever retry. One
+    transient timeout is enough — no crash required.
+    """
+
+    def test_a_failing_compensation_leaves_a_job_that_can_finish_it(self) -> None:
+        from jasmine_core import db as db_module
+
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        item = self.store.items()[0]
+        real_retain = self.transport.retain
+        real_delete = self.transport.delete_document
+        compensate_broken = {"on": False}
+
+        def doomed_delete(**kwargs):
+            if compensate_broken["on"]:
+                raise TransportError("engine_unreachable", "the engine timed out",
+                                     retryable=True)
+            return real_delete(**kwargs)
+
+        def in_flight(**kwargs):
+            # The operator tombstones the item while A's engine call is running.
+            self.lifecycle().delete(item["memory_id"],
+                                    {"expected_revision": 1, "host_id": HOST},
+                                    actor_id=HUMAN, actor_kind="human", host_id=HOST)
+            # A's lease lapses before its call returns.
+            with db_module.transaction(self.conn):
+                self.conn.execute(
+                    "UPDATE memory_jobs SET lease_expires_at='1970-01-01T00:00:00.000000Z'"
+                    " WHERE memory_id=? AND kind='retain'", (item["memory_id"],))
+            # Worker B takes the job over: the retain early-exits and the delete
+            # runs to completion while A is still on the wire.
+            takeover = self.worker(lease_owner="worker-B")
+            for _ in range(6):
+                tick = takeover.tick(scan=False)
+                if tick.outcome == "idle":
+                    break
+            # Only now does A's write land, after B's delete has finished.
+            receipt = real_retain(**kwargs)
+            compensate_broken["on"] = True
+            return receipt
+
+        self.transport.retain = in_flight
+        self.transport.delete_document = doomed_delete
+        try:
+            stale = self.worker(lease_owner="worker-A").tick(scan=False)
+        finally:
+            self.transport.retain = real_retain
+            self.transport.delete_document = real_delete
+
+        jobs = {j["kind"]: j for j in self.job_store().jobs()}
+        self.assertEqual(stale.error_code, "document_deleted_locally",
+                         stale.as_dict())
+        self.assertNotEqual(jobs["retain"]["status"], "DONE")
+        # The whole point: the take-back is queued on a row with no owner, so a
+        # refused `fail()` cannot drop it.
+        self.assertEqual(jobs["delete"]["status"], "PENDING",
+                         f"the take-back was not queued: {jobs['delete']}")
+        self.assertIsNotNone(self.transport.documents.get((item["bank_id"],
+                                                           item["document_id"])),
+                             "the stale write is still out there")
+
+        # The engine answers again and the queue finishes the job fencing could.
+        report = self.worker(lease_owner="worker-C").run(max_ticks=8)
+        jobs = {j["kind"]: j for j in self.job_store().jobs()}
+        self.assertIsNone(self.transport.documents.get((item["bank_id"],
+                                                        item["document_id"])),
+                          "the queued take-back never ran to completion")
+        self.assertEqual(jobs["delete"]["status"], "DONE", jobs["delete"])
+        self.assertEqual(jobs["retain"]["status"], "FAILED", jobs["retain"])
+        self.assertEqual(self.store.item(item["memory_id"])["engine_state"], "DELETED")
+        self.assertTrue(any(r.outcome == "deleted" for r in report), report)
+
+    def test_the_compensation_believes_a_failing_receipt(self) -> None:
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        item = self.store.items()[0]
+        real_retain = self.transport.retain
+        real_delete = self.transport.delete_document
+
+        def in_flight(**kwargs):
+            receipt = real_retain(**kwargs)
+            self.lifecycle().delete(item["memory_id"],
+                                    {"expected_revision": 1, "host_id": HOST},
+                                    actor_id=HUMAN, actor_kind="human", host_id=HOST)
+            return receipt
+
+        def lying_delete(**kwargs):
+            result = real_delete(**kwargs)
+            result["success"] = False
+            return result
+
+        self.transport.retain = in_flight
+        self.transport.delete_document = lying_delete
+        try:
+            report = self.worker(lease_owner="worker-A").tick(scan=False)
+        finally:
+            self.transport.retain = real_retain
+            self.transport.delete_document = real_delete
+
+        self.assertEqual(report.error_code, "document_deleted_locally",
+                         report.as_dict())
+        jobs = {j["kind"]: j for j in self.job_store().jobs()}
+        self.assertEqual(jobs["delete"]["status"], "PENDING",
+                         "a compensation that reported failure was recorded as done")
+        # The double has already popped the document — it acts before it lies —
+        # so the assertion is on what Core recorded, not on the double's state.
+        self.assertNotEqual(self.store.item(item["memory_id"])["engine_state"],
+                            "DELETED", "a receipt saying `false` marked the item deleted")
+
+    def test_re_queueing_a_delete_for_a_document_already_gone_terminates(self) -> None:
+        # The re-armed job may find the document already absent; that is the
+        # objective, so it must end `DONE` rather than a permanent failure.
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        item = self.store.items()[0]
+        self.worker().run(max_ticks=6)
+        self.lifecycle().delete(item["memory_id"],
+                                {"expected_revision": 1, "host_id": HOST},
+                                actor_id=HUMAN, actor_kind="human", host_id=HOST)
+        self.worker().run(max_ticks=6)
+        self.assertEqual(self.job_store().ensure_engine_work(
+            memory_id=item["memory_id"], kind="delete",
+            source_event_id=item["source_event_id"], reason="re-arm")["status"], "PENDING")
+        self.worker().run(max_ticks=6)
+        job = next(j for j in self.job_store().jobs()
+                   if j["memory_id"] == item["memory_id"] and j["kind"] == "delete")
+        self.assertEqual(job["status"], "DONE",
+                         f"an already-absent document stranded the job: {job}")
+        self.assertEqual(self.store.item(item["memory_id"])["engine_state"], "DELETED")
