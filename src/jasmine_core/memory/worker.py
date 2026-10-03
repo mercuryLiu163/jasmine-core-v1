@@ -351,6 +351,15 @@ class MemoryWorker:
             except TransportError as gone:
                 if gone.code != "engine_not_found":
                     raise
+                # A 404 means *a* resource was missing, not *which* one: a wrong
+                # endpoint, a bank this Core never derived, or a path rewritten
+                # by a proxy all answer 404 while the document is still there.
+                # Reading it back is what separates "already gone" from "we
+                # could not reach it", and absence is only claimed when both
+                # independent reads agree.
+                if not self._document_is_absent(transport, bank=claimed.bank,
+                                                document_id=claimed.job["document_id"]):
+                    raise
                 # The document is already absent, which is what this job exists
                 # to achieve. Recording it as anything else would strand a
                 # re-armed compensation — the retry path this exists for — as a
@@ -377,9 +386,39 @@ class MemoryWorker:
             return
         receipt = {**receipt, "memory_units_seen": len(units),
                    "memory_unit_ids": [u.get("id") for u in units if isinstance(u.get("id"), str)]}
-        self._jobs.mark_document_deleted(claimed, receipt=receipt)
+        try:
+            self._jobs.mark_document_deleted(claimed, receipt=receipt)
+        except errors.InvalidStateTransition:
+            # The claim was taken back while we were on the wire — which is the
+            # whole point of `ensure_engine_work` re-arming a `RUNNING` job. Our
+            # commit is refused, the job is `PENDING` again for whoever holds it
+            # now, and this report says so instead of surfacing as an unhandled
+            # exception that looks like a defect in the delete path.
+            report.outcome = "failed"
+            report.error_code = "claim_lost"
+            return
         report.outcome = "deleted"
         report.receipt = receipt
+
+    @staticmethod
+    def _document_is_absent(transport: MemoryTransport, *, bank: Any,
+                            document_id: str) -> bool:
+        """Prove a document is gone instead of inferring it from a status code.
+
+        Two reads on two paths. The unit listing answers `200 {items: []}` for a
+        document that is not there when the endpoint and the bank are right —
+        so a listing that still has units disproves absence immediately — and the
+        document read-back returns null only on a genuine miss. Any error, any
+        surviving unit, or a read-back that still answers means absence has not
+        been shown, and the caller must keep the failure.
+        """
+        try:
+            if transport.list_document_memories(bank=bank, document_id=document_id):
+                return False
+            return transport.get_document(bank=bank, document_id=document_id) is None
+        except TransportError:
+            # We could not check. Not knowing is not knowing it is gone.
+            return False
 
     def _require_transport(self, phase: str) -> MemoryTransport:
         """The engine, or a `TransportError` that the retry machinery understands.

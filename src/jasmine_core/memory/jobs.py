@@ -319,11 +319,22 @@ class JobStore:
                 return None
             job = job_row(row)
             expired = job["status"] == "RUNNING"
-            attempt_number = int(job["retry_count"]) + 1
+            # Two different numbers, deliberately.
+            #
+            # `attempt_number` comes from `memory_job_attempts`, because that
+            # table is append-only with `UNIQUE (job_id, attempt_number, phase)`
+            # and `CHECK (attempt_number>=1)`. `retry_count` is the *budget*
+            # counter, and `request_retry` resets it to 0 so an exhausted job
+            # gets a fresh allowance — deriving the attempt from it meant that
+            # reset collided with records the first run had already written,
+            # aborting the claim and leaving the job PENDING forever.
+            attempt_number = self._latest_attempt_number(job["job_id"],
+                                                         fallback=int(job["retry_count"])) + 1
+            budget_used = int(job["retry_count"]) + 1
             cursor = self._conn.execute(
                 "UPDATE memory_jobs SET status='RUNNING', lease_owner=?, lease_expires_at=?,"
                 " retry_count=?, updated_at=? WHERE job_id=? AND status=?",
-                (owner, expires, attempt_number, stamp, job["job_id"], job["status"]),
+                (owner, expires, budget_used, stamp, job["job_id"], job["status"]),
             )
             if cursor.rowcount != 1:
                 return None
@@ -391,6 +402,22 @@ class JobStore:
                 job_id=job.job["job_id"],
             )
 
+    def _latest_attempt_number(self, job_id: str, *, fallback: int = 0) -> int:
+        """The highest attempt number recorded for this job, or `fallback`.
+
+        The sequence lives in `memory_job_attempts` and only ever moves forward.
+        Reading it from here is what lets `retry_count` stay a resettable budget
+        counter without any writer having to know which of the two it needs.
+        """
+        row = self._conn.execute(
+            "SELECT COALESCE(MAX(attempt_number), 0) AS n FROM memory_job_attempts"
+            " WHERE job_id=?", (job_id,)).fetchone()
+        return max(int(row["n"]), int(fallback))
+
+    def _attempt_number_for(self, job: dict[str, Any]) -> int:
+        """The number this job's next attempt record must carry."""
+        return max(self._latest_attempt_number(job["job_id"]), int(job["retry_count"]), 1)
+
     def _attempt(self, job_id: str, attempt_number: int, phase: str, outcome: str, *,
                  owner: str, at: str, receipt: dict[str, Any] | None = None,
                  error_code: str | None = None,
@@ -425,7 +452,7 @@ class JobStore:
             self._assert_claim_held(job)
             self._store.note_retained(job.job["memory_id"], receipt)
             self._finish(job, receipt=receipt, at=stamp)
-            self._attempt(job.job["job_id"], int(job.job["retry_count"]), "RETAINED", "SUCCESS",
+            self._attempt(job.job["job_id"], self._attempt_number_for(job.job), "RETAINED", "SUCCESS",
                           owner=job.job["lease_owner"] or "", at=stamp, receipt=receipt)
 
     def fail(self, job: ClaimedJob, *, error_code: str, safe_error_summary: str,
@@ -449,6 +476,8 @@ class JobStore:
         """
         stamp = at or clock.now_rfc3339()
         summary = filtering.safe_summary(safe_error_summary)
+        # The budget counter, not the attempt sequence: after `request_retry`
+        # resets it this reads 1 while the sequence continues at its own number.
         attempts = int(job.job["retry_count"])
         budget = int(job.job["max_attempts"])
         retry = is_retryable(error_code) and attempts < budget
@@ -490,7 +519,7 @@ class JobStore:
                     "this Memory job is no longer running; another worker completed it",
                     job_id=job.job["job_id"], error_code=error_code,
                 )
-            self._attempt(job.job["job_id"], attempts, "FAILED",
+            self._attempt(job.job["job_id"], self._attempt_number_for(job.job), "FAILED",
                           "RETRY" if retry else "FAILED",
                           owner=job.job["lease_owner"] or "", at=stamp,
                           error_code=error_code, safe_error_summary=summary)
@@ -641,7 +670,7 @@ class JobStore:
         stamp = at or clock.now_rfc3339()
         with db.translate_lock_errors(), db.transaction(self._conn):
             self._finish(job, receipt=receipt, at=stamp)
-            self._attempt(job.job["job_id"], int(job.job["retry_count"]), "INVALIDATED",
+            self._attempt(job.job["job_id"], self._attempt_number_for(job.job), "INVALIDATED",
                           "SUCCESS", owner=job.job["lease_owner"] or "", at=stamp, receipt=receipt)
 
     # -- delete jobs -------------------------------------------------------
@@ -695,9 +724,14 @@ class JobStore:
 
         Three outcomes, and the differences matter:
 
-        * a job already `PENDING` or `RUNNING` is left exactly as it is — the
-          queue is already carrying this obligation, and re-arming a `RUNNING`
-          one would steal a lease;
+        * a job already `PENDING` is left alone — it is queued and will run;
+        * a `RUNNING` one is re-armed, which is the case that matters. "Running"
+          does not mean "still accurate": a delete can have been sent and not yet
+          committed `DONE` when a stale retain writes the document back, and
+          returning it unchanged would let it finish against the older view —
+          `DONE`, document present, nothing queued. Clearing its lease is safe
+          rather than destructive, because `_assert_claim_held` then refuses the
+          in-flight worker's own commit;
         * no job at all is created, keyed on `source_event_id`, so the
           `(source_event_id, kind)` uniqueness still makes enqueueing idempotent;
         * a `DONE` or `FAILED` job is re-armed. That is the whole point: the
@@ -725,22 +759,29 @@ class JobStore:
             ).fetchone()
             if existing is not None:
                 job = job_row(existing)
-                if job["status"] in ("PENDING", "RUNNING"):
+                if job["status"] == "PENDING":
                     return job
+                # Re-armed in one statement against every non-PENDING state, so a
+                # job that flips `RUNNING` -> `DONE` between the read and this
+                # write is still caught. Missing it would be the whole bug: the
+                # delete finishes against its older view and the new demand is
+                # dropped. `lease_owner=NULL` is what fences the in-flight
+                # worker's commit; the status, lease and timing columns are not
+                # identity columns, so neither trigger object is touched.
                 cursor = self._conn.execute(
                     "UPDATE memory_jobs SET status='PENDING', lease_owner=NULL,"
                     " lease_expires_at=NULL, next_attempt_at=?,"
                     " last_error_code=NULL, safe_error_summary=?, completed_at=NULL,"
-                    " updated_at=? WHERE job_id=? AND status=?",
+                    " updated_at=? WHERE job_id=?"
+                    " AND status IN ('RUNNING','DONE','FAILED')",
                     (stamp, filtering.safe_summary(reason or "remote write to be taken back",
                                                    limit=200) if reason else None,
-                     stamp, job["job_id"], job["status"]),
+                     stamp, job["job_id"]),
                 )
                 if cursor.rowcount == 1:
-                    job["status"] = "PENDING"
-                    job["next_attempt_at"] = stamp
-                    job["last_error_code"] = None
-                    job["completed_at"] = None
+                    job = job_row(self._conn.execute(
+                        "SELECT * FROM memory_jobs WHERE job_id=?",
+                        (job["job_id"],)).fetchone())
                 return job
             item = self._store.item(memory_id)
             if item is None:  # pragma: no cover - the caller holds the item
@@ -785,7 +826,7 @@ class JobStore:
                           "RETAIN_FAILED", "DELETED"),
                 receipt=receipt, remote_deleted=True, at=stamp)
             self._finish(job, receipt=receipt, at=stamp)
-            self._attempt(job.job["job_id"], int(job.job["retry_count"]), "DELETED", "SUCCESS",
+            self._attempt(job.job["job_id"], self._attempt_number_for(job.job), "DELETED", "SUCCESS",
                           owner=job.job["lease_owner"] or "", at=stamp, receipt=receipt)
 
     # -- reading -----------------------------------------------------------

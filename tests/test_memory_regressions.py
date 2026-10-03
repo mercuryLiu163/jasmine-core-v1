@@ -1075,3 +1075,139 @@ class TheTakeBackOutlivesTheClaimThatOwesIt(MemoryTestCase):
         self.assertEqual(job["status"], "DONE",
                          f"an already-absent document stranded the job: {job}")
         self.assertEqual(self.store.item(item["memory_id"])["engine_state"], "DELETED")
+
+
+class TheQueueSurvivesEveryWayToLoseTheObligation(MemoryTestCase):
+    """Three ways a take-back used to be dropped; each must now be carried."""
+
+    def _retained_then_tombstoned(self):
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        self.worker().run(max_ticks=6)
+        item = self.store.items()[0]
+        self.lifecycle().delete(item["memory_id"],
+                                {"expected_revision": 1, "host_id": HOST},
+                                actor_id=HUMAN, actor_kind="human", host_id=HOST)
+        return project, item
+
+    def test_a_running_delete_is_re_armed_rather_than_trusted(self) -> None:
+        """`RUNNING` is not `current`: the delete can be mid-flight and stale.
+
+        Worker A is inside `_process_delete` — the remote removal has happened
+        and `DONE` is not yet committed — when a stale retain writes the
+        document back. Handing A's job back unchanged would let it commit
+        against the older view: `DONE`, document present, nothing queued.
+        """
+        _, item = self._retained_then_tombstoned()
+        real_delete = self.transport.delete_document
+        real_retain = self.transport.retain
+        jobs = self.job_store()
+        # Claimed by the worker's own tick, so the hook runs while the job is
+        # genuinely `RUNNING`. Pre-claiming here would make that tick idle.
+        job_id = next(j["job_id"] for j in jobs.jobs() if j["kind"] == "delete")
+        bank = scope_module.project_bank(item["project_id"])
+
+        def mid_flight(**kwargs):
+            receipt = real_delete(**kwargs)
+            # A stale retain lands and its owner queues the take-back, exactly
+            # as `_process_retain` would.
+            real_retain(bank=bank, document_id=item["document_id"],
+                        content=item["sanitized_text"], context="x", metadata={},
+                        tags=(), memory_type=item["memory_type"], timestamp=None)
+            jobs.ensure_engine_work(memory_id=item["memory_id"], kind="delete",
+                                    source_event_id=item["source_event_id"],
+                                    reason="a stale retain restored the document")
+            return receipt
+
+        self.transport.delete_document = mid_flight
+        try:
+            report = self.worker(lease_owner="worker-A").tick(scan=False)
+        finally:
+            self.transport.delete_document = real_delete
+
+        after = jobs.job(job_id)
+        self.assertEqual(after["status"], "PENDING",
+                         "a job mid-flight was trusted instead of re-armed")
+        self.assertIsNone(after["lease_owner"],
+                          "the in-flight worker kept a claim the queue had taken back")
+        self.assertEqual(after["safe_error_summary"],
+                         "a stale retain restored the document")
+        self.assertEqual(report.outcome, "failed", report.as_dict())
+        self.assertEqual(report.error_code, "claim_lost", report.as_dict())
+        self.assertIsNotNone(
+            self.transport.documents.get((item["bank_id"], item["document_id"])),
+            "the stale write is still out there")
+
+        # The queue finishes what the fenced worker could not.
+        self.worker(lease_owner="worker-B").run(max_ticks=8)
+        final = jobs.job(job_id)
+        self.assertEqual(final["status"], "DONE", final)
+        self.assertIsNone(self.transport.documents.get((item["bank_id"],
+                                                        item["document_id"])),
+                          "the re-armed delete never removed the restored document")
+
+    def test_a_manual_retry_does_not_collide_with_the_attempt_history(self) -> None:
+        """`request_retry` resets the budget; the attempt sequence must not follow.
+
+        The counter is append-only with
+        `UNIQUE (job_id, attempt_number, phase)`. Deriving the attempt number
+        from the reset budget made the claim itself abort, so the job was left
+        `PENDING` with a worker that could never claim it.
+        """
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        self.transport.retain_error = TransportError("engine_rejected", "no",
+                                                     retryable=False)
+        self.worker(max_attempts=1).tick()
+        job = next(j for j in self.job_store().jobs() if j["kind"] == "retain")
+        self.assertEqual(job["status"], "FAILED")
+        before = {(a["attempt_number"], a["phase"])
+                  for a in self.job_store().attempts(job["job_id"])}
+        self.assertIn((1, "CLAIMED"), before)
+        self.assertIn((1, "FAILED"), before)
+
+        self.job_store().request_retry(job["job_id"], actor_id=HUMAN,
+                                       actor_kind="human", host_id=HOST)
+        self.transport.retain_error = None
+        report = self.worker(max_attempts=1).tick()   # must not raise
+
+        self.assertNotEqual(report.outcome, "error", report.as_dict())
+        job = next(j for j in self.job_store().jobs() if j["kind"] == "retain")
+        self.assertEqual(job["status"], "DONE", job)
+        after = self.job_store().attempts(job["job_id"])
+        numbers = [a["attempt_number"] for a in after]
+        self.assertEqual(numbers, sorted(numbers) and numbers,
+                         "attempt numbers must keep moving forward")
+        self.assertEqual(len({(a["attempt_number"], a["phase"]) for a in after}),
+                         len(after), "a retried claim reused an attempt number")
+
+    def test_a_404_that_does_not_mean_absent_is_not_recorded_as_a_delete(self) -> None:
+        """A status code proves nothing about *which* resource was missing.
+
+        A wrong endpoint, a bank this Core never derived, or a proxy rewriting
+        the path all answer 404 while the document is still in the bank.
+        """
+        _, item = self._retained_then_tombstoned()
+        real_delete = self.transport.delete_document
+
+        def wrong_endpoint(**kwargs):
+            raise TransportError("engine_not_found", "no such path", retryable=False,
+                                 http_status=404)
+
+        self.transport.delete_document = wrong_endpoint
+        try:
+            report = self.worker(lease_owner="worker-A").tick(scan=False)
+        finally:
+            self.transport.delete_document = real_delete
+
+        job = next(j for j in self.job_store().jobs()
+                   if j["memory_id"] == item["memory_id"] and j["kind"] == "delete")
+        self.assertNotEqual(job["status"], "DONE",
+                            "an unproven 404 was recorded as a successful delete")
+        self.assertNotEqual(self.store.item(item["memory_id"])["engine_state"], "DELETED")
+        self.assertIsNotNone(self.transport.documents.get((item["bank_id"],
+                                                           item["document_id"])),
+                             "the document is still there while Core says it is gone")
+        self.assertNotIn(report.outcome, ("deleted",))

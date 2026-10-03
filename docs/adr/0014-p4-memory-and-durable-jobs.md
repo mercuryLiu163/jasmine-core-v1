@@ -370,21 +370,38 @@ So the take-back is recorded where it can survive either outcome:
 * `_ensure_engine_work` (a `delete` job for a tombstoned item, an `invalidate`
   job for an obsoleted one) is called **before** anything fencing can refuse,
   from both the failed-compensation path and the early-exit path;
-* an existing job that is `PENDING` or `RUNNING` is left alone — the queue is
-  already carrying it, and re-arming a `RUNNING` one would steal a lease;
-* a `DONE` or `FAILED` one is re-armed, which is the point: the normal delete
-  can have completed *before* the stale write landed, which is exactly the
-  orphan. Re-arming touches only status, lease and timing columns, none of which
-  `trg_memory_jobs_identity_immutable` guards;
-* `retry_count` is deliberately **not** rewound. Attempt numbers are append-only
-  and `(job_id, attempt_number, phase)` is UNIQUE, so rewinding would collide
-  with records the first run already wrote. The budget continues from where the
-  job stopped, and `request_retry` — which does reset the counter — is the
-  operator's way to widen it;
-* a re-armed delete that finds the document already absent records success
-  rather than `engine_not_found`. The document being absent *is* the objective,
-  and stranding the retry as a permanent failure right after it succeeded in
-  principle would defeat the whole path.
+* an existing job that is `PENDING` is left alone — it is queued and will run;
+* a `RUNNING`, `DONE` or `FAILED` one is re-armed, in a single statement against
+  every non-`PENDING` state so a job that flips between the read and the write is
+  still caught. `RUNNING` is the case that matters, because *running* is not
+  *current*: a delete can be mid-flight, its remote removal already done and
+  `DONE` not yet committed, when a stale retain writes the document back.
+  Returning it unchanged would let it commit against the older view — `DONE`,
+  document present, nothing queued. Clearing `lease_owner` is what fences that
+  commit; `_assert_claim_held` refuses it and the report says `claim_lost`
+  rather than raising, because losing a lease is an expected outcome and not a
+  defect in the delete path. Re-arming touches only status, lease and timing
+  columns, none of which `trg_memory_jobs_identity_immutable` guards;
+* a re-armed delete that finds the document already absent records success, but
+  only after **proving** absence. A 404 means *a* resource was missing, not
+  *which* one: a wrong endpoint, a bank this Core never derived, or a proxy
+  rewriting the path all answer 404 while the document is still in the bank.
+  `_document_is_absent` reads it back twice, on two paths — the unit listing
+  answers `200 {items: []}` for an absent document when the endpoint and the
+  bank are right, and the document read-back returns null only on a genuine
+  miss — and any error or surviving unit keeps the failure. Status codes are
+  not evidence about which resource they describe;
+* `retry_count` and the attempt sequence are **two different numbers**, and the
+  distinction is what makes both safe to do their own job. `retry_count` is the
+  budget counter, and `request_retry` resets it to 0 so an exhausted job gets a
+  fresh allowance — that reset was previously harmless-looking and wasn't: the
+  claim derived `attempt_number` from it, so the reset made the next claim
+  collide with `UNIQUE (job_id, attempt_number, phase)`, abort the claim and
+  strand the job `PENDING` forever with a worker that could never take it.
+  `attempt_number` now comes from `MAX(attempt_number) + 1` over
+  `memory_job_attempts`, which only moves forward, while `retry_count` continues
+  to count claims. Neither writer has to know which one it needs:
+  `_attempt_number_for` picks the sequence and `fail()` picks the budget.
 
 The residue this still does not close is narrower than before: a process killed
 **between** the write and `_ensure_engine_work`. There is no transaction that
