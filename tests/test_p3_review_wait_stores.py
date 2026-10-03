@@ -3,6 +3,7 @@
 No actual model, native Gate, or external operator evidence is claimed.
 """
 import json
+import hashlib
 import os
 from unittest.mock import patch
 from test_p2_admission import AdmissionBusinessGraph
@@ -29,6 +30,10 @@ class ReviewWaitStores(AdmissionBusinessGraph):
     self._review_wait_flow(prompt='请读取 index.html 的当前内容，不要修改文件。',refusal='source')
  def test_real_noncontinuation_wrong_nonce_never_waits(self):
     self._review_wait_flow(prompt='请读取 index.html 的当前内容，不要修改文件。',refusal='nonce')
+ def test_real_noncontinuation_unconfigured_immediate_block_no_wait(self):
+    self._review_wait_flow(prompt='请读取 index.html 的当前内容，不要修改文件。',refusal='unconfigured')
+ def test_real_noncontinuation_wrong_selector_immediate_block_no_wait(self):
+    self._review_wait_flow(prompt='请读取 index.html 的当前内容，不要修改文件。',refusal='selector')
  def _review_wait_flow(self,child_race=False,prompt='继续',refusal=None):
     initial=p2_codex_hook.handle(self.payload(),self.binding)
     self.assertIn('additionalContext',initial.get('hookSpecificOutput',{}),initial)
@@ -37,6 +42,7 @@ class ReviewWaitStores(AdmissionBusinessGraph):
     atomic_json(adapter,{'actor_id':fixture.agent,'receipt_root':str(self.root),'hook_definition_sha256':'a'*64})
     token=self.root/'operator';token.write_text('component');token.chmod(0o600)
     self.config.update(p3_adapter_config_file=str(adapter),p3_operator_token_file=str(token),p3_core_session_id=None,p3_review_wait=True)
+    if prompt!='继续' and refusal!='unconfigured':self.config['p3_review_wait_prompt_sha256s']=['0'*64 if refusal=='selector' else hashlib.sha256(prompt.encode()).hexdigest()]
     atomic_json(self.binding,self.config)
     original=fixture.fake.action
     def tentative(source):
@@ -98,6 +104,9 @@ class ReviewWaitStores(AdmissionBusinessGraph):
       self.assertNotIn('additionalContext',result.get('hookSpecificOutput',{}))
       self.assertEqual(calls,[])
       return
+    if refusal in ('unconfigured','selector'):
+      self.assertEqual(len(review_reads),1)
+      self.assertNotIn('review_wait_deadline_monotonic',Lease(self.binding,Deadline()).read())
     if child_race or refusal:
       self.assertEqual(result['decision'],'block',result)
       self.assertNotEqual(Lease(self.binding,Deadline()).read()['phase'],'READY')

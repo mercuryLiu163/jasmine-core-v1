@@ -257,6 +257,11 @@ class ReviewWaitTests(unittest.TestCase):
            'resolution':{'interpretation_id':state['interpretation_id'],'source_event_id':state['event_id']}}}
       def post(self,*args,**kwargs):owner.fail('Hook must not approve')
     return Client()
+ def test_review_wait_prompt_selector_validation(self):
+    for value in (True,None,{},['*'],['A'*64],[True],['0'*64]*2,['%064x'%i for i in range(9)]):
+      with self.subTest(value=value),self.assertRaises(ValueError):hook._review_wait_selectors({'p3_review_wait_prompt_sha256s':value})
+    self.assertEqual(hook._review_wait_selectors({}),[])
+    self.assertEqual(hook._review_wait_selectors({'p3_review_wait_prompt_sha256s':['0'*64]}),['0'*64])
  def test_review_wait_same_state_same_deadline_reenters_admission(self):
     # Synthetic HTTP replies: this proves the component contract only.
     config,payload,state=self.pending();lease=MemoryLease(state);deadline=Deadline();requests=json.loads(json.dumps(state['requests']))
@@ -290,6 +295,14 @@ class ReviewWaitTests(unittest.TestCase):
         if type(value) is bool:self.assertEqual(hook.binding(path,payload),candidate)
         else:
           with self.assertRaises(ValueError):hook.binding(path,payload)
+ def test_malformed_selector_binding_preserves_exact_file(self):
+    config,payload,state=self.pending()
+    config.update(mode=2,human_token_file=str(self.root/'human'),trace_file=str(self.root/'trace'),p3_operator_token_file=str(self.root/'operator'))
+    path=self.root/'binding'
+    for value in (True,['*'],['0'*64]*2):
+      path.write_text(json.dumps({**config,'p3_review_wait_prompt_sha256s':value}));path.chmod(0o600);before=path.read_bytes()
+      with self.assertRaises(ValueError):hook.binding(path,payload)
+      self.assertEqual(path.read_bytes(),before)
  def test_approved_same_raw_emits_once_current_generation_context(self):
     config,payload,pending=self.pending();lease=MemoryLease({**self.state,'turn_id':'older','generation':'7','prompt_sha256':'old'})
     seen=[];captured=[]

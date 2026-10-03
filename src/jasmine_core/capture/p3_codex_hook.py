@@ -24,9 +24,18 @@ from .p3_context_adapter import prepare_emission
 P2_FIELDS={'mode','run_nonce','project_id','host_id','core_url','token_file','human_token_file','trace_file'}
 P3_FIELDS=P2_FIELDS|{'p3_adapter_config_file','p3_operator_token_file','p3_core_session_id'}
 
+def _review_wait_selectors(config):
+    selectors=config.get('p3_review_wait_prompt_sha256s',[])
+    if (not isinstance(selectors,list) or len(selectors)>8 or
+        any(not isinstance(v,str) or re.fullmatch('[0-9a-f]{64}',v) is None for v in selectors) or
+        len(set(selectors))!=len(selectors)):
+        raise ValueError('invalid ReviewWait prompt selectors')
+    return selectors
+
 def binding(path,payload):
     value,_=private_json(Path(path),cap=65536)
-    if set(value) not in (P3_FIELDS,P3_FIELDS|{'p3_review_wait'}) or value['mode']!=2: raise ValueError('invalid P3 binding')
+    if not P3_FIELDS<=set(value) or set(value)-P3_FIELDS-{'p3_review_wait','p3_review_wait_prompt_sha256s'} or value['mode']!=2: raise ValueError('invalid P3 binding')
+    _review_wait_selectors(value)
     if type(value.get('p3_review_wait',False)) is not bool:raise ValueError('invalid ReviewWait option')
     if not isinstance(value['run_nonce'],str) or len(value['run_nonce'])<32: raise ValueError('invalid nonce')
     if os.environ.get('JASMINE_CORE_GATE_NONCE')!=value['run_nonce']: return None
@@ -247,7 +256,9 @@ def _review_wait(state, config, payload, lease, deadline):
     observer reads the atomic lease without acquiring or writing that lock.
     """
     prompt=payload.get('prompt')
+    selectors=_review_wait_selectors(config)
     if (not isinstance(prompt,str) or not prompt.strip() or len(prompt.encode())>32768 or
+        (prompt!='继续' and hashlib.sha256(prompt.encode()).hexdigest() not in selectors) or
         config.get('p3_review_wait',False) is not True or
         os.environ.get('JASMINE_CORE_GATE_NONCE')!=config.get('run_nonce') or
         payload.get('hook_event_name')!='UserPromptSubmit' or

@@ -132,7 +132,12 @@ workspace may be its project's child directory. No arbitrary path list is used.
 
 P3 bindings may explicitly set `p3_review_wait` to a strict boolean; absent means
 false. Ordinary admission remains immediate BLOCK on pending Review. The option
-permits a genuine nonempty UserPromptSubmit (including `继续` and guard input),
+permits literal `继续` by default. An optional immutable binding list
+`p3_review_wait_prompt_sha256s` selects at most eight unique lowercase SHA256
+prompt hashes for additional exact genuine nonempty UserPromptSubmit input.
+Unconfigured prompts block immediately; malformed selectors reject the binding.
+The stock managed fixture selects only its fixed Guard prompt, computed from
+its original index bytes, and mirrors this list in the manifest. Waiting requires
 an active matching gate nonce, existing non-null Task/Step and an unchanged
 current native source identity. The full original prompt is retained byte for byte;
 Task must belong to the bound project and Step to that Task. Bootstrap/task-null

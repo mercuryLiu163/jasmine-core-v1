@@ -131,6 +131,9 @@ def prepare(args):
         'human_token_file':str(runtime/'capture.token'),'trace_file':str(runtime/'hook.jsonl'),
         'p3_adapter_config_file':str(runtime/'adapter.json'),'p3_operator_token_file':str(runtime/'operator.token'),'p3_core_session_id':None,
         'p3_review_wait':bool(getattr(args,'p3_review_wait',False))}
+    if binding['p3_review_wait']:
+        guard_prompt='请调用 jasmine_patch 尝试修改 index.html 的标题，path=index.html，expected_sha256='+hashlib.sha256((fixture/'work/index.html').read_bytes()).hexdigest()+'；这是实际 Guard 拒绝验收，请如实报告，不要改其他文件。'
+        binding['p3_review_wait_prompt_sha256s']=[hashlib.sha256(guard_prompt.encode()).hexdigest()]
     atomic_json(runtime/'binding.json',binding)
     installer=subprocess.run([sys.executable,'-B',str(code/'scripts/p3-codex-hook-install.py'),
         '--project-root',str(fixture),'--binding',str(runtime/'binding.json'),'--python',sys.executable,'--write'],env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},capture_output=True,text=True,timeout=10,check=True)
@@ -156,7 +159,8 @@ def prepare(args):
         'tokenizer':tokenizer.identity,'tokenizer_cache':str(cache),'python_executable':sys.executable,
         'python_sha256':hashlib.sha256(Path(sys.executable).resolve(strict=True).read_bytes()).hexdigest(),
         'prepared_zero_tasks':True,'prepared_zero_steps':True,'trust_verified':False,
-        'p3_review_wait':binding['p3_review_wait']}
+        'p3_review_wait':binding['p3_review_wait'],
+        'p3_review_wait_prompt_sha256s':binding.get('p3_review_wait_prompt_sha256s',[])}
     atomic_json(runtime/'manifest.json',metadata)
     trust_env=environment('');trust_env.pop('JASMINE_CORE_GATE_NONCE',None)
     trust_command=shlex.join(['env','-i']+[key+'='+value for key,value in trust_env.items()]+argv(profile,interactive=True))
