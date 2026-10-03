@@ -43,7 +43,7 @@ P2 is independently accepted as **PASS_P2_SCOPED_ADMISSION_ONLY** at implementat
 - [P0 Baseline implementation and validation taskbook](docs/Jasmine-Core-V1-P0-阶段任务书.md)
 - [P1 Truth Core implementation and validation taskbook](docs/Jasmine-Core-V1-P1-阶段任务书.md)
 - [P2 implementation and acceptance scope](docs/p2-results.md)
-- [P3 continuity taskbook (not implemented)](docs/Jasmine-Core-V1-P3-阶段任务书.md)
+- [P3 continuity taskbook](docs/Jasmine-Core-V1-P3-阶段任务书.md)
 
 The design documents are planning inputs and are not proof of implemented
 features.
@@ -116,8 +116,9 @@ be committed; see `.gitignore`.
 ## P3 native validation preparation
 
 P3-01 Checkpoint/Resume and P3-02 Context Builder have local component acceptance.
-P3-03 native lifecycle and typed execution remain subject to independent native
-G01–G07 acceptance. See [ADR0013](docs/adr/0013-native-lifecycle-and-typed-execution.md).
+Run34 recorded actual native G01–G07 PASS on source `6ec64362401bc92d52aed531e15d95a9d1441fb4`.
+See [P3 results and limitations](docs/p3-results.md) and the sanitized evidence manifest.
+Independent final source/evidence review is PASS. See [ADR0013](docs/adr/0013-native-lifecycle-and-typed-execution.md).
 The phase is published together after local validation; CI and separate milestone
 PRs are not acceptance requirements under the user's current instruction.
 
