@@ -127,3 +127,34 @@ The private adapter config freezes `hook_definition_path` separately from the
 workspace root. Lifecycle report/attestation rehash this exact project definition
 outside the write transaction; native `sourcePath` must equal it. The callback
 workspace may be its project's child directory. No arbitrary path list is used.
+
+## Optional managed fixture ReviewWait
+
+P3 bindings may explicitly set `p3_review_wait` to a strict boolean; absent means
+false. Ordinary admission remains immediate BLOCK on pending Review. The option
+only permits the exact real UserPromptSubmit text `继续`, an active matching gate
+nonce, existing non-null Task/Step and an unchanged current native source identity.
+The durable Raw request and the immutable Core Event must both match that source.
+Review must reference its current interpretation and resolution; maintenance head
+must stay NORMAL on that interpretation. Reject, rerun, unknown Review status,
+source mismatch or identity change blocks without emitting Context.
+
+The hook keeps its lease lock and polls only the read API under the original
+140-second absolute admission deadline. It records that deadline in
+`review_wait_deadline_monotonic` for a driver observer. A separately authorized,
+owned driver worker starts before native submission, reads the atomic lease
+without writing or locking it, and approves through the real Review API only after
+matching the actual native turn/start identity. Approval is never performed by the
+hook. The worker shares the original driver turn budget and is stopped and joined
+on completion or failure. No idle native message observer is required.
+
+After APPROVED, the hook reenters admission with the same Raw, Event, durable
+idempotent requests and deadline, then builds and checks current Context once for
+that generation. No old READY pack is reused. Component tests with synthetic HTTP
+replies establish this control flow only; they are not real native Gate proof.
+Isolated Core-store tests additionally exercise real Raw, Interpreter, Resolution,
+Review CAS, Context build and check-current with a synthetic provider, transport
+and operator. They cover NORMAL child maintenance races during re-admission and
+after the approval read. Original Interpretation/Resolution/Review identities
+are checked during re-admission and read again before Context, with a final head
+read after Review. These separate reads do not claim an atomic maintenance snapshot.

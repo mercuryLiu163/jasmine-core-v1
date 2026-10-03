@@ -26,7 +26,8 @@ P3_FIELDS=P2_FIELDS|{'p3_adapter_config_file','p3_operator_token_file','p3_core_
 
 def binding(path,payload):
     value,_=private_json(Path(path),cap=65536)
-    if set(value)!=P3_FIELDS or value['mode']!=2: raise ValueError('invalid P3 binding')
+    if set(value) not in (P3_FIELDS,P3_FIELDS|{'p3_review_wait'}) or value['mode']!=2: raise ValueError('invalid P3 binding')
+    if type(value.get('p3_review_wait',False)) is not bool:raise ValueError('invalid ReviewWait option')
     if not isinstance(value['run_nonce'],str) or len(value['run_nonce'])<32: raise ValueError('invalid nonce')
     if os.environ.get('JASMINE_CORE_GATE_NONCE')!=value['run_nonce']: return None
     for name,prefix in [('project_id','prj'),('host_id','hst')]:
@@ -113,13 +114,19 @@ def report_lifecycle(payload,config,lease,client,deadline,*,raw_input_bytes=None
     # PostCompact has no documented additionalContext stdout guarantee.
     return {}
 
-def _admit(state, config, payload, lease, deadline):
+def _admit(state, config, payload, lease, deadline, *, expected_identity=None):
     reader = DeadlineClient(config['core_url'], _token(config, 'token_file'), deadline)
     interpreted = _call(state, 'interpret', reader, lease, 'POST', '/v1/interpret',
         {'event_id': state['event_id'], 'idempotency_key': 'p2-int:' + state['event_id']}, cap=125)['interpretation']
     parent_id = interpreted['interpretation_id']
+    if expected_identity is not None and parent_id!=expected_identity['interpretation_id']:
+        return _block('review wait admission interpretation changed',state)
     current = reader.get('/v1/interpretations/' + parent_id)['interpretation']
     head = current['maintenance_head']
+    if expected_identity is not None and (head['status']!='NORMAL' or
+        head['current_interpretation_id']!=expected_identity['interpretation_id'] or
+        any(state.get(key)!=value for key,value in expected_identity.items())):
+        return _block('review wait admission identity changed',state)
     if head['status'] == 'REJECTED':
         state.update(phase='REJECTED', interpretation_id=parent_id)
         lease.write(state)
@@ -145,6 +152,9 @@ def _admit(state, config, payload, lease, deadline):
     else:
         body = state['requests'][resolve_name]['body']
     resolved = _call(state, resolve_name, reader, lease, 'POST', '/v1/resolve/' + ident, body)['resolution']
+    if expected_identity is not None and (resolved['resolution_id']!=expected_identity['resolution_id'] or
+        resolved['result']['review_id']!=expected_identity['review_id']):
+        return _block('review wait admission resolution changed',state)
     state['resolution_id'] = resolved['resolution_id']
     result = resolved['result']
     state['phase'] = result['disposition']
@@ -208,9 +218,85 @@ def _admit(state, config, payload, lease, deadline):
             raise ValueError('bookkeeping Step linkage invalid')
         state['step_id'] = step['step_id']
         lease.write(state)
+    if expected_identity is not None and not _review_identity_current(state,reader,expected_identity):
+        return _block('review wait admission identity changed',state)
     state.update(phase='SOURCE_ADMITTED',host_id=config['host_id'],project_id=config['project_id'])
     lease.write(state)
     return None
+
+def _review_identity_current(state,reader,identity):
+    if any(state.get(key)!=value for key,value in identity.items()):return False
+    interpretation=reader.get('/v1/interpretations/'+identity['interpretation_id'])['interpretation']
+    head=interpretation['maintenance_head']
+    if head['status']!='NORMAL' or head['current_interpretation_id']!=identity['interpretation_id']:return False
+    review=reader.get('/v1/reviews/'+identity['review_id'])['review']
+    matches=(review.get('status')=='APPROVED' and review.get('review_id')==identity['review_id'] and
+        review.get('resolution_id')==identity['resolution_id'] and
+        review.get('resolution',{}).get('interpretation_id')==identity['interpretation_id'] and
+        review.get('resolution',{}).get('source_event_id')==identity['event_id'])
+    if not matches:return False
+    # Read the head again after Review; these reads are a pre-Context check,
+    # not an atomic snapshot across concurrent maintenance writes.
+    head=reader.get('/v1/interpretations/'+identity['interpretation_id'])['interpretation']['maintenance_head']
+    return head['status']=='NORMAL' and head['current_interpretation_id']==identity['interpretation_id']
+
+def _review_wait(state, config, payload, lease, deadline):
+    """Managed fixture opt-in; only the external operator may approve Review.
+
+    The caller keeps its lease lock and original admission deadline. An external
+    observer reads the atomic lease without acquiring or writing that lock.
+    """
+    if (config.get('p3_review_wait',False) is not True or
+        os.environ.get('JASMINE_CORE_GATE_NONCE')!=config.get('run_nonce') or
+        payload.get('hook_event_name')!='UserPromptSubmit' or payload.get('prompt')!='继续' or
+        state.get('phase')!='PENDING_REVIEW' or
+        not ids.is_id(state.get('task_id'),'tsk') or not ids.is_id(state.get('step_id'),'stp')):
+        return _block('review required',state)
+    keys=('session_id','turn_id','event_id','generation','task_id','step_id','interpretation_id','resolution_id','review_id','prompt_sha256','core_session_id')
+    identity={key:state.get(key) for key in keys}
+    identity['requests']=json.loads(canonical_json(state.get('requests',{})))
+    expected_raw={'event_type':'user.prompt','source_system':'codex-p2-bound',
+        'source_event_id':canonical_json([payload['session_id'],payload['turn_id']]),
+        'event_id':derive_event_id(config['host_id'],payload['session_id'],payload['turn_id'],'p2-bound:继续'),
+        'host_id':config['host_id'],'project_id':config['project_id'],'task_id':state['task_id'],
+        'payload':{'text':'继续','step_id':state['step_id'],'source_session_id':payload['session_id'],'turn_id':payload['turn_id']}}
+    if (identity['session_id']!=payload['session_id'] or identity['turn_id']!=payload['turn_id'] or
+        identity['event_id']!=expected_raw['event_id'] or identity['prompt_sha256']!=hashlib.sha256('继续'.encode()).hexdigest() or
+        state.get('requests',{}).get('raw')!={'method':'POST','path':'/v1/events','body':expected_raw}):
+        return _block('review wait source mismatch',state)
+    deadline.remaining()
+    reader=DeadlineClient(config['core_url'],_token(config,'token_file'),deadline)
+    source=reader.get('/v1/events/'+state['event_id'])['event']
+    if any(source.get(key)!=value for key,value in expected_raw.items()):
+        return _block('review wait immutable source mismatch',state)
+    state['review_wait_deadline_monotonic']=deadline.end;lease.write(state)
+    while True:
+        deadline.remaining()
+        current=lease.read()
+        if not current or any(current.get(key)!=value for key,value in identity.items()) or current.get('phase')!='PENDING_REVIEW':
+            return _block('review wait binding changed',state)
+        interpretation=reader.get('/v1/interpretations/'+state['interpretation_id'])['interpretation']
+        head=interpretation['maintenance_head']
+        if head['status']!='NORMAL' or head['current_interpretation_id']!=state['interpretation_id']:
+            return _block('review wait interpretation changed',state)
+        review=reader.get('/v1/reviews/'+state['review_id'])['review']
+        current=lease.read()
+        if not current or any(current.get(key)!=value for key,value in identity.items()) or current.get('phase')!='PENDING_REVIEW':
+            return _block('review wait binding changed',state)
+        if (review.get('review_id')!=state['review_id'] or review.get('resolution_id')!=state['resolution_id'] or
+            review.get('resolution',{}).get('interpretation_id')!=state['interpretation_id'] or
+            review.get('resolution',{}).get('source_event_id')!=state['event_id']):
+            return _block('review wait review mismatch',state)
+        if review['status']=='APPROVED':
+            # Reenter the unchanged durable admission requests before Context.
+            blocked=_admit(state,config,payload,lease,deadline,expected_identity=identity)
+            if blocked:return blocked
+            if not _review_identity_current(state,reader,identity):
+                return _block('review wait pre-context identity changed',state)
+            return None
+        if review['status']!='PENDING':
+            return _block('review rejected or unavailable',state)
+        time.sleep(min(.1,deadline.remaining()))
 
 def handle(payload, path, *, client_factory=DeadlineClient, tokenizer=None, raw_input_bytes=None):
     path=Path(path)
@@ -304,6 +390,8 @@ def handle(payload, path, *, client_factory=DeadlineClient, tokenizer=None, raw_
             if state.get('captured_unbound_blocked'):
                 return _block('captured source is unbound; submit next real turn', state)
             blocked=_admit(state, config, payload, lease, deadline)
+            if blocked and state.get('phase')=='PENDING_REVIEW':
+                blocked=_review_wait(state,config,payload,lease,deadline)
             if blocked: return blocked
             text,receipt=build_current_context(config,lease,operator_client(config,deadline,client_factory),deadline,tokenizer=tokenizer)
             return {'hookSpecificOutput':{'hookEventName':'UserPromptSubmit','additionalContext':text}}

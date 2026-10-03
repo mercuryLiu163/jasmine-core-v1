@@ -222,3 +222,86 @@ class HookTests(unittest.TestCase):
     with patch.object(hook,'binding',return_value=self.config),patch.object(hook,'Lease',return_value=MemoryLease(self.state)),patch.object(hook,'_trace'),patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':'active'}),patch.object(hook,'_capture') as capture:
       result=hook.handle(payload,self.root/'binding')
     self.assertEqual(result['decision'],'block');capture.assert_not_called()
+
+class ReviewWaitTests(unittest.TestCase):
+ setUp=HookTests.setUp
+ def pending(self):
+    from jasmine_core.canonical import canonical_json
+    from jasmine_core.capture.codex_user_prompt_submit import derive_event_id
+    token=self.root/'reader';token.write_text('synthetic');token.chmod(0o600)
+    config={**self.config,'p3_review_wait':True,'run_nonce':'n'*32,'core_url':'http://127.0.0.1:1','token_file':str(token)}
+    payload={'hook_event_name':'UserPromptSubmit','session_id':'native-thread','turn_id':'native-turn','prompt':'继续'}
+    state={**self.state,'phase':'PENDING_REVIEW','prompt_sha256':hashlib.sha256('继续'.encode()).hexdigest(),
+       'event_id':derive_event_id(config['host_id'],payload['session_id'],payload['turn_id'],'p2-bound:继续'),
+       'interpretation_id':ids.new_id('int'),'resolution_id':ids.new_id('res'),'review_id':ids.new_id('rvw')}
+    raw={'event_type':'user.prompt','source_system':'codex-p2-bound','source_event_id':canonical_json([payload['session_id'],payload['turn_id']]),
+       'event_id':state['event_id'],'host_id':config['host_id'],'project_id':config['project_id'],'task_id':state['task_id'],
+       'payload':{'text':'继续','step_id':state['step_id'],'source_session_id':payload['session_id'],'turn_id':payload['turn_id']}}
+    state['requests']={'raw':{'method':'POST','path':'/v1/events','body':raw}}
+    return config,payload,state
+ def client(self,state,statuses,change=None):
+    owner=self
+    class Client:
+      def get(self,path):
+        if path.startswith('/v1/events/'):
+          return {'event':state['requests']['raw']['body']}
+        if path.startswith('/v1/interpretations/'):
+          return {'interpretation':{'maintenance_head':{'status':'NORMAL','current_interpretation_id':state['interpretation_id']}}}
+        status=statuses.pop(0) if len(statuses)>1 else statuses[0]
+        if change:change()
+        return {'review':{'review_id':state['review_id'],'resolution_id':state['resolution_id'],'status':status,
+           'resolution':{'interpretation_id':state['interpretation_id'],'source_event_id':state['event_id']}}}
+      def post(self,*args,**kwargs):owner.fail('Hook must not approve')
+    return Client()
+ def test_review_wait_same_state_same_deadline_reenters_admission(self):
+    # Synthetic HTTP replies: this proves the component contract only.
+    config,payload,state=self.pending();lease=MemoryLease(state);deadline=Deadline();requests=json.loads(json.dumps(state['requests']))
+    with patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':config['run_nonce']}),patch.object(hook,'DeadlineClient',return_value=self.client(state,['PENDING','APPROVED'])),patch.object(hook.time,'sleep'),patch.object(hook,'_admit',return_value=None) as admit:
+      self.assertIsNone(hook._review_wait(state,config,payload,lease,deadline))
+    self.assertIs(admit.call_args.args[0],state);self.assertIs(admit.call_args.args[-1],deadline)
+    self.assertEqual(state['requests'],requests);self.assertEqual(state['review_wait_deadline_monotonic'],deadline.end)
+ def test_review_wait_ineligible_does_not_poll(self):
+    for config_change,state_change,payload_change,nonce in [({'p3_review_wait':False},{},{},'n'*32),({}, {'task_id':None},{},'n'*32),({}, {},{'prompt':'继续 '},'n'*32),({}, {},{},'other'),({}, {'event_id':ids.new_id('evt')},{},'n'*32)]:
+      config,payload,state=self.pending();config.update(config_change);payload.update(payload_change);state.update(state_change)
+      with patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':nonce}),patch.object(hook,'DeadlineClient') as client:
+        self.assertEqual(hook._review_wait(state,config,payload,MemoryLease(state),Deadline())['decision'],'block')
+      client.assert_not_called()
+ def test_review_wait_rejection_unknown_identity_change_and_expiry(self):
+    for status in ('REJECTED','UNKNOWN','SOURCE_REPLAYED'):
+      config,payload,state=self.pending()
+      with patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':config['run_nonce']}),patch.object(hook,'DeadlineClient',return_value=self.client(state,[status])),patch.object(hook,'_admit') as admit:
+        self.assertEqual(hook._review_wait(state,config,payload,MemoryLease(state),Deadline())['decision'],'block');admit.assert_not_called()
+    config,payload,state=self.pending();lease=MemoryLease(state)
+    def changed():lease.state={**lease.state,'task_id':ids.new_id('tsk')}
+    with patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':config['run_nonce']}),patch.object(hook,'DeadlineClient',return_value=self.client(state,['PENDING'],changed)),patch.object(hook.time,'sleep'),patch.object(hook,'_admit') as admit:
+      self.assertEqual(hook._review_wait(state,config,payload,lease,Deadline())['decision'],'block');admit.assert_not_called()
+    with patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':config['run_nonce']}),patch.object(hook,'DeadlineClient'),self.assertRaises(TimeoutError):
+      hook._review_wait(state,config,payload,MemoryLease(state),Deadline(end=0))
+ def test_review_wait_binding_option_is_strict_optional_boolean(self):
+    config,payload,state=self.pending()
+    config.update(mode=2,human_token_file=str(self.root/'human'),trace_file=str(self.root/'trace'),p3_operator_token_file=str(self.root/'operator'))
+    for value in (False,True,None,1,'true'):
+      candidate={**config,'p3_review_wait':value};path=self.root/'binding';path.write_text(json.dumps(candidate));path.chmod(0o600)
+      with patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':config['run_nonce']}):
+        if type(value) is bool:self.assertEqual(hook.binding(path,payload),candidate)
+        else:
+          with self.assertRaises(ValueError):hook.binding(path,payload)
+ def test_approved_same_raw_emits_once_current_generation_context(self):
+    config,payload,pending=self.pending();lease=MemoryLease({**self.state,'turn_id':'older','generation':'7','prompt_sha256':'old'})
+    seen=[];captured=[]
+    def capture(state,*args):
+      captured.append(state['event_id']);state['requests']=pending['requests'];state['phase']='CAPTURED';lease.write(state)
+    def admit(state,*args,**kwargs):
+      seen.append((state['event_id'],state['generation'],dict(state['requests'])))
+      if len(seen)==1:
+        state.update(phase='PENDING_REVIEW',interpretation_id=pending['interpretation_id'],resolution_id=pending['resolution_id'],review_id=pending['review_id']);lease.write(state)
+        return hook._block('review required',state)
+      state['phase']='SOURCE_ADMITTED';lease.write(state)
+    def context(config,lease,client,deadline,**kwargs):
+      self.assertEqual(lease.state['phase'],'SOURCE_ADMITTED');self.assertEqual(lease.state['generation'],'8')
+      self.assertEqual(lease.state['event_id'],pending['event_id']);self.assertNotIn('context_pack_id',lease.state)
+      return ('fresh current generation context',{})
+    with patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':config['run_nonce']}),patch.object(hook,'binding',return_value=config),patch.object(hook,'Lease',return_value=lease),patch.object(hook,'_capture',side_effect=capture),patch.object(hook,'_admit',side_effect=admit),patch.object(hook,'DeadlineClient',return_value=self.client(pending,['APPROVED'])),patch.object(hook,'operator_client'),patch.object(hook,'build_current_context',side_effect=context) as build:
+      result=hook.handle(payload,self.root/'binding')
+    self.assertEqual(result['hookSpecificOutput']['additionalContext'],'fresh current generation context')
+    self.assertEqual(len(captured),1);self.assertEqual(seen[0],seen[1]);self.assertEqual(build.call_count,1)

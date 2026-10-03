@@ -129,7 +129,8 @@ def prepare(args):
     binding={'mode':2,'run_nonce':secrets.token_hex(24),'project_id':project,'host_id':host,
         'core_url':f'http://127.0.0.1:{port}','token_file':str(runtime/'processor.token'),
         'human_token_file':str(runtime/'capture.token'),'trace_file':str(runtime/'hook.jsonl'),
-        'p3_adapter_config_file':str(runtime/'adapter.json'),'p3_operator_token_file':str(runtime/'operator.token'),'p3_core_session_id':None}
+        'p3_adapter_config_file':str(runtime/'adapter.json'),'p3_operator_token_file':str(runtime/'operator.token'),'p3_core_session_id':None,
+        'p3_review_wait':bool(getattr(args,'p3_review_wait',False))}
     atomic_json(runtime/'binding.json',binding)
     installer=subprocess.run([sys.executable,'-B',str(code/'scripts/p3-codex-hook-install.py'),
         '--project-root',str(fixture),'--binding',str(runtime/'binding.json'),'--python',sys.executable,'--write'],env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1'},capture_output=True,text=True,timeout=10,check=True)
@@ -154,7 +155,8 @@ def prepare(args):
         'memory_failure_config_sha256':hashlib.sha256((runtime/'memory-failed.json').read_bytes()).hexdigest(),
         'tokenizer':tokenizer.identity,'tokenizer_cache':str(cache),'python_executable':sys.executable,
         'python_sha256':hashlib.sha256(Path(sys.executable).resolve(strict=True).read_bytes()).hexdigest(),
-        'prepared_zero_tasks':True,'prepared_zero_steps':True,'trust_verified':False}
+        'prepared_zero_tasks':True,'prepared_zero_steps':True,'trust_verified':False,
+        'p3_review_wait':binding['p3_review_wait']}
     atomic_json(runtime/'manifest.json',metadata)
     trust_env=environment('');trust_env.pop('JASMINE_CORE_GATE_NONCE',None)
     trust_command=shlex.join(['env','-i']+[key+'='+value for key,value in trust_env.items()]+argv(profile,interactive=True))
@@ -171,6 +173,7 @@ def main():
     parser.add_argument('--out',type=Path,required=True)
     parser.add_argument('--catalog',type=Path,required=True)
     parser.add_argument('--codex')
+    parser.add_argument('--p3-review-wait',action='store_true',help='explicit managed fixture ReviewWait opt-in; default disabled')
     parser.add_argument('--tokenizer-cache',type=Path,required=True)
     parser.add_argument('--node',type=Path,required=True)
     parser.add_argument('--node-modules',type=Path,required=True)
