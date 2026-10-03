@@ -12,6 +12,19 @@ Builder reads the shared complete Truth snapshot and auxiliary checkpoint select
 
 All ACTIVE Rules, their complete origin/version references, current Task and Step state, criteria and safety requirements are mandatory. HARD content is never truncated. The complete rendered text, including header and separators, must fit 2,500 tokens. Overflow returns `AUTHORITY_TOO_LARGE` or `CONTEXT_MANDATORY_TOO_LARGE`; optional Evidence bodies, note and Memory are removed with source-linked omission receipts.
 
+Renderer `jasmine.context.v1` supports the explicitly tagged Evidence reference
+encoding `columns-rows.dictionary-columns.v1`. It contains the complete ordered
+column names and one row per original reference. The explicit
+`dictionary_columns.fingerprint_sha256` contains every full string fingerprint
+in deterministic first occurrence order; that column's row values are zero-based
+dictionary ordinals. All other values, nulls, types and row order remain unchanged.
+Nonuniform keys or nonstring fingerprints retain the original JSON list; the
+table is selected only when its exact selected-encoding count is smaller.
+Complete Truth and its digest are unchanged. No Rule, Evidence ref or mandatory
+State is omitted. Rule rendering and both overflow checks retain their existing
+semantics; the 2,500-token limit is unchanged. Existing pack bytes remain immutable;
+renderer code fingerprints invalidate current admission after this format change.
+
 The pinned tokenizer is tiktoken 0.14.0, explicit `o200k_base`, using `encode_ordinary`. Qualification is `EXPLICIT_ENCODING_MODEL_UNVERIFIED`, target model gpt-6.1-sol, scope `RENDERED_PACK_ENCODING_ONLY`. This does not establish the platform's hidden prompt count or model encoding. Offline asset SHA256 is `446a9538cb6c348e3516120d7c08b09f57c36495e2acfffe59a5bf8b0cfb1a2d`. Missing or changed dependencies fail explicitly; loading never downloads inside a transaction. The macOS arm64 dependency hashes are in `requirements-context-macos-arm64.lock`.
 
 ## Read-only Memory

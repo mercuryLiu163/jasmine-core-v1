@@ -1,5 +1,6 @@
 """Exact selected-encoding Context components; no native injection claims."""
 import copy
+import json
 import os
 import tempfile
 import unittest
@@ -10,7 +11,7 @@ from support import DbTestCase
 from jasmine_core import SCHEMA_VERSION, ids
 from jasmine_core.context.builder import ContextBuilder, ContextActorMismatch
 from jasmine_core.context.memory_provider import MemoryProvider
-from jasmine_core.context.renderer import render, RenderOverflow
+from jasmine_core.context.renderer import render, RenderOverflow, _evidence_refs, EVIDENCE_COLUMNS
 from jasmine_core.context.tokens import Tokenizer, TokenizerUnavailable
 from jasmine_core.events import EventStore
 from jasmine_core.models import NewObject, NewEvent
@@ -29,6 +30,32 @@ class Tokens(unittest.TestCase):
         self.assertEqual(self.tokenizer.count(text),len(self.tokenizer.encoding.encode_ordinary(text)))
         self.assertEqual(self.tokenizer.encoding.decode(self.tokenizer.encoding.encode_ordinary(text)),text)
         self.assertEqual(self.tokenizer.identity['qualification'],'EXPLICIT_ENCODING_MODEL_UNVERIFIED')
+    def test_lossless_evidence_table_all_values_order_and_duplicates(self):
+        refs=[{key:None for key in EVIDENCE_COLUMNS} for _ in range(12)]
+        for i,row in enumerate(refs):
+            row.update(evidence_id='evd_'+str(i),kind='TEST',status='PASS',task_revision=i,
+                       fingerprint_sha256=('a' if i%2 else 'b')*64)
+        refs.append(copy.deepcopy(refs[0]))
+        table=_evidence_refs(refs,self.tokenizer)
+        self.assertIsInstance(table,dict)
+        self.assertEqual(table['format'],'columns-rows.dictionary-columns.v1')
+        self.assertEqual(table['dictionary_columns']['fingerprint_sha256'],['b'*64,'a'*64])
+        decoded=[]
+        for values in table['rows']:
+            row=dict(zip(table['columns'],values,strict=True))
+            row['fingerprint_sha256']=table['dictionary_columns']['fingerprint_sha256'][row['fingerprint_sha256']]
+            decoded.append(row)
+        self.assertEqual(decoded,refs)
+        from jasmine_core.canonical import canonical_json
+        self.assertLess(self.tokenizer.count(canonical_json(table)),self.tokenizer.count(canonical_json(refs)))
+    def test_evidence_table_no_missing_to_null_or_type_coercion(self):
+        base={key:None for key in EVIDENCE_COLUMNS}
+        for refs in ([],[base],[{**base,'fingerprint_sha256':'a'*64}],
+                     [{**base,'fingerprint_sha256':False}],
+                     [{k:v for k,v in base.items() if k!='kind'}],
+                     [{**base,'extra':'preserve'}]):
+            with self.subTest(refs=refs):
+                self.assertIs(_evidence_refs(refs,self.tokenizer),refs)
     def test_missing_offline_asset_never_downloads(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch('urllib.request.urlopen',side_effect=AssertionError('no network')):
