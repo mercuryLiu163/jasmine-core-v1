@@ -753,3 +753,184 @@ class TwoRealConnectionsStillWork(MemoryTestCase):
         self.assertEqual(
             self.conn.execute("SELECT COUNT(*) AS n FROM events WHERE event_id LIKE 'evt_%'"
                               ).fetchone()["n"] > 0, True)
+
+
+class ProvenanceCannotBeReshapedByTheEngine(MemoryTestCase):
+    """The engine echoes what Core wrote; it does not get to rewrite it."""
+
+    def test_another_projects_evidence_id_never_reaches_this_trace(self) -> None:
+        from jasmine_core.memory import provenance
+        from jasmine_core.memory.types import EngineResult
+
+        mine = self.project()
+        other = self.project()
+        self.active_decision(project_id=mine)
+        self.scan()
+        self.worker().run(max_ticks=6)
+        item = self.store.items()[0]
+        foreign_evidence, _ = self.evidence(task_id=self.task(other), status="FAIL",
+                                            detail="another project's failure")
+        real = self.transport.answer_for(item["bank_id"], item["memory_id"], "lesson",
+                                         document_id=item["document_id"])
+        self.transport.answer[item["bank_id"]] = [EngineResult(
+            engine_result_id=real.engine_result_id, text=real.text, bank_id=real.bank_id,
+            document_id=real.document_id,
+            metadata={**real.metadata, provenance.EVIDENCE_IDS_KEY: foreign_evidence})]
+
+        outcome = self.adapter().recall(RecallRequest(
+            project_id=mine, actor_id=HUMAN, query="lesson", max_tokens=400))
+        self.assertEqual([f.reason for f in outcome.filtered], ["foreign_evidence"])
+        self.assertEqual(outcome.items, ())
+        self.assertNotIn(foreign_evidence, str(outcome.as_dict()),
+                         "a foreign Evidence id was written into a readable trace")
+
+    def test_an_unrelated_event_of_the_same_project_cannot_replace_a_source(self) -> None:
+        from jasmine_core.memory import provenance
+        from jasmine_core.memory.types import EngineResult
+
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        self.worker().run(max_ticks=6)
+        item = self.store.items()[0]
+        unrelated = self.event("user.prompt", project_id=project,
+                               text="an unrelated remark")
+        real = self.transport.answer_for(item["bank_id"], item["memory_id"], "lesson",
+                                         document_id=item["document_id"])
+        self.transport.answer[item["bank_id"]] = [EngineResult(
+            engine_result_id=real.engine_result_id, text=real.text, bank_id=real.bank_id,
+            document_id=real.document_id,
+            metadata={**real.metadata, provenance.SOURCE_EVENT_IDS_KEY: unrelated})]
+
+        outcome = self.adapter().recall(RecallRequest(
+            project_id=project, actor_id=HUMAN, query="lesson", max_tokens=400))
+        self.assertEqual([f.reason for f in outcome.filtered], ["foreign_source"],
+                         "an id the item never claimed was believed")
+        self.assertNotIn(unrelated, str(outcome.as_dict()))
+
+    def test_the_recalled_provenance_comes_from_the_item_not_the_echo(self) -> None:
+        from jasmine_core.memory import provenance
+        from jasmine_core.memory.types import EngineResult
+
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        self.worker().run(max_ticks=6)
+        item = self.store.items()[0]
+        real = self.transport.answer_for(item["bank_id"], item["memory_id"], "lesson",
+                                         document_id=item["document_id"])
+        # An engine that *drops* a source must not shorten what the trace reports.
+        self.transport.answer[item["bank_id"]] = [EngineResult(
+            engine_result_id=real.engine_result_id, text=real.text, bank_id=real.bank_id,
+            document_id=real.document_id, metadata={
+                provenance.MEMORY_ID_KEY: item["memory_id"],
+                provenance.ORIGIN_EVENT_ID_KEY: item["origin_event_id"]})]
+
+        outcome = self.adapter().recall(RecallRequest(
+            project_id=project, actor_id=HUMAN, query="lesson", max_tokens=400))
+        self.assertEqual(len(outcome.items), 1, outcome.as_dict())
+        self.assertEqual(outcome.items[0].provenance.source_event_ids,
+                         (item["source_event_id"],),
+                         "the engine's silence changed the recorded provenance")
+
+
+class ARetainThatOutlivesItsItemTakesTheWriteBack(MemoryTestCase):
+    """The window fencing cannot close: the write is already on the wire."""
+
+    def _retain_while_revoked(self, action: str):
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        item = self.store.items()[0]
+        real_retain = self.transport.retain
+
+        def in_flight(**kwargs):
+            receipt = real_retain(**kwargs)
+            # The operator revokes the item while that call is executing.
+            if action == "delete":
+                self.lifecycle().delete(item["memory_id"],
+                                        {"expected_revision": 1, "host_id": HOST},
+                                        actor_id=HUMAN, actor_kind="human", host_id=HOST)
+            else:
+                self.lifecycle().obsolete(item["memory_id"],
+                                          {"expected_revision": 1, "host_id": HOST},
+                                          actor_id=HUMAN, actor_kind="human", host_id=HOST)
+            return receipt
+
+        self.transport.retain = in_flight
+        try:
+            report = self.worker().tick(scan=False)
+        finally:
+            self.transport.retain = real_retain
+        return item, report
+
+    def test_a_deleted_item_leaves_no_remote_document_behind(self) -> None:
+        item, report = self._retain_while_revoked("delete")
+        self.assertEqual(report.error_code, "document_deleted_locally", report.as_dict())
+        self.assertNotEqual(report.outcome, "retained")
+        self.assertIsNone(self.transport.documents.get((item["bank_id"],
+                                                        item["document_id"])),
+                          "the retain was undone only in the database")
+        job = next(j for j in self.job_store().jobs()
+                   if j["memory_id"] == item["memory_id"] and j["kind"] == "retain")
+        self.assertNotEqual(job["status"], "DONE",
+                            "a take-back was recorded as a successful retain")
+        self.assertEqual(self.store.item(item["memory_id"])["status"], "DELETED")
+
+    def test_an_obsoleted_item_keeps_its_document_but_its_units_are_retired(self) -> None:
+        item, report = self._retain_while_revoked("obsolete")
+        self.assertEqual(report.error_code, "document_deleted_locally", report.as_dict())
+        self.assertIsNotNone(self.transport.documents.get((item["bank_id"],
+                                                           item["document_id"])),
+                             "obsolete keeps the document; only its units retire")
+        self.assertTrue(self.transport.invalidated,
+                        "the units this retain created were never soft-retired")
+        self.assertEqual(self.store.item(item["memory_id"])["status"], "OBSOLETE")
+
+    def test_an_active_item_is_left_alone(self) -> None:
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        item = self.store.items()[0]
+        report = self.worker().tick(scan=False)
+        self.assertEqual(report.outcome, "retained", report.as_dict())
+        self.assertIsNotNone(self.transport.documents.get((item["bank_id"],
+                                                           item["document_id"])))
+        self.assertFalse(self.transport.deleted,
+                         "a healthy retain must not undo itself")
+
+
+class ADeliveryReceiptIsNotBelievedOnItsWord(MemoryTestCase):
+    """The worker's own guard, independent of how strict the transport is."""
+
+    def test_a_delete_receipt_that_reports_failure_is_not_recorded_as_done(self) -> None:
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        self.worker().run(max_ticks=6)
+        item = self.store.items()[0]
+        self.lifecycle().delete(item["memory_id"],
+                                {"expected_revision": 1, "host_id": HOST},
+                                actor_id=HUMAN, actor_kind="human", host_id=HOST)
+
+        honest = self.transport.delete_document
+
+        def reporting_failure(**kwargs):
+            receipt = honest(**kwargs)
+            receipt["success"] = False
+            return receipt
+
+        self.transport.delete_document = reporting_failure
+        try:
+            report = self.worker().tick(scan=False)
+        finally:
+            self.transport.delete_document = honest
+
+        self.assertEqual(report.error_code, "engine_delete_failed", report.as_dict())
+        self.assertNotEqual(report.outcome, "deleted")
+        job = next(j for j in self.job_store().jobs()
+                   if j["memory_id"] == item["memory_id"] and j["kind"] == "delete")
+        self.assertNotEqual(job["status"], "DONE",
+                            "a receipt saying the delete failed was recorded as a delete")
+        self.assertEqual(job["last_error_code"], "engine_delete_failed")
+        self.assertNotEqual(self.store.item(item["memory_id"])["engine_state"], "DELETED")

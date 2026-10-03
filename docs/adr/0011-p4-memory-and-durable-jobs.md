@@ -116,15 +116,31 @@ without Core metadata is `unverified_provenance` and is never rendered. This is
 the answer to a forged remote source: refused by construction, not by pattern
 matching on text.
 
-The Event check has two halves and originally had one: a referenced Raw Event
-must *exist*, and it must belong to this item's scope. Checking existence alone
-let a forged `jasmine_source_event_ids` claim that names a real Event from
-**another** project through — it resolved, it was written into
-`Provenance.source_event_ids`, and it landed in this project's readable trace,
-which is a cross-project forgery with an identifier attached. A foreign Event
-now yields `foreign_source`, and `jasmine_origin_event_id` is checked the same
-way instead of being trusted outright. An Event with no project is a system or
-global Event and may be cited by anything.
+**The record is the authority, not the tables the ids point at.** Every earlier
+form of this check asked whether an id *resolves*, and an id that resolves is
+not evidence that it belongs to this item. Two review rounds found the
+consequences, and they are the same shape each time:
+
+* a Raw Event from **another** project, real and resolvable, reached
+  `Provenance.source_event_ids` and this project's readable trace — a
+  cross-project forgery with an identifier attached;
+* an Evidence id from another project passed the same way, and Evidence is worse
+  placed for that check than Event: it carries no project of its own, reaching
+  one only through its task, so `SELECT 1 FROM evidence` had nothing to compare
+  against;
+* and within one project, *any* unrelated Event could replace the item's real
+  source, so a forged metadata claim rewrote the provenance an Inspector walks
+  back through.
+
+The check is now against what Core itself wrote at retain time —
+`memory_item_sources` and `evidence_ids_json`. Every id the engine declares must
+be a member of that record, and the `Provenance` handed to a caller is built
+*from* the record rather than from the echo, so an engine that drops a
+supporting source cannot shorten the trace either. Refusals are `foreign_source`
+and `foreign_evidence`; `source_missing` and `evidence_missing` remain for an id
+that is recorded but no longer resolves. `jasmine_origin_event_id` is compared to
+the item's persisted origin instead of being trusted outright. An Event with no
+project is a system or global Event and may be cited by anything.
 
 **Where an item's origin came from.** `memory_items.origin_event_id` is the Event
 the *content* came from, which for a Decision is not `source_event_id`: the
@@ -219,6 +235,19 @@ Five consequences, each a decision:
    `engine_protocol_error` (the response does not follow the schema), an explicit
    `false` is `engine_retain_failed` / `engine_delete_failed`, and a queued
    `async=true` is `engine_retain_unconfirmed`. None of them can reach `DONE`.
+
+   The second pass checked the *rest* of the contract rather than `success`
+   alone, because a receipt is evidence only if it describes the request that
+   was made. `RetainResponse` requires `success`, `bank_id`, `items_count` and
+   `async`; `DeleteDocumentResponse` requires `success`, `message`,
+   `document_id` and `memory_units_deleted`. A missing or `null` field is
+   `engine_protocol_error`. A non-boolean `async` (`"true"`, `1`) slipped through
+   because the test was `is True` and read as synchronous. A `bank_id` naming a
+   different bank, and a `document_id` naming a different document, were echoed
+   into the receipt unexamined — an acknowledgement about somebody else's data,
+   recorded as this one's result. Both are now refusals. The worker also refuses
+   to mark a document `DELETED` from any receipt whose `success` is falsy, so the
+   guarantee does not rest on every future `MemoryTransport` being this strict.
 3. **Recall's `types` is the engine's vocabulary, not ours.** Core's five types
    have no remote equivalent, so they travel as `metadata` (returned on every
    recalled result) and as `tags` (used for the visibility filter). `observation`
@@ -307,6 +336,28 @@ being yours:
 it, so the re-send replaces rather than duplicates. **P4 claims at-least-once
 delivery with an idempotent sink, not end-to-end exactly-once**, which cannot be
 proven against an LLM-backed extractor and is not claimed anywhere.
+
+**The write that outlives the claim.** Fencing constrains the *database*: a
+stale worker cannot touch the job row or the item. It cannot constrain an HTTP
+request already on the wire. The sequence is real: A claims a `retain` and its
+engine call is in flight when the lease expires; B reclaims the job, finds the
+item tombstoned and fails it; the `delete` job then runs and completes against a
+document that does not exist yet; and only afterwards does A's write land. Both
+jobs are terminal, the item says `DELETED`, and the document sits in the bank
+with nothing queued to remove it — a permanent orphan, surfacing only when the
+next recall returns something an operator deleted.
+
+A is the only participant that knows it just wrote, so A takes it back. After
+`retain` returns, `_compensate_revoked_write` re-reads the item and, if it has
+left `ACTIVE`, deletes the document (`DELETED`) or soft-retires its units
+(`OBSOLETE`, which keeps the document by design). The job is then failed as
+`document_deleted_locally` rather than marked `DONE`; if the claim has already
+passed to someone else the failure is not recorded, because the take-back is what
+mattered. A compensation that cannot reach the engine surfaces as that retain's
+own `TransportError`, so a worker that could not undo its write reports it
+instead of recording success. What this does **not** close: a process killed
+between the write and the compensation. That residue needs an operator-side
+read-back sweep and is named as not covered rather than assumed away.
 
 **Retry.** A retryable failure returns to `PENDING` with exponential backoff
 (30 s, doubling, clamped to 3600 s, ±25% jitter, clamped *after* the jitter) and a

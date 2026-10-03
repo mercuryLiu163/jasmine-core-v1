@@ -230,14 +230,16 @@ class RecallJudgement(MemoryTestCase):
         self.engine_row("forged source", metadata={
             provenance.SOURCE_EVENT_IDS_KEY: ids.new_id("evt")})
         outcome = self.recall()
-        self.assertEqual([f.reason for f in outcome.filtered], ["source_missing"])
+        # Not `source_missing`: an id this item never claimed is refused as
+        # foreign whether or not it happens to resolve elsewhere.
+        self.assertEqual([f.reason for f in outcome.filtered], ["foreign_source"])
 
     def test_a_forged_evidence_id_is_dropped(self) -> None:
         from jasmine_core import ids
 
         self.engine_row("forged evidence", metadata={
             provenance.EVIDENCE_IDS_KEY: ids.new_id("evd")})
-        self.assertEqual([f.reason for f in self.recall().filtered], ["evidence_missing"])
+        self.assertEqual([f.reason for f in self.recall().filtered], ["foreign_evidence"])
 
     def test_a_row_claiming_a_bank_this_call_may_not_read_is_dropped(self) -> None:
         # The threat is a shared engine returning a row that belongs to another

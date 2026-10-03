@@ -44,6 +44,7 @@ from typing import Any, Callable
 
 from .. import clock
 from .. import db
+from .. import errors
 from . import filtering
 from . import jobs as jobs_module
 from . import provenance
@@ -205,15 +206,78 @@ class MemoryWorker:
         self._assert_no_transaction("retain")
         try:
             receipt = self._adapter.retain(request)
+            # The engine call can outlive the claim. Fencing stops a stale
+            # worker from writing the *job* or the *item* — but the HTTP request
+            # is already on the wire, and by the time it returns the operator's
+            # delete may have run to completion with no job left to remove
+            # anything. This worker is the only participant that knows it just
+            # wrote, so it is the one that has to take the write back.
+            revoked = self._compensate_revoked_write(claimed)
         except TransportError as exc:
             status = self._jobs.fail(claimed, error_code=exc.code,
                                      safe_error_summary=exc.safe_error_summary)
             report.outcome = "retry" if status == "PENDING" else "failed"
             report.error_code = exc.code
             return
+        if revoked:
+            try:
+                self._jobs.fail(claimed, error_code="document_deleted_locally",
+                                safe_error_summary="the item left ACTIVE while this "
+                                                   "retain was in flight; the remote "
+                                                   "write was taken back")
+            except errors.InvalidStateTransition:
+                # The job belongs to another attempt now. The undo above is what
+                # mattered, and it is done; refusing to record it here is correct.
+                pass
+            report.outcome = "failed"
+            report.error_code = "document_deleted_locally"
+            return
         self._jobs.complete(claimed, receipt=receipt.as_dict())
         report.outcome = "retained"
         report.receipt = receipt.as_dict()
+
+    def _compensate_revoked_write(self, claimed: jobs_module.ClaimedJob) -> bool:
+        """Take back a remote write the local lifecycle has already revoked.
+
+        Returns True when something was taken back.
+
+        The window this closes: worker A claims a `retain` and its engine call is
+        still in flight when its lease expires; B reclaims the job, finds the item
+        already tombstoned and fails it; the `delete` job then runs and completes
+        against a document that does not exist yet; and only afterwards does A's
+        write land. Both jobs are terminal, the item says `DELETED`, and the
+        document is in the bank with nothing queued to remove it — a permanent
+        orphan, invisible until the next recall returns content an operator
+        deleted. Local fencing cannot help, because fencing constrains the local
+        database and this write is remote.
+
+        * `DELETED` — the document must not exist: delete what we just wrote.
+        * `OBSOLETE` — the document must exist but its units must be retired, so
+          soft-retire them rather than destroy the document.
+        * `ACTIVE` — nothing was revoked; the current owner's copy is the same
+          document under `update_mode=replace`, so there is nothing to undo.
+
+        A failure here surfaces as the retain's own `TransportError`, so a job
+        that could not take its write back is reported rather than quietly
+        recorded as retained.
+        """
+        fresh = self._store.item(claimed.item["memory_id"])
+        if fresh is None or fresh["status"] == "ACTIVE":
+            return False
+        transport = self._require_transport("retain")
+        document_id = claimed.job["document_id"]
+        if fresh["status"] == "DELETED":
+            transport.delete_document(bank=claimed.bank, document_id=document_id)
+            return True
+        for unit in transport.list_document_memories(bank=claimed.bank,
+                                                     document_id=document_id):
+            unit_id = unit.get("id")
+            if isinstance(unit_id, str) and unit.get("state") != "invalidated":
+                transport.invalidate_memory(
+                    bank=claimed.bank, memory_id=unit_id,
+                    reason=f"jasmine memory {fresh['memory_id']} left ACTIVE while "
+                           f"its retain was in flight")
+        return True
 
     def _process_delete(self, claimed: jobs_module.ClaimedJob, report: WorkerReport) -> None:
         """Physically remove the remote document.
@@ -233,6 +297,17 @@ class MemoryWorker:
             receipt = transport.delete_document(
                 bank=claimed.bank, document_id=claimed.job["document_id"]
             )
+            if not receipt.get("success"):
+                # The transport refuses this before returning, so a reachable
+                # branch means some other `MemoryTransport` did not. Raised
+                # inside the block so it takes the same path as any other engine
+                # refusal — `fail()` with backoff — rather than escaping as an
+                # unhandled error that would leave the job `RUNNING` until its
+                # lease quietly expired.
+                raise TransportError(
+                    "engine_delete_failed",
+                    "the engine reported the document was not deleted",
+                    retryable=True)
         except TransportError as exc:
             status = self._jobs.fail(claimed, error_code=exc.code,
                                      safe_error_summary=exc.safe_error_summary)

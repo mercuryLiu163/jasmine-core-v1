@@ -430,23 +430,33 @@ class HindsightTransport:
         if not isinstance(payload, dict):
             raise TransportError("engine_protocol_error",
                                  "the retain response was not a JSON object", retryable=False)
-        # The official OpenAPI 0.10.2 makes `success` and `async` *required*
-        # members of RetainResponse, so a response without them is not a
-        # near-miss — it is a response this adapter cannot interpret. Treating an
-        # absent `success` as success is what let an empty receipt `{}`, a
-        # `"success": null`, and an `async` queued operation all be recorded as
-        # a completed retain: the job goes DONE, the item is `RETAINED`, and the
-        # Inspector reports a document that was never stored.
-        if not isinstance(payload.get("success"), bool):
+        # RetainResponse makes `success`, `bank_id`, `items_count` and `async`
+        # **required** (official OpenAPI 0.10.2). A response missing any of them
+        # is not a near-miss — it is one this adapter cannot interpret — and
+        # accepting it is what let an empty `{}` and a `"success": null` be
+        # recorded as a completed retain: job `DONE`, item `RETAINED`, an
+        # Inspector reporting a document that was never stored.
+        _require_fields(payload, ("success", "bank_id", "items_count", "async"), "retain")
+        if not isinstance(payload["success"], bool) or not isinstance(payload["async"], bool):
             raise TransportError(
                 "engine_protocol_error",
-                "the retain response did not carry the required boolean `success`",
+                "`success` and `async` must be JSON booleans",
+                retryable=False)
+        if isinstance(payload["items_count"], bool) or not isinstance(payload["items_count"], int):
+            raise TransportError(
+                "engine_protocol_error",
+                "`items_count` must be a JSON integer",
+                retryable=False)
+        if not isinstance(payload["bank_id"], str):
+            raise TransportError(
+                "engine_protocol_error",
+                "`bank_id` must be a JSON string",
                 retryable=False)
         if not payload["success"]:
             raise TransportError("engine_retain_failed",
                                  "the engine reported the retain did not succeed",
                                  retryable=True)
-        if payload.get("async") is True:
+        if payload["async"]:
             # We asked for `async=false` precisely because a durable worker needs
             # a receipt it can trust. An operation that is only queued has no
             # confirmed result yet, and recording it as stored would be the
@@ -456,6 +466,15 @@ class HindsightTransport:
                 "the engine queued the retain instead of storing it; the document "
                 "has not been confirmed and must not be marked retained",
                 retryable=True)
+        if payload["bank_id"] != bank.bank_id:
+            # Acknowledging a different bank is not an acknowledgement of this
+            # one. Recording it would let a retained document be filed under a
+            # receipt that says it went somewhere else.
+            raise TransportError(
+                "engine_protocol_error",
+                "the retain response acknowledged a different bank than the one "
+                "the document was written to",
+                retryable=False)
         usage = payload.get("usage")
         return {
             "document_id": document_id,
@@ -567,25 +586,45 @@ class HindsightTransport:
         if not isinstance(payload, dict):
             raise TransportError("engine_protocol_error",
                                  "the delete response was not a JSON object", retryable=False)
-        # `success` is required by DeleteDocumentResponse and is a boolean. It
-        # used to be read as `bool(payload.get("success", True))`, which means an
-        # absent field and an explicit `false` both came out as success and the
-        # worker recorded `DELETED` over a document the engine refused to remove.
-        if not isinstance(payload.get("success"), bool):
-            raise TransportError(
-                "engine_protocol_error",
-                "the delete response did not carry the required boolean `success`",
-                retryable=False)
+        # DeleteDocumentResponse makes `success`, `message`, `document_id` and
+        # `memory_units_deleted` **required**. It used to be read as
+        # `bool(payload.get("success", True))`, so an absent field and an
+        # explicit `false` both came out as success, and `document_id` was
+        # echoed back unexamined — an engine reporting that it deleted
+        # *somebody else's* document was recorded as this one's removal.
+        _require_fields(payload, ("success", "message", "document_id",
+                                  "memory_units_deleted"), "delete")
+        if not isinstance(payload["success"], bool):
+            raise TransportError("engine_protocol_error",
+                                 "`success` must be a JSON boolean", retryable=False)
+        if not isinstance(payload["message"], str):
+            raise TransportError("engine_protocol_error",
+                                 "`message` must be a JSON string", retryable=False)
+        if isinstance(payload["memory_units_deleted"], bool) or not isinstance(
+                payload["memory_units_deleted"], int):
+            raise TransportError("engine_protocol_error",
+                                 "`memory_units_deleted` must be a JSON integer",
+                                 retryable=False)
         if not payload["success"]:
             raise TransportError(
                 "engine_delete_failed",
                 "the engine reported the document was not deleted",
                 retryable=True)
+        if payload["document_id"] != document_id:
+            # The engine's answer is about a different document, so it is not
+            # evidence about this one. Recording `DELETED` from it would leave
+            # the document we actually asked about in place while Core reports
+            # it gone.
+            raise TransportError(
+                "engine_protocol_error",
+                "the delete response named a different document than the one "
+                "that was deleted",
+                retryable=False)
         return {
-            "document_id": payload.get("document_id") or document_id,
-            "memory_units_deleted": _as_int(payload.get("memory_units_deleted")),
+            "document_id": payload["document_id"],
+            "memory_units_deleted": payload["memory_units_deleted"],
             "success": True,
-            "message": payload.get("message") if isinstance(payload.get("message"), str) else "",
+            "message": payload["message"],
         }
 
     def get_document(self, *, bank: BankRef, document_id: str) -> dict[str, Any] | None:
@@ -600,6 +639,20 @@ class HindsightTransport:
                 return None
             raise
         return payload if isinstance(payload, dict) else None
+
+
+def _require_fields(payload: dict[str, Any], names: tuple[str, ...], what: str) -> None:
+    """The schema says these are required; a response without them is refused.
+
+    Absent and `null` are the same refusal: neither is a value, and a worker
+    that cannot tell whether a document was stored must not record that it was.
+    """
+    missing = [name for name in names if payload.get(name) is None]
+    if missing:
+        raise TransportError(
+            "engine_protocol_error",
+            f"the {what} response is missing required field(s): {', '.join(missing)}",
+            retryable=False)
 
 
 def _as_int(value: Any) -> int:

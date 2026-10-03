@@ -290,6 +290,114 @@ class FailureModes(Wire):
         self.assertEqual(caught.exception.code, "engine_response_too_large")
 
 
+class ReceiptValidation(Wire):
+    """A receipt is evidence only if it matches the contract and the request.
+
+    `RetainResponse` and `DeleteDocumentResponse` mark their fields required in
+    the official OpenAPI 0.10.2, and the worker writes `DONE` on the strength of
+    this response alone. Reading `payload.get("success") is False` instead meant
+    an absent field read as success, so an empty `{}`, a `"success": null`, an
+    `async` queued operation, an acknowledgement for a *different* bank and a
+    delete confirmation for a *different* document were each enough to reach
+    `DONE`.
+    """
+
+    def _receipt(self, payload: dict) -> None:
+        with patch.object(HindsightTransport, "_request", return_value=payload):
+            self.transport.retain(bank=self.bank, document_id="doc-1", content="c",
+                                  context="c", metadata={}, tags=(),
+                                  memory_type="FAILURE_LESSON", timestamp=None)
+
+    def _deletion(self, payload: dict) -> None:
+        with patch.object(HindsightTransport, "_request", return_value=payload):
+            self.transport.delete_document(bank=self.bank, document_id="doc-1")
+
+    def test_a_retain_response_missing_required_fields_is_refused(self) -> None:
+        for payload in (
+            {},                                          # nothing at all
+            {"success": True},                           # the rest unspoken
+            {"success": None, "bank_id": self.bank.bank_id,
+             "items_count": 1, "async": False},          # explicit null
+            {"success": True, "async": False,
+             "items_count": 1},                          # no bank
+            {"success": True, "bank_id": self.bank.bank_id,
+             "items_count": 1},                          # no async
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaises(TransportError) as caught:
+                    self._receipt(payload)
+                self.assertEqual(caught.exception.code, "engine_protocol_error")
+                self.assertFalse(caught.exception.retryable)
+
+    def test_a_non_boolean_or_mistyped_field_is_refused(self) -> None:
+        good = {"success": True, "async": False, "bank_id": self.bank.bank_id,
+                "items_count": 1}
+        for broken in ("true", 1, 0, "false"):
+            with self.subTest(async_value=broken):
+                with self.assertRaises(TransportError) as caught:
+                    self._receipt({**good, "async": broken})
+                self.assertEqual(caught.exception.code, "engine_protocol_error")
+        with self.assertRaises(TransportError):
+            self._receipt({**good, "items_count": "1"})
+        with self.assertRaises(TransportError):
+            self._receipt({**good, "bank_id": 7})
+
+    def test_a_receipt_for_a_different_bank_is_not_a_receipt(self) -> None:
+        with self.assertRaises(TransportError) as caught:
+            self._receipt({"success": True, "async": False, "items_count": 1,
+                           "bank_id": "jasmine-project-" + "0" * 26})
+        self.assertEqual(caught.exception.code, "engine_protocol_error")
+
+    def test_an_explicitly_unsuccessful_retain_is_retryable(self) -> None:
+        with self.assertRaises(TransportError) as caught:
+            self._receipt({"success": False, "async": False, "items_count": 0,
+                           "bank_id": self.bank.bank_id})
+        self.assertEqual(caught.exception.code, "engine_retain_failed")
+        self.assertTrue(caught.exception.retryable)
+
+    def test_a_queued_retain_is_unconfirmed_not_retained(self) -> None:
+        with self.assertRaises(TransportError) as caught:
+            self._receipt({"success": True, "async": True, "items_count": 1,
+                           "bank_id": self.bank.bank_id, "operation_id": "op_1"})
+        self.assertEqual(caught.exception.code, "engine_retain_unconfirmed")
+        self.assertTrue(caught.exception.retryable)
+
+    def test_a_delete_confirmation_for_another_document_is_refused(self) -> None:
+        with self.assertRaises(TransportError) as caught:
+            self._deletion({"success": True, "message": "deleted",
+                            "document_id": "somebody-elses-document",
+                            "memory_units_deleted": 3})
+        self.assertEqual(caught.exception.code, "engine_protocol_error")
+        self.assertFalse(caught.exception.retryable)
+
+    def test_a_delete_response_missing_required_fields_is_refused(self) -> None:
+        for payload in (
+            {"success": True, "document_id": "doc-1", "memory_units_deleted": 1},
+            {"success": True, "message": "ok", "memory_units_deleted": 1},
+            {"success": False, "message": "no", "document_id": "doc-1",
+             "memory_units_deleted": 0},
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaises(TransportError) as caught:
+                    self._deletion(payload)
+                self.assertIn(caught.exception.code,
+                              ("engine_protocol_error", "engine_delete_failed"))
+        # The explicit failure is a distinct, retryable code.
+        with self.assertRaises(TransportError) as caught:
+            self._deletion({"success": False, "message": "no", "document_id": "doc-1",
+                            "memory_units_deleted": 0})
+        self.assertEqual(caught.exception.code, "engine_delete_failed")
+        self.assertTrue(caught.exception.retryable)
+
+    def test_a_contract_shaped_receipt_is_accepted(self) -> None:
+        self.transport.retain(bank=self.bank, document_id="doc-ok", content="c",
+                              context="c", metadata={}, tags=(),
+                              memory_type="FAILURE_LESSON", timestamp=None)
+        self.assertEqual(
+            self.transport.delete_document(bank=self.bank, document_id="doc-ok")["success"],
+            True)
+
+
 class EndToEndOverTheWire(MemoryTestCase):
     """The whole P4 path against the wire double: scan, retain, recall, lifecycle."""
 

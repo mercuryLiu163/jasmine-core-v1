@@ -165,32 +165,63 @@ class ProvenanceChecker:
         if item["status"] == "OBSOLETE":
             return Verification(False, "obsolete", item=item,
                                 memory_type=item["memory_type"])
-        for source_event_id in split_ids(result.metadata.get(SOURCE_EVENT_IDS_KEY)):
+        # The authoritative record of this item's provenance is what Core wrote
+        # when it retained the item: `memory_item_sources` and `evidence_ids_json`.
+        # The engine only echoes it back, and an echo can be wrong or forged —
+        # so every id it declares is checked *against the record*, not against
+        # the tables it happens to name. Checking the tables was the gap: an id
+        # that exists but is not this item's own passed, which let a project B
+        # Evidence id reach a project A trace, and let any unrelated Event of
+        # the same project replace the item's real source.
+        recorded_sources = tuple(
+            row["source_event_id"] for row in self._store.sources_of(memory_id))
+        declared_sources = split_ids(result.metadata.get(SOURCE_EVENT_IDS_KEY))
+        if declared_sources and not set(declared_sources) <= set(recorded_sources):
+            return Verification(False, "foreign_source", item=item,
+                                memory_type=item["memory_type"])
+        for source_event_id in declared_sources:
             reason = self._event_scope_error(source_event_id, item)
             if reason is not None:
                 return Verification(False, reason, item=item,
                                     memory_type=item["memory_type"])
-        origin_event_id = result.metadata.get(ORIGIN_EVENT_ID_KEY)
-        if origin_event_id:
-            reason = self._event_scope_error(origin_event_id, item)
+
+        recorded_origin = item.get("origin_event_id") or item["source_event_id"]
+        declared_origin = result.metadata.get(ORIGIN_EVENT_ID_KEY)
+        if declared_origin and declared_origin != recorded_origin:
+            return Verification(False, "foreign_source", item=item,
+                                memory_type=item["memory_type"])
+        if declared_origin:
+            reason = self._event_scope_error(declared_origin, item)
             if reason is not None:
                 return Verification(False, reason, item=item,
                                     memory_type=item["memory_type"])
-        for evidence_id in split_ids(result.metadata.get(EVIDENCE_IDS_KEY)):
+
+        recorded_evidence = tuple(item["evidence_ids"])
+        declared_evidence = split_ids(result.metadata.get(EVIDENCE_IDS_KEY))
+        if declared_evidence and not set(declared_evidence) <= set(recorded_evidence):
+            # Same shape of forgery, different table: Evidence carries no
+            # project of its own, it reaches one through its task, so an
+            # existence check alone accepted another project's Evidence id.
+            return Verification(False, "foreign_evidence", item=item,
+                                memory_type=item["memory_type"])
+        for evidence_id in declared_evidence:
             if self._conn.execute("SELECT 1 FROM evidence WHERE evidence_id=?",
                                   (evidence_id,)).fetchone() is None:
                 return Verification(False, "evidence_missing", item=item,
                                     memory_type=item["memory_type"])
+
         conflict = self._authority_conflict(item)
         if conflict is not None:
             return Verification(False, conflict, item=item, memory_type=item["memory_type"])
+        # Built from the record, not from the echo: an engine that drops a
+        # supporting source cannot shorten the provenance the trace reports,
+        # and one that adds an id is refused above rather than believed.
         provenance = Provenance(
-            source_event_ids=split_ids(result.metadata.get(SOURCE_EVENT_IDS_KEY))
-            or (item["source_event_id"],),
-            evidence_ids=split_ids(result.metadata.get(EVIDENCE_IDS_KEY)) or tuple(item["evidence_ids"]),
+            source_event_ids=recorded_sources or (item["source_event_id"],),
+            evidence_ids=recorded_evidence,
             origin_rule_id=item["origin_rule_id"],
             origin_rule_version=item["origin_rule_version"],
-            origin_event_id=result.metadata.get(ORIGIN_EVENT_ID_KEY),
+            origin_event_id=recorded_origin,
         )
         return Verification(True, item=item, provenance=provenance,
                             memory_type=item["memory_type"], historical=True)
