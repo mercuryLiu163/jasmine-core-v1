@@ -31,6 +31,11 @@ EVENT_HASH_FIELDS = (
 )
 
 EVENT_TYPES = frozenset({
+    "adapter.lifecycle_reported", "adapter.lifecycle_attested", "adapter.operation_reserved",
+    "adapter.operation_completed", "adapter.operation_denied", "adapter.operation_key_bound", "adapter.requirement_bound",
+    "context.built",
+    "checkpoint.created",
+    "resume.built",
     "user.prompt",
     "assistant.message",
     "session.started",
@@ -146,6 +151,8 @@ class NewEvent:
                 f"event_type must be one of {', '.join(sorted(EVENT_TYPES))}", field="event_type"
             )
         source_system = require(body, "source_system")
+        if event_type.startswith("adapter.") or source_system=="core-native-adapter":
+            raise errors.InvalidRequest("adapter command namespace is reserved for internal capability endpoints")
         if not source_system.strip():
             raise errors.InvalidRequest("source_system must not be empty", field="source_system")
 

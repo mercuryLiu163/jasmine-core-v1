@@ -9,6 +9,9 @@ description = "Jasmine Core V1 baseline: immutable raw event store and truth fou
 requires-python = ">=3.11"
 dependencies = []
 
+[project.optional-dependencies]
+context = ["tiktoken==0.14.0"]
+
 [project.scripts]
 jasmine-core = "jasmine_core.cli:main"
 

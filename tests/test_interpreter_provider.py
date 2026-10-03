@@ -92,6 +92,32 @@ print(json.dumps({'type':'turn.completed'}))
                     provider=CodexProvider(str(binary),str(path))
                     self.assertEqual(provider.valid,mode is None)
 
+    def test_validated_version_is_selected_by_exact_bytes(self):
+        # Component files stand in for approved bytes; no real CLI compatibility
+        # is established by this patched allowlist test.
+        with tempfile.TemporaryDirectory(prefix='jasmine-version-component-') as temp:
+            root=Path(temp);binary=root/'component';catalog=root/'catalog.json'
+            binary.write_bytes(b'component-only newer binary')
+            fingerprint=hashlib.sha256(binary.read_bytes()).hexdigest()
+            catalog.write_text(json.dumps({'models':[{'slug':'gpt-6.1-sol',
+                'apply_patch_tool_type':None,'experimental_supported_tools':[],
+                'supports_search_tool':False,'tool_mode':None}]}))
+            with patch.object(CodexProvider,'ADDITIONAL_VALIDATED_EXECUTABLES',
+                              {'codex-cli/component-only':fingerprint}):
+                provider=CodexProvider(str(binary),str(catalog))
+                self.assertTrue(provider.valid)
+                self.assertEqual(provider.configuration()['version'],'codex-cli/component-only')
+                self.assertEqual(provider.configuration()['executable_sha256'],fingerprint)
+                binary.write_bytes(b'unsupported replacement')
+                with self.assertRaises(ProviderFailure) as raised:
+                    provider.extract({'text':'source data'})
+                self.assertEqual(raised.exception.code,'provider_configuration_changed')
+                self.assertFalse(CodexProvider(str(binary),str(catalog)).valid)
+
+    def test_original_validated_fingerprint_is_preserved(self):
+        self.assertEqual(CodexProvider.validated_executables()['codex-cli/0.159.0'],
+            'e89718aa1969bfc4a471277bdc4679a3a3529293de0a309909822dfd67ddb77a')
+
     def test_group_eperm_exited_parent_preserves_output_cap(self):
         spawn=subprocess.Popen
         owned=[]

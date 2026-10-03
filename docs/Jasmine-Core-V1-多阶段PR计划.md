@@ -3,13 +3,13 @@
 > **2026-09-30 用户执行覆盖：** 后续按完整阶段在本地完成实现、独立 Review、独立 validation 和真实 Gate 后统一 push；不逐条创建/推送 PR，不运行 CI，也不把 CI 作为验收门禁。文内 PR 切分保留为本地实施与审查里程碑；旧 CI/逐 PR 发布要求由此覆盖。已合并 P2-01/P2-02 的历史记录保留，不追溯删除。后续阶段采用同一覆盖规则，除非用户明确另行调整。
 
 
-状态：阶段计划。P0 的 PR #1–#3 和 P1 的 PR #4–#6 已合并；P1 最终基线为 `905962564d07e4b5d7c08802231611c21f0b4ad5`，真实 Gate、独立审查、PR/main CI 与合并后验证已通过。P2–P7 尚为规划，不表示已实施。P0/P1 原始验收证据在本机 ignored validation/artifacts 保留，下表描述未来阶段目标。
+状态：阶段计划。P0 的 PR #1–#3 和 P1 的 PR #4–#6 已合并；P1 最终基线为 `905962564d07e4b5d7c08802231611c21f0b4ad5`，真实 Gate、独立审查、PR/main CI 与合并后验证已通过。P2 已完成限定验收；P3 Run34 七项真实 Gate 已记录 PASS，详见 [P3 结果](p3-results.md)。P4–P7 保留规划范围，不表示已实施。P0/P1 原始验收证据在本机 ignored validation/artifacts 保留，下表描述未来阶段目标。
 
 P2/P3 由当前调度线程顺序负责，P4 Memory 和 P6 Dashboard 委派其他 Agent 按依赖并行。可执行文档：[并行协作说明](Jasmine-Core-V1-P2-P3-P4-P6-并行协作说明.md)、[P2](Jasmine-Core-V1-P2-阶段任务书.md)、[P3](Jasmine-Core-V1-P3-阶段任务书.md)、[P4](Jasmine-Core-V1-P4-阶段任务书.md)、[P6](Jasmine-Core-V1-P6-阶段任务书.md)。文档交付本身不构成这些阶段的实现或验收。
 
-## 当前实施记录（2026-09-30）
+## 当前实施记录（2026-10-03）
 
-P2-01/P2-02 已合历史保留；P2-03 在 `468918a803dc8bb44700d6d6043afd5e3c7c4204`、Schema8 完成本地独立验收，结论 PASS_P2_SCOPED_ADMISSION_ONLY，详见[P2结果摘要](p2-results.md)。以下逐 PR 条件按顶部用户覆盖解释为本地实施/Review/validation 里程碑，whole-stage 完成后一次发布，不执行 CI 门禁。P3 尚未实施，实际 compact、完整 Context Pack 与 Playwright 执行联合 Gate 仍待后续阶段。
+P2-01/P2-02 已合历史保留；P2-03 在 `468918a803dc8bb44700d6d6043afd5e3c7c4204`、Schema8 完成本地独立验收，结论 PASS_P2_SCOPED_ADMISSION_ONLY，详见[P2结果摘要](p2-results.md)。以下逐 PR 条件按顶部用户覆盖解释为本地实施/Review/validation 里程碑，whole-stage 完成后一次发布，不执行 CI 门禁。P3 在源码 `6ec64362401bc92d52aed531e15d95a9d1441fb4` 的 Run34 完成真实 compact、exact Context 和 Playwright 联合 G01–G07 PASS 记录；最终独立交付审查 PASS；阶段统一发布由 Git/PR 元数据记录，详见 [P3 结果](p3-results.md)。
 
 ## 依据与边界
 

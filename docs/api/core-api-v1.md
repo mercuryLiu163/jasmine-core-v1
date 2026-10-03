@@ -323,8 +323,8 @@ The local provider is opt-in: the operator sets absolute
 `JASMINE_CORE_INTERPRETER_CODEX` and `JASMINE_CORE_INTERPRETER_CATALOG` paths.
 The catalog must retain the actual `gpt-6.1-sol` entry and have
 `apply_patch_tool_type: null`, `experimental_supported_tools: []`, and
-`supports_search_tool: false`, and `tool_mode: null`. This release supports only the independently
-verified CLI0.159.0 binary fingerprint recorded in the provider. Other binaries
+`supports_search_tool: false`, and `tool_mode: null`. This release supports the independently
+verified CLI0.159.0 and CLI0.159.3 binary fingerprints recorded in the provider. Other binaries
 or missing configuration return a recorded `FAILED/provider_unavailable`.
 The request body cannot alter this `no-execution.v2` profile or its default
 non-Plan execution mode. The CLI may declare one Plan-only question meta tool;
@@ -360,3 +360,61 @@ expected_revisions is an exact array of `{object_type:project|task|step|rule,obj
 New command201; exact historical replay200; source replay200. Review source-race loser is SOURCE_REPLAYED and preserves original applied action refs. Bad syntax400, wrong role/scope403, missing resource404, stale head409 interpretation_not_current, unready processing409 interpretation_not_ready, key conflict409 idempotency_conflict, stale full context409 context_conflict, latest application conflict409 application_conflict. Existing GET Interpretation adds maintenance_head/history/operation_completions while preserving original processing fields. Unsupported PATH/TOOL manual mappings return400 and keep pending; no silently changed scope or claimed application.
 
 Review APPROVE may map a CORRECTION candidate to SUPERSEDE_RULE targeting a different-source Rule only in the same Task and exact scope, with authority:manage, human/system identity and the complete revision/context snapshot. This exception is unavailable to ordinary manual-reapply. The immutable action result preserves previous_origin_event_id, previous_rule_version, previous_source_event_id plus the new change_event_ids.
+
+## P3-01 Checkpoint and Resume (Schema 9)
+
+These endpoints store deterministic continuity receipts; they do not attest actual compact/Stop hooks or restore Truth. All require `objects:read`, `state:read`, `authority:read`, `evidence:read`, and `events:read`, in addition to the endpoint scope.
+
+| Endpoint | Scope | Result |
+| --- | --- | --- |
+| POST `/v1/checkpoints` | `checkpoint:write` | 201 new / 200 exact replay |
+| GET `/v1/checkpoints/{ckp}` | `checkpoint:read` | exact immutable checkpoint |
+| GET `/v1/tasks/{tsk}/checkpoints/latest` | `checkpoint:read` | latest checkpoint or null |
+| POST `/v1/tasks/{tsk}/resume` | `resume:build`, `checkpoint:read` | 201 new / 200 exact replay |
+| GET `/v1/resumes/{rms}` | `resume:read`, `checkpoint:read` | exact immutable Resume |
+
+Checkpoint body: `{task_id,host_id,source_event_id,reason,idempotency_key,session_id?,current_step_id?,note?}`. Note is `{text,source_event_id}`, bounded to 2000 characters. Reasons: MANUAL, HANDOFF, BLOCKED, STEP_VERIFIED, PRE_COMPACT, SESSION_STOP. Native lifecycle reasons are caller requests labeled UNVERIFIED_REQUEST; they are not native platform proof.
+
+Resume body: `{host_id,source_event_id,idempotency_key,session_id?,checkpoint_id?}`. Null/omitted checkpoint selects the latest matching Task and optional Core session; explicit checkpoint must belong to that Task. Optional identities can be null; required identities cannot. Latest GET accepts only a single `session_id` query. All other endpoints accept no query. Unknown/duplicate fields, malformed IDs, nonfinite or invalid Unicode JSON fail 400.
+
+New commands use server-owned complete snapshots and bounded outside-transaction fingerprint scans. Scan timeout/failure/output cap return 503 `checkpoint_scan_timeout`, `checkpoint_scan_failed`, or `checkpoint_scan_too_large`. Concurrent Truth/selection changes after one retry return 409 `checkpoint_context_conflict` or `resume_context_conflict`. Corrupt/ahead checkpoint contents return 409 `checkpoint_integrity_error`. Oversized complete context returns 409 `checkpoint_context_too_large`. Exact actor/key replay returns original stored receipt contents even after subsequent business changes; a changed request body with the same key returns 409 `idempotency_conflict`.
+
+See [ADR 0011](../adr/0011-checkpoint-resume-snapshot.md) for integrity, provenance, budget and non-Authority note boundaries.
+
+## P3-02 Context packs (Schema 10)
+
+- `POST /v1/context/build`: exact fields `task_id`, `host_id`, `source_event_id`, `idempotency_key`, `reason`; optional `session_id`, `current_step_id`. Reasons: SESSION_START, USER_PROMPT, POST_COMPACT, HANDOFF, MANUAL. USER_PROMPT requires a genuine human prompt source. Requires `context:build` plus checkpoint and baseline read scopes. New receipt is 201; historical exact-key replay is 200.
+- `GET /v1/context/{ctx}`: immutable full receipt, requiring `context:read` plus baseline/checkpoint reads. Unknown query fields are rejected.
+- `POST /v1/context/{ctx}/check-current`: exact `host_id`, `source_event_id`, optional `session_id`, `current_step_id`; requires build/read scopes and the original actor. Returns current comparison, not a regenerated pack. Binding, configuration or Truth/selector mismatch returns 409; actor mismatch 403. No query fields are accepted.
+
+Receipts include the genuine command Event, complete snapshot/selector, exact rendered content/hash/byte count, pinned tokenizer identity, total/section counts, omission provenance and read-only Memory diagnostics. A 2,500-token rendered-pack bound uses explicit o200k_base; model encoding remains unverified. Mandatory overflow is `AUTHORITY_TOO_LARGE` or `CONTEXT_MANDATORY_TOO_LARGE`. Missing tokenizer is an explicit dependency failure. See ADR 0012 for offline setup and admission boundaries. Context generation and its component adapter do not establish actual native hook injection or tool execution.
+
+## Native adapter (P3-03)
+
+Schema remains 10. These routes require the exact configured system key and
+Registry home-host binding; `adapter:report`, `adapter:attest` and `adapter:read`
+are purpose scopes, in addition to the existing business read/write scopes.
+
+| Route | Purpose |
+| --- | --- |
+| POST `/v1/adapter/lifecycle/report` | Exact trusted callback report; no native completion claim |
+| POST `/v1/adapter/lifecycle/attest` | Immutable post-collection native lifecycle proof |
+| POST `/v1/adapter/operations/reserve` | One reservation per native thread/turn/call |
+| GET `/v1/adapter/operations/{evt}` | Historical snapshot; UNKNOWN_OUTCOME if effect started without terminal |
+| POST `/v1/adapter/operations/{evt}/check-current` | Read-only fresh admission check; historical receipt is not authorization |
+| POST `/v1/adapter/operations/{evt}/complete` | Terminal once; stale effects do not qualify Evidence |
+| POST `/v1/adapter/requirements/bind` | Explicit P2 Rule-to-P1 criterion binding with exact revisions |
+| POST `/v1/evidence/codex-dynamic-observation` | Read the already committed original dynamic Evidence |
+
+All routes reject query parameters and unknown body fields. GET/observation use
+`adapter:read`; mutations use report or attest. Exact-key replay returns the
+original snapshot (200); fresh immutable mutations return 201. Changed native-call
+arguments or reused keys conflict (409). Private receipt/config input is supplied
+by the adapter deployment, not by model arguments or public Raw Events.
+
+The complete exact request fields are frozen in the implementation's `REPORT`,
+`RESERVE`, `CHECK` and `BIND` constants and the lifecycle/complete validators.
+Operations are the four fixed `jasmine_read`, `jasmine_patch`, `jasmine_test` and
+`jasmine_playwright` names. Guard confirmation/precondition outcomes are blocked
+unless the reviewed path can establish the necessary precondition; no automatic
+confirmation or acceptance is implied. See [ADR 0013](../adr/0013-native-lifecycle-and-typed-execution.md).

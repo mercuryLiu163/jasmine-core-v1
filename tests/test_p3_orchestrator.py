@@ -1,0 +1,128 @@
+import tempfile
+import hashlib
+import json
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from jasmine_core.adapter.orchestrator import DynamicExecutor,NativeRunner,attest_completed_lifecycle
+from jasmine_core.capture.p2_runtime import Deadline,atomic_json
+
+class NativeFake:
+    def __init__(self):self.messages=[]
+    def send_request(self,method,params,budget):self.messages.append((method,params));return len(self.messages)
+    def wait_response(self,ident,budget):
+        if self.messages[ident-1][0]=='turn/start':return {'turn':{'id':'turn-real'}}
+        return {'thread':{'id':'thread-real'}}
+    def send_notification(self,method,params,budget):self.messages.append((method,params))
+
+class OrchestrationTests(unittest.TestCase):
+    def test_explicit_turn_limit_blocks_before_third_native_request(self):
+        native=NativeFake();runner=NativeRunner(native,None,max_turns=2)
+        runner.start(None,cwd='/private/tmp/fixture')
+        runner.submit('first',None);runner.submit('second',None)
+        requests=list(native.messages)
+        with self.assertRaisesRegex(ValueError,'native turn limit exceeded'):
+            runner.submit('third',None)
+        self.assertEqual(native.messages,requests)
+        self.assertEqual(sum(method=='turn/start' for method,_ in native.messages),2)
+        self.assertEqual(runner.turn_count,2)
+
+    def test_turn_limit_requires_strict_integer_in_reviewed_bounds(self):
+        from jasmine_core.adapter.gate_runner import run
+        for invalid in (True,False,0,25,-1,2.0,'2',None):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex(ValueError,'bounded native turn limit required'):
+                    NativeRunner(NativeFake(),None,max_turns=invalid)
+                with self.assertRaisesRegex(ValueError,'bounded native turn limit required'):
+                    run(Path('/nonexistent'),'',user_reviewed_trust=True,max_turns=invalid)
+        self.assertEqual(NativeRunner(NativeFake(),None).max_turns,16)
+        self.assertEqual(NativeRunner(NativeFake(),None,max_turns=24).max_turns,24)
+
+    def test_lifecycle_attestation_keeps_only_identified_current_turn_and_replays_bytes(self):
+        # Collector component regression: no native lifecycle/Gate claim.
+        for event in ('Stop','PreCompact'):
+            with self.subTest(event=event),tempfile.TemporaryDirectory() as tmp:
+                root=Path(tmp).resolve();root.chmod(0o700)
+                callback={'report':{'hook_event_name':event,'native_thread_id':'thread',
+                                    'native_turn_id':'current','hook_run_id':None,
+                                    'hook_definition_sha256':'hook','profile_sha256':'profile','deployment_sha256':'deployment'}}
+                config=SimpleNamespace(value={'receipt_root':str(root),'hook_definition_sha256':'hook',
+                    'profile_sha256':'profile','deployment_sha256':'deployment','hook_definition_path':'/reviewed/hooks.json'},
+                    receipt=lambda ident:(callback,'callback-sha'))
+                atomic_json(root/'callback_one_checkpoint.json',{'kind':'lifecycle_checkpoint',
+                    'callback_id':'callback_one','reported_event_id':'reported','checkpoint_id':'checkpoint'})
+                posts=[]
+                client=SimpleNamespace(post=lambda endpoint,body,cap:posts.append((endpoint,body)))
+                def native(method,**params):
+                    return {'method':method,'params':{'threadId':'thread',**params}}
+                current=[native('hook/started',turnId='current',run={'id':'hook-run','eventName':'stop' if event=='Stop' else 'preCompact','source':'project','handlerType':'command','sourcePath':'/reviewed/hooks.json'}),
+                         native('hook/completed',turnId='current',run={'id':'hook-run','eventName':'stop' if event=='Stop' else 'preCompact','source':'project','handlerType':'command','sourcePath':'/reviewed/hooks.json','status':'completed'})]
+                if event=='Stop':
+                    current.append(native('turn/completed',turn={'id':'current','status':'completed'}))
+                else:
+                    current.extend(native(method,turnId='current',item={'id':'compact','type':'contextCompaction'})
+                                   for method in ('item/started','item/completed'))
+                for partial in ([],current[:1],current[:2]):
+                    attest_completed_lifecycle(client,config,partial,deadline=Deadline())
+                    self.assertFalse((root/'attest_callback_one.json').exists())
+                    self.assertEqual(posts,[])
+                from jasmine_core.resolution_common import Conflict
+                for altered in ('source','id'):
+                    malformed=json.loads(json.dumps(current[:2]));malformed[0]['params']['run'][altered]='invalid' if altered=='source' else ''
+                    with self.assertRaises(Conflict):attest_completed_lifecycle(client,config,malformed,deadline=Deadline())
+                    self.assertFalse((root/'attest_callback_one.json').exists())
+                for terminal in (native('turn/completed',turn={'id':'current','status':'completed'}),
+                                 native('turn/completed',turn={'id':'current','status':'failed'})):
+                    with self.assertRaises(Conflict):attest_completed_lifecycle(client,config,[current[0],terminal],deadline=Deadline())
+                    self.assertFalse((root/'attest_callback_one.json').exists());self.assertEqual(posts,[])
+                if event=='PreCompact':
+                    with self.assertRaises(Conflict):attest_completed_lifecycle(client,config,[current[0],current[-1]],deadline=Deadline())
+                    self.assertFalse((root/'attest_callback_one.json').exists());self.assertEqual(posts,[])
+                with self.assertRaisesRegex(ValueError,'notification cap'):
+                    attest_completed_lifecycle(client,config,current[:1]*513,deadline=Deadline())
+                # Large conversation items are excluded without changing raw input.
+                noisy=native('item/completed',turnId='current',item={'id':'message','type':'agentMessage','text':'private '*20000})
+                attest_completed_lifecycle(client,config,[noisy]+current,deadline=Deadline())
+                receipt=root/'attest_callback_one.json';before=receipt.read_bytes()
+                ignored=[native('turn/completed',turn={'id':'later','status':'completed'}),
+                    native('hook/completed',turnId='later'),native('item/completed'),
+                    native('turn/completed',turnId='current',turn={'id':'later'}),
+                    native('turn/completed',turnId='later',turn={'id':'current'}),
+                    native('turn/completed',turnId='',turn={'id':'current'}),
+                    {'method':'hook/completed','params':None},
+                    {'method':'turn/completed','params':{'threadId':'foreign','turn':{'id':'current'}}}]
+                # Tampering with frozen receipt metadata is refused before another POST.
+                tampered=json.loads(before);tampered['profile_sha256']='other'
+                atomic_json(receipt,tampered)
+                with self.assertRaises(ValueError):attest_completed_lifecycle(client,config,current,deadline=Deadline())
+                self.assertEqual(len(posts),1)
+                receipt.write_bytes(before)
+                attest_completed_lifecycle(client,config,current+ignored,deadline=Deadline())
+                self.assertEqual(receipt.read_bytes(),before)
+                self.assertEqual(json.loads(before)['notifications'],current)
+                self.assertEqual(posts[0],posts[1])
+                self.assertEqual(posts[0][1]['receipt_sha256'],hashlib.sha256(before).hexdigest())
+
+    def test_handshake_skill_and_compact_ack_are_distinct(self):
+        native=NativeFake();runner=NativeRunner(native,None)
+        runner.initialize(None)
+        self.assertEqual([m[0] for m in native.messages],['initialize','initialized'])
+        runner.start(None,cwd='/private/tmp/fixture')
+        self.assertEqual(len(native.messages[-1][1]['dynamicTools']),4)
+        self.assertTrue(all(t['type']=='function' for t in native.messages[-1][1]['dynamicTools']))
+        runner.submit('继续',None,skill_path='/fixture/.agents/skills/jasmine-playwright/SKILL.md')
+        self.assertEqual(native.messages[-1][1]['input'][0]['text'],'继续')
+        self.assertEqual(native.messages[-1][1]['input'][1]['type'],'skill')
+        self.assertEqual(runner.last_turn_id,'turn-real')
+        runner.compact(None)
+        self.assertEqual(native.messages[-1][0],'thread/compact/start')
+        self.assertEqual(runner.notifications,[])
+
+    def test_receipt_identity_safe_and_immutable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp).chmod(0o700)
+            executor=DynamicExecutor(None,None,SimpleNamespace(value={'receipt_root':str(Path(tmp).resolve()),'executor_inputs':{}}),worker_inputs={},allowed_paths=[])
+            with self.assertRaises(ValueError):executor.receipt('../escape',{})
+            digest=executor.receipt('call',{'kind':'dynamic_call','request':{'tool':'jasmine_read'},'received_at_monotonic':1})
+            self.assertEqual(digest,executor.receipt('call',{'kind':'dynamic_call','request':{'tool':'jasmine_read'},'received_at_monotonic':2}))
+            with self.assertRaises(ValueError):executor.receipt('call',{'kind':'dynamic_call','request':{'tool':'jasmine_patch'},'received_at_monotonic':2})
