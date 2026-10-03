@@ -244,7 +244,11 @@ class ReviewWaitTests(unittest.TestCase):
     class Client:
       def get(self,path):
         if path.startswith('/v1/events/'):
-          return {'event':state['requests']['raw']['body']}
+          return {'event':{**state['requests']['raw']['body'],'actor_kind':'human'}}
+        if path.startswith('/v1/tasks/'):
+          return {'task':{'project_id':owner.config['project_id']}}
+        if path.startswith('/v1/steps/'):
+          return {'step':{'task_id':state['task_id']}}
         if path.startswith('/v1/interpretations/'):
           return {'interpretation':{'maintenance_head':{'status':'NORMAL','current_interpretation_id':state['interpretation_id']}}}
         status=statuses.pop(0) if len(statuses)>1 else statuses[0]

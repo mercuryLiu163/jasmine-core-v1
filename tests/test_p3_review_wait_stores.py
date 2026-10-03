@@ -19,7 +19,17 @@ class ReviewWaitStores(AdmissionBusinessGraph):
     self._review_wait_flow(child_race=True)
  def test_real_normal_child_race_on_readmission_interpret_blocks(self):
     self._review_wait_flow(child_race='interpret')
- def _review_wait_flow(self,child_race=False):
+ def test_real_normal_child_race_on_final_step_read_blocks(self):
+    self._review_wait_flow(child_race='step',prompt='请读取 index.html 的当前内容，不要修改文件。')
+ def test_real_noncontinuation_pending_approval_same_native_source(self):
+    self._review_wait_flow(prompt='请读取 index.html 的当前内容，不要修改文件。')
+ def test_real_noncontinuation_rejected_review_has_no_context(self):
+    self._review_wait_flow(prompt='请读取 index.html 的当前内容，不要修改文件。',refusal='reject')
+ def test_real_noncontinuation_changed_source_has_no_context(self):
+    self._review_wait_flow(prompt='请读取 index.html 的当前内容，不要修改文件。',refusal='source')
+ def test_real_noncontinuation_wrong_nonce_never_waits(self):
+    self._review_wait_flow(prompt='请读取 index.html 的当前内容，不要修改文件。',refusal='nonce')
+ def _review_wait_flow(self,child_race=False,prompt='继续',refusal=None):
     initial=p2_codex_hook.handle(self.payload(),self.binding)
     self.assertIn('additionalContext',initial.get('hookSpecificOutput',{}),initial)
     old=Lease(self.binding,Deadline()).read();fixture=self.fixture
@@ -38,7 +48,7 @@ class ReviewWaitStores(AdmissionBusinessGraph):
     def scan(budget,*,conn):
       return {'snapshot':{'complete':False,'partial_reasons':['synthetic-component']},'sample_window':{'started_at_unix':1,'finished_at_unix':2}}
     builder=ContextBuilder(fixture.conn,schema_version=SCHEMA_VERSION,tokenizer=tokenizer,scanner=scan)
-    Base=p2_codex_hook.DeadlineClient;calls=[];review_reads=[]
+    Base=p2_codex_hook.DeadlineClient;calls=[];review_reads=[];review_id_for_step=[]
     def correct(parent,source):
       fixture.resolver.maintenance.change(parent,'correct',{
         'idempotency_key':'component-normal-child-race','host_id':fixture.host,
@@ -54,7 +64,13 @@ class ReviewWaitStores(AdmissionBusinessGraph):
         if path=='/v1/context/build':return builder.build(body,actor_id=fixture.agent)
         if path.endswith('/check-current'):return builder.check_current(path.split('/')[3],body,actor_id=fixture.agent)
         if method=='GET' and path.startswith('/v1/reviews/'):
-          review=fixture.reviews.get(path.split('/')[-1]);review_reads.append(review['status'])
+          review=fixture.reviews.get(path.split('/')[-1]);review_reads.append(review['status']);review_id_for_step[:]=[review['review_id']]
+          if refusal=='source' and len(review_reads)==2:
+            # Negative transport corruption; actual persisted Event remains untouched.
+            return {'review':{**review,'resolution':{**review['resolution'],'source_event_id':'wrong-source'}}}
+          if refusal=='reject' and len(review_reads)==2:
+            fixture.reviews.change(review['review_id'],'reject',{'idempotency_key':'component-reject','host_id':fixture.host,'reason':'explicit refusal','expected_revision':review['revision']},actor_id=fixture.human,scopes=fixture.scopes)
+            return {'review':fixture.reviews.get(review['review_id'])}
           if len(review_reads)==2:
             preview=review['preview']
             # Explicit simulated external operator action via the real Review CAS.
@@ -70,12 +86,19 @@ class ReviewWaitStores(AdmissionBusinessGraph):
             correct(parent,review['resolution']['source_event_id'])
           return {'review':review}
         response=super().request(method,path,body,**kwargs)
+        if child_race=='step' and path.startswith('/v1/steps/') and method=='GET' and len(review_reads)>=3:
+          current=fixture.reviews.get(review_id_for_step[0])
+          correct(current['resolution']['interpretation_id'],current['resolution']['source_event_id'])
         if child_race=='interpret' and path=='/v1/interpret' and len(review_reads)==2:
           correct(response['interpretation']['interpretation_id'],body['event_id'])
         return response
-    with patch.object(p3_codex_hook,'DeadlineClient',Transport),patch.object(p2_codex_hook,'DeadlineClient',Transport):
-      result=p3_codex_hook.handle({**self.payload('real-component-next'),'prompt':'继续'},self.binding,client_factory=Transport,tokenizer=tokenizer)
-    if child_race:
+    with patch.dict(os.environ,{'JASMINE_CORE_GATE_NONCE':'wrong'} if refusal=='nonce' else {}),patch.object(p3_codex_hook,'DeadlineClient',Transport),patch.object(p2_codex_hook,'DeadlineClient',Transport):
+      result=p3_codex_hook.handle({**self.payload('real-component-next'),'prompt':prompt},self.binding,client_factory=Transport,tokenizer=tokenizer)
+    if refusal=='nonce':
+      self.assertNotIn('additionalContext',result.get('hookSpecificOutput',{}))
+      self.assertEqual(calls,[])
+      return
+    if child_race or refusal:
       self.assertEqual(result['decision'],'block',result)
       self.assertNotEqual(Lease(self.binding,Deadline()).read()['phase'],'READY')
       self.assertEqual(len([x for x in calls if x[1]=='/v1/context/build']),0)
@@ -84,7 +107,7 @@ class ReviewWaitStores(AdmissionBusinessGraph):
     self.assertIn('additionalContext',result.get('hookSpecificOutput',{}),result)
     current=Lease(self.binding,Deadline()).read();source=fixture.resolver.events.get(current['event_id'])
     self.assertEqual(current['phase'],'READY');self.assertEqual(current['generation'],'2')
-    self.assertEqual(source['task_id'],old['task_id']);self.assertEqual(source['payload']['text'],'继续')
+    self.assertEqual(source['task_id'],old['task_id']);self.assertEqual(source['payload']['text'],prompt)
     self.assertEqual(source['payload']['turn_id'],'real-component-next');self.assertNotEqual(source['event_id'],old['event_id'])
     self.assertEqual(fixture.reviews.get(current['review_id'])['status'],'APPROVED')
     self.assertEqual(len([x for x in calls if x[1]=='/v1/events']),1)

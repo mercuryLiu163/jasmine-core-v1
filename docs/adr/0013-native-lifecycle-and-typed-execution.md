@@ -132,8 +132,11 @@ workspace may be its project's child directory. No arbitrary path list is used.
 
 P3 bindings may explicitly set `p3_review_wait` to a strict boolean; absent means
 false. Ordinary admission remains immediate BLOCK on pending Review. The option
-only permits the exact real UserPromptSubmit text `继续`, an active matching gate
-nonce, existing non-null Task/Step and an unchanged current native source identity.
+permits a genuine nonempty UserPromptSubmit (including `继续` and guard input),
+an active matching gate nonce, existing non-null Task/Step and an unchanged
+current native source identity. The full original prompt is retained byte for byte;
+Task must belong to the bound project and Step to that Task. Bootstrap/task-null
+sources never wait. The Core source must be a human user.prompt Event.
 The durable Raw request and the immutable Core Event must both match that source.
 Review must reference its current interpretation and resolution; maintenance head
 must stay NORMAL on that interpretation. Reject, rerun, unknown Review status,
