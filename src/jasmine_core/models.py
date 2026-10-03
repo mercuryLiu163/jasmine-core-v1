@@ -56,7 +56,7 @@ EVENT_TYPES = frozenset({
     "step.staled",
     "resolution.command", "interpretation.bound", "review.approved", "review.rejected",
     "interpretation.corrected", "interpretation.rejected", "interpretation.rerun",
-    # P4 (ADR 0011 §7). Only human/system command actions on the Memory
+    # P4 (ADR 0014 §7). Only human/system command actions on the Memory
     # lifecycle are Events. Worker claim/retain/completion is *not*: those rows
     # live in the append-only `memory_job_attempts` table, because a background
     # worker holds a lease owner rather than a registered device actor, and a job

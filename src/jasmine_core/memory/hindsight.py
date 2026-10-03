@@ -1,4 +1,4 @@
-"""The real Hindsight transport: HTTP over the standard library (ADR 0011 §2).
+"""The real Hindsight transport: HTTP over the standard library (ADR 0014 §2).
 
 Everything asserted below was read from the official OpenAPI document of
 Hindsight **0.10.2** (`https://hindsight.vectorize.io/openapi.json`,

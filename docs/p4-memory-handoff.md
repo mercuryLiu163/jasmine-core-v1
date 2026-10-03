@@ -5,11 +5,13 @@ P4 cannot be declared passed from this environment, and nothing here claims it.
 
 - Branch: `p4-memory`
 - Base: `850fbec` (P2-01 + P2-02 resolver + P2-03 admission merged); **schema 9**
-- Candidate commits, oldest first: `84ed560` (implementation), `8f397cf`
-  (first review round), `8f8297b` (handoff), `0b3172e` (second review round),
-  `040346b` (this handoff)
+- Candidate commits, oldest first:
+  `84ed560` implementation · `8f397cf` review round 1 · `8f8297b` handoff ·
+  `0b3172e` review round 2 (5 blocking + 2 secondary) · `040346b` handoff ·
+  `1f25555` rebase onto `850fbec` + renumber · `c0e1da6` review round 3
+  (3 P1 + 1 P2)
 - Design input: `docs/Jasmine-Core-V1-P4-阶段任务书.md`, frozen in
-  `docs/adr/0011-p4-memory-and-durable-jobs.md`
+  `docs/adr/0014-p4-memory-and-durable-jobs.md`
 
 > SHAs above are the ones on this branch **after** rebasing onto `850fbec`. The
 > pre-rebase history is preserved at tag `p4-pre-rebase-850fbec`.
@@ -22,19 +24,42 @@ P4 cannot be declared passed from this environment, and nothing here claims it.
 - `src/jasmine_core/migrations/m0009_memory.py` — P4 schema, version 9.
 - `scripts/p4-memory-gate.py` — the real G01–G07 runner.
 - HTTP API `/v1/memory/*`, CLI `jasmine-core memory …` and `jasmine-core memory-worker`.
-- Docs: ADR 0011, `docs/p4-memory-operations.md`, `docs/api/core-api-v1.md`.
+- Docs: ADR 0014, `docs/p4-memory-operations.md`, `docs/api/core-api-v1.md`.
 
 The five Memory kinds, the `PENDING/RUNNING/DONE/FAILED` job, lease/retry/backoff,
 append-only attempts, crash recovery, Recall/Reflect, obsolete/delete/pin/unpin, and
 the Inspector all exist and are tested. Memory is a non-authoritative projection: it
 never writes a Rule, State, Evidence, Checkpoint or Task revision.
 
-**Renumbering, twice.** P4 was cut as `m0007_memory` at ADR 0008, renumbered to
-`m0008_memory`/ADR 0009 when P2-01 took `m0007_interpretations`, and renumbered
-again to `m0009_memory`/ADR **0011** when P2-02 took `m0008_resolutions` and
-P2-02/P2-03 took ADR 0009 and 0010. `SCHEMA_VERSION` is therefore **9** while
-`main` is at 8. Nothing P2 owns was touched: `m0007_interpretations`,
-`m0008_resolutions`, ADR 0008/0009/0010 are all main's.
+### Renumbering, and the one that is stuck
+
+| | P4 claims now | Taken by | Can P4 move? |
+|---|---|---|---|
+| migration | `m0009_memory`, `VERSION = 9` | P3 PR #11: `m0009_continuity`, `m0010_context` | **not yet** |
+| ADR | `0014-p4-memory-…` | P3 PR #11: 0011, 0012, 0013 | moved in `1f25555`→follow-up |
+
+History: cut as `m0007_memory` / ADR 0008 → `m0008_memory` / ADR 0009 when
+P2-01 took `m0007_interpretations` → `m0009_memory` / ADR 0011 when P2-02 took
+`m0008_resolutions` and P2-02/P2-03 took ADR 0009/0010 → ADR **0014** when P3
+PR #11 (open, `p3-checkpoint-context-resume`) claimed 0011–0013.
+
+**The migration cannot jump to 11 yet, and this is enforced, not a matter of
+taste.** `migrations.discover()` requires versions to be contiguous from 1; with
+`m0009` and `m0010` absent, a `m0011_memory` at position 9 raises at import:
+
+```
+MigrationConflict: migration versions must be contiguous from 1: position 9 holds version 11
+```
+
+(verified in a throwaway worktree, not assumed). So P4 keeps `m0009_memory` and
+`SCHEMA_VERSION = 9`, and the renumber to `m0011` / `11` happens as part of the
+rebase onto P3 — which P4 has to do anyway, since its Gates need P3's Context
+Pack. Until P3 merges, **two branches both hold migration 9**: whoever merges
+second renumbers, and P4's note is that its renumber is mechanical rather than
+optional.
+
+Nothing P2 owns was touched: `m0007_interpretations`, `m0008_resolutions`, ADR
+0008/0009/0010 are all main's.
 
 The rebase also resolved the shared files against `850fbec` — `ids.py`
 (`res`/`rvw` joined the prefix set, and P4's unused `itr` was dropped),
@@ -211,7 +236,7 @@ Reported alongside them, both confirmed and fixed:
 - A missing or empty `api_version` was treated as verified; a malformed engine URL
   raised a raw parse error; secret redaction missed case-varied and bare assignments.
 
-Full rationale is in the commit messages of `8f397cf` and `0b3172e` and in ADR 0011.
+Full rationale is in the commit messages of `8f397cf` and `0b3172e` and in ADR 0014.
 
 ## Two shared fixtures had their own defects
 

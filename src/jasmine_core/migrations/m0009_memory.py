@@ -32,7 +32,7 @@ from __future__ import annotations
 NAME = "m0009_memory"
 VERSION = 9
 
-#: Frozen by ADR 0011 §2. Repeated here because SQLite cannot CHECK against a
+#: Frozen by ADR 0014 §2. Repeated here because SQLite cannot CHECK against a
 #: constant declared in Python: the constraint has to live in the table.
 _MEMORY_TYPES = ("'CONFIRMED_DECISION'", "'STABLE_PROJECT_FACT'", "'RESOLVED_ISSUE'",
                  "'VERIFIED_OUTCOME'", "'FAILURE_LESSON'")
@@ -101,7 +101,7 @@ STATEMENTS = (
     "CREATE INDEX ix_memory_items_type ON memory_items(memory_type, status, created_at)",
     "CREATE INDEX ix_memory_items_recall ON memory_items(status, pinned, last_recalled_at)",
     # Supporting sources. One retained document may be backed by more than one
-    # committed Event, and ADR 0011 §5 requires a de-duplicated recall hit to
+    # committed Event, and ADR 0014 §5 requires a de-duplicated recall hit to
     # keep *all* of its legal provenance rather than whichever one won the merge.
     """
     CREATE TABLE memory_item_sources (

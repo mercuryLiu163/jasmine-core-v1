@@ -1,4 +1,4 @@
-"""Bank derivation and project authorisation (ADR 0011 §3, design §7).
+"""Bank derivation and project authorisation (ADR 0014 §3, design §7).
 
 Two rules from the design that this module exists to make mechanical:
 

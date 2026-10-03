@@ -1,4 +1,4 @@
-"""Durable asynchronous Memory jobs: enqueue, claim, lease, retry, recovery (ADR 0011 §8).
+"""Durable asynchronous Memory jobs: enqueue, claim, lease, retry, recovery (ADR 0014 §8).
 
 Design module §12 draws the ordering: `state transaction commits first → enqueue
 PENDING → worker retain → DONE or retry with backoff`. The interesting part is

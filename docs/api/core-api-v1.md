@@ -363,7 +363,7 @@ Review APPROVE may map a CORRECTION candidate to SUPERSEDE_RULE targeting a diff
 
 ## P4 Memory extension
 
-See [ADR 0011](../adr/0011-p4-memory-and-durable-jobs.md). Long-term Memory is
+See [ADR 0014](../adr/0014-p4-memory-and-durable-jobs.md). Long-term Memory is
 **non-authoritative history**: these endpoints read and curate what an earlier
 session learned, and nothing here can activate a Rule, move State, mint
 Evidence, overwrite a Checkpoint or raise a Task revision. The server must be

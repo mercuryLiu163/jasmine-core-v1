@@ -45,7 +45,7 @@ def effective_budget(allocated: int | None) -> int:
 
     `None` or 0 means P3 allocated no Memory partition. That is not the same as
     "unlimited": an absent partition means the Context Pack has no room for
-    Memory, so the adapter must not query at all (ADR 0011 §5).
+    Memory, so the adapter must not query at all (ADR 0014 §5).
     """
     if not allocated or allocated <= 0:
         return 0

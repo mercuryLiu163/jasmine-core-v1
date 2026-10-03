@@ -27,7 +27,7 @@ RANDOM_BYTES = RANDOM_BITS // 8
 #: that P1 cannot introduce a different shape; the columns are not created yet.
 #: `int` is P2's interpretation id, `res`/`rvw` its resolution and review ids.
 #:
-#: P4 registers five further prefixes (ADR 0011 §2): `mem` Memory item, `mjb`
+#: P4 registers five further prefixes (ADR 0014 §2): `mem` Memory item, `mjb`
 #: durable Memory job, `mja` job attempt, `mtr` Recall/Reflect trace, `mqi` one
 #: result inside a trace. `del` is deliberately not used for the delete command
 #: Event: `evt_` already covers every command Event, and a second id for the

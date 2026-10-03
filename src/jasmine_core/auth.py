@@ -24,7 +24,7 @@ SCOPES = ("admin", "objects:read", "objects:write", "events:read", "events:write
           "fingerprint:read", "interpretations:read", "interpretations:process",
           "interpretations:manage", "resolutions:read", "resolutions:process",
           "reviews:read", "reviews:manage",
-          # P4 (ADR 0011 §6). `memory:read` is read-only and non-authoritative,
+          # P4 (ADR 0014 §6). `memory:read` is read-only and non-authoritative,
           # so an Agent key may hold it: the Inspector shows Memory as history.
           # `memory:manage` (obsolete/delete/pin) and `memory:reflect` (an
           # explicit LLM synthesis over the bank) are human/system only, for the

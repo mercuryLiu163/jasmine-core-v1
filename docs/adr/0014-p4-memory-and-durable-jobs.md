@@ -1,4 +1,4 @@
-# ADR 0011: P4 long-term Memory, durable jobs and the Memory lifecycle
+# ADR 0014: P4 long-term Memory, durable jobs and the Memory lifecycle
 
 Status: implementation candidate. **No P4 Gate is claimed.** `P4-G01`…`P4-G07`
 require a real Hindsight process, a real LLM extractor, a real Agent session and
@@ -470,7 +470,7 @@ branch** as of the rebase onto `850fbec`; none was applied by pushing to
 | File | Change | Action needed |
 | --- | --- | --- |
 | `__init__.py` | `SCHEMA_VERSION` 8 → **9** (`main` is at 8) | renumber with the migration |
-| `migrations/m0009_memory.py` | new | **renumbered twice**: cut as `m0007_memory`, then `m0008_memory`, then `m0009_memory` as P2 claimed `m0007_interpretations` and `m0008_resolutions`. Ships at `VERSION = 9`. |
+| `migrations/m0009_memory.py` | new | **renumbered three times**: cut as `m0007_memory`, then `m0008_memory`, then `m0009_memory` as P2 claimed `m0007_interpretations` and `m0008_resolutions`. Ships at `VERSION = 9`, `SCHEMA_VERSION = 9`. **P3 PR #11 also claims migration 9** (`m0009_continuity`), so whoever merges second renumbers. P4 cannot pre-empt by moving to `m0011`: `discover()` requires versions contiguous from 1, and with 9 and 10 absent `m0011` fails at import with `MigrationConflict: migration versions must be contiguous from 1: position 9 holds version 11`. The move to `m0011`/`SCHEMA_VERSION = 11` happens in the rebase onto P3, which P4 needs anyway for its Context Pack. |
 | `ids.py` | five prefixes | register |
 | `models.py` | five `EVENT_TYPES` | register |
 | `auth.py` | three scopes + two actor-kind refusals | register |

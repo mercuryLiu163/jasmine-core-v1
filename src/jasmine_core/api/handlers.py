@@ -672,4 +672,4 @@ P4 appends its own route tuple from `memory.api` rather than editing this
 function. The alternative — a second dispatch table — would leave `resolve()`
 incomplete, and a route that `resolve()` cannot find is a route whose 404 is
 indistinguishable from a typo. The P4 tuple is still a shared-file change and is
-listed as such in ADR 0011 §12."""
+listed as such in ADR 0014 §12."""

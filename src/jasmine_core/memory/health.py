@@ -1,4 +1,4 @@
-"""Memory health, reported independently of Core health (ADR 0011 §10; design §14).
+"""Memory health, reported independently of Core health (ADR 0014 §10; design §14).
 
 Design §14's first row is the whole point of this file: *Hindsight unavailable →
 long-term Memory pauses; Rules/State/Evidence/Checkpoint continue normally*.

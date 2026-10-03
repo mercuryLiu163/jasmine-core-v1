@@ -1,4 +1,4 @@
-"""Frozen P4 vocabulary and the values that cross the adapter boundary (ADR 0011 §2).
+"""Frozen P4 vocabulary and the values that cross the adapter boundary (ADR 0014 §2).
 
 These are the words the rest of P4, P6 and the validation runner share. They
 are declared here rather than repeated per module so that "the five memory
@@ -26,7 +26,7 @@ MEMORY_TYPE_SET = frozenset(MEMORY_TYPES)
 
 #: A type name is a label, never a proof. These are the provenance facts the
 #: eligibility check must find in Core before a type may be used at all
-#: (design §7; ADR 0011 §4). Anything less and the item is not enqueued.
+#: (design §7; ADR 0014 §4). Anything less and the item is not enqueued.
 REQUIRED_PROVENANCE: dict[str, tuple[str, ...]] = {
     # A Decision memory is only legitimate if a human/system ACTIVE Authority
     # Decision exists. There is no "the agent said so" path.
@@ -63,7 +63,7 @@ ENGINE_STATES: tuple[str, ...] = (
     "DELETE_PENDING", "DELETED", "DELETE_FAILED",
 )
 
-# -- recall outcome (ADR 0011 §5) ---------------------------------------------
+# -- recall outcome (ADR 0014 §5) ---------------------------------------------
 #: `degraded` is separate from `empty` on purpose: a bank that failed is not a
 #: bank with nothing to say, and a Dashboard that cannot tell them apart will
 #: report a healthy Core with no memory.
@@ -165,7 +165,7 @@ class RetainReceipt:
     `remote_memory_unit_ids` is deliberately *not* part of this: with
     `update_mode="replace"` Hindsight deletes and re-extracts a document's
     memories on every re-send, so a memory unit id is not stable across a
-    crash-and-retry. The document id is the stable handle (ADR 0011 §5).
+    crash-and-retry. The document id is the stable handle (ADR 0014 §5).
     """
 
     document_id: str

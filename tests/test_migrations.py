@@ -45,7 +45,7 @@ EXPECTED_TABLES = {
     "reviews", "review_changes", "review_request_keys",
     "maintenance_heads", "interpretation_changes", "interpretation_operation_completions",
     "maintenance_request_keys",
-    # P4 (ADR 0011 §3). P4 owns these and creates nothing else; the P0-P3 truth
+    # P4 (ADR 0014 §3). P4 owns these and creates nothing else; the P0-P3 truth
     # tables above are untouched by m0009_memory.
     "memory_items",
     "memory_item_sources",

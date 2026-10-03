@@ -6,7 +6,7 @@ only place that decides what happens to content on its way into the bank, and
 it is deliberately separate from `memory.adapter` so the policy can be reviewed
 without reading the transport.
 
-The policy frozen in ADR 0011 §5, in one line each:
+The policy frozen in ADR 0014 §5, in one line each:
 
 * **reject** the content when it carries credential material we cannot redact
   without destroying the lesson (a private key block, or a literal provider

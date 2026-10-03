@@ -1,4 +1,4 @@
-"""The engine boundary (ADR 0011 §2).
+"""The engine boundary (ADR 0014 §2).
 
 `MemoryTransport` is the whole of what P4 knows about Hindsight. Everything above
 it — banks, provenance, jobs, lifecycle, the API — is written against this
