@@ -4,7 +4,8 @@ Status: **implementation complete and locally verified; Gate NOT passed.**
 P4 cannot be declared passed from this environment, and nothing here claims it.
 
 - Branch: `p4-memory`
-- Candidate commit: `549fd721c96006d2408c6aba0deb4d2ad5aa4596` (`549fd72`)
+- Candidate commit: `fede0c9` (the handoff docs land in `fede0c9^{tree}`)
+- Prior commits: `549fd72` (first review round), `378ab02` (previous handoff)
 - Base: `7ac8e94` (P2-01 merged), rebased; schema version 8
 - Design input: `docs/Jasmine-Core-V1-P4-阶段任务书.md`, frozen in
   `docs/adr/0009-p4-memory-and-durable-jobs.md`
@@ -32,10 +33,14 @@ P2 and were left untouched.
 
 | Check | Command | Result |
 |---|---|---|
-| Full suite | `PYTHON=python3.13 ./scripts/run-tests.sh` | `Ran 577 tests … OK` |
+| Full suite | `PYTHON=python3.13 ./scripts/run-tests.sh` | `Ran 582 tests … OK` |
 | Byte-compile | `python3.13 -m compileall -q src scripts tests` | clean |
 | Lint | `pyflakes 4.0.0` on all P4 src, tests, gate runner | clean |
-| Gate smoke | `scripts/p4-memory-gate.py` against an unreachable engine | 7/7 `BLOCKED`, 0 `PASS` |
+| Gate smoke | `scripts/p4-memory-gate.py` against an unreachable engine | 7/7 `BLOCKED`, 0 `PASS`, commit `fede0c9`, dirty `false` |
+
+`pyflakes` also reports one pre-existing `# noqa`-ignored import in
+`tests/test_memory_cli.py` (a deliberate side-effect import for `sys.path`);
+it is not a P4 file and was left alone.
 
 **`scripts/run-tests.sh` must be run with `PYTHON=python3.13`.** Its default is
 `python3`, which on this machine is 3.9.6 while `pyproject.toml` requires
@@ -85,6 +90,88 @@ retired Rule has not bumped `current_version`, so the version comparison alone w
 have served it. Both halves are pinned by
 `tests/test_memory_regressions.py::GateRunnerG02WouldNotHaveFailed`.
 
+## Independent review: five blocking findings and two secondary
+
+Three reviewers reached the same five blockers. Each was reproduced with a
+script before any code was written, so the descriptions below are observed
+behaviour rather than inference.
+
+1. **A forged provenance claim could name another project's real Event.**
+   `provenance.py` checked that a referenced Raw Event *exists* and nothing
+   else. An id this database had never seen was refused — but an id that was
+   perfectly real and belonged to a **different** project passed into
+   `Provenance.source_event_ids` and was written into this project's readable
+   trace, which is a cross-project forgery with an identifier attached.
+   Reproduced: a project B Event accepted as project A's source, filtered
+   reasons empty, the foreign id present in the Recall payload. Now both halves
+   are checked (exists *and* in scope) and yield a new `foreign_source` reason;
+   `jasmine_origin_event_id`, which was trusted outright, is checked the same way.
+
+2. **An expired lease did not surrender the job.** `status='RUNNING'` does not
+   identify a claim, because an expired lease leaves the status untouched.
+   Worker A claims, its lease lapses, worker B claims the same job — still
+   `RUNNING`, new owner, attempt 2 — and A returns with a receipt. Reproduced:
+   A's stale `fail()` drove the job to `FAILED` while B owned attempt 2. `_finish`,
+   `fail` and `mark_document_deleted` now match `lease_owner` *and* `retry_count`,
+   and `_assert_claim_held` runs **before** the item write so a stale worker
+   cannot leave a changed engine state behind.
+
+3. **A retain and a delete for one document could interleave.** Nothing ordered
+   them, so `claim_due` offered both: the delete removed the remote document,
+   the slow retain (already past its `item is ACTIVE` check) wrote it back, and
+   the local item stayed a `DELETED` tombstone whose remote copy no job would
+   ever remove — the only job that would have removed it had already succeeded.
+   Reproduced end to end. `claim_due` now offers a `PENDING` job only when no job
+   for that `memory_id` is `RUNNING`; the expired-lease reclaim branch is
+   deliberately exempt, or a stranded `RUNNING` job could never be picked up again.
+
+4. **An unconfirmed receipt was recorded as success.** The official OpenAPI
+   **0.10.2** (retrieved during this fix) marks `success` and `async` *required*
+   on `RetainResponse` and `success` required on `DeleteDocumentResponse`, but
+   the code tested `payload.get("success") is False`, so an absent field meant
+   success. Reproduced: `{}`, `{"success": null}` and
+   `{"async": true, "operation_id": …}` were all accepted as a completed retain,
+   and delete's `bool(payload.get("success", True))` turned an explicit `false`
+   into `true`. A missing or non-boolean `success` is now `engine_protocol_error`,
+   an explicit false is `engine_retain_failed` / `engine_delete_failed`, a queued
+   async operation is `engine_retain_unconfirmed`; the latter two are registered
+   retryable, and none can reach `DONE`.
+
+5. **G05/G06/G07 could report PASS without their mandated evidence.** Each ran
+   its checks and fell off the end of the function, so the runner recorded
+   `PASS` while the Context Pack, the real process restart and the audit
+   evidence their taskbook entries require had never been produced. Two shapes
+   are now allowed, asserted on the parsed source by
+   `test_only_g06_may_return_normally`:
+   * **G05 and G07 end in `raise Blocked(...)`** naming what is missing, and both
+     join `NEEDS_P3_PACK` — they prove something about an actual Context Pack, so
+     they do not even start without P3.
+   * **G06 returns and earns it**: both windows are now crossed by real OS
+     processes. One commits the Truth and dies before scanning; one runs the real
+     `MemoryWorker` whose transport wrapper `os._exit(7)`s after
+     `transport.retain` returned and before `jobs.complete`, killing the process
+     *inside* the retain window with the remote write done and `DONE` unwritten;
+     a third claims the expired lease and finishes. Reopening a connection would
+     have proved nothing: the state a crash discards only ever lived in the dead
+     process. New `Gate.spawn_worker` shares a bootstrap, hands the child the
+     parent's host/actor ids, and turns a wrong exit code into a `Failed`.
+
+Reported alongside them, both confirmed and fixed:
+
+* **Invalidate with no engine still raised `AttributeError`.** It was the only
+  engine call left reaching for `self._transport` directly (`# type: ignore`
+  was the tell), so it got no error code, no attempt record and no backoff —
+  the job just sat `RUNNING` until its lease expired, forever. Reproduced:
+  `unhandled_AttributeError`, job stuck. Now `engine_not_configured`, `FAILED`.
+* **Retain replaced a Decision's origin with its approval Event.**
+  `Candidate.provenance.origin_event_id` was computed *and* validated by
+  eligibility, then dropped — `memory_items` had no such column — so the worker
+  substituted `source_event_id`, which for a Decision is the `rule.approved`
+  Event, not the Event the content came from. Every recalled Decision reported
+  an approval as its origin and the real one was recorded nowhere. The column is
+  added to `m0008_memory.py` (P4's own unmerged migration), the item stores it,
+  and the worker and `FakeTransport` both read it back.
+
 ## Other substantive fixes in this commit
 
 - **Recovery cursor livelock.** The cursor advanced only past Events that produced
@@ -128,12 +215,20 @@ Found while fixing the above, and worth knowing because they silently weakened t
 ## Reviewer checklist
 
 1. The `rule_changes` version fix and the `SUPERSEDED`/`RETIRED` eligibility
-   widening — the only change here that alters which memories exist.
-2. `Window` / the recovery cursor: confirm no source can advance the cursor past an
+   widening — the only change that alters which memories exist.
+2. The five review fixes above, each with a reproduction in the section itself.
+   Items 2, 3 and 4 are the ones where a plausible-looking green result was
+   possible before the fix.
+3. `m0008_memory.py`: `origin_event_id` was added to P4's own *unmerged*
+   migration rather than shipped as a new version — confirm no downstream has
+   already applied m0008 at schema 8 without it.
+4. `Window` / the recovery cursor: confirm no source can advance the cursor past an
    Event it did not examine.
-3. ACL scoping: confirm no read path can be widened by omitting a filter.
-4. Confirm the Gate is still `BLOCKED`-only. It must never report `PASS` without a
-   real engine, a real extractor, a real Agent session and a P3 pack.
+5. ACL scoping: confirm no read path can be widened by omitting a filter.
+6. Confirm the Gate is still `BLOCKED`-only. It must never report `PASS` without a
+   real engine, a real extractor, a real Agent session and a P3 pack — and now
+   G05/G07 cannot return at all until those exist, while G06 returns only after
+   real processes have died.
 
 ## Not done, deliberately
 
