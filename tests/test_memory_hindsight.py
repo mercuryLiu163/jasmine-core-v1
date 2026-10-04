@@ -610,6 +610,26 @@ class AbsenceIsProvenNotInferred(Wire):
                 self.transport.get_document(bank=self.bank, document_id="doc-001")
         self.assertIn("twice", caught.exception.safe_error_summary)
 
+    def test_an_unreadable_entry_is_not_coverage(self) -> None:
+        """`items: [null]` must not be counted as a page that was read.
+
+        Skipping an entry we cannot inspect still advances `offset`, so a server
+        answering with junk reaches `total`, concludes the document is absent,
+        and lets the worker record `DELETED` over one that is still there.
+        """
+        gone = self._gone()
+        for label, entry in (("null entry", None), ("no id", {}),
+                             ("empty id", {"id": ""}), ("numeric id", {"id": 7})):
+            with self.subTest(label=label):
+                with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                        gone, {"items": [entry], "total": 1, "limit": 100, "offset": 0})):
+                    with self.assertRaises(TransportError) as caught:
+                        self.transport.get_document(bank=self.bank,
+                                                    document_id="our-document")
+                self.assertEqual(caught.exception.code, "engine_protocol_error")
+                self.assertFalse(caught.exception.retryable)
+                self.assertIn("cannot be checked", caught.exception.safe_error_summary)
+
     def test_the_read_back_must_be_the_document_that_was_asked_for(self) -> None:
         """A document-shaped answer for a *different* document is not an answer."""
         for body in ({"id": "somebody-elses-document", "bank_id": self.bank.bank_id},

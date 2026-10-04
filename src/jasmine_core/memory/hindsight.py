@@ -729,23 +729,38 @@ class HindsightTransport:
                     "partitioned",
                     retryable=False)
             for entry in payload["items"]:
+                # An entry we cannot read is not coverage. Skipping it would
+                # still let `offset` reach `total`, so a server answering
+                # `items: [null]` would have every page "read", conclude the
+                # document is absent and let the worker record `DELETED` over a
+                # document that is still there. `DocumentListItem` has an `id`;
+                # without one this page proves nothing.
                 if not isinstance(entry, dict):
-                    continue
+                    raise TransportError(
+                        "engine_protocol_error",
+                        "the documents collection returned an entry that is not "
+                        "an object, so its pages cannot be checked",
+                        retryable=False)
                 identifier = entry.get("id")
+                if not isinstance(identifier, str) or not identifier:
+                    raise TransportError(
+                        "engine_protocol_error",
+                        "the documents collection returned an entry without an "
+                        "id, so its pages cannot be checked",
+                        retryable=False)
                 if identifier == document_id:
                     raise TransportError(
                         "engine_protocol_error",
                         "the document is listed by the collection but its "
                         "read-back returned 404",
                         retryable=False)
-                if isinstance(identifier, str):
-                    if identifier in seen:
-                        raise TransportError(
-                            "engine_protocol_error",
-                            "the documents collection returned a document "
-                            "twice, so its pages are not partitioned",
-                            retryable=False)
-                    seen.add(identifier)
+                if identifier in seen:
+                    raise TransportError(
+                        "engine_protocol_error",
+                        "the documents collection returned a document twice, "
+                        "so its pages are not partitioned",
+                        retryable=False)
+                seen.add(identifier)
             offset += len(payload["items"])
             if offset >= total:
                 return

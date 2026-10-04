@@ -1287,3 +1287,51 @@ class ClaimGenerationSeparatesTwoClaimsByTheSameWorker(MemoryTestCase):
         self.assertEqual([a["attempt_number"] for a in attempts
                           if a["phase"] == "CLAIMED"], [1, 2],
                          "each claim must be recorded under its own number")
+
+
+class AFailedReadBackKeepsTheJobRetrying(MemoryTestCase):
+    """A timeout while proving absence must not become a permanent failure.
+
+    The delete 404s, the confirmation reads the collection, and the *read-back*
+    times out partway through. Swallowing that and re-raising the original 404
+    recorded `engine_not_found` — permanent — so the job went `FAILED` with no
+    automatic retry, and the only way forward was an operator.
+    """
+
+    def test_a_timeout_in_the_read_back_is_retried_not_terminal(self) -> None:
+        from jasmine_core.memory.transport import TransportError as TE
+
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        self.worker().run(max_ticks=6)
+        item = self.store.items()[0]
+        self.lifecycle().delete(item["memory_id"],
+                                {"expected_revision": 1, "host_id": HOST},
+                                actor_id=HUMAN, actor_kind="human", host_id=HOST)
+
+        def no_such_document(**kwargs):
+            raise TE("engine_not_found", "no such document", retryable=False,
+                     http_status=404)
+
+        def timed_out(**kwargs):
+            raise TE("engine_unreachable", "the read-back timed out", retryable=True)
+
+        self.transport.delete_document = no_such_document
+        self.transport.list_document_memories = lambda **kwargs: []
+        self.transport.get_document = timed_out
+        try:
+            report = self.worker(lease_owner="worker-A").tick(scan=False)
+        finally:
+            del self.transport.delete_document
+            del self.transport.list_document_memories
+            del self.transport.get_document
+
+        job = next(j for j in self.job_store().jobs()
+                   if j["memory_id"] == item["memory_id"] and j["kind"] == "delete")
+        self.assertEqual(report.error_code, "engine_unreachable", report.as_dict())
+        self.assertEqual(job["status"], "PENDING",
+                         f"the read-back's timeout was reported as {job['status']} "
+                         f"under {job['last_error_code']}")
+        self.assertEqual(job["last_error_code"], "engine_unreachable")
+        self.assertNotEqual(self.store.item(item["memory_id"])["engine_state"], "DELETED")

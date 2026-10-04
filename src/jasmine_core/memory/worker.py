@@ -408,17 +408,21 @@ class MemoryWorker:
         Two reads on two paths. The unit listing answers `200 {items: []}` for a
         document that is not there when the endpoint and the bank are right —
         so a listing that still has units disproves absence immediately — and the
-        document read-back returns null only on a genuine miss. Any error, any
-        surviving unit, or a read-back that still answers means absence has not
-        been shown, and the caller must keep the failure.
+        document read-back returns null only on a genuine miss. Any surviving
+        unit, or a read-back that still answers, means absence has not been
+        shown and the caller keeps the failure.
+
+        An *error* is different from an answer: it is re-raised rather than
+        turned into `False`. Swallowing it meant a read-back that timed out
+        halfway through a paginated collection became "not absent", and the
+        caller then re-raised the **original** 404 — which is permanent — so a
+        retryable timeout ended as a terminal `FAILED` with no automatic retry
+        ever. The probe's own error is the actionable one, and it has to reach
+        the job.
         """
-        try:
-            if transport.list_document_memories(bank=bank, document_id=document_id):
-                return False
-            return transport.get_document(bank=bank, document_id=document_id) is None
-        except TransportError:
-            # We could not check. Not knowing is not knowing it is gone.
+        if transport.list_document_memories(bank=bank, document_id=document_id):
             return False
+        return transport.get_document(bank=bank, document_id=document_id) is None
 
     def _require_transport(self, phase: str) -> MemoryTransport:
         """The engine, or a `TransportError` that the retry machinery understands.
