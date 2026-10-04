@@ -559,15 +559,60 @@ class HindsightTransport:
 
     def list_document_memories(self, *, bank: BankRef, document_id: str,
                                limit: int = 200, offset: int = 0) -> list[dict[str, Any]]:
-        """`GET /v1/default/banks/{bank_id}/memories/list?document_id=...`."""
+        """One page of `GET .../memories/list?document_id=...`, envelope checked."""
+        payload = self._document_page(bank=bank, document_id=document_id,
+                                      limit=limit, offset=offset)
+        return payload["items"]
+
+    def _document_page(self, *, bank: BankRef, document_id: str, limit: int,
+                       offset: int) -> dict[str, Any]:
         payload = self._request(
             "GET", self._bank_path(bank, "/memories/list"),
             query={"document_id": document_id, "limit": limit, "offset": offset},
         )
-        if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
-            raise TransportError("engine_protocol_error",
-                                 "the memory listing had no items array", retryable=False)
-        return [row for row in payload["items"] if isinstance(row, dict)]
+        return validated_page(payload, requested_offset=offset, what="memory listing")
+
+    def list_all_document_memories(self, *, bank: BankRef,
+                                   document_id: str) -> list[dict[str, Any]]:
+        """Every unit of a document — or a refusal, never a partial answer.
+
+        Driven by `total`, not by a short page. A server is free to return fewer
+        rows than the `limit` asked for, and a page shorter than requested looks
+        exactly like the last one: stopping there ends the read early and lets the
+        caller report work done on units it never loaded. `ListMemoryUnitsResponse`
+        requires `total`, `limit` and `offset`, which is what makes "have I seen
+        them all" answerable rather than assumed.
+        """
+        units: list[dict[str, Any]] = []
+        offset = 0
+        first_total: int | None = None
+        for _ in range(_MAX_DOCUMENT_PAGES):
+            payload = self._document_page(bank=bank, document_id=document_id,
+                                          limit=UNIT_PAGE_SIZE, offset=offset)
+            total = _page_total(payload)
+            if first_total is None:
+                first_total = total
+            elif total != first_total:
+                raise TransportError(
+                    "engine_conflict",
+                    f"the memory listing changed while it was read "
+                    f"(total {first_total} then {total}), so coverage cannot be proved",
+                    retryable=True)
+            units.extend(payload["items"])
+            offset += len(payload["items"])
+            if offset >= total:
+                return units
+            if not payload["items"]:
+                raise TransportError(
+                    "engine_protocol_error",
+                    f"the memory listing for {document_id} reported {total} units "
+                    f"but stopped after {offset}",
+                    retryable=False)
+        raise TransportError(
+            "engine_protocol_error",
+            f"the memory listing for {document_id} exceeds {_MAX_DOCUMENT_PAGES} pages, "
+            "so it cannot be read completely",
+            retryable=False)
 
     def invalidate_memory(self, *, bank: BankRef, memory_id: str, reason: str) -> None:
         """`PATCH /v1/default/banks/{bank_id}/memories/{memory_id}`."""
@@ -715,63 +760,14 @@ class HindsightTransport:
                     "engine_protocol_error",
                     "the documents collection did not return an items array",
                     retryable=False)
-            total = payload.get("total")
-            if isinstance(total, bool) or not isinstance(total, int):
-                raise TransportError(
-                    "engine_protocol_error",
-                    "the documents collection did not report a total, so full "
-                    "coverage cannot be proved",
-                    retryable=False)
-            if total < 0:
-                # `offset >= total` is the stopping rule, and every negative
-                # total satisfies it on the first page — which would report the
-                # whole collection covered without reading a single row.
-                raise TransportError(
-                    "engine_protocol_error",
-                    "the documents collection reported a negative total, so "
-                    "coverage cannot be proved",
-                    retryable=False)
+            # One validator for both collections: the documents loop was
+            # hardened first and the unit listing still ended on a short page,
+            # which is how "read every page" and "stopped early" coexist.
+            validated_page(payload, requested_offset=offset,
+                           what="documents collection", first_total=first_total)
+            total = _page_total(payload)
             if first_total is None:
                 first_total = total
-            elif total != first_total:
-                # The collection changed while it was being read, so the pages
-                # do not describe one set and "every page was read" is untrue.
-                # Concurrency, not schema: this is retryable, and a retry
-                # re-reads from the start once it settles.
-                raise TransportError(
-                    "engine_conflict",
-                    f"the documents collection changed while it was read "
-                    f"(total {first_total} then {total}), so coverage cannot "
-                    "be proved",
-                    retryable=True)
-            echoed_offset = payload.get("offset")
-            if (isinstance(echoed_offset, bool) or not isinstance(echoed_offset, int)
-                    or echoed_offset != offset):
-                raise TransportError(
-                    "engine_protocol_error",
-                    "the documents collection answered from a different offset "
-                    "than the one that was requested, so the pages are not "
-                    "partitioned",
-                    retryable=False)
-            echoed_limit = payload.get("limit")
-            if isinstance(echoed_limit, bool) or not isinstance(echoed_limit, int) \
-                    or echoed_limit < 0:
-                raise TransportError(
-                    "engine_protocol_error",
-                    "the documents collection reported an invalid limit",
-                    retryable=False)
-            if echoed_limit and len(payload["items"]) > echoed_limit:
-                raise TransportError(
-                    "engine_protocol_error",
-                    "the documents collection returned more rows than its own "
-                    "stated limit, so the pages are not partitioned",
-                    retryable=False)
-            if offset + len(payload["items"]) > total:
-                raise TransportError(
-                    "engine_protocol_error",
-                    "the documents collection returned more rows than its total "
-                    "allows, so coverage cannot be proved",
-                    retryable=False)
             for entry in payload["items"]:
                 # An entry we cannot read is not coverage. Skipping it would
                 # still let `offset` reach `total`, so a server answering
@@ -824,12 +820,99 @@ class HindsightTransport:
             retryable=False)
 
 
-#: `GET .../documents` defaults to 100 rows per page, and a proof of absence
-#: has to read every page rather than the first one.
+#: Rows per page when reading a collection to completion, and the page cap that
+#: stops a server whose `total` never settles from spinning the reader. Two
+#: sizes because the engine documents two: `GET .../documents` defaults to 100
+#: and `GET .../memories/list` to 200. Both are stated rather than inherited so
+#: the echoed `limit` has something to be checked against, and 1000 pages of
+#: either is far past any real collection.
 _DOCUMENT_PAGE_SIZE = 100
-#: A hard stop so a server whose `total` never settles cannot spin this loop.
-#: 1000 pages of 100 is 100k documents, well past any real bank.
+UNIT_PAGE_SIZE = 200
 _MAX_DOCUMENT_PAGES = 1000
+
+
+def _page_total(payload: dict[str, Any]) -> int:
+    """`total` from a page `validated_page` already accepted."""
+    value = payload.get("total")
+    return value if isinstance(value, int) and not isinstance(value, bool) else 0
+
+
+def validated_page(payload: Any, *, requested_offset: int, what: str,
+                   first_total: int | None = None) -> dict[str, Any]:
+    """The paging fields of a collection response, or a refusal.
+
+    One implementation for every paginated read, because two is how they drift:
+    the documents collection was hardened first while the unit listing still
+    ended on a short page. Every field that decides *coverage* is checked —
+    `total`, the `offset` asked for, the `limit` the server claims, and that the
+    rows fit inside both. A `total` differing from an earlier page means the
+    collection moved under us, which is concurrency rather than schema and is
+    reported as a retryable `engine_conflict`.
+    """
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        raise TransportError(
+            "engine_protocol_error",
+            f"the {what} did not return an items array",
+            retryable=False)
+    total = payload.get("total")
+    if isinstance(total, bool) or not isinstance(total, int):
+        raise TransportError(
+            "engine_protocol_error",
+            f"the {what} did not report a total, so full coverage cannot be proved",
+            retryable=False)
+    if total < 0:
+        # `offset >= total` is the stopping rule, and every negative total
+        # satisfies it on the first page: the collection reads as covered
+        # without a single row being read.
+        raise TransportError(
+            "engine_protocol_error",
+            f"the {what} reported a negative total, so coverage cannot be proved",
+            retryable=False)
+    if first_total is not None and total != first_total:
+        raise TransportError(
+            "engine_conflict",
+            f"the {what} changed while it was read (total {first_total} then {total}), "
+            "so coverage cannot be proved",
+            retryable=True)
+    echo_offset = payload.get("offset")
+    if (isinstance(echo_offset, bool) or not isinstance(echo_offset, int)
+            or echo_offset != requested_offset):
+        raise TransportError(
+            "engine_protocol_error",
+            f"the {what} answered from a different offset than the one that was "
+            "requested, so the pages are not partitioned",
+            retryable=False)
+    echo_limit = payload.get("limit")
+    if isinstance(echo_limit, bool) or not isinstance(echo_limit, int) or echo_limit < 0:
+        raise TransportError(
+            "engine_protocol_error",
+            f"the {what} reported an invalid limit",
+            retryable=False)
+    items = payload["items"]
+    if echo_limit == 0 and total > requested_offset:
+        # A limit of 0 means "I will never hand you another row", so `offset`
+        # can never advance and `offset >= total` can never become true the
+        # honest way. Anything concluded from such a page is a proof built on a
+        # cursor that cannot move. Refused only when rows are still outstanding:
+        # an empty collection has nothing left to page and is not a problem.
+        raise TransportError(
+            "engine_protocol_error",
+            f"the {what} reported a limit of 0 while {total - requested_offset} rows "
+            "remain, so it cannot be paged",
+            retryable=False)
+    if echo_limit and len(items) > echo_limit:
+        raise TransportError(
+            "engine_protocol_error",
+            f"the {what} returned more rows than its own stated limit, so the "
+            "pages are not partitioned",
+            retryable=False)
+    if requested_offset + len(items) > total:
+        raise TransportError(
+            "engine_protocol_error",
+            f"the {what} returned more rows than its total allows, so coverage "
+            "cannot be proved",
+            retryable=False)
+    return payload
 
 
 def _require_fields(payload: dict[str, Any], names: tuple[str, ...], what: str) -> None:

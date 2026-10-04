@@ -431,6 +431,13 @@ class MemoryAdapter:
             based_on_memory_ids=tuple(based_on),
             banks=tuple(outcomes),
             error_code=next((b.error_code for b in failed if b.error_code), None),
+            # The summary belongs beside the code for the same reason the code
+            # does: `error_code` says *what class* of failure and this says what
+            # the engine actually reported. Leaving it `None` while the banks
+            # carried it meant the top-level payload had a reason with no
+            # explanation and the only detail was buried per-bank.
+            safe_error_summary=next((b.safe_error_summary for b in failed
+                                     if b.safe_error_summary), None),
         )
         return self._record_reflect(outcome, request, at)
 

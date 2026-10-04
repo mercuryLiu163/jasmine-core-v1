@@ -252,6 +252,11 @@ a caller branches on, and it was filled with the *bank id* of the first failed
 bank — a value no error table contains, while the actual reason sat per-bank
 where nothing looked. It now carries that bank's `error_code`.
 
+**A reason without its explanation is half an answer.**
+`ReflectOutcome.safe_error_summary` was never assigned, so a degraded Reflect
+carried `error_code` at the top level while the engine's own words sat only in
+the per-bank outcomes. Both now travel together, as they do on `RecallOutcome`.
+
 **A type we do not have is a refusal.** `recall` accepted an unrecognised
 `types` entry, queried the engine for it, and the local type filter then matched
 nothing — so a typo returned `empty`, indistinguishable from a bank with nothing
@@ -500,12 +505,27 @@ each break the partition. The first three are schema violations; a changing tota
 is concurrency, and that is `engine_conflict` — retryable, re-read from the start
 once the bank settles.
 
-**One page is not the document.** `list_document_memories` takes a `limit`, and
-obsoleting "every unit" against the default page left every unit past it `valid`
-while the job recorded `INVALIDATED`; the same truncation is how a document with
-units on a later page gets called absent. `_all_document_units` reads until a
-short page, with a page cap that raises rather than loops, and the invalidate
-path, the compensation path, the delete receipt and the absence check all use it.
+**One page is not the document, and a short page is not the last one.**
+`list_document_memories` takes a `limit`, and obsoleting "every unit" against the
+default page left every unit past it `valid` while the job recorded
+`INVALIDATED`; the same truncation is how a document with units on a later page
+gets called absent. The first fix still ended the read when a page came back
+shorter than we asked — but a server is free to cap the page below the `limit`,
+and *that* short page looks exactly like the last one, so the read stopped early
+and reported work done on units it never loaded.
+
+Completeness is therefore driven by `total`, never by page length, and both
+collections share one validator (`validated_page`) checking `total`, the `offset`
+asked for, the `limit` the server claims, and that the rows fit inside both —
+because two implementations is how they drift, which is precisely how the
+documents collection was hardened first while the unit listing still ended on a
+short page. It lives in the transport: only the transport can read the paging
+envelope. `list_all_document_memories` is the completeness call, the worker's
+`_all_document_units` is a thin wrapper over it so no call site can quietly
+revert to the single-page method, and the fake and the wire stub both paginate
+for real — a double that always answered with every row could never catch a
+reader that stopped after one page, because there would be no second page to
+miss.
 
 **A delete that provably failed is retryable.** When the read-back shows the
 document is still there, the 404 that started the exchange did not mean "the
@@ -618,7 +638,9 @@ it on the job *list* while the job detail, the item list and the item detail
 returned it is not a policy anyone can rely on: the same job appears at the top
 level of `GET /jobs/{id}`, inside `attempts` there, and inside `jobs` on an item
 detail. Responses therefore pass through one walker (`_respond`) at each return,
-so no nesting can be forgotten. `error_code` beside it is a stable enumerable
+so no nesting can be forgotten — and that includes the trace endpoints, whose
+rows carry `safe_error_summary` beside `error_code` and which had been the one
+path still building a `Response` by hand. `error_code` beside it is a stable enumerable
 value and is deliberately *not* withheld — an Agent needs to know a retain
 failed, just not what the engine said about it.
 
@@ -702,6 +724,13 @@ the parsed source:
   this run could mean acceptance at all, and why not), and the verdict is `PASS`
   only when a full case set and a clean checkout are both in play; otherwise the
   run is `BLOCKED`, which is what a partial evaluation is.
+* **The Gate's own numbers come from complete reads.** Its assertions are
+  counts — "exactly one document", "every unit is `invalidated`" — and a count
+  taken from one page is a count of one page: G07 would report every unit retired
+  from the first 200 while the rest were still `valid`, and `retained_item`
+  reported "nothing was retained" whenever the item it wanted sat past the
+  200th. `engine_units` reads the document to completion and `all_items` keys
+  past the page boundary.
 * **G06 returns, and earns it.** Its two windows are crossed by real OS
   processes: one commits the Truth and dies before ever scanning, another runs
   the *real* `MemoryWorker` whose transport wrapper calls `os._exit(7)` after

@@ -84,40 +84,19 @@ class WorkerReport:
 #: How many reports an unbounded `run()` keeps in memory (see `run`).
 _REPORT_HISTORY = 500
 
-#: `list_document_memories` takes a `limit`, and its default is one page.
-_UNIT_PAGE_SIZE = 200
-#: A page cap so a server that keeps handing back full pages cannot spin the
-#: reader. 1000 pages of 200 is 200k units, far past any real document.
-_MAX_UNIT_PAGES = 1000
-
-
 def _all_document_units(transport: MemoryTransport, *, bank: Any,
                         document_id: str) -> list[dict[str, Any]]:
-    """Every memory unit of a document, not the first page of them.
+    """Every memory unit of a document, or a refusal.
 
-    A document with more units than one page returns a truncated list, and the
-    consequences of believing it are the ones that matter: obsoleting only the
-    first 200 leaves every unit after that `valid` while the job records
-    `INVALIDATED`, and the same truncation is how a document with units on a
-    later page gets called absent. A short page ends the read — the units are
-    ordered, so nothing earlier can appear later — and the page cap stops a
-    server that ignores `offset` from looping forever, with an error rather
-    than an answer it did not earn.
+    Delegates to the transport because only it can read the paging envelope
+    (`total`/`limit`/`offset`) that makes completeness checkable. The reason it
+    is a separate call at all: a document with more units than one page returns a
+    truncated list, and believing that list is how obsoleting "all of them" left
+    every unit past the first page `valid` while the job recorded `INVALIDATED`,
+    and how a document with units on a later page got called absent. The work is
+    done here so no call site can quietly go back to the single-page call.
     """
-    units: list[dict[str, Any]] = []
-    offset = 0
-    for _ in range(_MAX_UNIT_PAGES):
-        page = transport.list_document_memories(bank=bank, document_id=document_id,
-                                                limit=_UNIT_PAGE_SIZE, offset=offset)
-        units.extend(page)
-        if len(page) < _UNIT_PAGE_SIZE:
-            return units
-        offset += len(page)
-    raise TransportError(
-        "engine_protocol_error",
-        f"the memory listing for {document_id} exceeds {_MAX_UNIT_PAGES} pages, "
-        "so it cannot be read completely",
-        retryable=False)
+    return transport.list_all_document_memories(bank=bank, document_id=document_id)
 
 
 class MemoryWorker:

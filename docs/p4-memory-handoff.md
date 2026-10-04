@@ -1,20 +1,44 @@
 # P4 handoff: long-term Memory, Hindsight adapter, durable jobs
 
-Status: **implementation complete and locally verified; Gate NOT passed.**
+Status: **implementation candidate; fixed-list review partial; full P4 acceptance BLOCKED.**
 P4 cannot be declared passed from this environment, and nothing here claims it.
 
 - Branch: `p4-memory`
 - Base: `850fbec` (P2-01 + P2-02 resolver + P2-03 admission merged); **schema 9**
+- Independently reviewed candidate: `eeba6af24d5e84b8f96bd106f0d07bb6d733edb5`.
 - Candidate commits, oldest first:
   `84ed560` implementation · `8f397cf` review round 1 · `8f8297b` handoff ·
   `0b3172e` review round 2 (5 blocking + 2 secondary) · `040346b` handoff ·
   `1f25555` rebase onto `850fbec` + renumber · `c0e1da6` review round 3
-  (3 P1 + 1 P2)
+  (3 P1 + 1 P2) · `5e91cf2` ADR 0014 · `7fabffd` durable take-back work ·
+  `39e0a8c` take-back re-arm/read-back · `b59a31a` monotonic claim generation ·
+  `1abbaae` document pagination and identity · `b74bd76` unreadable-page refusal ·
+  `eeba6af` full b74bd76 review fixes (one P1 and eight P2s).
 - Design input: `docs/Jasmine-Core-V1-P4-阶段任务书.md`, frozen in
   `docs/adr/0014-p4-memory-and-durable-jobs.md`
 
 > SHAs above are the ones on this branch **after** rebasing onto `850fbec`. The
 > pre-rebase history is preserved at tag `p4-pre-rebase-850fbec`.
+
+## Fixed-list review closure
+
+The independent fixed-list review of `eeba6af` found the following local status.
+Closed local findings do not constitute real Gate acceptance.
+
+| Finding | Status | Remaining boundary |
+|---|---|---|
+| F01 | closed locally | Both collections validate `total`, the `offset` asked for, the `limit` echoed, and that the rows fit inside both; a `limit` of 0 with rows outstanding cannot be paged and is refused rather than read as coverage. |
+| F02 | closed locally | Local review scope only. |
+| F03 | closed locally | The unit listing is driven by `total` through one shared validator, not by page length; `list_all_document_memories` is the only completeness call, and the fake and the wire stub paginate for real. |
+| F04 | closed locally | Every response, traces included, passes through one walker; a trace row carries `safe_error_summary` beside its `error_code` and had been the one path still building a `Response` by hand. |
+| F05 | closed locally | Local review scope only. |
+| F06 | closed locally | Local review scope only. |
+| F07 | closed locally | `ReflectOutcome.safe_error_summary` is assigned beside `error_code`, and both flow into the trace row. |
+| F08 | closed locally | Local review scope only. |
+| F09 | closed locally | Local review scope only. |
+
+The complete review report will be saved in the root repository at
+`artifacts/p4-review-20261003/P4-REVIEW-eeba6af/P4-REVIEW.md`.
 
 ## What is delivered
 
@@ -68,34 +92,47 @@ files that enumerate migrations.
 
 ## Verification actually performed
 
+The independent run below used the clean candidate
+`eeba6af24d5e84b8f96bd106f0d07bb6d733edb5`, schema 9, and Python **3.13.15**.
+The handoff and test-runner follow-up edits were made only after that run, so
+these results describe the committed candidate rather than the subsequent dirty
+working tree.
+
 | Check | Command | Result |
 |---|---|---|
-| Full suite | `PYTHON=python3.13 ./scripts/run-tests.sh` | `Ran 582 tests … OK` |
-| Byte-compile | `python3.13 -m compileall -q src scripts tests` | clean |
-| Lint | `pyflakes 4.0.0` on all P4 src, tests, gate runner | clean |
-| Gate smoke | `scripts/p4-memory-gate.py` against an unreachable engine | 7/7 `BLOCKED`, 0 `PASS`, dirty `false` |
+| Full suite | `PYTHONDONTWRITEBYTECODE=1 PYTHON=python3.13 ./scripts/run-tests.sh` | `Ran 692 tests in 20.247s … OK`; exit 0; no skips |
+| Byte-compile | `PYTHONPYCACHEPREFIX=/tmp/p4-review-eeba6af-pycache python3.13 -B -m compileall -q src scripts tests` | clean; exit 0 |
+| Lint | previous implementation report: `pyflakes 4.0.0` on P4 src/tests/runner | not independently reproduced for this candidate; the available runtime lacks pyflakes, and no dependency was installed |
+| Gate smoke | `python3.13 -B scripts/p4-memory-gate.py` against `http://127.0.0.1:1` | 7/7 `BLOCKED`, 0 `PASS`, exit 2, dirty `false` |
 
-`pyflakes` also reports one pre-existing `# noqa`-ignored import in
-`tests/test_memory_cli.py` (a deliberate side-effect import for `sys.path`);
-it is not a P4 file and was left alone.
+The full-suite log is `/tmp/p4-review-eeba6af-suite.log`. The Gate smoke manifest
+is `/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p4-review-eeba6af-gate-nz2_mdsv/out/p4-gate-1791093435.json`.
+These are local, temporary verification artifacts; the unreachable-engine smoke
+is not a real Gate receipt.
 
-**`scripts/run-tests.sh` must be run with `PYTHON=python3.13`.** Its default is
-`python3`, which on this machine is 3.9.6 while `pyproject.toml` requires
-`>=3.11`; under 3.9 the suite produces 16 misleading tracebacks. This is a
-pre-existing environment trap, not a P4 defect, and `run-tests.sh` was not changed
-because it is a shared P0 file.
+`scripts/run-tests.sh` now checks **Python >=3.11** before unittest discovery,
+matching `pyproject.toml`. Its default is still `python3`; on this machine that
+selects 3.9.6, so it now exits 2 with one version message instead of misleading
+import tracebacks. Set `PYTHON` to a supported interpreter such as `python3.13`.
 
 ## Gate status: BLOCKED, with no receipts
 
 The task book asks for 原始 receipts. **There are none, and none can be produced
-here.** Each of G01–G07 needs at least one of:
+here.** The missing dependencies across G01–G07 are:
 
-- a real Hindsight deployment (no instance, and no network egress to one),
-- a real LLM extractor (P2 has no interpreter wired in),
+- a real Hindsight deployment and its fact-extraction LLM (none supplied here),
+- the P2 eligible candidate collector and any real input/extractor chain required by the taskbook,
 - a real Agent session and a P3 Context Pack (P3 has not landed).
 
+G06 can be evaluated independently with a real Hindsight deployment and committed
+Authority sources; it does not need P3 Context or a real Agent conversation.
+G01–G05 and G07 still end in `Blocked` because the actual Agent/pack acceptance
+path is not wired. Declaring dependency commits in configuration does not complete
+that path. Subset and `--allow-dirty` runs are explicitly ineligible for stage
+acceptance, and the manifest records scope, reasons and the actual bank namespace.
+
 The runner checks preconditions *first* and reports `BLOCKED` with the exact missing
-item, never `PASS`. A smoke run against `http://127.0.0.1:1` produced:
+item. A smoke run against `http://127.0.0.1:1` produced:
 
 ```
 P4-G01..G07  BLOCKED — the engine at http://127.0.0.1:1 did not answer:
@@ -149,9 +186,14 @@ behaviour rather than inference.
    Worker A claims, its lease lapses, worker B claims the same job — still
    `RUNNING`, new owner, attempt 2 — and A returns with a receipt. Reproduced:
    A's stale `fail()` drove the job to `FAILED` while B owned attempt 2. `_finish`,
-   `fail` and `mark_document_deleted` now match `lease_owner` *and* `retry_count`,
-   and `_assert_claim_held` runs **before** the item write so a stale worker
-   cannot leave a changed engine state behind.
+   `fail` and `mark_document_deleted` now match `lease_owner` and the monotonic
+   `claim_generation`. Retry budget (`retry_count`) can reset, so it is not a
+   fencing token. Each successful claim advances the generation. Re-arming clears the lease
+   and returns the job to PENDING, so the old claim cannot commit; the next claim
+   gets a new generation. A stale claim cannot become valid again after a manual
+   retry or owner reuse.
+   `_assert_claim_held` runs **before** the item write so a stale worker cannot
+   leave a changed engine state behind.
 
 3. **A retain and a delete for one document could interleave.** Nothing ordered
    them, so `claim_due` offered both: the delete removed the remote document,
@@ -265,13 +307,14 @@ Found while fixing the above, and worth knowing because they silently weakened t
 4. `Window` / the recovery cursor: confirm no source can advance the cursor past an
    Event it did not examine.
 5. ACL scoping: confirm no read path can be widened by omitting a filter.
-6. Confirm the Gate is still `BLOCKED`-only. It must never report `PASS` without a
-   real engine, a real extractor, a real Agent session and a P3 pack — and now
-   G05/G07 cannot return at all until those exist, while G06 returns only after
-   real processes have died.
+6. Confirm stage PASS requires every real Gate on a clean candidate. Subset and
+   development runs cannot pass the stage. G01–G05/G07 still require the actual
+   Agent/Context evidence path; G06 can pass independently only after real worker
+   process crash/restart and real engine read-back.
 
 ## Not done, deliberately
 
 - No merge to `main`, no push, no tag: the candidate SHA is handed over instead.
 - No service deployed, no user service, config, hook or secret touched.
-- `run-tests.sh` left as-is despite the 3.9 trap, since it is shared P0 tooling.
+- The authorized follow-up edits update this handoff and add the shared test-runner
+  version guard; they are uncommitted and were made after clean-candidate validation.

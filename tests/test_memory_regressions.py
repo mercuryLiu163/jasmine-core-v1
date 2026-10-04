@@ -1318,13 +1318,13 @@ class AFailedReadBackKeepsTheJobRetrying(MemoryTestCase):
             raise TE("engine_unreachable", "the read-back timed out", retryable=True)
 
         self.transport.delete_document = no_such_document
-        self.transport.list_document_memories = lambda **kwargs: []
+        self.transport.list_all_document_memories = lambda **kwargs: []
         self.transport.get_document = timed_out
         try:
             report = self.worker(lease_owner="worker-A").tick(scan=False)
         finally:
             del self.transport.delete_document
-            del self.transport.list_document_memories
+            del self.transport.list_all_document_memories
             del self.transport.get_document
 
         job = next(j for j in self.job_store().jobs()
@@ -1384,7 +1384,7 @@ class EveryUnitOfADocumentIsHandled(MemoryTestCase):
     """
 
     def test_units_beyond_the_first_page_are_all_invalidated(self) -> None:
-        from jasmine_core.memory.worker import _UNIT_PAGE_SIZE
+        from jasmine_core.memory.hindsight import UNIT_PAGE_SIZE as _UNIT_PAGE_SIZE
 
         project = self.project()
         self.active_decision(project_id=project)
@@ -1392,20 +1392,17 @@ class EveryUnitOfADocumentIsHandled(MemoryTestCase):
         self.worker().run(max_ticks=6)
         item = self.store.items()[0]
         total = _UNIT_PAGE_SIZE + 50
-        units = [{"id": f"mu_{i:04d}", "state": "valid"} for i in range(total)]
-        real_list = self.transport.list_document_memories
-
-        def paged(*, bank, document_id, limit=200, offset=0):
-            return units[offset:offset + limit]
-
-        self.transport.list_document_memories = paged
-        try:
-            self.lifecycle().obsolete(item["memory_id"],
-                                      {"expected_revision": 1, "host_id": HOST},
-                                      actor_id=HUMAN, actor_kind="human", host_id=HOST)
-            self.worker().run(max_ticks=6)
-        finally:
-            self.transport.list_document_memories = real_list
+        # The double paginates on its own now, so this is the real reader being
+        # exercised rather than a patched page function: a document whose units
+        # span two pages has to have both of them seen.
+        key = (item["bank_id"], item["document_id"])
+        self.assertIn(key, self.transport.documents)
+        self.transport.documents[key]["memory_unit_ids"] = [
+            f"mu_{i:04d}" for i in range(total)]
+        self.lifecycle().obsolete(item["memory_id"],
+                                  {"expected_revision": 1, "host_id": HOST},
+                                  actor_id=HUMAN, actor_kind="human", host_id=HOST)
+        self.worker().run(max_ticks=6)
 
         job = next(j for j in self.job_store().jobs()
                    if j["memory_id"] == item["memory_id"] and j["kind"] == "invalidate")
@@ -1492,7 +1489,33 @@ class ReflectReportsAReasonNotABankId(MemoryTestCase):
                          f"the outcome reported {outcome.error_code!r}, which is an "
                          f"id rather than a reason")
         self.assertTrue(outcome.banks and outcome.banks[0].bank_id != outcome.error_code)
+        # The reason without the explanation is only half an answer: the banks
+        # carried the engine's words and the top level did not.
+        self.assertEqual(outcome.safe_error_summary, "the engine timed out",
+                         "the degraded outcome has no summary to go with its code")
+        self.assertIsNone(outcome.text)
 
     @staticmethod
     def _boom(**kwargs):
         raise TransportError("engine_timeout", "the engine timed out", retryable=True)
+
+    def test_the_reflect_trace_carries_the_summary_with_the_code(self) -> None:
+        """A reason with no explanation is half an answer, in either payload."""
+        from jasmine_core.memory.types import ReflectRequest
+
+        project = self.project()
+        real = self.transport.reflect
+        self.transport.reflect = self._boom
+        try:
+            outcome = self.adapter().reflect(ReflectRequest(
+                project_id=project, actor_id=HUMAN, query="what did we learn",
+                max_tokens=400, explicit_user_request=True, requested_by=HUMAN))
+        finally:
+            self.transport.reflect = real
+        self.assertIsNotNone(outcome.trace_id)
+        trace = self.store.trace(outcome.trace_id)
+        self.assertIsNotNone(trace, "a degraded Reflect left no trace")
+        self.assertEqual(trace["error_code"], "engine_timeout")
+        self.assertEqual(trace["safe_error_summary"], "the engine timed out",
+                         "the trace has the code without the words that explain it")
+        self.assertIn("engine_timeout", str(trace))

@@ -337,13 +337,32 @@ class Gate:
             reports.append(tick)
         return reports
 
+    @staticmethod
+    def all_items(store: MemoryStore, *, page: int = 500) -> list[dict[str, Any]]:
+        """Every item, keyed past the page boundary rather than capped at one.
+
+        `items(limit=200)` answers a window, and a Gate that filters that window
+        for `RETAINED` reports "nothing was retained" whenever the item it wants
+        sits past the 200th — a false failure built from a page, exactly the
+        shape the worker-side completeness checks exist to prevent.
+        """
+        items: list[dict[str, Any]] = []
+        after: str | None = None
+        for _ in range(1000):
+            batch = store.items(limit=page, after_memory_id=after)
+            items.extend(batch)
+            if len(batch) < page:
+                return items
+            after = batch[-1]["memory_id"]
+        raise Failed("the item store exceeds 1000 pages; retention cannot be checked")
+
     def retained_item(self, conn: sqlite3.Connection) -> dict[str, Any]:
         """The Memory item the engine actually confirmed, or a failure saying why."""
-        items = [item for item in MemoryStore(conn, schema_version=9).items(limit=200)
-                 if item["engine_state"] == "RETAINED"]
+        everything = self.all_items(MemoryStore(conn, schema_version=9))
+        items = [item for item in everything if item["engine_state"] == "RETAINED"]
         if not items:
             states = [(item["memory_type"], item["engine_state"], item["last_error_code"])
-                      for item in MemoryStore(conn, schema_version=9).items(limit=200)]
+                      for item in everything]
             raise Failed(f"no Memory item reached RETAINED: {states}")
         return items[0]
 
@@ -403,8 +422,17 @@ class Gate:
         return self.transport.get_document(bank=bank, document_id=document_id)
 
     def engine_units(self, bank: scope.BankRef, document_id: str) -> list[dict[str, Any]]:
+        """Every unit of the document.
+
+        The Gate's assertions are counts — "exactly one document", "every unit
+        is `invalidated`" — and a count taken from one page is a count of one
+        page. G07 would report all units retired from the first 200 while the
+        rest were still `valid`, and G05/G06 would accept or reject a document
+        on a partial list.
+        """
         assert self.transport is not None
-        return self.transport.list_document_memories(bank=bank, document_id=document_id)
+        return self.transport.list_all_document_memories(bank=bank,
+                                                         document_id=document_id)
 
     def recall(self, project_id: str, query: str, *, task_id: str | None = None,
                max_tokens: int = 600):
@@ -806,7 +834,8 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
             eligibility.SourceRegistry())
         outcomes = [t.outcome for t in g.drain(conn)]
         store = MemoryStore(conn, schema_version=9)
-        retained = [i for i in store.items(limit=50) if i["engine_state"] == "RETAINED"]
+        retained = [i for i in runner.Gate.all_items(store)
+                    if i["engine_state"] == "RETAINED"]
         jobs = jobs_module.JobStore(conn, store).jobs()
         print(json.dumps({
             "created": len(report["created"]),

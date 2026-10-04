@@ -130,13 +130,38 @@ class FakeTransport:
         self.reflect_calls.append({"bank": bank.bank_id, "query": query})
         return {"text": "fake synthesis", "based_on_ids": []}
 
-    def list_document_memories(self, *, bank: BankRef, document_id: str, limit: int = 200,
-                               offset: int = 0) -> list[dict[str, Any]]:
+    def _unit_rows(self, *, bank: BankRef, document_id: str) -> list[dict[str, Any]]:
         stored = self.documents.get((bank.bank_id, document_id))
         if stored is None:
             return []
         return [{"id": unit, "text": stored["content"], "state": "valid"}
                 for unit in stored["memory_unit_ids"]]
+
+    def list_document_memories(self, *, bank: BankRef, document_id: str, limit: int = 200,
+                               offset: int = 0) -> list[dict[str, Any]]:
+        # The envelope is modelled too: a double that always returned every row
+        # could not catch a reader that trusted one page, because there would
+        # never be a second page to miss.
+        rows = self._unit_rows(bank=bank, document_id=document_id)
+        return rows[offset:offset + limit]
+
+    def list_all_document_memories(self, *, bank: BankRef,
+                                   document_id: str) -> list[dict[str, Any]]:
+        rows = self._unit_rows(bank=bank, document_id=document_id)
+        offset, first_total, all_rows = 0, len(rows), []
+        for _ in range(1000):
+            page = rows[offset:offset + 100]
+            total = len(rows)
+            if first_total != total:
+                raise TransportError("engine_conflict", "the listing changed", retryable=True)
+            all_rows.extend(page)
+            offset += len(page)
+            if offset >= total:
+                return all_rows
+            if not page:
+                raise TransportError("engine_protocol_error", "the listing stopped early",
+                                     retryable=False)
+        raise TransportError("engine_protocol_error", "too many pages", retryable=False)
 
     def invalidate_memory(self, *, bank: BankRef, memory_id: str, reason: str) -> None:
         self.invalidated.append((bank.bank_id, memory_id, reason))
@@ -246,6 +271,33 @@ class _StubHandler(BaseHTTPRequestHandler):
             return None
         return match.group("bank"), (match.group("suffix") or "")
 
+    def _query(self) -> dict[str, str]:
+        params: dict[str, str] = {}
+        for part in self.path.partition("?")[2].split("&"):
+            if "=" in part:
+                key, _, value = part.partition("=")
+                params[key] = _unquote(value)
+        return params
+
+    def _paged(self, rows: list, *, default_limit: int) -> dict[str, Any]:
+        """Honour `limit`/`offset` and echo them.
+
+        A double that always answered `{"items": [...all...], "offset": 0}` could
+        not catch a reader that stopped after one page — there would never be a
+        second page to miss — so pagination is modelled, not asserted.
+        """
+        params = self._query()
+        try:
+            limit = int(params.get("limit", default_limit))
+        except ValueError:
+            limit = default_limit
+        try:
+            offset = int(params.get("offset", "0"))
+        except ValueError:
+            offset = 0
+        page = rows[offset:offset + limit] if limit > 0 else []
+        return {"items": page, "total": len(rows), "limit": limit, "offset": offset}
+
     def _unit(self, bank: str, unit_id: str) -> dict[str, Any] | None:
         for document in self.server.documents.values():
             for unit in document["units"].values():
@@ -265,14 +317,10 @@ class _StubHandler(BaseHTTPRequestHandler):
                 "observations": True, "mcp": True, "worker": True,
                 "bank_config_api": True, "store_document_text": True}})
         if suffix == "/memories/list":
-            query = self.path.partition("?")[2]
-            wanted = ""
-            for part in query.split("&"):
-                if part.startswith("document_id="):
-                    wanted = _unquote(part.split("=", 1)[1])
+            wanted = self._query().get("document_id", "")
             document = self.server.documents.get((bank, wanted))
-            items = list(document["units"].values()) if document else []
-            return self._send(200, {"items": items, "total": len(items), "limit": 200, "offset": 0})
+            units = list(document["units"].values()) if document else []
+            return self._send(200, self._paged(units, default_limit=200))
         if suffix.startswith("/documents/"):
             document = self.server.documents.get((bank, _unquote(suffix.split("/", 2)[2])))
             if document is None:
@@ -280,7 +328,15 @@ class _StubHandler(BaseHTTPRequestHandler):
             return self._send(200, {k: v for k, v in document.items() if k != "units"}
                               | {"memory_unit_count": len(document["units"])})
         if suffix == "/documents":
-            return self._send(200, {"items": [], "total": 0, "limit": 100, "offset": 0})
+            # The real collection endpoint, because `_confirm_documents_route`
+            # reads it to prove a document is absent. An always-empty page here
+            # would agree with every 404, including one caused by a route that
+            # does not exist, and the double would never disagree with the code
+            # it is supposed to check.
+            documents = [{"id": document_id, "bank_id": bank}
+                         for (owner, document_id) in list(self.server.documents)
+                         if owner == bank]
+            return self._send(200, self._paged(documents, default_limit=100))
         return self._send(404, {"detail": "not found"})
 
     def do_POST(self) -> None:  # noqa: N802

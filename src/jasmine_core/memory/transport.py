@@ -77,6 +77,18 @@ class MemoryTransport(Protocol):
     def reflect(self, *, bank: BankRef, query: str, max_tokens: int) -> dict[str, Any]:
         """Generate a historical synthesis. Raises `TransportError`."""
 
+    def list_all_document_memories(self, *, bank: BankRef,
+                                   document_id: str) -> list[dict[str, Any]]:
+        """Every memory unit of a document, proven complete or not returned at all.
+
+        `list_document_memories` answers one page, and a caller that treats that
+        as the document will report an operation succeeded while units it never
+        saw are still `valid` remotely. Implemented by the transport because only
+        it can read the paging envelope (`total`/`limit`/`offset`) that makes
+        completeness checkable; see `hindsight.HindsightTransport`.
+        """
+        ...
+
     def list_document_memories(self, *, bank: BankRef, document_id: str,
                                limit: int = 200, offset: int = 0) -> list[dict[str, Any]]:
         """Read back the memory units a document produced.

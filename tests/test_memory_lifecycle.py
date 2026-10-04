@@ -71,7 +71,8 @@ class Obsolete(LifecycleCase):
         # whatever the engine does, and the Inspector says which half is true.
         self.assertIn("a queued job will soft-retire",
                       describe_engine_claim(self.store.item(self.memory_id)))
-        self.transport.list_document_memories = _raise(
+        original_list = self.transport.list_all_document_memories
+        self.transport.list_all_document_memories = _raise(
             TransportError("engine_unreachable", "down", retryable=True))
         report = self.worker(lease_owner="worker-b").tick()
         self.assertEqual(report.outcome, "retry")
@@ -79,8 +80,7 @@ class Obsolete(LifecycleCase):
         self.assertIn("a queued job will soft-retire",
                       describe_engine_claim(self.store.item(self.memory_id)))
         # Once the engine accepts it, the claim changes -- and only then.
-        self.transport.list_document_memories = self.transport.list_document_memories
-        self.worker().tick()
+        self.transport.list_all_document_memories = original_list
         self.assertIn("soft-retired in the engine",
                       describe_engine_claim(self.store.item(self.memory_id), invalidated=True))
 

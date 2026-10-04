@@ -167,7 +167,8 @@ def list_jobs(request: Request, core: "Core", principal: auth.Principal,
     projects = svc.visible_projects(principal.actor_id, project_id)
     if projects is not None and not projects:
         # An actor with no grants gets an empty list, not the whole database.
-        return Response(200, {"jobs": [], "count": 0, "counts": _empty_counts()})
+        return _respond(200, {"jobs": [], "count": 0, "counts": _empty_counts()},
+                        actor_kind)
     jobs = svc.jobs.jobs(
         project_id=project_id,
         projects=projects,
@@ -226,7 +227,8 @@ def list_items(request: Request, core: "Core", principal: auth.Principal,
     projects = svc.visible_projects(principal.actor_id, project_id)
     svc.require_filtered_bank(_optional(request, "bank_id"), principal.actor_id, projects)
     if projects is not None and not projects:
-        return Response(200, {"items": [], "count": 0, "non_authoritative": True})
+        return _respond(200, {"items": [], "count": 0, "non_authoritative": True},
+                        core.actor_kind(principal.actor_id))
     items = svc.store.items(
         project_id=project_id,
         projects=projects,
@@ -280,11 +282,15 @@ def list_traces(request: Request, core: "Core", principal: auth.Principal,
         raise errors.InvalidRequest("task_id must be a tsk_ id", field="task_id", value=task_id)
     projects = svc.visible_projects(principal.actor_id, project_id)
     if projects is not None and not projects:
-        return Response(200, {"traces": [], "count": 0})
+        return _respond(200, {"traces": [], "count": 0},
+                        core.actor_kind(principal.actor_id))
     traces = svc.store.traces(project_id=project_id, projects=projects, task_id=task_id,
                               limit=_int(request, "limit", 50),
                               after_trace_id=_optional(request, "after_trace_id"))
-    return Response(200, {"traces": traces, "count": len(traces)})
+    # A trace row carries `safe_error_summary` beside its `error_code`, so it
+    # passes through the same walker as everything else.
+    return _respond(200, {"traces": traces, "count": len(traces)},
+                    core.actor_kind(principal.actor_id))
 
 
 def get_trace(request: Request, core: "Core", principal: auth.Principal,
@@ -296,7 +302,7 @@ def get_trace(request: Request, core: "Core", principal: auth.Principal,
     if trace is None or not _may_see(svc, principal, project_id=trace["project_id"],
                                      bank_id=None):
         raise errors.NotFound("memory_trace", trace_id)
-    return Response(200, {"trace": trace})
+    return _respond(200, {"trace": trace}, core.actor_kind(principal.actor_id))
 
 
 def memory_health(request: Request, core: "Core", principal: auth.Principal,

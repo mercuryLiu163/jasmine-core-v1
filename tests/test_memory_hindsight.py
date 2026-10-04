@@ -398,6 +398,63 @@ class ReceiptValidation(Wire):
             True)
 
 
+class EveryPageIsReadToTheStatedTotal(unittest.TestCase):
+    """A page shorter than asked for is not the last page.
+
+    `list_document_memories` took a `limit`, and a server is free to return
+    fewer rows than that limit. Stopping on the short page ends the read with
+    units unseen, and every caller that then reports work done is reporting it
+    on units it never loaded — obsoleting "all of them" while some stay valid,
+    or calling a document absent while its units are on a later page.
+    """
+
+    def test_a_server_that_caps_the_page_does_not_end_the_read(self) -> None:
+        total = 250
+        cap = 50
+        served: list[dict] = []
+
+        def page(*, bank, document_id, limit, offset):
+            # The server answers at most `cap` rows whatever `limit` asks for —
+            # legal, and exactly the shape that made a short page look final.
+            rows = [{"id": f"mu_{i:04d}", "state": "valid"} for i in range(offset, min(offset + cap, total))]
+            served.append(offset)
+            return {"items": rows, "total": total, "limit": cap, "offset": offset}
+
+        def reply(*args, **kwargs):
+            query = kwargs.get("query") or {}
+            return page(bank=None, document_id=query.get("document_id", "d"),
+                        limit=query.get("limit", 100), offset=query.get("offset", 0))
+
+        transport = HindsightTransport.__new__(HindsightTransport)
+        transport._request = reply
+
+        units = transport.list_all_document_memories(
+            bank=scope.project_bank("prj_01K742SG00BMSDET9BTP151RAR"),
+            document_id="d")
+        self.assertEqual(len(units), total,
+                         f"the read stopped after {served}, which is {len(units)} of {total}")
+        self.assertEqual(len({u['id'] for u in units}), total, "a unit was read twice")
+
+    def test_a_total_that_moves_underneath_the_read_is_refused(self) -> None:
+        transport = HindsightTransport.__new__(HindsightTransport)
+        replies = iter([
+            {"items": [{"id": f"a{i}"} for i in range(50)], "total": 250,
+             "limit": 50, "offset": 0},
+            {"items": [{"id": "b"}], "total": 300, "limit": 50, "offset": 50},
+        ])
+
+        def reply(*args, **kwargs):
+            return next(replies)
+
+        transport._request = reply
+        with self.assertRaises(TransportError) as caught:
+            transport.list_all_document_memories(
+                bank=scope.project_bank("prj_01K742SG00BMSDET9BTP151RAR"),
+                document_id="d")
+        self.assertEqual(caught.exception.code, "engine_conflict")
+        self.assertTrue(caught.exception.retryable)
+
+
 class EndToEndOverTheWire(MemoryTestCase):
     """The whole P4 path against the wire double: scan, retain, recall, lifecycle."""
 
@@ -726,3 +783,27 @@ class AbsenceIsProvenNotInferred(Wire):
                 self.transport.get_document(bank=self.bank, document_id="our-document")
         self.assertEqual(caught.exception.code, "engine_conflict")
         self.assertTrue(caught.exception.retryable)
+
+    def test_a_limit_of_zero_cannot_stand_in_for_coverage(self) -> None:
+        """A page that can never advance is not evidence that it was read.
+
+        `offset >= total` only ever becomes true if `offset` moves, and a server
+        answering `limit: 0` while rows are outstanding guarantees it will not.
+        """
+        gone = self._gone()
+        for total in (1, 250):
+            with self.subTest(total=total):
+                with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                        gone, {"items": [], "total": total, "limit": 0, "offset": 0})):
+                    with self.assertRaises(TransportError) as caught:
+                        self.transport.get_document(bank=self.bank,
+                                                    document_id="our-document")
+                self.assertEqual(caught.exception.code, "engine_protocol_error")
+                self.assertIn("limit of 0", caught.exception.safe_error_summary)
+
+        # Nothing outstanding is not a paging problem: an empty collection is
+        # an empty collection.
+        with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                gone, {"items": [], "total": 0, "limit": 0, "offset": 0})):
+            self.assertIsNone(self.transport.get_document(bank=self.bank,
+                                                          document_id="our-document"))

@@ -463,6 +463,17 @@ class EngineTextIsWithheldFromAgents(MemoryApiTestCase):
                 " outcome, error_code, safe_error_summary, lease_owner, started_at)"
                 " VALUES (?, ?, 1, 'FAILED', 'FAILED', 'engine_rejected', ?, 'w', ?)",
                 (ids.new_id("mja"), self.job_id, self.ENGINE_TEXT, "2026-09-29T12:00:00Z"))
+            # A trace carries the same field beside its `error_code`.
+            self.trace_id = ids.new_id("mtr")
+            self.conn.execute(
+                "INSERT INTO memory_query_traces (trace_id, mode, status, project_id,"
+                " actor_id, query_sha256, query_length, requested_types_json, banks_json,"
+                " filtered_json, used_tokens, authority_refs_json, error_code,"
+                " safe_error_summary, created_at)"
+                " VALUES (?, 'recall', 'degraded', ?, ?, ?, 0, '[]', '[]', '[]', 0, '[]',"
+                " 'engine_timeout', ?, ?)",
+                (self.trace_id, self.project_id, ACTOR, "0" * 64, self.ENGINE_TEXT,
+                 "2026-09-29T12:00:00Z"))
         self.agent = self._agent_key()
 
     def _agent_key(self) -> str:
@@ -490,10 +501,12 @@ class EngineTextIsWithheldFromAgents(MemoryApiTestCase):
         human = self._human_key()
         for path in (f"/v1/memory/jobs/{self.job_id}",
                      f"/v1/memory/items/{self.memory_id}",
-                     "/v1/memory/items"):
+                     "/v1/memory/items",
+                     "/v1/memory/traces",
+                     f"/v1/memory/traces/{self.trace_id}"):
             with self.subTest(path=path):
                 status, body = self.call("GET", path, token=human)
-                self.assertEqual(status, 200)
+                self.assertEqual(status, 200, body)
                 self.assertIn(self.ENGINE_TEXT, json.dumps(body),
                               f"a human key lost the engine text on {path}")
 
@@ -502,7 +515,9 @@ class EngineTextIsWithheldFromAgents(MemoryApiTestCase):
                      "/v1/memory/jobs",
                      f"/v1/memory/items/{self.memory_id}",
                      "/v1/memory/items",
-                     "/v1/memory/health"):
+                     "/v1/memory/health",
+                     "/v1/memory/traces",
+                     f"/v1/memory/traces/{self.trace_id}"):
             with self.subTest(path=path):
                 status, body = self.call("GET", path, token=self.agent)
                 self.assertEqual(status, 200, body)
