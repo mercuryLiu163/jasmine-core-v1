@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -159,6 +160,74 @@ class Preconditions(unittest.TestCase):
         names = {instruction.argval
                  for instruction in dis.get_instructions(self.runner.CASES_BY_ID["P4-G01"])}
         self.assertIn("require_real_agent", names)
+
+    def test_every_spawned_worker_snippet_binds_every_name_it_uses(self) -> None:
+        """A snippet that uses a name it never imports raises only when it runs.
+
+        G06's second window died with `NameError: name 'jobs_module' is not defined`,
+        and the window before that with `NameError: name 'SCHEMA_VERSION' is not
+        defined` -- both invisible until the engine was healthy enough to reach them,
+        because a snippet only executes on the happy path. `pyflakes` cannot see
+        inside a triple-quoted string, so nothing else covers this class.
+
+        So every `spawn_worker` snippet is parsed and its loaded names are checked
+        against the bootstrap's scope, its own imports and bindings, and the
+        builtins. This is the check `21c2daa`'s message described; the commit fixed
+        the one `NameError` and the claim about the rest turned out to be untested
+        until the next one fired.
+        """
+        import ast
+        import builtins
+        import textwrap
+
+        tree = ast.parse(pathlib.Path(self.runner.__file__).read_text(encoding="utf-8"))
+        bootstrap = next(node.value for node in ast.walk(tree)
+                         if isinstance(node, ast.Constant) and isinstance(node.value, str)
+                         and "def boot():" in node.value)
+        scope = {node.id for node in ast.walk(ast.parse(textwrap.dedent(bootstrap)))
+                 if isinstance(node, ast.Name)}
+        scope |= {alias.asname or alias.name.split(".")[0]
+                  for alias in ast.walk(ast.parse(textwrap.dedent(bootstrap)))
+                  if isinstance(alias, ast.alias)}
+        # Everything the bootstrap puts in scope for a child by contract.
+        shared = {"opts", "json", "sys", "os", "runner", "boot", "gate", "self"}
+
+        checked = 0
+        for call in ast.walk(tree):
+            if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+                    and call.func.attr == "spawn_worker"):
+                continue
+            self.assertTrue(call.args and isinstance(call.args[0], ast.Constant),
+                            "spawn_worker's source must be a literal, or it cannot be checked")
+            label = next((kw.value.value for kw in call.keywords
+                          if kw.arg == "label" and isinstance(kw.value, ast.Constant)), "?")
+            module = ast.parse(textwrap.dedent(call.args[0].value))
+            bound = set(scope) | shared | set(dir(builtins))
+            for node in ast.walk(module):
+                if isinstance(node, ast.alias):
+                    bound.add(node.asname or node.name.split(".")[0])
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    bound.add(node.name)
+                    bound |= {a.arg for a in getattr(getattr(node, "args", None), "posonlyargs", [])}
+                    bound |= {a.arg for a in getattr(getattr(node, "args", None), "args", [])}
+                    bound |= {a.arg for a in getattr(getattr(node, "args", None), "kwonlyargs", [])}
+                    if getattr(node, "args", None) is not None and node.args.vararg:
+                        bound.add(node.args.vararg.arg)
+                    if getattr(node, "args", None) is not None and node.args.kwarg:
+                        bound.add(node.args.kwarg.arg)
+                if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+                    bound.add(node.id)
+                if isinstance(node, ast.ExceptHandler) and node.name:
+                    bound.add(node.name)
+                if isinstance(node, ast.comprehension):
+                    bound |= {t.id for t in ast.walk(node.target) if isinstance(t, ast.Name)}
+                if isinstance(node, ast.Global):
+                    bound |= set(node.names)
+            used = {node.id for node in ast.walk(module)
+                    if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)}
+            self.assertEqual(sorted(used - bound), [], f"{label} uses an unbound name")
+            checked += 1
+        self.assertGreaterEqual(checked, 4, "no snippet was checked; the scan found nothing")
 
     def test_a_dry_run_against_no_engine_reports_blocked_for_every_case(self) -> None:
         """The end-to-end honesty check: nothing available means nothing passes."""

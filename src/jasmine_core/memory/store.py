@@ -75,6 +75,17 @@ class MemoryStore:
         self._schema_version = schema_version
 
     @property
+    def schema_version(self) -> int:
+        """The schema version Events appended through this Core are stamped with.
+
+        Read rather than re-passed by the components that write Events, because a
+        second copy of the number is a second thing to forget at the next renumber --
+        and a wrong one is invisible: nothing validates it, it is only ever written
+        into an immutable row.
+        """
+        return self._schema_version
+
+    @property
     def conn(self) -> sqlite3.Connection:
         return self._conn
 

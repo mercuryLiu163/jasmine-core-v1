@@ -575,7 +575,10 @@ class JobStore:
             )
         if not ids.is_id(job_id, JOB_ID_PREFIX):
             raise errors.InvalidRequest("job_id must be a mjb_ id", field="job_id", value=job_id)
-        events = EventStore(self._conn, schema_version=0)
+        # Stamped from the store rather than a literal: this is the operator command
+        # Event for a manual retry, and `schema_version=0` put it in the audit log
+        # disagreeing with every other Event in the same database.
+        events = EventStore(self._conn, schema_version=self._store.schema_version)
         with db.translate_lock_errors(), db.transaction(self._conn):
             row = self._conn.execute("SELECT * FROM memory_jobs WHERE job_id=?", (job_id,)).fetchone()
             if row is None:

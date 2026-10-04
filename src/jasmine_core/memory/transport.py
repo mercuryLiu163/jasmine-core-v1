@@ -77,8 +77,8 @@ class MemoryTransport(Protocol):
     def reflect(self, *, bank: BankRef, query: str, max_tokens: int) -> dict[str, Any]:
         """Generate a historical synthesis. Raises `TransportError`."""
 
-    def list_all_document_memories(self, *, bank: BankRef,
-                                   document_id: str) -> list[dict[str, Any]]:
+    def list_all_document_memories(self, *, bank: BankRef, document_id: str,
+                                   state: str | None = None) -> list[dict[str, Any]]:
         """Every memory unit of a document, proven complete or not returned at all.
 
         `list_document_memories` answers one page, and a caller that treats that
@@ -86,16 +86,25 @@ class MemoryTransport(Protocol):
         saw are still `valid` remotely. Implemented by the transport because only
         it can read the paging envelope (`total`/`limit`/`offset`) that makes
         completeness checkable; see `hindsight.HindsightTransport`.
+
+        `state` is the engine's own lifecycle filter and is **not** sent by
+        default, because the default listing excludes retired units: a caller that
+        wants to see what a soft-retire did has to ask for them by name. It is on
+        the protocol rather than only on the Hindsight implementation because the
+        Gate's soft-retire check is the only thing that observes a soft-retire, and
+        a second engine implementing this protocol must be able to answer it.
         """
         ...
 
     def list_document_memories(self, *, bank: BankRef, document_id: str,
-                               limit: int = 200, offset: int = 0) -> list[dict[str, Any]]:
+                               limit: int = 200, offset: int = 0,
+                               state: str | None = None) -> list[dict[str, Any]]:
         """Read back the memory units a document produced.
 
         Needed because a remote memory unit id is not stable across a re-send
         (see `types.RetainReceipt`), so lifecycle operations and Gate read-back
-        address units by listing the document.
+        address units by listing the document. `state` has the meaning described on
+        `list_all_document_memories`.
         """
 
     def invalidate_memory(self, *, bank: BankRef, memory_id: str, reason: str) -> None:

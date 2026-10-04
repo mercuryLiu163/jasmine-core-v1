@@ -32,7 +32,7 @@ class BankDerivation(MemoryTestCase):
     def test_a_task_in_another_project_is_not_resolvable(self) -> None:
         a, b = self.project("a"), self.project("b")
         task_b = self.task(b)
-        from jasmine_core import SCHEMA_VERSION, errors
+        from jasmine_core import errors
 
         with self.assertRaises(errors.NotFound) as caught:
             scope.resolve_banks(self.conn, project_id=a, task_id=task_b, actor_id=HUMAN)

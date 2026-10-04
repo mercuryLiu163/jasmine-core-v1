@@ -75,7 +75,12 @@ class MemoryLifecycle:
                  mode: str = scope_module.SINGLE_USER) -> None:
         self._conn = conn
         self._store = store
-        self._events = EventStore(conn, schema_version=0)
+        # `store` was built with the schema version this Core is at, and the value
+        # is written into every Event row it appends. A literal 0 stamped every
+        # `memory.pinned` / `memory.obsoleted` / `memory.deleted` / `memory.unpinned`
+        # / `memory.job.retried` Event with `schema_version=0` on a schema-11 database,
+        # so the audit trail the taskbook requires disagreed with the rest of the log.
+        self._events = EventStore(conn, schema_version=store.schema_version)
         self._jobs = jobs_module.JobStore(conn, store)
         # The mode belongs here, not only in `detail()`. Constructing a
         # `ProjectAccess` with the default inside the write path is how an

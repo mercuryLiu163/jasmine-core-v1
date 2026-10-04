@@ -130,24 +130,34 @@ class FakeTransport:
         self.reflect_calls.append({"bank": bank.bank_id, "query": query})
         return {"text": "fake synthesis", "based_on_ids": []}
 
-    def _unit_rows(self, *, bank: BankRef, document_id: str) -> list[dict[str, Any]]:
+    def _unit_rows(self, *, bank: BankRef, document_id: str,
+                   state: str | None = None) -> list[dict[str, Any]]:
         stored = self.documents.get((bank.bank_id, document_id))
         if stored is None:
             return []
-        return [{"id": unit, "text": stored["content"], "state": "valid"}
+        rows = [{"id": unit, "text": stored["content"],
+                 "state": ("invalidated" if unit in stored.get("invalidated_units", ())
+                           else "valid")}
                 for unit in stored["memory_unit_ids"]]
+        # The engine excludes retired units from the default listing; a fake that
+        # returned them either way cannot tell a soft-retire that happened from one
+        # that did not.
+        if state:
+            return [row for row in rows if row["state"] == state]
+        return [row for row in rows if row["state"] != "invalidated"]
 
     def list_document_memories(self, *, bank: BankRef, document_id: str, limit: int = 200,
-                               offset: int = 0) -> list[dict[str, Any]]:
+                               offset: int = 0, state: str | None = None
+                               ) -> list[dict[str, Any]]:
         # The envelope is modelled too: a double that always returned every row
         # could not catch a reader that trusted one page, because there would
         # never be a second page to miss.
-        rows = self._unit_rows(bank=bank, document_id=document_id)
+        rows = self._unit_rows(bank=bank, document_id=document_id, state=state)
         return rows[offset:offset + limit]
 
-    def list_all_document_memories(self, *, bank: BankRef,
-                                   document_id: str) -> list[dict[str, Any]]:
-        rows = self._unit_rows(bank=bank, document_id=document_id)
+    def list_all_document_memories(self, *, bank: BankRef, document_id: str,
+                                   state: str | None = None) -> list[dict[str, Any]]:
+        rows = self._unit_rows(bank=bank, document_id=document_id, state=state)
         offset, first_total, all_rows = 0, len(rows), []
         for _ in range(1000):
             page = rows[offset:offset + 100]
@@ -165,6 +175,12 @@ class FakeTransport:
 
     def invalidate_memory(self, *, bank: BankRef, memory_id: str, reason: str) -> None:
         self.invalidated.append((bank.bank_id, memory_id, reason))
+        # Recorded on the document, so a listing can be asked for the retired unit by
+        # name the way the engine's `state` filter allows.
+        for candidate in self.documents.values():
+            if memory_id in candidate["memory_unit_ids"]:
+                candidate.setdefault("invalidated_units", set()).add(memory_id)
+                break
 
     def delete_document(self, *, bank: BankRef, document_id: str) -> dict[str, Any]:
         self.deleted.append((bank.bank_id, document_id))

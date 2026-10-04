@@ -640,11 +640,17 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
                      lease_owner=gate.case_id).tick(scan=False)
     finally:
         conn.close()
+    # The invariant VC-14/15 also names: Recall reads State and must not move it. What
+    # G02 creates is a *Rule*, so the Rule's revision is the thing to watch -- the
+    # previous form read `tasks.revision`, which is empty in this case, so the value
+    # was `None`, `CaseRecord.as_dict` dropped it, and nothing was ever compared. An
+    # unasserted invariant and an absent one look identical in the manifest.
     conn = gate.conn()
     try:
-        revision_before = conn.execute(
-            "SELECT revision FROM tasks WHERE task_id IS NOT NULL").fetchone()
-        record.state_revision_before = revision_before[0] if revision_before else None
+        rule_before = AuthorityStore(conn, schema_version=SCHEMA_VERSION).get(old_rule)
+        task_before = conn.execute(
+            "SELECT task_id, revision FROM tasks ORDER BY task_id").fetchall()
+        record.state_revision_before = rule_before["version"]
     finally:
         conn.close()
     outcome = gate.recall(project, "which memory engine does V1 use", max_tokens=600)
@@ -664,10 +670,30 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
           f"{[(i.provenance.origin_rule_id, i.provenance.origin_rule_version) for i in decisions]}")
     check(all(item.historical for item in decisions),
           "a Decision must reach the Context Pack as history, never as current Truth")
+    # ...and the comparison that makes those two numbers mean something.
+    conn = gate.conn()
+    try:
+        rule_after = AuthorityStore(conn, schema_version=SCHEMA_VERSION).get(old_rule)
+        task_after = conn.execute(
+            "SELECT task_id, revision FROM tasks ORDER BY task_id").fetchall()
+        record.state_revision_after = rule_after["version"]
+        check(rule_after["version"] == record.state_revision_before,
+              f"Recall moved the Rule's revision: {record.state_revision_before} -> "
+              f"{rule_after['version']}. Memory is history; it never rewrites Authority.")
+        check([tuple(row) for row in task_after] == [tuple(row) for row in task_before],
+              "Recall moved a Task revision: "
+              f"{[(r['task_id'], r['revision']) for r in task_before]} -> "
+              f"{[(r['task_id'], r['revision']) for r in task_after]}")
+        check(rule_after["status"] == "ACTIVE",
+              f"Recall changed the Rule's status to {rule_after['status']}")
+    finally:
+        conn.close()
     record.receipts.append(gate.receipt("g02-recall", outcome.as_dict()))
     raise Blocked(
-        "the filtering half is recorded; the answering half needs a real P3 Context Pack "
-        "and a real new session, so the current Decision is what the agent actually says."
+        "the filtering half and the State-is-not-rewritten half are recorded against a "
+        "real engine; the answering half needs a real P3 Context Pack and a real new "
+        "session, so what the agent actually says about the current Decision is not yet "
+        "observed."
     )
 
 
@@ -748,10 +774,13 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
 
 def case_g05(gate: Gate, record: CaseRecord) -> None:
     """Truth keeps working while the engine is unreachable, and recovers (VC-22)."""
-    # G05 is not only about the connection: it also requires the Context to be
-    # marked degraded with an exact pack containing no Memory. Declared here so
-    # the case cannot start — let alone return a verdict — without P3.
-    gate.require_p3_pack()
+    # G05 is not only about the connection: it also requires the Context to be marked
+    # degraded with an exact pack containing no Memory. That is required at the *end*,
+    # by `require_p3_pack()`, and not here. Declared first, it switched this case's
+    # entire real-engine half off behind one config string, so a defect in the
+    # unreachable path, the Truth-continues checks or the recovery was recorded as
+    # BLOCKED and looked exactly like "P3 is not merged". A Gate cannot report a
+    # precondition as satisfied by not running.
     probed = gate.require_engine()
     project = gate.seed_project("g05")
     record.project_ids.append(project)
@@ -838,13 +867,15 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
     # contains no Memory, that a real Tool Evidence is captured, and that a
     # legal State/Checkpoint flow runs — all of which need a merged P3 and a
     # real session. Without them this case must not return, because a returning
-    # case is recorded as PASS.
+    # case is recorded as PASS. Required here, after the real half has run.
+    gate.require_p3_pack()
     raise Blocked(
         "the unreachable engine, the Truth-continues checks and the recovery with no "
         "duplicate document are recorded against a real engine. Still missing for G05: "
         "a Context marked degraded with an exact pack containing no Memory, a real Tool "
-        "Evidence capture, and a legal State/Checkpoint flow. P3 is not merged and no "
-        "real session is declared, so this case is BLOCKED, not PASS."
+        "Evidence capture, and a legal State/Checkpoint flow. Those need a P3 Context "
+        "Pack built in a real Agent session; until one is supplied this case is "
+        "BLOCKED, not PASS. Everything above it ran against the real engine."
     )
 
 
@@ -1081,7 +1112,9 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
 
     # G07's Context half — a recalled memory shown non-authoritative, an obsolete
     # one shown not injected, and the source read back *from the pack* — needs P3.
-    gate.require_p3_pack()
+    # The Context Pack half is required at the end of this case, not here: gating the
+    # whole lifecycle on it would mean a broken pin/obsolete/delete path could never
+    # be reported at all.
     probed = gate.require_engine()
     project = gate.seed_project("g07")
     record.project_ids.append(project)
@@ -1274,6 +1307,7 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
         "failed_error_code": failed_delete["last_error_code"],
         "recovered_status": final_job["status"],
     }
+    gate.require_p3_pack()
     record.receipts.append(gate.receipt("g07-lifecycle", {
         "pin": before.as_dict(), "obsolete": result["after"], "delete": deleted["after"],
         "delete_fault": {"status": failed_delete["status"],
@@ -1290,8 +1324,9 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
         "stale-revision refusal and the actor refusal are recorded against a real engine. "
         "Still missing for G07: an actual Context Pack showing a recalled memory marked "
         "non-authoritative and an obsolete one not injected, the pack-level source "
-        "read-back, and the management audit Event for these lifecycle commands. P3 is "
-        "not merged and no real session is declared, so this case is BLOCKED, not PASS."
+        "read-back, and the management audit Event for these lifecycle commands. Those "
+        "need a P3 Context Pack built in a real Agent session; until one is supplied "
+        "this case is BLOCKED, not PASS. Everything above it ran against the real engine."
     )
 
 
