@@ -10,6 +10,8 @@ import os
 import selectors
 import subprocess
 import time
+import re
+from urllib.parse import urlsplit
 from datetime import datetime
 
 from .. import errors, ids
@@ -21,6 +23,57 @@ from ..resolution_common import fields
 
 TYPES=('CONFIRMED_DECISION','STABLE_PROJECT_FACT','RESOLVED_ISSUE','VERIFIED_OUTCOME','FAILURE_LESSON')
 MAX_BYTES=65536
+WORKER_ENV_FIELDS=frozenset({'PYTHONPATH','LANG','LC_ALL','JASMINE_CORE_DB',
+    'JASMINE_MEMORY_ACTOR_ID','JASMINE_MEMORY_DEPLOYMENT_MODE','JASMINE_MEMORY_BANK_NAMESPACE',
+    'JASMINE_HINDSIGHT_URL','JASMINE_HINDSIGHT_API_PREFIX',
+    'JASMINE_HINDSIGHT_TIMEOUT_SECONDS','JASMINE_HINDSIGHT_API_KEY'})
+
+
+def _validate_worker_environment(environment):
+    supplied={} if environment is None else environment
+    if not isinstance(supplied,dict) or set(supplied)-WORKER_ENV_FIELDS or any(
+            not isinstance(value,str) or '\x00' in value or len(value)>65536
+            for value in supplied.values()):
+        raise ValueError('Memory worker requires explicit allowlisted string environment fields')
+    if 'JASMINE_CORE_DB' in supplied:
+        path=Path(supplied['JASMINE_CORE_DB'])
+        if not path.is_absolute() or path!=path.resolve(strict=True) or not path.is_file():
+            raise ValueError('Memory database must be an existing canonical absolute file')
+    if 'PYTHONPATH' in supplied:
+        for item in supplied['PYTHONPATH'].split(os.pathsep):
+            path=Path(item)
+            if not item or not path.is_absolute() or path!=path.resolve(strict=True) or not path.is_dir():
+                raise ValueError('Memory import roots must be existing canonical absolute directories')
+    if 'JASMINE_MEMORY_ACTOR_ID' in supplied and not ids.is_id(supplied['JASMINE_MEMORY_ACTOR_ID'],'act'):
+        raise ValueError('Memory worker requires a valid acting identity')
+    if 'JASMINE_MEMORY_DEPLOYMENT_MODE' in supplied and supplied['JASMINE_MEMORY_DEPLOYMENT_MODE'] not in ('single_user','acl'):
+        raise ValueError('Memory deployment mode must be single_user or acl')
+    namespace=supplied.get('JASMINE_MEMORY_BANK_NAMESPACE','')
+    if namespace and re.fullmatch(r'[A-Za-z0-9._-]{1,64}',namespace) is None:
+        raise ValueError('invalid Memory bank namespace')
+    if 'JASMINE_HINDSIGHT_URL' in supplied:
+        url=urlsplit(supplied['JASMINE_HINDSIGHT_URL'])
+        if url.scheme not in ('http','https') or not url.hostname or url.username or url.password or url.query or url.fragment:
+            raise ValueError('Memory engine requires an absolute HTTP(S) URL without credentials')
+        url.port  # Validate the port without retaining an untrusted URL in diagnostics.
+    if 'JASMINE_HINDSIGHT_TIMEOUT_SECONDS' in supplied:
+        timeout=float(supplied['JASMINE_HINDSIGHT_TIMEOUT_SECONDS'])
+        if not math.isfinite(timeout) or timeout<=0:
+            raise ValueError('Memory engine timeout must be positive and finite')
+    if 'JASMINE_HINDSIGHT_API_PREFIX' in supplied:
+        prefix=supplied['JASMINE_HINDSIGHT_API_PREFIX']
+        if not prefix.startswith('/') or '?' in prefix or '#' in prefix or '..' in prefix.split('/'):
+            raise ValueError('Memory API prefix must be an absolute URL path')
+    if any(c in supplied.get('JASMINE_HINDSIGHT_API_KEY','') for c in '\r\n'):
+        raise ValueError('invalid Memory engine credential header')
+    return dict(supplied)
+
+
+def _worker_environment(environment):
+    try:return _validate_worker_environment(environment)
+    except (ValueError,TypeError,OSError):
+        # Configuration failures must never quote a credential or a supplied value.
+        raise ValueError('invalid fixed Memory worker environment configuration') from None
 
 
 def _sha(value):
@@ -130,9 +183,7 @@ class MemoryProvider:
         if self.argv is not None:
             if len(self.argv)!=2 or not all(isinstance(a,str) and Path(a).is_absolute() for a in self.argv):
                 raise ValueError('Memory worker must name absolute interpreter and script paths')
-        supplied=environment or {}
-        if set(supplied)-{'PYTHONPATH','LANG','LC_ALL'} or not all(isinstance(v,str) for v in supplied.values()):
-            raise ValueError('Memory worker accepts only explicit safe environment fields')
+        supplied=_worker_environment(environment)
         self.environment={'PATH':os.defpath,'LANG':'C.UTF-8','PYTHONHASHSEED':'0','PYTHONNOUSERSITE':'1','PYTHONDONTWRITEBYTECODE':'1',**supplied}
         self.config_digest=self.configuration()['config_digest']
 
@@ -153,6 +204,9 @@ class MemoryProvider:
         except (ValueError,TypeError) as exc:raise errors.InvalidRequest('invalid fixed Memory worker configuration') from exc
         if provider.argv is None:raise errors.InvalidRequest('explicit Memory deployment requires worker argv')
         work=fingerprint.configured_root().resolve(strict=True)
+        database=provider.environment.get('JASMINE_CORE_DB')
+        if database is not None and Path(database).is_relative_to(work):
+            raise errors.InvalidRequest('Memory database must be outside model-writable work root')
         resolved_argv=[]
         for index,item in enumerate(provider.argv):
             original=Path(item);resolved=original.resolve(strict=True)
