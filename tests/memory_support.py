@@ -445,6 +445,16 @@ class _StubHandler(BaseHTTPRequestHandler):
                 units[f"mu_{self.server.unit_counter}"] = self._unit_for(
                     unit, {}, bank, document_id)
         self.server.banks.add(bank)
+        if getattr(self.server, "extract_nothing", False):
+            self.server.documents[(bank, document_id)] = {
+                "id": document_id, "bank_id": bank, "original_text": item["content"],
+                "content_hash": filtering.canonical.sha256_hex(item["content"]),
+                "units": {}, "tags": item.get("tags") or [],
+                "created_at": clock.now_rfc3339(), "updated_at": clock.now_rfc3339()}
+            return self._send(200, {"success": True, "bank_id": bank, "items_count": 1,
+                                    "async": False, "operation_id": None,
+                                    "usage": {"input_tokens": 100, "output_tokens": 40,
+                                              "total_tokens": 140}})
         self.server.documents[(bank, document_id)] = {
             "id": document_id, "bank_id": bank, "original_text": item["content"],
             "content_hash": filtering.canonical.sha256_hex(item["content"]),
@@ -575,6 +585,11 @@ class StubHindsightServer:
         #: forgiving direction is how an absent bank came to read as empty for so
         #: long.
         self.httpd.banks: set[str] = set()
+        #: Retain accepts the document and extracts nothing from it, which is what
+        #: a real 0.10.2 deployment did with a small local extraction model: same
+        #: `items_count`, same 200, and a document in the bank with no memory unit
+        #: in it. Nothing about the receipt distinguishes it from a real store.
+        self.httpd.extract_nothing = False
         self.thread = threading.Thread(
             target=self.httpd.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
         )

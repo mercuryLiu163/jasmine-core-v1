@@ -237,6 +237,42 @@ class MemoryWorker:
             report.error_code = exc.code
             return
 
+        # The retain was accepted. That is not the same as it stored anything:
+        # Hindsight extracts memory units with a model, and reports the same
+        # `items_count` for a document it extracted nothing from as for one it
+        # extracted three facts from. A live 0.10.2 deployment did exactly that --
+        # `success: true, items_count: 1`, and the document sat in the bank with
+        # `memory_unit_count: 0`, permanently unrecallable. Completing the job on
+        # the receipt alone recorded that as DONE and marked the item `RETAINED`,
+        # so the one job that could have retried it never would.
+        #
+        # So the unit listing is read back before the job is completed. It is the
+        # same read the invalidate and delete paths already do, and it is the only
+        # evidence that the memory is recallable at all. A transport failure here is
+        # the probe's own error and decides whether the job retries -- not the
+        # retain's 200.
+        try:
+            extracted = _all_document_units(self._require_transport("retain read-back"),
+                                           bank=claimed.bank, document_id=item["document_id"])
+        except TransportError as probe:
+            status = self._jobs.fail(claimed, error_code=probe.code,
+                                     safe_error_summary=probe.safe_error_summary)
+            report.outcome = "retry" if status == "PENDING" else "failed"
+            report.error_code = probe.code
+            return
+        if not extracted:
+            # Retryable on purpose: extraction is a model call and a real deployment
+            # was observed extracting nothing from a document it had just accepted,
+            # so the same content can succeed on a later attempt. What must not
+            # happen is the job reaching DONE, because then nothing ever looks again.
+            status = self._jobs.fail(
+                claimed, error_code="engine_extracted_no_units",
+                safe_error_summary=("the engine accepted the document but stored no "
+                                    "memory unit in it, so nothing would be recallable"))
+            report.outcome = "retry" if status == "PENDING" else "failed"
+            report.error_code = "engine_extracted_no_units"
+            return
+
         # The engine call is over; the item may have left `ACTIVE` while it ran.
         # Everything below is best effort against a claim that may already have
         # been reclaimed by another worker, so the obligation to take the write

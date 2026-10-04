@@ -623,6 +623,23 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
         rule = AuthorityStore(conn, schema_version=SCHEMA_VERSION).get(old_rule)
         record.rule_versions.append(f"{rule['rule_id']}:{rule['version']}")
         check(rule["version"] == 2, f"the old rule is still at version {rule['version']}")
+    finally:
+        conn.close()
+    # The supersede created rule version 2, and nothing has sent it to the engine yet.
+    # Without this the bank holds only the version-1 document, so the recall below can
+    # only ever return the superseded item, filter it, and answer `empty` -- which is
+    # the honest answer but tests nothing about the *current* Truth winning. Both
+    # versions have to be in the bank for "current Truth first" to be a claim at all.
+    conn = gate.conn()
+    try:
+        jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)
+                             ).enqueue_from_sources(eligibility.SourceRegistry())
+        MemoryWorker(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION), gate.transport,
+                     lease_owner=gate.case_id).tick(scan=False)
+    finally:
+        conn.close()
+    conn = gate.conn()
+    try:
         revision_before = conn.execute(
             "SELECT revision FROM tasks WHERE task_id IS NOT NULL").fetchone()
         record.state_revision_before = revision_before[0] if revision_before else None
@@ -633,8 +650,18 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
     superseded = [f for f in outcome.filtered if f.reason == "superseded_decision"]
     check(bool(superseded),
           f"the old Decision was not filtered as superseded: {outcome.as_dict()}")
-    check(all(item.memory_type != "CONFIRMED_DECISION" for item in outcome.items),
-          "a superseded Decision reached the Context Pack")
+    # Not "no CONFIRMED_DECISION at all": the current Decision is a CONFIRMED_DECISION
+    # and it is exactly what must win. What must not arrive is the *superseded version*
+    # -- and "which version" is a fact on the item, so that is what is asserted. The
+    # previous form (`no CONFIRMED_DECISION in items`) also contradicted the
+    # `status == "ok"` assertion above it, which requires at least one item.
+    decisions = [item for item in outcome.items if item.memory_type == "CONFIRMED_DECISION"]
+    check(bool(decisions), f"the current Decision was not offered at all: {outcome.as_dict()}")
+    check(all(item.origin_rule_version == 2 for item in decisions),
+          "a superseded version of the Decision reached the Context Pack: "
+          f"{[(i.origin_rule_id, i.origin_rule_version) for i in decisions]}")
+    check(all(item.historical for item in decisions),
+          "a Decision must reach the Context Pack as history, never as current Truth")
     record.receipts.append(gate.receipt("g02-recall", outcome.as_dict()))
     raise Blocked(
         "the filtering half is recorded; the answering half needs a real P3 Context Pack "

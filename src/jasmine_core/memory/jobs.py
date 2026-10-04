@@ -81,6 +81,13 @@ RETRYABLE_CODES = frozenset({
     "engine_unreachable", "engine_timeout", "engine_rate_limited", "engine_server_error",
     "engine_retain_failed", "engine_delete_failed", "engine_retain_unconfirmed",
     "engine_conflict",
+    # The engine accepted the document and stored no memory unit in it. Extraction
+    # is a model call, and a real 0.10.2 deployment was observed returning an empty
+    # extraction from a document it had just accepted with `items_count: 1`, so the
+    # same content can succeed on a later attempt. `max_attempts` still bounds it:
+    # content the model will never extract ends FAILED and visible, which is the
+    # outcome that was missing when the receipt alone completed the job.
+    "engine_extracted_no_units",
 })
 PERMANENT_CODES = frozenset({
     "engine_unauthorized", "engine_forbidden", "engine_rejected", "engine_not_found",

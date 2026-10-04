@@ -399,6 +399,37 @@ class P4sWorkerSpeaksP3sSlotProtocol(EndToEndOverTheWire):
         self.assertEqual(completed.stdout, b"",
                          "a worker without an identity still answered")
 
+    def test_a_retain_that_stored_nothing_is_not_a_completed_retain(self) -> None:
+        """An accepted document with no memory unit in it is not a stored memory.
+
+        Hindsight extracts with a model and reports the same `items_count` for a
+        document it extracted nothing from as for one it extracted three facts from.
+        A live deployment did exactly that, and because the job completed on the
+        receipt alone the item was marked `RETAINED`, the job `DONE`, and nothing
+        would ever be recalled from it -- with the one job that could have retried
+        it closed. The receipt is not evidence; the unit listing is.
+        """
+        self.server.httpd.extract_nothing = True
+        self._retain_lesson()
+
+        job = self.job_store().jobs()[0]
+        self.assertEqual(job["status"], "PENDING",
+                         f"a retain that stored nothing must not be DONE: {job}")
+        self.assertEqual(job["last_error_code"], "engine_extracted_no_units")
+        item = self.store.items()[0]
+        self.assertNotEqual(item["engine_state"], "RETAINED",
+                            "an item with nothing in the engine is not retained")
+        self.assertTrue(job["safe_error_summary"])
+
+        # And the engine really is in that state, so the check is reading the
+        # engine rather than believing the receipt.
+        from jasmine_core.memory import scope as scope_module
+
+        units = self.wire.list_all_document_memories(
+            bank=scope_module.project_bank(self.project_id),
+            document_id=item["document_id"])
+        self.assertEqual(units, [])
+
     def test_a_bank_reports_its_own_failure_not_another_banks(self) -> None:
         """A bank that answered is not stamped with a neighbour's error code.
 
