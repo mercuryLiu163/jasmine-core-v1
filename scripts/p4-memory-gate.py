@@ -1399,7 +1399,15 @@ def main() -> int:
             record.mode = "real"
         except Blocked as blocked:
             record.verdict = "BLOCKED"
-            record.mode = "not-run"
+            # `not-run` is a claim that nothing happened, and it was recorded for
+            # every case that ended in `Blocked` -- including the six that retained,
+            # recalled, obsoleted, deleted, faulted and recovered against the real
+            # engine first and only then found a precondition missing. A manifest
+            # that says `not-run` next to six receipts is telling a reviewer the
+            # opposite of what happened.
+            record.mode = ("real" if (record.receipts or record.engine_evidence
+                                      or record.job_ids or record.document_ids)
+                           else "not-run")
             record.blocked_on = blocked.items
             record.reason = "; ".join(blocked.items)
         except Failed as failure:

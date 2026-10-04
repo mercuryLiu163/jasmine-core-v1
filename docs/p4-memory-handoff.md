@@ -4,7 +4,7 @@ Status: **implementation candidate; fixed-list review partial; full P4 acceptanc
 P4 cannot be declared passed from this environment, and nothing here claims it.
 
 - Branch: `p4-memory`
-- Base: `850fbec` (P2-01 + P2-02 resolver + P2-03 admission merged); **schema 9**
+- Base: `850fbec` (P2-01 + P2-02 resolver + P2-03 admission merged); **schema 11**
 - Independently reviewed candidate: `eeba6af24d5e84b8f96bd106f0d07bb6d733edb5`.
 - Candidate commits, oldest first:
   `84ed560` implementation · `8f397cf` review round 1 · `8f8297b` handoff ·
@@ -63,7 +63,7 @@ never writes a Rule, State, Evidence, Checkpoint or Task revision.
 | ADR | `0014-p4-memory-…` | P3 PR #11: 0011, 0012, 0013 | moved in `1f25555`→follow-up |
 
 History: cut as `m0007_memory` / ADR 0008 → `m0008_memory` / ADR 0009 when
-P2-01 took `m0007_interpretations` → `m0009_memory` / ADR 0011 when P2-02 took
+P2-01 took `m0007_interpretations` and P4 renumbered to `m0011_memory` / ADR 0014 when P2-02 took
 `m0008_resolutions` and P2-02/P2-03 took ADR 0009/0010 → ADR **0014** when P3
 PR #11 (open, `p3-checkpoint-context-resume`) claimed 0011–0013.
 
@@ -75,8 +75,8 @@ taste.** `migrations.discover()` requires versions to be contiguous from 1; with
 MigrationConflict: migration versions must be contiguous from 1: position 9 holds version 11
 ```
 
-(verified in a throwaway worktree, not assumed). So P4 keeps `m0009_memory` and
-`SCHEMA_VERSION = 9`, and the renumber to `m0011` / `11` happens as part of the
+(verified in a throwaway worktree, not assumed). So P4 now ships `m0011_memory` and
+`SCHEMA_VERSION = 11`, and the renumber to `m0011` / `11` happens as part of the
 rebase onto P3 — which P4 has to do anyway, since its Gates need P3's Context
 Pack. Until P3 merges, **two branches both hold migration 9**: whoever merges
 second renumbers, and P4's note is that its renumber is mechanical rather than
@@ -92,11 +92,13 @@ files that enumerate migrations.
 
 ## P3 integration state
 
-`origin/main` is still `850fbec`; P3's PR #11 (`p3-checkpoint-context-resume`) is
-**open**, so the migration renumber (`m0009_memory` → `m0011_memory`,
-`SCHEMA_VERSION` 9 → 11) cannot happen yet: `migrations.discover()` requires
-versions contiguous from 1, and with `m0009`/`m0010` absent a `m0011` at position
-9 raises `MigrationConflict` at import. That renumber is mechanical and belongs
+`origin/main` is still `850fbec` and P3's PR #11 (`p3-checkpoint-context-resume`) is
+still **open**, but the integration is done on `p4-integration`: P3 `7016dab` is
+merged and the renumber has happened (`m0009_memory` → `m0011_memory`,
+`SCHEMA_VERSION` 9 → 11). It could not happen before, because
+`migrations.discover()` requires versions contiguous from 1 — with `m0009`/`m0010`
+absent a `m0011` at position 9 raised `MigrationConflict` at import. Merging into
+`main` is still P3's PR to land; that renumber is mechanical and belongs
 to the rebase onto P3.
 
 What was done against the published P3 branch:
@@ -130,7 +132,7 @@ because nothing verified it.
 ## Verification actually performed
 
 The independent run below used the clean candidate
-`eeba6af24d5e84b8f96bd106f0d07bb6d733edb5`, schema 9, and Python **3.13.15**.
+`eeba6af24d5e84b8f96bd106f0d07bb6d733edb5`, schema 11, and Python **3.13.15**.
 The handoff and test-runner follow-up edits were made only after that run, so
 these results describe the committed candidate rather than the subsequent dirty
 working tree.
@@ -285,7 +287,7 @@ Reported alongside them, both confirmed and fixed:
   substituted `source_event_id`, which for a Decision is the `rule.approved`
   Event, not the Event the content came from. Every recalled Decision reported
   an approval as its origin and the real one was recorded nowhere. The column is
-  added to `m0009_memory.py` (P4's own unmerged migration), the item stores it,
+  added to `m0011_memory.py` (P4's own unmerged migration), the item stores it,
   and the worker and `FakeTransport` both read it back.
 
 ## Other substantive fixes in this commit
@@ -335,12 +337,13 @@ Found while fixing the above, and worth knowing because they silently weakened t
 2. The five review fixes above, each with a reproduction in the section itself.
    Items 2, 3 and 4 are the ones where a plausible-looking green result was
    possible before the fix.
-3. `m0009_memory.py`: `origin_event_id` was added to P4's own *unmerged*
+3. `m0011_memory.py`: `origin_event_id` was added to P4's own *unmerged*
    migration rather than shipped as a new version — confirm no downstream has
-   already applied it at schema 9 without that column. Note the migration has
-   been renumbered twice and `main` currently ships `m0008_resolutions` at
-   schema 8, so the integration is `m0008_resolutions` **then** `m0009_memory`
-   with `SCHEMA_VERSION = 9`.
+   already applied it without that column. The migration has now been renumbered
+   four times (`m0007` → `m0008` → `m0009` → `m0011`), each time because another
+   phase claimed the slot first, so the applied-order list to check against a real
+   database is `… m0008_resolutions, m0009_continuity, m0010_context,
+   m0011_memory` with `SCHEMA_VERSION = 11`.
 4. `Window` / the recovery cursor: confirm no source can advance the cursor past an
    Event it did not examine.
 5. ACL scoping: confirm no read path can be widened by omitting a filter.

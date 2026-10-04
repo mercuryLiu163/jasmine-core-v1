@@ -65,11 +65,23 @@ class RunnerSource(unittest.TestCase):
         source = GATE.read_text(encoding="utf-8")
         # The vocabulary exists so the documentation can name what is excluded.
         self.assertIn('"boundary-fake"', source, "the vocabulary must exist to be excluded")
-        # The only two `mode` assignments are the two honest values, and neither
-        # is the fake one. A case that has not run says so.
+        # Every `mode` the runner can assign is one of the two honest values, and
+        # neither is the fake one. The `BLOCKED` branch computes its value rather
+        # than hard-coding `not-run`, because a case that retained, recalled,
+        # obsoleted, deleted, faulted and recovered against a real engine before
+        # finding a precondition missing did not "not run" -- and a manifest that
+        # says so next to six receipts misleads whoever reads it next.
         assignments = set(re.findall(r'record\.mode = "([a-z-]+)"', source))
-        self.assertEqual(assignments, {"not-run", "real"})
         self.assertNotIn("boundary-fake", assignments)
+        self.assertTrue(assignments <= {"real", "not-run"},
+                        f"unexpected mode values: {sorted(assignments)}")
+        self.assertIn("not-run", source, "a case that did nothing must still be able to say so")
+        conditional = re.search(r'record\.mode = \((.*?)\)\s*\n?\s*else "not-run"',
+                                source, re.S)
+        self.assertIsNotNone(conditional,
+                             "the BLOCKED branch must still reach `not-run` when nothing ran")
+        self.assertIn("record.receipts", conditional.group(1),
+                      "`not-run` must depend on whether the case actually did anything")
         self.assertEqual(self.runner_module().CaseRecord("x", "BLOCKED").mode, "real",
                          "the default mode must be the honest one")
         self.assertEqual(self.runner_module().CaseRecord.__dataclass_fields__["mode"].default,
