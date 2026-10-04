@@ -971,6 +971,7 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
     restarted = json.loads(gate.spawn_worker(
         """
         from jasmine_core import db
+        from jasmine_core.memory import jobs as jobs_module
         from jasmine_core.memory.store import MemoryStore
         from jasmine_core.memory.worker import MemoryWorker
 
