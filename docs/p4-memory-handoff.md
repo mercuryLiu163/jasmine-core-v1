@@ -29,8 +29,8 @@ Closed local findings do not constitute real Gate acceptance.
 |---|---|---|
 | F01 | closed locally | Both collections validate `total`, the `offset` asked for, the `limit` echoed, and that the rows fit inside both; a `limit` of 0 with rows outstanding cannot be paged and is refused rather than read as coverage. |
 | F02 | closed locally | Local review scope only. |
-| F03 | closed locally | The unit listing is driven by `total` through one shared validator, not by page length; `list_all_document_memories` is the only completeness call, and the fake and the wire stub paginate for real. |
-| F04 | closed locally | Every response, traces included, passes through one walker; a trace row carries `safe_error_summary` beside its `error_code` and had been the one path still building a `Response` by hand. |
+| F03 | closed locally | The unit listing is driven by `total` through one shared validator, not by page length; every entry must be an object with an `id`, duplicates are refused across pages, and a unit or document naming another owner is refused, so no entry can be silently skipped and then reported as done. `list_all_document_memories` is the only completeness call, and the fake and the wire stub paginate for real. |
+| F04 | closed locally | Every response, traces included, passes through one walker; a trace row carries `safe_error_summary` beside its `error_code`, and `traces()` had also returned the raw `banks_json` string alongside the parsed `banks`, which the walker cannot see into. Rows now carry the parsed form or the raw one, never both. |
 | F05 | closed locally | Local review scope only. |
 | F06 | closed locally | Local review scope only. |
 | F07 | closed locally | `ReflectOutcome.safe_error_summary` is assigned beside `error_code`, and both flow into the trace row. |

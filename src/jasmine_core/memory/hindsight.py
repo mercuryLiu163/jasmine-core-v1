@@ -570,7 +570,9 @@ class HindsightTransport:
             "GET", self._bank_path(bank, "/memories/list"),
             query={"document_id": document_id, "limit": limit, "offset": offset},
         )
-        return validated_page(payload, requested_offset=offset, what="memory listing")
+        payload = validated_page(payload, requested_offset=offset, what="memory listing")
+        _validated_units(payload["items"], document_id=document_id)
+        return payload
 
     def list_all_document_memories(self, *, bank: BankRef,
                                    document_id: str) -> list[dict[str, Any]]:
@@ -586,6 +588,10 @@ class HindsightTransport:
         units: list[dict[str, Any]] = []
         offset = 0
         first_total: int | None = None
+        # Duplicates have to be checked *across* pages: `_document_page` checks
+        # each page on its own, and the same unit arriving twice on different
+        # pages is what makes `total` a count of rows rather than of units.
+        seen: set[str] = set()
         for _ in range(_MAX_DOCUMENT_PAGES):
             payload = self._document_page(bank=bank, document_id=document_id,
                                           limit=UNIT_PAGE_SIZE, offset=offset)
@@ -598,6 +604,14 @@ class HindsightTransport:
                     f"the memory listing changed while it was read "
                     f"(total {first_total} then {total}), so coverage cannot be proved",
                     retryable=True)
+            for entry in payload["items"]:
+                if entry["id"] in seen:
+                    raise TransportError(
+                        "engine_protocol_error",
+                        f"the memory listing returned {entry['id']} twice, so the "
+                        "pages are not partitioned",
+                        retryable=False)
+                seen.add(entry["id"])
             units.extend(payload["items"])
             offset += len(payload["items"])
             if offset >= total:
@@ -788,6 +802,17 @@ class HindsightTransport:
                         "the documents collection returned an entry without an "
                         "id, so its pages cannot be checked",
                         retryable=False)
+                owner = entry.get("bank_id")
+                if owner is not None and owner != bank.bank_id:
+                    # The collection was queried under one bank; an entry naming
+                    # another is a row this call did not ask about, and treating
+                    # it as part of the set is how a foreign document's presence
+                    # or absence gets read as this bank's.
+                    raise TransportError(
+                        "engine_protocol_error",
+                        "the documents collection returned a document belonging "
+                        f"to another bank ({owner!r} for {bank.bank_id!r})",
+                        retryable=False)
                 if identifier == document_id:
                     raise TransportError(
                         "engine_protocol_error",
@@ -829,6 +854,50 @@ class HindsightTransport:
 _DOCUMENT_PAGE_SIZE = 100
 UNIT_PAGE_SIZE = 200
 _MAX_DOCUMENT_PAGES = 1000
+
+
+def _validated_units(items: list, *, document_id: str) -> None:
+    """Every listed entry must be a readable unit of *this* document.
+
+    A caller that filters the list for the entries it understands turns a
+    malformed, duplicated or foreign entry into a silent omission — and then
+    records the job `DONE` having handled the subset it happened to parse. The
+    document read-back is the one place that knows which document was asked for,
+    so it is the one place that can refuse.
+
+    `MemoryUnitListItem` requires `id`; `document_id` is optional, so an entry
+    that names one must name this one. The check is entry-by-entry because the
+    failure mode is "one of them was skipped", not "the list was wrong".
+    """
+    seen: set[str] = set()
+    for entry in items:
+        if not isinstance(entry, dict):
+            raise TransportError(
+                "engine_protocol_error",
+                "the memory listing returned an entry that is not an object, so "
+                "it cannot be handled",
+                retryable=False)
+        identifier = entry.get("id")
+        if not isinstance(identifier, str) or not identifier:
+            raise TransportError(
+                "engine_protocol_error",
+                "the memory listing returned an entry without an id, so it "
+                "cannot be handled",
+                retryable=False)
+        if identifier in seen:
+            raise TransportError(
+                "engine_protocol_error",
+                f"the memory listing returned {identifier} twice, so the pages "
+                "are not partitioned",
+                retryable=False)
+        seen.add(identifier)
+        owner = entry.get("document_id")
+        if owner is not None and owner != document_id:
+            raise TransportError(
+                "engine_protocol_error",
+                "the memory listing returned a unit belonging to another "
+                f"document ({owner!r} for {document_id!r})",
+                retryable=False)
 
 
 def _page_total(payload: dict[str, Any]) -> int:

@@ -514,6 +514,19 @@ shorter than we asked — but a server is free to cap the page below the `limit`
 and *that* short page looks exactly like the last one, so the read stopped early
 and reported work done on units it never loaded.
 
+**An entry we cannot read is not an entry we may skip.** Completeness is not
+only "every page was fetched" but "every row on it was understood": a caller that
+filters the list for the entries it recognises turns a malformed, duplicated or
+foreign entry into a silent omission and then records the job `DONE` having
+handled the subset it happened to parse. Obsoleting "all units" would leave the
+rest `valid` while the receipt said otherwise. So every entry must be an object
+with a non-empty string `id`; duplicates are refused across pages as well as
+within one, because the same unit arriving twice is what makes `total` a count of
+rows rather than of units; a unit naming a `document_id` must name this one; and
+a document naming a `bank_id` must name the bank the collection was queried
+under. The document read-back is the only place that knows what was asked for, so
+it is the only place that can refuse.
+
 Completeness is therefore driven by `total`, never by page length, and both
 collections share one validator (`validated_page`) checking `total`, the `offset`
 asked for, the `limit` the server claims, and that the rows fit inside both —
@@ -640,7 +653,16 @@ level of `GET /jobs/{id}`, inside `attempts` there, and inside `jobs` on an item
 detail. Responses therefore pass through one walker (`_respond`) at each return,
 so no nesting can be forgotten — and that includes the trace endpoints, whose
 rows carry `safe_error_summary` beside `error_code` and which had been the one
-path still building a `Response` by hand. `error_code` beside it is a stable enumerable
+path still building a `Response` by hand.
+
+**A row never carries a raw JSON twin of a field it also carries parsed.** The
+walker redacts *fields*; it cannot see into an opaque string. `traces()` added
+the parsed `banks` list while leaving `banks_json` in the same row, so every
+trace in the list still contained the bank outcomes — engine text included — as
+one string the walker had no reason to look at. `trace()` pops the raw column and
+always did; `traces()` now does too, `attempts()` pops `receipt_json` for the
+same reason, and the rule is that a caller receives the parsed form or the raw
+one and never both, on every row-returning path. `error_code` beside it is a stable enumerable
 value and is deliberately *not* withheld — an Agent needs to know a retain
 failed, just not what the engine said about it.
 

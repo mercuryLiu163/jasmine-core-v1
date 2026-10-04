@@ -470,10 +470,18 @@ class EngineTextIsWithheldFromAgents(MemoryApiTestCase):
                 " actor_id, query_sha256, query_length, requested_types_json, banks_json,"
                 " filtered_json, used_tokens, authority_refs_json, error_code,"
                 " safe_error_summary, created_at)"
-                " VALUES (?, 'recall', 'degraded', ?, ?, ?, 0, '[]', '[]', '[]', 0, '[]',"
+                " VALUES (?, 'recall', 'degraded', ?, ?, ?, 0, '[]', ?, '[]', 0, '[]',"
                 " 'engine_timeout', ?, ?)",
-                (self.trace_id, self.project_id, ACTOR, "0" * 64, self.ENGINE_TEXT,
-                 "2026-09-29T12:00:00Z"))
+                (self.trace_id, self.project_id, ACTOR, "0" * 64,
+                 # The bank outcomes as the engine reported them, which is where
+                 # the free text lives. Stored as JSON *and* surfaced parsed, so
+                 # the raw string is its own copy of the same words.
+                 json.dumps([{"bank_id": f"jasmine-project-{self.project_id}",
+                              "scope_kind": "project", "status": "failed",
+                              "error_code": "engine_timeout",
+                              "safe_error_summary": self.ENGINE_TEXT,
+                              "items": 0, "used_tokens": 0}]),
+                 self.ENGINE_TEXT, "2026-09-29T12:00:00Z"))
         self.agent = self._agent_key()
 
     def _agent_key(self) -> str:
@@ -524,6 +532,9 @@ class EngineTextIsWithheldFromAgents(MemoryApiTestCase):
                 text = json.dumps(body)
                 self.assertNotIn(self.ENGINE_TEXT, text,
                                  f"engine free text leaked to an agent on {path}")
+                self.assertNotIn("banks_json", text,
+                                 f"{path} returned the raw JSON twin of a parsed "
+                                 f"field, which no walker can see into")
                 self.assertIn("safe_error_summary", text,
                               f"{path} stopped carrying the field entirely; the "
                               f"policy is to withhold the text, not the shape")

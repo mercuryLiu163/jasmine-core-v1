@@ -784,6 +784,17 @@ class AbsenceIsProvenNotInferred(Wire):
         self.assertEqual(caught.exception.code, "engine_conflict")
         self.assertTrue(caught.exception.retryable)
 
+    def test_a_document_from_another_bank_is_refused(self) -> None:
+        """The collection was asked about one bank; its rows must be that bank's."""
+        gone = self._gone()
+        with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                gone, {"items": [{"id": "doc-a", "bank_id": "somebody-elses-bank"}],
+                       "total": 1, "limit": 100, "offset": 0})):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.get_document(bank=self.bank, document_id="our-document")
+        self.assertEqual(caught.exception.code, "engine_protocol_error")
+        self.assertIn("another bank", caught.exception.safe_error_summary)
+
     def test_a_limit_of_zero_cannot_stand_in_for_coverage(self) -> None:
         """A page that can never advance is not evidence that it was read.
 
@@ -807,3 +818,58 @@ class AbsenceIsProvenNotInferred(Wire):
                 gone, {"items": [], "total": 0, "limit": 0, "offset": 0})):
             self.assertIsNone(self.transport.get_document(bank=self.bank,
                                                           document_id="our-document"))
+
+
+class AUnitWeCannotReadIsNotAUnitWeMaySkip(unittest.TestCase):
+    """The failure mode is "one entry was skipped", not "the list was wrong".
+
+    A reader that filters the units it understands turns a malformed, duplicated
+    or foreign entry into a silent omission — and then a job records `DONE`
+    having handled the subset it happened to parse. Obsoleting "every unit" would
+    leave the rest `valid` while the receipt says otherwise.
+    """
+
+    BANK = "prj_01K742SG00BMSDET9BTP151RAR"
+
+    def _page(self, items, *, total, offset, limit=200):
+        return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+    def _read(self, *pages):
+        replies = iter(pages)
+
+        def reply(*args, **kwargs):
+            return next(replies)
+
+        transport = HindsightTransport.__new__(HindsightTransport)
+        transport._request = reply
+        return transport.list_all_document_memories(
+            bank=scope.project_bank(self.BANK), document_id="doc-1")
+
+    def test_an_unreadable_entry_is_refused(self) -> None:
+        for label, entry in (("not an object", None), ("no id", {"text": "x"}),
+                             ("empty id", {"id": ""}), ("numeric id", {"id": 7})):
+            with self.subTest(label=label):
+                with self.assertRaises(TransportError) as caught:
+                    self._read(self._page([entry], total=1, offset=0))
+                self.assertEqual(caught.exception.code, "engine_protocol_error")
+                self.assertFalse(caught.exception.retryable)
+
+    def test_a_duplicate_across_pages_is_refused(self) -> None:
+        with self.assertRaises(TransportError) as caught:
+            self._read(self._page([{"id": f"mu_{i}"} for i in range(200)],
+                                  total=201, offset=0),
+                       self._page([{"id": "mu_0"}], total=201, offset=200))
+        self.assertIn("twice", caught.exception.safe_error_summary)
+
+    def test_a_unit_of_another_document_is_refused(self) -> None:
+        with self.assertRaises(TransportError) as caught:
+            self._read(self._page([{"id": "mu_1", "document_id": "somebody-elses"}],
+                                  total=1, offset=0))
+        self.assertEqual(caught.exception.code, "engine_protocol_error")
+        self.assertIn("another document", caught.exception.safe_error_summary)
+
+    def test_a_well_formed_list_still_reads(self) -> None:
+        units = self._read(self._page(
+            [{"id": "mu_1", "document_id": "doc-1", "state": "valid"},
+             {"id": "mu_2", "state": "valid"}], total=2, offset=0))
+        self.assertEqual([u["id"] for u in units], ["mu_1", "mu_2"])

@@ -884,13 +884,19 @@ class JobStore:
         return [job_row(row) for row in rows]
 
     def attempts(self, job_id: str) -> list[dict[str, Any]]:
-        return [
-            dict(row, receipt=json.loads(row["receipt_json"]) if row["receipt_json"] else None)
-            for row in self._conn.execute(
+        # Same rule as `job_row`: a caller gets the parsed receipt or the raw
+        # string, never both. An attempt's receipt is Core's own data rather than
+        # engine text, but one shape for every row keeps a future field from
+        # arriving as an opaque string beside its own parsed twin.
+        attempts: list[dict[str, Any]] = []
+        for row in self._conn.execute(
                 "SELECT * FROM memory_job_attempts WHERE job_id=? ORDER BY attempt_number, phase",
-                (job_id,),
-            )
-        ]
+                (job_id,)):
+            entry = dict(row)
+            receipt = entry.pop("receipt_json", None)
+            entry["receipt"] = json.loads(receipt) if receipt else None
+            attempts.append(entry)
+        return attempts
 
     def counts(self, *, project_id: str | None = None,
                projects: tuple[str, ...] | None = None) -> dict[str, int]:

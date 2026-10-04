@@ -508,8 +508,18 @@ class MemoryStore:
             f" FROM memory_query_traces{where} ORDER BY trace_id LIMIT ?",
             params,
         ).fetchall()
-        return [dict(row, requested_types=json.loads(row["requested_types_json"]),
-                     banks=json.loads(row["banks_json"])) for row in rows]
+        # `dict(row, ...)` added the parsed forms while leaving the raw JSON
+        # strings in place, so every trace in the list carried `banks_json` —
+        # the same bank outcomes the walker redacts, as one opaque string it
+        # cannot see into. `trace()` pops them; this must too, or the redaction
+        # is only as good as the shape the caller happens to receive.
+        traces: list[dict[str, Any]] = []
+        for row in rows:
+            entry = dict(row)
+            entry["requested_types"] = json.loads(entry.pop("requested_types_json"))
+            entry["banks"] = json.loads(entry.pop("banks_json"))
+            traces.append(entry)
+        return traces
 
 
 def _scope_clause(clauses: list[str], params: list[Any], *, project_id: str | None,
