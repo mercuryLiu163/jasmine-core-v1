@@ -1269,7 +1269,7 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
     finally:
         conn.close()
     record.engine_evidence["probe"] = probed
-    record.engine_evidence["units_after_obsolete"] = len(units)
+    record.engine_evidence["units_after_obsolete"] = len(retired)
     record.engine_evidence["delete_fault_then_recovery"] = {
         "failed_error_code": failed_delete["last_error_code"],
         "recovered_status": final_job["status"],
