@@ -527,6 +527,9 @@ class Gate:
     sys.path.insert(0, opts["src"])
     import importlib.util
     from pathlib import Path
+    # Every child names `SCHEMA_VERSION` rather than the number, so the bootstrap
+    # imports it once here instead of each snippet importing its own copy.
+    from jasmine_core import SCHEMA_VERSION
     spec = importlib.util.spec_from_file_location("p4_memory_gate", opts["gate"])
     runner = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = runner
