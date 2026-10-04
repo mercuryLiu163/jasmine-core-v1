@@ -1197,10 +1197,16 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
                   "a delete that could not reach the engine claimed it completed")
         finally:
             conn.close()
-        check(gate.engine_document(bank, document_id) is not None,
-              "the document was removed by a transport that could not reach the engine")
     finally:
         gate.transport = live_transport
+
+    # "The delete did not remove the document" can only be asked of an engine that
+    # answers. This assertion used to sit inside the dead-transport block above, where
+    # it was guaranteed to raise `engine_unreachable` -- a transport pointed at
+    # 127.0.0.1:1 cannot confirm anything, so the case failed against every
+    # deployment rather than testing the thing it names.
+    check(gate.engine_document(bank, document_id) is not None,
+          "the document was removed by a delete that could not reach the engine")
 
     # Recovery: the engine is reachable again and the same job finishes.
     conn = gate.conn()
