@@ -486,13 +486,39 @@ class Gate:
         env["PYTHONPATH"] = f"{ROOT / 'src'}{os.pathsep}{env.get('PYTHONPATH', '')}".rstrip(
             os.pathsep)
         proc = subprocess.run([sys.executable, str(script), options],
-                              capture_output=True, text=True, timeout=180, env=env)
+                              capture_output=True, text=True,
+                              timeout=self.child_timeout(), env=env)
         if expect_exit is not None and proc.returncode != expect_exit:
             raise Failed(
                 f"{label}: the worker process exited {proc.returncode}, expected "
                 f"{expect_exit}; stderr={(proc.stderr or '')[-1200:]}"
             )
         return proc
+
+    def child_timeout(self) -> float:
+        """How long a spawned worker process may take.
+
+        A child that retains has to wait for the engine, and a real engine's
+        extraction is a model call: the deployment this Gate was written against
+        answered `retain` in well under the old fixed 180 s, but a local
+        llama.cpp extraction on the same engine measured 51 s to 510 s per
+        document depending on chunk length. A cap that expires mid-retain reports
+        a harness timeout as a P4 failure, which is the one thing this runner
+        exists not to do -- it cannot tell a slow engine from a stuck worker.
+
+        So the cap is the engine's own timeout plus room for the rest of the tick,
+        and the operator can still set it outright. `JASMINE_HINDSIGHT_TIMEOUT_SECONDS`
+        is the same number P4's transport uses, so by default the child is never
+        killed while its own engine call is still legitimately in flight.
+        """
+        configured = self.config.get("worker_timeout_seconds")
+        if configured is not None:
+            return float(configured)
+        try:
+            engine = float(config_from_env().timeout_seconds) if config_from_env() else 0.0
+        except (AttributeError, TypeError, ValueError):
+            engine = 0.0
+        return max(180.0, engine * 2 + 60.0)
 
     #: Source every child starts with: rebuild this same Gate in its own process.
     CHILD_BOOTSTRAP = """
