@@ -14,6 +14,7 @@ re-check it against a live deployment rather than take it on trust:
 | list units | `GET /v1/default/banks/{bank_id}/memories/list?document_id=` | `{items[], total, limit, offset}` |
 | invalidate unit | `PATCH /v1/default/banks/{bank_id}/memories/{memory_id}` `{"state":"invalidated"}` | memory unit |
 | list documents | `GET /v1/default/banks/{bank_id}/documents` | `{items[], total, ...}` |
+| list banks | `GET /v1/default/banks` | `{banks[], total, limit, offset}` |
 | delete document | `DELETE /v1/default/banks/{bank_id}/documents/{document_id}` | `{success, message, document_id, memory_units_deleted}` |
 
 Five consequences of that spec drive the whole design, and each is a decision
@@ -96,6 +97,10 @@ MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 #: Hindsight rejects a recall query over 500 tokens. Core checks first so the
 #: refusal is a Core 400 with a clear field name instead of a remote 422.
 MAX_QUERY_CHARS = 2000
+#: Reading the banks collection to exhaustion: the cap is a backstop, not an
+#: expectation, and hitting it is an error rather than an absence.
+BANK_PAGE_SIZE = 200
+BANK_PAGE_CAP = 50
 
 #: Hindsight's own default recall budget is 4096 tokens. A reflect request is an
 #: LLM call over the whole bank, so an unbounded `max_tokens` from an operator
@@ -495,7 +500,26 @@ class HindsightTransport:
 
     def recall(self, *, bank: BankRef, query: str, max_tokens: int,
                fact_types: tuple[str, ...], tags: tuple[str, ...]) -> list[EngineResult]:
-        """`POST /v1/default/banks/{bank_id}/memories/recall`."""
+        """`POST /v1/default/banks/{bank_id}/memories/recall`.
+
+        A bank the engine has never been asked to write answers 404, and that is
+        not an outage. Hindsight 0.10.2 creates a bank on its first retain, so a
+        deployment that has only ever stored project memory has no global bank at
+        all -- and the adapter recalls the global bank on every single call, on
+        purpose, because a global preference is Truth wherever it exists. Reading
+        that 404 as `engine_not_found` made the whole recall `degraded`, which is
+        what P3 is told when Memory is unavailable; on a healthy deployment with
+        no global memory yet, every Context Pack therefore arrived with no Memory
+        in it at all.
+
+        So a 404 here is resolved by *proving* which thing is missing, using the
+        banks collection: a collection that answers and does not list this bank
+        means the bank has nothing to say, which is `empty`, not a failure. A
+        collection that itself 404s means the route is wrong, and that stays the
+        error it was. Absence is still proven rather than assumed, exactly as
+        `get_document` proves a document's absence -- and `get_document` is left
+        alone, because there a 404 is the answer being sought.
+        """
         if len(query) > MAX_QUERY_CHARS:
             raise TransportError("query_too_long",
                                  f"the recall query exceeds {MAX_QUERY_CHARS} characters",
@@ -514,7 +538,12 @@ class HindsightTransport:
             # by a remote predicate.
             body["tags"] = list(tags)
             body["tags_match"] = "any"
-        payload = self._request("POST", self._bank_path(bank, "/memories/recall"), body=body)
+        try:
+            payload = self._request("POST", self._bank_path(bank, "/memories/recall"), body=body)
+        except TransportError as exc:
+            if exc.http_status == 404 and self._bank_is_absent(bank):
+                return []
+            raise
         if not isinstance(payload, dict) or not isinstance(payload.get("results"), list):
             raise TransportError("engine_protocol_error",
                                  "the recall response had no results array", retryable=False)
@@ -745,6 +774,72 @@ class HindsightTransport:
                 "that was requested",
                 retryable=False)
         return payload
+
+    def _bank_is_absent(self, bank: BankRef) -> bool:
+        """Prove this bank does not exist, rather than infer it from a 404.
+
+        The banks collection is the authority, and it is read to exhaustion for
+        the same reason the documents collection is: `limit` defaults small, so
+        one page listing every bank this caller can see is not evidence about a
+        bank that might be on page two. A collection that cannot be read at all,
+        that does not answer the paging fields, or that lists this bank anyway
+        leaves the question open -- and an open question is an error, never an
+        absence, because the whole point is not to turn a wrong path into a
+        successful "this bank has nothing".
+        """
+        target = scope_module.engine_bank_id(bank)
+        seen: list[str] = []
+        first_total: int | None = None
+        offset = 0
+        for _page in range(BANK_PAGE_CAP):
+            payload = self._request("GET", "/banks",
+                                    query={"limit": BANK_PAGE_SIZE, "offset": offset})
+            if not isinstance(payload, dict) or not isinstance(payload.get("banks"), list):
+                raise TransportError("engine_protocol_error",
+                                     "the banks collection did not return a banks array",
+                                     retryable=False)
+            total = payload.get("total")
+            echo_offset = payload.get("offset")
+            echo_limit = payload.get("limit")
+            for value in (total, echo_offset, echo_limit):
+                if isinstance(value, bool) or not isinstance(value, int):
+                    raise TransportError(
+                        "engine_protocol_error",
+                        "the banks collection did not report its paging fields, so a "
+                        "bank's absence cannot be proved", retryable=False)
+            if echo_offset != offset:
+                raise TransportError(
+                    "engine_protocol_error",
+                    "the banks collection answered from a different offset than the one "
+                    "requested", retryable=False)
+            if first_total is None:
+                first_total = total
+            elif total != first_total:
+                raise TransportError("engine_conflict",
+                                     "the banks collection changed while it was read",
+                                     retryable=True)
+            if total < 0:
+                raise TransportError("engine_protocol_error",
+                                     "the banks collection reported a negative total",
+                                     retryable=False)
+            for entry in payload["banks"]:
+                if not isinstance(entry, dict) or not isinstance(entry.get("bank_id"), str):
+                    # Skipping still advances the offset, so an unreadable row
+                    # would let every page read as covered.
+                    raise TransportError(
+                        "engine_protocol_error",
+                        "the banks collection listed an entry with no bank_id, so a "
+                        "bank's absence cannot be proved", retryable=False)
+                seen.append(entry["bank_id"])
+            if target in seen:
+                return False
+            offset += len(payload["banks"])
+            if offset >= total:
+                return target not in seen
+        raise TransportError("engine_protocol_error",
+                             f"the banks collection did not resolve within {BANK_PAGE_CAP} "
+                             "pages, so a bank's absence cannot be proved",
+                             retryable=False)
 
     def _confirm_documents_route(self, *, bank: BankRef, document_id: str) -> None:
         """Prove the 404 was about the document rather than about the route.

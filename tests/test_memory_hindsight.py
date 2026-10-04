@@ -67,6 +67,16 @@ class Wire(unittest.TestCase):
         self.transport = HindsightTransport(HindsightConfig(self.server.base_url,
                                                            timeout_seconds=5))
         self.bank = scope.project_bank("prj_" + "0" * 26)
+        # Hindsight creates a bank on its first retain and answers 404 for a bank it
+        # was never asked to write to. So the bank under test has to exist before it
+        # can be read, and the double now models that. Reading an absent bank used to
+        # answer an empty result set, which is more forgiving than the engine and is
+        # how "this bank has nothing" came to be indistinguishable from "this bank is
+        # broken" for so long. It also makes the document-absence test stronger: the
+        # collection now really does hold a document that is *not* the one asked for.
+        self.transport.retain(bank=self.bank, document_id="seeded", content="a seeded memory",
+                              context="", metadata={}, tags=(), memory_type="CONFIRMED_DECISION",
+                              timestamp=None)
 
     # -- version -----------------------------------------------------------
 
@@ -470,6 +480,71 @@ class EndToEndOverTheWire(MemoryTestCase):
         self.failed_step(project_id=self.project_id, task_id=self.task_id,
                          reason="callback task_id did not match the task")
 
+    def test_a_bank_the_engine_never_had_is_empty_not_a_failure(self) -> None:
+        """A bank nothing was ever retained into has nothing to say.
+
+        Hindsight creates a bank on its first retain, so a deployment that has
+        only project memory has no global bank -- and the adapter recalls the
+        global bank on every call, because a global preference is Truth wherever
+        it exists. Reading that 404 as a fault made the whole recall `degraded`,
+        which is the answer P3 is given when Memory is unavailable: on a perfectly
+        healthy deployment, every Context Pack arrived with no Memory in it.
+        """
+        from jasmine_core.memory.scope import BankRef
+
+        absent = BankRef(bank_id="jasmine-global", scope_kind="global", project_id=None)
+        self.assertEqual(
+            self.wire.recall(bank=absent, query="anything", max_tokens=100,
+                             fact_types=(), tags=()),
+            [], "a bank the engine has never heard of has no results, not an error")
+
+    def test_a_bank_that_does_exist_still_answers(self) -> None:
+        """The proof reads the banks collection; it must not shadow a real bank."""
+        from jasmine_core.memory.scope import BankRef
+
+        self.scan()
+        self.worker(transport=self.wire).run(max_ticks=6)
+        present = BankRef(bank_id=f"jasmine-project-{self.project_id}",
+                          scope_kind="project", project_id=self.project_id)
+        results = self.wire.recall(bank=present, query="callback", max_tokens=200,
+                                   fact_types=(), tags=())
+        self.assertTrue(results, "an existing bank still returns its units")
+
+    def test_a_wrong_route_is_still_an_error(self) -> None:
+        """Absence is proved, never inferred from the 404 alone.
+
+        If the banks collection itself cannot be read, the question "does this bank
+        exist" is open -- and an open question must not be answered "no". Otherwise
+        a mistyped prefix would make every bank look empty, which is the mirror of
+        the bug this replaced.
+        """
+        from jasmine_core.memory.scope import BankRef
+
+        absent = BankRef(bank_id="jasmine-global", scope_kind="global", project_id=None)
+        self.server.httpd.banks_collection_404 = True
+        with self.assertRaises(TransportError) as raised:
+            self.wire.recall(bank=absent, query="anything", max_tokens=100,
+                             fact_types=(), tags=())
+        self.assertEqual(raised.exception.code, "engine_not_found")
+        self.server.httpd.banks_collection_404 = False
+
+    def test_an_unreadable_banks_collection_proves_nothing(self) -> None:
+        """A row with no `bank_id` means coverage is not proved, not that it is empty.
+
+        Skipping that row would still advance the offset, so every page would read as
+        covered and a bank that exists could be reported absent -- the same shape of
+        bug the documents collection was hardened against.
+        """
+        from jasmine_core.memory.scope import BankRef
+
+        absent = BankRef(bank_id="jasmine-global", scope_kind="global", project_id=None)
+        self.server.httpd.banks_collection_junk = True
+        with self.assertRaises(TransportError) as raised:
+            self.wire.recall(bank=absent, query="anything", max_tokens=100,
+                             fact_types=(), tags=())
+        self.assertEqual(raised.exception.code, "engine_protocol_error")
+        self.server.httpd.banks_collection_junk = False
+
     def test_a_committed_failure_becomes_a_recallable_lesson(self) -> None:
         report = self.scan()
         self.assertEqual(len(report["created"]), 1)
@@ -812,7 +887,14 @@ class AbsenceIsProvenNotInferred(Wire):
             os.environ.pop("JASMINE_MEMORY_BANK_NAMESPACE", None)
 
         # Same Core bank, no namespace: a different engine bank, so the document
-        # that run-a wrote is not visible to it.
+        # that run-a wrote is not visible to it. The un-namespaced bank has to
+        # exist first -- an engine bank nothing was ever written to answers 404
+        # for its documents too, and then the absence cannot be *proved* at all,
+        # which is a different (and correct) refusal from "that document is not
+        # there". Isolation between two existing banks is the claim being made.
+        self.transport.retain(bank=bank, document_id="unrelated", content="c",
+                              context="x", metadata={}, tags=(),
+                              memory_type="FAILURE_LESSON", timestamp=None)
         self.assertIsNone(self.transport.get_document(bank=bank, document_id="doc-1"),
                           "two engine namespaces saw each other's document")
         self.assertEqual(bank.bank_id, canonical)

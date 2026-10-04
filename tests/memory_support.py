@@ -261,12 +261,29 @@ class _StubHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _require_bank(self, bank: str, suffix: str) -> bool:
+        """Hindsight answers 404 for a bank it was never asked to write to.
+
+        Modeled because the difference is the whole bug: the double used to answer
+        an empty result set for a bank that did not exist, so P4 never met the
+        404 and never had to decide what it meant.
+        """
+        if bank in self.server.banks or suffix in ("", "/"):
+            return True
+        self._send(404, {"detail": f"Bank '{bank}' not found"})
+        return False
+
     def _route(self) -> tuple[str, str] | None:
         # `self.path` carries the query string; the route table is path-only.
         path = self.path.partition("?")[0]
         match = BANK_PATH.match(path)
         if self.path == "/version":
             return "__version__", ""
+        if path == "/v1/default/banks":
+            # The banks *collection*. A bank exists here once something has been
+            # retained into it, which is what makes "this bank has nothing" a
+            # provable statement rather than an inference from a 404.
+            return "__banks__", ""
         if match is None:
             return None
         return match.group("bank"), (match.group("suffix") or "")
@@ -312,10 +329,24 @@ class _StubHandler(BaseHTTPRequestHandler):
         if route is None:
             return self._send(404, {"detail": "not found"})
         bank, suffix = route
+        if not self._require_bank(bank, suffix):
+            return
         if bank == "__version__":
             return self._send(200, {"api_version": "0.10.2", "features": {
                 "observations": True, "mcp": True, "worker": True,
                 "bank_config_api": True, "store_document_text": True}})
+        if bank == "__banks__":
+            if getattr(self.server, "banks_collection_404", False):
+                return self._send(404, {"detail": "not found"})
+            if getattr(self.server, "banks_collection_junk", False):
+                return self._send(200, {"banks": [{"name": "no id here"}],
+                                        "total": 1, "limit": 200, "offset": 0})
+            names = sorted(self.server.banks)
+            offset = int(self._query().get("offset", "0") or 0)
+            limit = int(self._query().get("limit", "200") or 200)
+            page = [{"bank_id": name} for name in names[offset:offset + limit]]
+            return self._send(200, {"banks": page, "total": len(names),
+                                    "limit": limit, "offset": offset})
         if suffix == "/memories/list":
             wanted = self._query().get("document_id", "")
             document = self.server.documents.get((bank, wanted))
@@ -344,6 +375,9 @@ class _StubHandler(BaseHTTPRequestHandler):
         if route is None:
             return self._send(404, {"detail": "not found"})
         bank, suffix = route
+        # `/memories` is the retain that *creates* the bank, so it is exempt.
+        if suffix != "/memories" and not self._require_bank(bank, suffix):
+            return
         body = self._read()
         if suffix == "/memories":
             return self._retain(bank, body)
@@ -410,6 +444,7 @@ class _StubHandler(BaseHTTPRequestHandler):
                 self.server.unit_counter += 1
                 units[f"mu_{self.server.unit_counter}"] = self._unit_for(
                     unit, {}, bank, document_id)
+        self.server.banks.add(bank)
         self.server.documents[(bank, document_id)] = {
             "id": document_id, "bank_id": bank, "original_text": item["content"],
             "content_hash": filtering.canonical.sha256_hex(item["content"]),
@@ -528,6 +563,18 @@ class StubHindsightServer:
         #: on every single recall -- which is how one bank's code ends up stamped
         #: on another bank's answer.
         self.httpd.failing_banks: set[str] = set()
+        #: Knobs for the banks collection, so the absence proof's own failure
+        #: modes are reachable: a collection that 404s (wrong path), and one that
+        #: answers with a row P4 cannot read (coverage not proved).
+        self.httpd.banks_collection_404 = False
+        self.httpd.banks_collection_junk = False
+        #: Banks that exist. A bank is created by its first retain and stays
+        #: created -- deleting every document in it does not uncreate it -- which
+        #: is what the real engine does. Scoping this to "banks with documents"
+        #: would make the double diverge from Hindsight again, and diverging in the
+        #: forgiving direction is how an absent bank came to read as empty for so
+        #: long.
+        self.httpd.banks: set[str] = set()
         self.thread = threading.Thread(
             target=self.httpd.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
         )
