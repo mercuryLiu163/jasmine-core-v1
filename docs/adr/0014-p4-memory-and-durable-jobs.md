@@ -775,9 +775,23 @@ defaults to `single_user`, so a worker that does not hand it
 `acl` deployment believes it is enforcing grants. In `acl` mode an actor with no
 row in `memory_project_actors` reads nothing, which is what the mode is for.
 
-**Still open:** `VERIFIED_OUTCOME` needs P1's `verified_transition` proof, which
-lives in P3's branch; sending one without it produces an item P3 filters as
-`unverified_outcome`, so only `FAILURE_LESSON` is emitted today.
+**A `VERIFIED_OUTCOME` cites its transition; it does not restate the proof.** P3
+accepts the item only when it names the `EXECUTED -> VERIFIED` transition, and
+`filter_memory` then re-derives the entire proof from that Event — the State
+lineage, the revisions, the body hash, and that this Evidence is among the
+results the step was verified on. So the worker locates the transition and cites
+it, in P4's existing idiom for that Event, and reads the payload the way P3 does
+(`result.evidence_ids`, and equal to the payload's own list, because P3 refuses
+anything else). It cites nothing when it cannot find one: a `PASS` result that no
+transition verified is not a verified outcome, and a claim shipped to be filtered
+downstream is indistinguishable, to the reader, from one that was believed.
+
+The division matters. A worker that also *checked* the lineage would be a second
+implementation of P1's integrity rule, free to drift from the first; P4 states
+what it saw and P3 decides whether it holds. Verified against P3's own
+`verified_transition` and `filter_memory`: P3 accepts the transition P4's writer
+produces and certifies it by id, and it needed no change to agree — the two
+writers already reduce the hashed payload to the same fields.
 
 Worker claim/retain/completion is *not* an Event: those rows live in the
 append-only `memory_job_attempts`, because a background worker holds a lease owner

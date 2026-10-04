@@ -113,10 +113,19 @@ What was done against the published P3 branch:
   validator enforces (exact key sets, bank echo, item cap, fact/Evidence
   equalities, digest recomputation).
 
-Two contract gaps, reported rather than worked around: P3's query carries no
-acting identity (the worker requires `JASMINE_MEMORY_ACTOR_ID` and degrades
-otherwise, never inventing one), and `VERIFIED_OUTCOME` needs P1's
-`verified_transition` from P3's branch, so only `FAILURE_LESSON` is emitted today.
+P3's query carries no acting identity, so the worker takes the actor from
+`JASMINE_MEMORY_ACTOR_ID` and degrades without it rather than inventing one.
+
+`VERIFIED_OUTCOME` is now emitted as well. It was deferred while P1's
+`verified_transition` lived only in P3's branch; that check turned out to be a
+*verification* P3 performs on the Event the item cites, not a proof the worker has
+to produce — so the worker cites the `EXECUTED -> VERIFIED` transition and P3
+re-derives the rest. Confirmed against P3's own code: `verified_transition`
+accepts the transition P4's writer produces, and `filter_memory` certifies the
+item with `verified_transition_event_id` set to that Event and no filtering. A
+`PASS` result with no verifying transition is still classified as a verified
+outcome by P4 — that is the honest reading of the Evidence — but it is not sent,
+because nothing verified it.
 
 ## Verification actually performed
 

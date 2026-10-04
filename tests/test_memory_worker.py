@@ -150,6 +150,91 @@ class P4sWorkerSpeaksP3sSlotProtocol(EndToEndOverTheWire):
                           "a FAILURE_LESSON may not claim VERIFIED qualification")
         self.assertEqual(mapped["provenance_digest"], _provenance_digest(mapped))
 
+    def _outcome_query(self) -> dict:
+        query = self._query()
+        query["types"] = ["VERIFIED_OUTCOME"]
+        return query
+
+    def _retain_outcome(self) -> tuple[dict, str, str]:
+        """A `VERIFIED_OUTCOME` backed by real PASS Evidence and a real transition.
+
+        The transition is written by P4's own state machine, so the item cites an
+        Event that happened rather than one the worker inferred — which is the
+        whole requirement, since P3 re-derives the proof from that Event.
+        """
+        _, evidence_id, transition_id = self.verified_step(
+            project_id=self.project_id, task_id=self.task_id)
+        self.scan()
+        self.worker(transport=self.wire).run(max_ticks=6)
+        backed = [item for item in self.store.items() if evidence_id in item["evidence_ids"]]
+        self.assertEqual(len(backed), 1,
+                         f"expected one Evidence-backed item, got "
+                         f"{[(i['memory_type'], i['evidence_ids']) for i in self.store.items()]}")
+        self.assertEqual(backed[0]["memory_type"], "VERIFIED_OUTCOME")
+        return backed[0], evidence_id, transition_id
+
+    def test_a_verified_outcome_names_the_transition_that_verified_it(self) -> None:
+        item, evidence_id, transition_id = self._retain_outcome()
+        completed = self._spawn(self._outcome_query())
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)
+
+        mapped = next((entry for entry in result["items"]
+                       if evidence_id in entry["evidence_ids"]), None)
+        self.assertIsNotNone(mapped, "the verified outcome was not offered to P3")
+        self.assertEqual(set(mapped), ITEM_KEYS)
+        self.assertEqual(mapped["memory_id"], item["memory_id"])
+        self.assertEqual(mapped["memory_type"], "VERIFIED_OUTCOME")
+        # P3 refuses the item as `unverified_outcome` unless it names the
+        # transition, and refuses again unless that id is among the sources.
+        self.assertEqual(mapped["verified_transition_event_id"], transition_id)
+        self.assertIn(transition_id, mapped["source_event_ids"])
+        row = self.conn.execute(
+            "SELECT source_event_id, change_event_id FROM evidence WHERE evidence_id=?",
+            (evidence_id,)).fetchone()
+        self.assertLessEqual({row["source_event_id"], row["change_event_id"]},
+                             set(mapped["source_event_ids"]))
+        # ...and it must be a transition that really verified this Evidence.
+        cited = json.loads(self.conn.execute(
+            "SELECT payload_json FROM events WHERE event_id=?",
+            (transition_id,)).fetchone()["payload_json"])
+        self.assertEqual(cited["to"], "VERIFIED")
+        self.assertEqual(cited["from"], "EXECUTED")
+        self.assertEqual(cited["step_id"], self.conn.execute(
+            "SELECT step_id FROM evidence WHERE evidence_id=?",
+            (evidence_id,)).fetchone()["step_id"])
+        self.assertIn(evidence_id, cited["result"]["evidence_ids"])
+        self.assertEqual(mapped["provenance_digest"], _provenance_digest(mapped))
+
+    def test_a_pass_result_nothing_verified_is_not_claimed_as_an_outcome(self) -> None:
+        """A PASS with no verifying transition is not a verified outcome.
+
+        P4 classifies it as one, because that is the honest reading of the
+        Evidence. What it must not do is *tell* P3 it was verified: the claim is
+        only worth anything if something verified it, and shipping one to be
+        filtered is indistinguishable downstream from shipping one believed.
+        """
+        evidence_id, _ = self.evidence(task_id=self.task_id, status="PASS",
+                                       detail="suite passed")
+        self.scan()
+        self.worker(transport=self.wire).run(max_ticks=6)
+        stored = [item for item in self.store.items() if evidence_id in item["evidence_ids"]]
+        self.assertEqual(len(stored), 1, [(i["memory_type"], i["evidence_ids"])
+                                          for i in self.store.items()])
+        self.assertEqual(stored[0]["memory_type"], "VERIFIED_OUTCOME",
+                         "P4 does read an unverified PASS as a verified outcome")
+        self.assertIsNone(self.conn.execute(
+            "SELECT step_id FROM evidence WHERE evidence_id=?",
+            (evidence_id,)).fetchone()["step_id"],
+            "this fixture is only meaningful with a step-less PASS")
+
+        completed = self._spawn(self._outcome_query())
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)
+        self.assertEqual([entry for entry in result["items"]
+                          if evidence_id in entry["evidence_ids"]], [],
+                         "a PASS nothing verified must not be claimed to P3")
+
     def test_the_fact_points_at_a_real_evidence_row(self) -> None:
         """P3 re-derives the fact from the database; a plausible one is not enough."""
         _, evidence_id = self._retain_lesson()

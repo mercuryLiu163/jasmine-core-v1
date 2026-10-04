@@ -648,6 +648,49 @@ class MemoryTestCase(unittest.TestCase):
             actor_id=self.system_actor)
         return record["evidence"]["evidence_id"], record["result_event"]["event_id"]
 
+    def verified_step(self, *, project_id: str, task_id: str,
+                      kind: str = "COMMAND_RESULT") -> tuple[str, str, str]:
+        """A step genuinely verified on PASS Evidence, through the real state machine.
+
+        Returns `(step_id, evidence_id, transition_event_id)`. This is the fixture
+        for `VERIFIED_OUTCOME`: the transition is a real `EXECUTED -> VERIFIED`
+        Event written by P4's own writer, so a worker citing it is citing
+        something that happened rather than something it inferred.
+        """
+        from jasmine_core.evidence import CurrentEvidenceValidator, EvidenceStore
+        from jasmine_core.state import StateStore
+
+        # The HTTP layer injects the real validator; the store alone refuses, so
+        # a verified step has to be reached the way production reaches it.
+        store = StateStore(self.conn, schema_version=9,
+                           evidence_validator=CurrentEvidenceValidator(self.conn))
+        criteria = {"requirements": [{"key": "run", "kind": kind, "required_result": "PASS"}]}
+        created = store.create_step(task_id, {"title": "s", "host_id": HOST,
+                                              "expected_revision": store.task(task_id)["revision"],
+                                              "acceptance_criteria": criteria},
+                                    actor_id=HUMAN, actor_kind="human", can_accept=True)
+        step_id = created["step"]["step_id"]
+        store.transition_step(step_id, {"status": "IN_PROGRESS", "expected_revision": 1,
+                                        "host_id": HOST},
+                              actor_id=HUMAN, actor_kind="human", can_accept=False)
+        self.workspace()
+        record = EvidenceStore(self.conn, schema_version=9).record_tool_result(
+            {"task_id": task_id, "step_id": step_id, "host_id": HOST, "codex_session_id": "cs",
+             "turn_id": f"t-{ids.new_id('evt')[-6:]}", "tool_use_id": ids.new_id("evt")[-8:],
+             "tool_name": "pytest", "tool_input": {"cmd": "pytest -q"},
+             "tool_response": {"exit_code": 0}, "kind": kind},
+            actor_id=self.system_actor)
+        evidence_id = record["evidence"]["evidence_id"]
+        store.transition_step(step_id, {"status": "EXECUTED", "expected_revision": 2,
+                                        "host_id": HOST},
+                              actor_id=HUMAN, actor_kind="human", can_accept=False)
+        verified = store.transition_step(step_id, {"status": "VERIFIED", "expected_revision": 3,
+                                                   "host_id": HOST},
+                                         actor_id=HUMAN, actor_kind="human", can_accept=False)
+        self.assertEqual(verified["step"]["status"], "VERIFIED")
+        self.assertEqual(verified["evidence_ids"], [evidence_id])
+        return step_id, evidence_id, verified["event"]["event_id"]
+
     def workspace(self) -> str:
         """A throwaway workspace root, which P1 fingerprint capture requires."""
         import os

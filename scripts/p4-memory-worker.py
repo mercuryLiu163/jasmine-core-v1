@@ -47,10 +47,14 @@ itself.
 `FAILURE_LESSON` is therefore emitted when the item has a resolving Evidence row
 whose status is `FAIL`; that is the whole of its requirement.
 
-`VERIFIED_OUTCOME` additionally needs P1's `verified_transition` proof, which
-lives in P3's branch and is not merged, so it is deliberately **not** emitted
-yet: sending it without the proof would produce an item P3 filters as
-`unverified_outcome` and would be guessing at a contract this worker does not own.
+`VERIFIED_OUTCOME` additionally names the `EXECUTED -> VERIFIED` transition that
+verified the step, and P3 refuses the item as `unverified_outcome` without it —
+`filter_memory` re-derives the proof from the Event it is given. So the worker
+locates that transition and cites it, and cites nothing when it cannot find one:
+a PASS result that no transition verified is not a verified outcome, and
+shipping the claim to be filtered downstream is indistinguishable, from the
+reader, from shipping one that was believed. The two halves are verified against
+P3's own `verified_transition` and `filter_memory`.
 
 Two fields are written to satisfy the contract's shape and are flagged for P3's
 review rather than treated as settled: `confidence` is `1.0` for every item
@@ -151,7 +155,7 @@ def _evidence_rows(conn: Any, evidence_ids: tuple[str, ...]) -> list[Any]:
     rows = []
     for evidence_id in evidence_ids:
         row = conn.execute(
-            "SELECT evidence_id, task_id, status, source_event_id, change_event_id"
+            "SELECT evidence_id, task_id, step_id, status, source_event_id, change_event_id"
             " FROM evidence WHERE evidence_id=?", (evidence_id,)).fetchone()
         if row is not None and row["change_event_id"]:
             rows.append(row)
@@ -173,6 +177,56 @@ def _fact_for(conn: Any, row: Any) -> dict[str, Any] | None:
             "evidence_id": row["evidence_id"], "key": "status", "value": status}
 
 
+def _verified_transition(conn: Any, row: Any) -> str | None:
+    """The `EXECUTED -> VERIFIED` transition this Evidence was verified by.
+
+    A `VERIFIED_OUTCOME` is only accepted when it names the transition that
+    verified the step, so the question is not "is there a transition somewhere"
+    but "is this Evidence one of the results that transition was verified on".
+    The lookup is P4's existing idiom for the same event (`evidence.py`), and
+    the payload test is P3's own: P3 calls `verified_transition` on the event we
+    cite and refuses the item as `unverified_outcome` if this Evidence is not in
+    its recorded results.
+
+    P3 re-derives the whole proof -- the State lineage, the revisions, the body
+    hash -- from its own copy of the Event. This worker cites the Event and does
+    not restate the proof, because a second implementation of an integrity rule
+    is a second thing that can drift from the first. Verified against P3's own
+    `verified_transition`, which accepts the transition P4's writer produces.
+    """
+    step_id = row["step_id"]
+    task_id = row["task_id"]
+    if not isinstance(step_id, str) or not isinstance(task_id, str):
+        return None
+    candidate = conn.execute(
+        "SELECT event_id, payload_json FROM events WHERE task_id=? AND"
+        " event_type='step.transitioned'"
+        " AND json_extract(payload_json,'$.step_id')=?"
+        " AND json_extract(payload_json,'$.from')='EXECUTED'"
+        " AND json_extract(payload_json,'$.to')='VERIFIED'"
+        " ORDER BY seq DESC LIMIT 1", (task_id, step_id)).fetchone()
+    if candidate is None:
+        return None
+    try:
+        payload = json.loads(candidate["payload_json"])
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    # P3 compares `result.evidence_ids` against the payload's own list and
+    # requires them equal; reading either alone would let a payload that P3
+    # rejects look like one it accepts.
+    results = payload.get("result")
+    results = results if isinstance(results, dict) else {}
+    cited = results.get("evidence_ids")
+    top = payload.get("evidence_ids")
+    if not isinstance(cited, list) or cited != top:
+        return None
+    if row["evidence_id"] not in cited:
+        return None
+    return candidate["event_id"]
+
+
 def _item_for(conn: Any, item: Any) -> dict[str, Any] | None:
     """One P4 recall item in the shape P3 re-verifies, or `None` to leave it out."""
     if item.memory_type not in _P3_ELIGIBLE:
@@ -182,15 +236,26 @@ def _item_for(conn: Any, item: Any) -> dict[str, Any] | None:
         fact = _fact_for(conn, row)
         if fact is None:
             continue
+        source_events = [row["source_event_id"], row["change_event_id"]]
         if item.memory_type == "FAILURE_LESSON":
             # P3 requires `not_failure_evidence` otherwise; it does not read the
             # engine's claim, it reads this row's status.
             if row["status"] != "FAIL":
                 continue
-            verified_transition = None
+            transition_event_id = None
         else:
-            # Needs P1's `verified_transition` proof, which lives in P3's branch.
-            continue
+            # P3 requires the transition in `source_event_ids` and rejects a
+            # verified outcome whose Evidence did not verify the step.
+            if row["status"] != "PASS":
+                continue
+            transition_event_id = _verified_transition(conn, row)
+            if transition_event_id is None:
+                # A PASS result nothing verified is not a verified outcome. It is
+                # not sent and left for P3 to reject, because shipping a claim
+                # and having it filtered is indistinguishable, downstream, from
+                # shipping one that was believed.
+                continue
+            source_events.append(transition_event_id)
         event = conn.execute("SELECT occurred_at FROM events WHERE event_id=?",
                              (row["change_event_id"],)).fetchone()
         if event is None or not isinstance(event["occurred_at"], str):
@@ -205,14 +270,14 @@ def _item_for(conn: Any, item: Any) -> dict[str, Any] | None:
             # P3 re-checks both against the database and against the Evidence's
             # task; citing the Evidence's own events is what makes that check
             # pass, and it is what the memory is actually about.
-            "source_event_ids": [row["source_event_id"], row["change_event_id"]],
+            "source_event_ids": source_events,
             "source_task_id": row["task_id"],
             "origin_rule_ref": None,
             "evidence_ids": [row["evidence_id"]],
             "backend_classification": None,
             "text": item.text[:MAX_TEXT],
             "confidence": 1.0,
-            "verified_transition_event_id": verified_transition,
+            "verified_transition_event_id": transition_event_id,
             "recorded_at": recorded_at,
             "fact": fact,
         }
