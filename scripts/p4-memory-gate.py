@@ -657,9 +657,9 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
     # `status == "ok"` assertion above it, which requires at least one item.
     decisions = [item for item in outcome.items if item.memory_type == "CONFIRMED_DECISION"]
     check(bool(decisions), f"the current Decision was not offered at all: {outcome.as_dict()}")
-    check(all(item.origin_rule_version == 2 for item in decisions),
+    check(all(item.provenance.origin_rule_version == 2 for item in decisions),
           "a superseded version of the Decision reached the Context Pack: "
-          f"{[(i.origin_rule_id, i.origin_rule_version) for i in decisions]}")
+          f"{[(i.provenance.origin_rule_id, i.provenance.origin_rule_version) for i in decisions]}")
     check(all(item.historical for item in decisions),
           "a Decision must reach the Context Pack as history, never as current Truth")
     record.receipts.append(gate.receipt("g02-recall", outcome.as_dict()))
