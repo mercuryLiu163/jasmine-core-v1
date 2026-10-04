@@ -406,8 +406,10 @@ class _StubHandler(BaseHTTPRequestHandler):
             # `replace`: the old document and every memory unit it produced are
             # deleted first, so the new units get new ids. P4 must therefore not
             # treat a memory unit id as stable across a retry.
-            self.server.unit_counter += 1
-            units[f"mu_{self.server.unit_counter}"] = self._unit_for(item, {}, bank, document_id)
+            for unit in self._extracted_units(item, bank, document_id):
+                self.server.unit_counter += 1
+                units[f"mu_{self.server.unit_counter}"] = self._unit_for(
+                    unit, {}, bank, document_id)
         self.server.documents[(bank, document_id)] = {
             "id": document_id, "bank_id": bank, "original_text": item["content"],
             "content_hash": filtering.canonical.sha256_hex(item["content"]),
@@ -418,6 +420,31 @@ class _StubHandler(BaseHTTPRequestHandler):
                                 "async": False, "operation_id": None,
                                 "usage": {"input_tokens": 100, "output_tokens": 40,
                                           "total_tokens": 140}})
+
+    def _extracted_units(self, item: dict[str, Any], bank: str,
+                         document_id: str) -> list[dict[str, Any]]:
+        """The facts one document yields, as distinct statements.
+
+        Split on sentence boundaries so the units differ in text the way real
+        extractions do -- P4 de-duplicates recalled facts by *text*, so units with
+        identical text would collapse upstream and never reach the identity check
+        this stub exists to exercise.
+        """
+        count = max(1, int(getattr(self.server, "units_per_document", 1)))
+        content = item["content"]
+        if count == 1:
+            return [item]
+        sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", content) if s.strip()]
+        units = []
+        for position in range(count):
+            # The marker goes *first*: `_unit_for` truncates unit text to 200
+            # characters, so a marker appended after the content is cut away and
+            # every unit ends up with identical text -- which P4 then de-duplicates
+            # by text, upstream, and the identity collision this exists to produce
+            # never reaches the code under test.
+            text = sentences[position % len(sentences)] if sentences else content
+            units.append({**item, "content": f"extracted fact {position + 1}: {text}"})
+        return units
 
     def _unit_for(self, item: dict[str, Any], _existing: dict[str, str], bank: str,
                   document_id: str) -> dict[str, Any]:
@@ -433,6 +460,8 @@ class _StubHandler(BaseHTTPRequestHandler):
         }
 
     def _recall(self, bank: str, body: dict[str, Any]) -> None:
+        if bank in getattr(self.server, "failing_banks", ()):  # per-bank outage
+            return self._send(503, {"detail": f"bank {bank} unavailable"})
         query = body.get("query")
         if not isinstance(query, str) or not query:
             return self._send(422, {"detail": "query is required"})
@@ -486,6 +515,19 @@ class StubHindsightServer:
         self.httpd.unit_counter = 0
         self.httpd.reflect_calls: list[tuple[str, Any]] = []
         self.httpd.unreachable = False
+        #: How many memory units one retained document extracts into. Real
+        #: Hindsight 0.10.2 extracts *several* facts from one document, every one
+        #: of them carrying that document's `jasmine_*` metadata -- so several
+        #: units share one `jasmine_memory_id`. One is the convenient case, not
+        #: the real one; a wire double that can only produce one unit per document
+        #: cannot express the identity collision that causes.
+        self.httpd.units_per_document = 1
+        #: Banks that answer 503 while their neighbours answer normally. P4's
+        #: adapter always recalls the global bank even when only a project bank
+        #: was asked for, so on a project-only deployment the global bank fails
+        #: on every single recall -- which is how one bank's code ends up stamped
+        #: on another bank's answer.
+        self.httpd.failing_banks: set[str] = set()
         self.thread = threading.Thread(
             target=self.httpd.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True
         )
@@ -496,6 +538,33 @@ class StubHindsightServer:
         host, port = self.httpd.server_address[:2]
         return f"http://{host}:{port}"
 
+    @property
+    def units_per_document(self) -> int:
+        """Proxied to the server, because the request handler reads it there."""
+        return int(self.httpd.units_per_document)
+
+    @units_per_document.setter
+    def units_per_document(self, value: int) -> None:
+        self.httpd.units_per_document = int(value)
+
+    def _unit_texts(self, memory_id: str) -> list[str]:
+        """The engine-side text of every unit carrying this P4 memory id."""
+        texts = []
+        for document in self.httpd.documents.values():
+            for unit in document["units"].values():
+                if unit.get("metadata", {}).get("jasmine_memory_id") == memory_id:
+                    texts.append(unit["text"])
+        return texts
+
+    def _unit_count(self, memory_id: str) -> int:
+        """How many engine units the stored documents carry for one P4 memory."""
+        total = 0
+        for (_bank, _document), document in self.httpd.documents.items():
+            for unit in document["units"].values():
+                if unit.get("metadata", {}).get("jasmine_memory_id") == memory_id:
+                    total += 1
+        return total
+
     def stop(self) -> None:
         self.httpd.shutdown()
         self.httpd.server_close()
@@ -503,6 +572,12 @@ class StubHindsightServer:
 
     def set_unreachable(self, value: bool) -> None:
         self.httpd.unreachable = value
+
+    def set_bank_failing(self, bank_id: str, *, failing: bool = True) -> None:
+        if failing:
+            self.httpd.failing_banks.add(bank_id)
+        else:
+            self.httpd.failing_banks.discard(bank_id)
 
 
 # -- Core fixture -------------------------------------------------------------

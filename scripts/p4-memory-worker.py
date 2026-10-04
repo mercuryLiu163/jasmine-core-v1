@@ -353,7 +353,13 @@ def main() -> int:
             # A bank P4 never reported on cannot be called `ok`: the answer would
             # be claiming something about a bank nobody asked.
             bank["status"] = _bank_status(outcome)
-            bank["error_code"] = getattr(outcome, "error_code", None) or error_code
+            # This bank's own code, never the top-level one. The top-level code is
+            # the first *failed* bank P4 recalled, and the adapter recalls the
+            # global bank even when P3 asked only for the project one. So the
+            # fallback stamped a project bank that had just answered with items
+            # and reported `engine_not_found` from a bank P3 never asked about --
+            # a degraded pack would then name the wrong bank as the failing one.
+            bank["error_code"] = getattr(outcome, "error_code", None)
             banks.append(bank)
         # P3 refuses `empty` with items, and refuses `ok` when a bank degraded.
         if any(bank["status"] == "degraded" for bank in banks):
@@ -446,10 +452,36 @@ def main() -> int:
                      f"{str(exc)[:300]}")
 
     items = []
+    # One P3 item per P3 memory identity, never one per engine memory unit.
+    #
+    # Hindsight extracts several facts from one document: a real 0.10.2 retain of
+    # one Failure Lesson produced two memory units for one `document_id`, and both
+    # carry the same `jasmine_memory_id`. P3's contract admits one item per
+    # `(bank_id, memory_id)` and refuses the whole envelope otherwise
+    # (`validate_result`: 'duplicate or undeclared Memory identity'), which the
+    # provider then reports as `memory_invalid_or_unavailable`. So a healthy engine
+    # holding a genuine, locally re-verifiable memory produced a degraded Context
+    # Pack with no Memory in it at all.
+    #
+    # Collapsing to the first occurrence is not a lossy choice about provenance:
+    # every unit of one document shares that document's `jasmine_*` metadata, so
+    # `_item_for` re-derives the same `fact` for each of them and P3 re-verifies
+    # the same Evidence row. `text` is engine prose, which P3 bounds but never
+    # renders, so the unit kept is the engine's own highest-ranked one.
+    seen_memory_ids = set()
     for item in outcome.items:
+        key = (item.bank_id, item.memory_id)
+        if key in seen_memory_ids:
+            continue
         mapped = _item_for(conn, item)
-        if mapped is not None:
-            items.append(mapped)
+        if mapped is None:
+            # Not marked as seen: whether an identity maps to an item depends on
+            # its Evidence row, which every unit of one document shares today. If
+            # that ever stops being true, marking first would silently drop the
+            # unit that does map.
+            continue
+        seen_memory_ids.add(key)
+        items.append(mapped)
         if len(items) >= MAX_ITEMS:
             break
     outcomes = {entry.bank_id: entry for entry in outcome.banks}

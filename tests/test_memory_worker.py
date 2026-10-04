@@ -206,6 +206,45 @@ class P4sWorkerSpeaksP3sSlotProtocol(EndToEndOverTheWire):
         self.assertIn(evidence_id, cited["result"]["evidence_ids"])
         self.assertEqual(mapped["provenance_digest"], _provenance_digest(mapped))
 
+    def test_several_engine_facts_for_one_memory_become_one_item(self) -> None:
+        """One document, several extracted facts, one P3 item.
+
+        Real Hindsight 0.10.2 extracts *several* memory units from one document and
+        every unit carries that document's `jasmine_memory_id`. P3 admits one item
+        per `(bank_id, memory_id)` and refuses the whole envelope otherwise
+        (`duplicate or undeclared Memory identity`), which the provider then reports
+        as `memory_invalid_or_unavailable` -- so before this was handled, a healthy
+        engine holding a genuine, locally re-verifiable memory produced a degraded
+        Context Pack with no Memory in it at all. No repo test could say so: the
+        wire double produced exactly one unit per document.
+        """
+        from jasmine_core.context.memory_provider import validate_result
+
+        self.server.units_per_document = 3
+        item, evidence_id = self._retain_lesson()
+
+        # The engine really does hand back several facts for the one document, as
+        # *distinct* text: units with equal text are de-duplicated upstream and the
+        # identity collision would never reach the worker at all.
+        self.assertEqual(self.server._unit_count(item["memory_id"]), 3,
+                         "the wire double must really extract several units")
+        texts = self.server._unit_texts(item["memory_id"])
+        self.assertEqual(len(set(texts)), 3, f"unit text must differ: {texts}")
+        completed = self._spawn(self._query())
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)
+
+        mapped = [entry for entry in result["items"] if evidence_id in entry["evidence_ids"]]
+        self.assertEqual(len(mapped), 1,
+                         f"one memory must reach P3 once, got {[e['memory_id'] for e in mapped]}")
+        self.assertEqual(mapped[0]["memory_id"], item["memory_id"])
+        identities = [(entry["bank"]["bank_id"], entry["memory_id"])
+                      for entry in result["items"]]
+        self.assertEqual(len(identities), len(set(identities)),
+                         "P3 refuses a result that names one identity twice")
+        # P3's own validator, not a restatement of its rule.
+        validate_result(result)
+
     def test_a_pass_result_nothing_verified_is_not_claimed_as_an_outcome(self) -> None:
         """A PASS with no verifying transition is not a verified outcome.
 
@@ -359,6 +398,32 @@ class P4sWorkerSpeaksP3sSlotProtocol(EndToEndOverTheWire):
         self.assertNotEqual(completed.returncode, 0)
         self.assertEqual(completed.stdout, b"",
                          "a worker without an identity still answered")
+
+    def test_a_bank_reports_its_own_failure_not_another_banks(self) -> None:
+        """A bank that answered is not stamped with a neighbour's error code.
+
+        The adapter always recalls `jasmine-global`, which does not exist on a
+        project-only deployment, so that recall fails on every single call. The
+        top-level `error_code` is therefore almost always set even when the bank
+        P3 asked about answered with items. Falling back to it per bank reported a
+        project bank that had just answered `ok` as `engine_not_found`, and a
+        degraded Context Pack would then name a bank P3 never asked about as the
+        one that failed.
+        """
+        self._retain_lesson()
+        self.server.set_bank_failing("jasmine-global")
+        try:
+            result = json.loads(self._spawn(self._query()).stdout)
+        finally:
+            self.server.set_bank_failing("jasmine-global", failing=False)
+
+        self.assertEqual(len(result["banks"]), 1)
+        bank = result["banks"][0]
+        self.assertEqual(bank["bank_id"], f"jasmine-project-{self.project_id}")
+        self.assertEqual(bank["status"], "ok")
+        self.assertIsNone(bank["error_code"],
+                          "a bank that answered has no error of its own to report")
+        self.assertTrue(result["items"], "the project bank's own items are still offered")
 
     def test_a_degraded_engine_still_answers_with_the_banks(self) -> None:
         """An engine that cannot be reached omits memory; it does not omit the answer."""
