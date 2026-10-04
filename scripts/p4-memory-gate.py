@@ -293,7 +293,7 @@ class Gate:
         conn = self.conn()
         try:
             # ObjectStore.create opens its own transaction (ADR 0002).
-            return ObjectStore(conn, schema_version=9).create(
+            return ObjectStore(conn, schema_version=SCHEMA_VERSION).create(
                 NewObject.project({"name": f"{self.run_id}-{name}", "host_id": self.host}),
                 actor_id=self.human)["object"]["project_id"]
         finally:
@@ -306,7 +306,7 @@ class Gate:
         origin_id = self.event(project_id, "user.prompt", content)
         conn = self.conn()
         try:
-            authority = AuthorityStore(conn, schema_version=9)
+            authority = AuthorityStore(conn, schema_version=SCHEMA_VERSION)
             proposed = authority.propose({
                 "rule_key": rule_key, "kind": "DECISION", "severity": "HARD",
                 "enforcement": "CONTEXT", "content": content, "matcher": {},
@@ -332,7 +332,7 @@ class Gate:
         """
         reports = []
         for _ in range(limit):
-            tick = MemoryWorker(conn, MemoryStore(conn, schema_version=9), self.transport,
+            tick = MemoryWorker(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION), self.transport,
                                 lease_owner=f"p4-gate-{self.case_id}").tick()
             if tick.claimed is None:
                 break
@@ -360,7 +360,7 @@ class Gate:
 
     def retained_item(self, conn: sqlite3.Connection) -> dict[str, Any]:
         """The Memory item the engine actually confirmed, or a failure saying why."""
-        everything = self.all_items(MemoryStore(conn, schema_version=9))
+        everything = self.all_items(MemoryStore(conn, schema_version=SCHEMA_VERSION))
         items = [item for item in everything if item["engine_state"] == "RETAINED"]
         if not items:
             states = [(item["memory_type"], item["engine_state"], item["last_error_code"])
@@ -379,10 +379,10 @@ class Gate:
 
         conn = self.conn()
         try:
-            task_id = ObjectStore(conn, schema_version=9).create(NewObject.task({
+            task_id = ObjectStore(conn, schema_version=SCHEMA_VERSION).create(NewObject.task({
                 "project_id": project_id, "title": f"p4 gate {self.case_id}",
                 "host_id": self.host}), actor_id=self.human)["object"]["task_id"]
-            state = StateStore(conn, schema_version=9)
+            state = StateStore(conn, schema_version=SCHEMA_VERSION)
             step = state.create_step(task_id, {"title": "device test", "host_id": self.host,
                                                "expected_revision": 1},
                                      actor_id=self.human, actor_kind="human",
@@ -393,7 +393,7 @@ class Gate:
             state.transition_step(step, {"status": "FAILED", "reason": reason,
                                          "expected_revision": 2, "host_id": self.host},
                                   actor_id=self.human, actor_kind="human", can_accept=False)
-            EvidenceStore(conn, schema_version=9).record_tool_result(
+            EvidenceStore(conn, schema_version=SCHEMA_VERSION).record_tool_result(
                 {"task_id": task_id, "step_id": step, "host_id": self.host,
                  "codex_session_id": self.case_id, "turn_id": f"t-{ids.new_id('evt')[-8:]}",
                  "tool_use_id": ids.new_id("evt")[-8:], "tool_name": "pytest",
@@ -401,7 +401,7 @@ class Gate:
                  "tool_response": {"exit_code": 1},
                  "artifact_uri": "workspace:/source.txt"},
                 actor_id=self.system)
-            job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=9))
+            job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
             report = job_store.enqueue_from_sources(eligibility.SourceRegistry())
             check(bool(report["created"]),
                   f"no eligible source was created; the committed failure did not reach the "
@@ -443,8 +443,8 @@ class Gate:
 
         conn = self.conn()
         try:
-            return MemoryAdapter(conn, MemoryStore(conn, schema_version=9), self.transport,
-                                 schema_version=9).recall(RecallRequest(
+            return MemoryAdapter(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION), self.transport,
+                                 schema_version=SCHEMA_VERSION).recall(RecallRequest(
                 project_id=project_id, actor_id=self.human, query=query, task_id=task_id,
                 max_tokens=max_tokens))
         finally:
@@ -567,9 +567,9 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
     # Retain the old Decision, then confirm a new one through the real Authority path.
     conn = gate.conn()
     try:
-        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=9))
+        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
         job_store.enqueue_from_sources(eligibility.SourceRegistry())
-        MemoryWorker(conn, MemoryStore(conn, schema_version=9), gate.transport,
+        MemoryWorker(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION), gate.transport,
                      lease_owner=gate.case_id).tick(scan=False)
     finally:
         conn.close()
@@ -579,7 +579,7 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
     # false FAIL against a healthy Core.
     conn = gate.conn()
     try:
-        authority = AuthorityStore(conn, schema_version=9)
+        authority = AuthorityStore(conn, schema_version=SCHEMA_VERSION)
         authority.transition(old_rule, "supersede", {
             "expected_revision": 2, "host_id": gate.host, "kind": "DECISION",
             "severity": "HARD", "enforcement": "CONTEXT",
@@ -591,7 +591,7 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
         conn.close()
     conn = gate.conn()
     try:
-        rule = AuthorityStore(conn, schema_version=9).get(old_rule)
+        rule = AuthorityStore(conn, schema_version=SCHEMA_VERSION).get(old_rule)
         record.rule_versions.append(f"{rule['rule_id']}:{rule['version']}")
         check(rule["version"] == 2, f"the old rule is still at version {rule['version']}")
         revision_before = conn.execute(
@@ -623,7 +623,7 @@ def case_g03(gate: Gate, record: CaseRecord) -> None:
           f"a bank with no such record must be empty, not ok: {outcome.as_dict()}")
     check(outcome.items == (), "recall invented an item for a record that does not exist")
     check(outcome.trace_id is not None, "an empty recall must still leave a trace")
-    trace = MemoryStore(gate.conn(), schema_version=9).trace(outcome.trace_id)
+    trace = MemoryStore(gate.conn(), schema_version=SCHEMA_VERSION).trace(outcome.trace_id)
     check(trace is not None and trace["status"] == "empty", "the empty trace is missing")
     record.receipts.append(gate.receipt("g03-empty-trace", trace or {}))
     raise Blocked(
@@ -648,9 +648,9 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
     for project in (project_a, project_b):
         conn = gate.conn()
         try:
-            jobs_module.JobStore(conn, MemoryStore(conn, schema_version=9)).enqueue_from_sources(
+            jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)).enqueue_from_sources(
                 eligibility.SourceRegistry())
-            MemoryWorker(conn, MemoryStore(conn, schema_version=9), gate.transport,
+            MemoryWorker(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION), gate.transport,
                          lease_owner=gate.case_id).tick(scan=False)
         finally:
             conn.close()
@@ -731,10 +731,10 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
     gate.transport = dead
     conn = gate.conn()
     try:
-        task_id = ObjectStore(conn, schema_version=9).create(NewObject.task({
+        task_id = ObjectStore(conn, schema_version=SCHEMA_VERSION).create(NewObject.task({
             "project_id": project, "title": "p4 g05 continues", "host_id": gate.host}),
             actor_id=gate.human)["object"]["task_id"]
-        state = StateStore(conn, schema_version=9)
+        state = StateStore(conn, schema_version=SCHEMA_VERSION)
         step = state.create_step(task_id, {"title": "s", "host_id": gate.host,
                                            "expected_revision": 1},
                                  actor_id=gate.human, actor_kind="human",
@@ -814,7 +814,7 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
 
     conn = gate.conn()
     try:
-        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=9))
+        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
         check(job_store.jobs() == [],
               "a dead process still left a job: the enqueue is not where it should be")
         check(job_store.cursor() == 0,
@@ -825,17 +825,17 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
 
     scan = json.loads(gate.spawn_worker(
         """
-        from jasmine_core import db
+        from jasmine_core import SCHEMA_VERSION, db
         from jasmine_core.memory import eligibility, jobs as jobs_module
         from jasmine_core.memory.store import MemoryStore
 
         g = boot()
         conn = db.connect(g.db_path)
         report = jobs_module.JobStore(
-            conn, MemoryStore(conn, schema_version=9)).enqueue_from_sources(
+            conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)).enqueue_from_sources(
             eligibility.SourceRegistry())
         outcomes = [t.outcome for t in g.drain(conn)]
-        store = MemoryStore(conn, schema_version=9)
+        store = MemoryStore(conn, schema_version=SCHEMA_VERSION)
         retained = [i for i in runner.Gate.all_items(store)
                     if i["engine_state"] == "RETAINED"]
         jobs = jobs_module.JobStore(conn, store).jobs()
@@ -860,10 +860,10 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
                           rule_key="deps.pinned")
     conn = gate.conn()
     try:
-        report = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=9)
+        report = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)
                                       ).enqueue_from_sources(eligibility.SourceRegistry())
         check(len(report["created"]) == 1, f"the second source produced no job: {report}")
-        pending = [j for j in jobs_module.JobStore(conn, MemoryStore(conn, schema_version=9)
+        pending = [j for j in jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)
                                                    ).jobs() if j["status"] == "PENDING"]
         check(len(pending) == 1, f"expected one pending job, got {pending}")
         interrupted_job = pending[0]["job_id"]
@@ -899,7 +899,7 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
 
         g = boot()
         conn = db.connect(g.db_path)
-        MemoryWorker(conn, MemoryStore(conn, schema_version=9),
+        MemoryWorker(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION),
                      DieAfterRemoteWrite(g.transport),
                      lease_owner="p4-gate-g06-doomed").tick(scan=False)
         os._exit(99)
@@ -908,7 +908,7 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
 
     conn = gate.conn()
     try:
-        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=9))
+        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
         crashed = job_store.job(interrupted_job)
         check(crashed["status"] == "RUNNING",
               f"a crashed worker did not leave the job RUNNING: {crashed['status']}")
@@ -935,7 +935,7 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
 
         g = boot()
         conn = db.connect(g.db_path)
-        store = MemoryStore(conn, schema_version=9)
+        store = MemoryStore(conn, schema_version=SCHEMA_VERSION)
         report = MemoryWorker(conn, store, g.transport,
                               lease_owner="p4-gate-g06-restarted").tick(scan=False)
         job = jobs_module.JobStore(conn, store).job(opts["job_id"])
@@ -963,7 +963,7 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
 
     conn = gate.conn()
     try:
-        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=9))
+        job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
         attempts = job_store.attempts(interrupted_job)
         bank = scope.project_bank(project)
         units_after = gate.engine_units(bank, document_id)
@@ -1024,13 +1024,13 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
             body: dict[str, Any] = {"expected_revision": revision, "host_id": gate.host}
             if reason:
                 body["reason"] = reason
-            return getattr(MemoryLifecycle(conn, MemoryStore(conn, schema_version=9)), action)(
+            return getattr(MemoryLifecycle(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)), action)(
                 memory_id, body, actor_id=gate.human, actor_kind="human", host_id=gate.host)
         finally:
             conn.close()
 
     def revision() -> int:
-        return MemoryStore(gate.conn(), schema_version=9).item(memory_id)["revision"]
+        return MemoryStore(gate.conn(), schema_version=SCHEMA_VERSION).item(memory_id)["revision"]
 
     # pin: ordering only, no recall effect, and refused on an obsolete item.
     lifecycle("pin", 1)
@@ -1048,7 +1048,7 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
     except errors.RevisionConflict:
         stale_refused = True
     check(stale_refused, "a stale expected_revision was accepted")
-    check(MemoryStore(gate.conn(), schema_version=9).item(memory_id)["revision"] == 2,
+    check(MemoryStore(gate.conn(), schema_version=SCHEMA_VERSION).item(memory_id)["revision"] == 2,
           "a refused stale revision still changed the item")
 
     # obsolete: excluded from recall immediately, provenance intact, engine
@@ -1074,7 +1074,7 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
     deleted = lifecycle("delete", revision(), "user asked")
     check(deleted["memory"]["status"] == "DELETED", "delete did not take")
     check(deleted["job"]["kind"] == "delete", "delete did not queue the engine work")
-    check(MemoryStore(gate.conn(), schema_version=9).item(memory_id)["remote_deleted_at"] is None,
+    check(MemoryStore(gate.conn(), schema_version=SCHEMA_VERSION).item(memory_id)["remote_deleted_at"] is None,
           "delete claimed the remote copy was already gone")
 
     # Remote delete failure first: the engine becomes unreachable while the
@@ -1097,7 +1097,7 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
         conn = gate.conn()
         try:
             jobs = [j for j in jobs_module.JobStore(
-                conn, MemoryStore(conn, schema_version=9)).jobs()
+                conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)).jobs()
                 if j["memory_id"] == memory_id and j["kind"] == "delete"]
             check(len(jobs) == 1, f"expected one delete job, got {jobs}")
             failed_delete = jobs[0]
@@ -1106,7 +1106,7 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
                   f"engine; it should be waiting to retry, not DONE and not wedged")
             check(failed_delete["last_error_code"] is not None,
                   "the failed delete recorded no error code")
-            item = MemoryStore(conn, schema_version=9).item(memory_id)
+            item = MemoryStore(conn, schema_version=SCHEMA_VERSION).item(memory_id)
             check(item["status"] == "DELETED", f"the item is {item['status']}")
             check(item["remote_deleted_at"] is None,
                   "a delete that could not reach the engine claimed it completed")
@@ -1126,11 +1126,11 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
                 " WHERE memory_id=? AND kind='delete' AND status='PENDING'", (memory_id,))
         gate.drain(conn)
         final_job = [j for j in jobs_module.JobStore(
-            conn, MemoryStore(conn, schema_version=9)).jobs()
+            conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)).jobs()
             if j["memory_id"] == memory_id and j["kind"] == "delete"][0]
         check(final_job["status"] == "DONE",
               f"the delete job is {final_job['status']} after the engine recovered")
-        final_item = MemoryStore(conn, schema_version=9).item(memory_id)
+        final_item = MemoryStore(conn, schema_version=SCHEMA_VERSION).item(memory_id)
         check(final_item["engine_state"] == "DELETED",
               f"the item is {final_item['engine_state']} after a recovered delete")
         check(final_item["remote_deleted_at"] is not None,
@@ -1144,9 +1144,9 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
         check(conn.execute("SELECT 1 FROM events WHERE event_id=?",
                            (source_event_id,)).fetchone() is not None,
               "delete removed the source Raw Event; it must not")
-        item = MemoryStore(conn, schema_version=9).item(memory_id)
+        item = MemoryStore(conn, schema_version=SCHEMA_VERSION).item(memory_id)
         check(item["engine_state"] == "DELETED", f"the item is {item['engine_state']}")
-        sources = MemoryStore(conn, schema_version=9).sources_of(memory_id)
+        sources = MemoryStore(conn, schema_version=SCHEMA_VERSION).sources_of(memory_id)
         check(bool(sources), "the tombstone lost its provenance")
         for action in ("obsolete", "delete", "pin", "unpin"):
             refused = False
@@ -1169,7 +1169,7 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
             registry.Registry(conn).upsert_actor(agent, kind="agent", home_host_id=gate.host)
         refused = False
         try:
-            MemoryLifecycle(conn, MemoryStore(conn, schema_version=9)).pin(
+            MemoryLifecycle(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)).pin(
                 ids.new_id("mem"), {"expected_revision": 1, "host_id": gate.host},
                 actor_id=agent, actor_kind="agent", host_id=gate.host)
         except errors.ForbiddenActorKind:

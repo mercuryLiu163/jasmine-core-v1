@@ -11,6 +11,7 @@ from __future__ import annotations
 import unittest
 
 from memory_support import HUMAN, MemoryTestCase
+from jasmine_core import SCHEMA_VERSION
 from jasmine_core.memory import provenance, scope, tokens
 from jasmine_core.memory.transport import TransportError
 from jasmine_core.memory.types import EngineResult, RecallRequest, ReflectRequest
@@ -31,7 +32,7 @@ class BankDerivation(MemoryTestCase):
     def test_a_task_in_another_project_is_not_resolvable(self) -> None:
         a, b = self.project("a"), self.project("b")
         task_b = self.task(b)
-        from jasmine_core import errors
+        from jasmine_core import SCHEMA_VERSION, errors
 
         with self.assertRaises(errors.NotFound) as caught:
             scope.resolve_banks(self.conn, project_id=a, task_id=task_b, actor_id=HUMAN)
@@ -178,12 +179,12 @@ class RecallJudgement(MemoryTestCase):
     def test_recall_does_not_touch_authority_state_or_revision(self) -> None:
         from jasmine_core import authority
 
-        before_rule = authority.AuthorityStore(self.conn, schema_version=9).get(self.rule_id)
+        before_rule = authority.AuthorityStore(self.conn, schema_version=SCHEMA_VERSION).get(self.rule_id)
         before_task = self.conn.execute("SELECT revision, status FROM tasks WHERE task_id=?",
                                         (self.task_id,)).fetchone()
         self.engine_row("V1 uses Hindsight as the long-term memory engine")
         self.recall()
-        after_rule = authority.AuthorityStore(self.conn, schema_version=9).get(self.rule_id)
+        after_rule = authority.AuthorityStore(self.conn, schema_version=SCHEMA_VERSION).get(self.rule_id)
         after_task = self.conn.execute("SELECT revision, status FROM tasks WHERE task_id=?",
                                        (self.task_id,)).fetchone()
         self.assertEqual(before_rule, after_rule)
@@ -288,7 +289,7 @@ class RecallJudgement(MemoryTestCase):
         from jasmine_core.authority import AuthorityStore
 
         # VC-14: the user discussed engine A, then confirmed engine B.
-        authority = AuthorityStore(self.conn, schema_version=9)
+        authority = AuthorityStore(self.conn, schema_version=SCHEMA_VERSION)
         authority.transition(self.rule_id, "supersede", {
             "expected_revision": 2, "host_id": "hst_01K742SG00BMSDET9BTP151RAR",
             "kind": "DECISION", "severity": "HARD", "enforcement": "CONTEXT",

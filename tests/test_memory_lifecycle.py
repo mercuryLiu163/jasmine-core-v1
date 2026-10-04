@@ -9,7 +9,7 @@ actor can do. The remote read-back half of P4-G07 needs a real engine.
 from __future__ import annotations
 
 from memory_support import HOST, HUMAN, MemoryTestCase
-from jasmine_core import db, errors, ids
+from jasmine_core import SCHEMA_VERSION, db, errors, ids
 
 
 class LifecycleCase(MemoryTestCase):
@@ -283,7 +283,7 @@ class Permissions(LifecycleCase):
         from jasmine_core.memory.jobs import JobStore
         from jasmine_core.memory.eligibility import SourceRegistry
 
-        store = MemoryStore(self.conn, schema_version=9)
+        store = MemoryStore(self.conn, schema_version=SCHEMA_VERSION)
         acl = MemoryLifecycle(self.conn, store, mode=scope.ACL)
         # A second project's Memory, and a grant for the first project only.
         other = self.project("other")

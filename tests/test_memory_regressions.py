@@ -13,7 +13,7 @@ import sqlite3
 import unittest
 
 from memory_support import HOST, HUMAN, MemoryTestCase
-from jasmine_core import clock, db, errors, ids
+from jasmine_core import SCHEMA_VERSION, clock, db, errors, ids
 from jasmine_core.memory import eligibility, filtering, jobs as jobs_module
 from jasmine_core.memory import scope as scope_module
 from jasmine_core.memory.store import MemoryStore
@@ -38,7 +38,7 @@ class RecoveryScanCursor(MemoryTestCase):
     def _many_refusals(self, count: int) -> None:
         from jasmine_core.state import StateStore
 
-        state = StateStore(self.conn, schema_version=9)
+        state = StateStore(self.conn, schema_version=SCHEMA_VERSION)
         for index in range(count):
             step = state.create_step(self.task_id,
                                      {"title": f"s{index}", "host_id": HOST,
@@ -121,7 +121,7 @@ class RecoveryScanCursor(MemoryTestCase):
                 return getattr(self._inner, name)
 
         watched = Watched(self.conn)
-        store = MemoryStore(self.conn, schema_version=9)
+        store = MemoryStore(self.conn, schema_version=SCHEMA_VERSION)
         jobs_module.JobStore(watched, store).enqueue_from_sources(
             eligibility.SourceRegistry(), limit=50)
         self.assertEqual(watched.reads_in_transaction, [],
@@ -298,7 +298,7 @@ class NoConfiguredEngine(MemoryTestCase):
         from jasmine_core.memory.adapter import MemoryAdapter
         from jasmine_core.memory.types import Provenance, RetainRequest
 
-        adapter = MemoryAdapter(self.conn, self.store, self.transport, schema_version=9)
+        adapter = MemoryAdapter(self.conn, self.store, self.transport, schema_version=SCHEMA_VERSION)
         request = RetainRequest(
             bank=scope_module.project_bank(self.project_id), document_id="d",
             memory_type="FAILURE_LESSON", content="x",
@@ -353,7 +353,7 @@ class AclIsEnforcedOnBothPaths(MemoryTestCase):
         self.active_decision(project_id=self.b, rule_key="engine.b")
         self.scan()
         self.grant_project(self.a, actor_id=self.agent_actor)
-        self.store_a = MemoryStore(self.conn, schema_version=9)
+        self.store_a = MemoryStore(self.conn, schema_version=SCHEMA_VERSION)
         self.acl = MemoryLifecycle(self.conn, self.store_a, mode=scope_module.ACL)
 
     def test_an_ungranted_project_is_refused_on_the_write_path(self) -> None:
@@ -619,7 +619,7 @@ class GateRunnerG02WouldNotHaveFailed(MemoryTestCase):
         old_rule, _ = self.active_decision(project_id=project,
                                            content="V1 uses mem0 for long-term memory",
                                            rule_key="engine")
-        authority = AuthorityStore(self.conn, schema_version=9)
+        authority = AuthorityStore(self.conn, schema_version=SCHEMA_VERSION)
         authority.transition(old_rule, "supersede", {
             "expected_revision": 2, "host_id": HOST, "kind": "DECISION",
             "severity": "HARD", "enforcement": "CONTEXT",
@@ -656,7 +656,7 @@ class GateRunnerG02WouldNotHaveFailed(MemoryTestCase):
         old_rule, _ = self.active_decision(project_id=project,
                                            content="V1 uses mem0 for long-term memory",
                                            rule_key="engine")
-        AuthorityStore(self.conn, schema_version=9).transition(old_rule, "supersede", {
+        AuthorityStore(self.conn, schema_version=SCHEMA_VERSION).transition(old_rule, "supersede", {
             "expected_revision": 2, "host_id": HOST, "kind": "DECISION",
             "severity": "HARD", "enforcement": "CONTEXT",
             "content": "V1 uses Hindsight for long-term memory", "matcher": {},
@@ -677,7 +677,7 @@ class GateRunnerG02WouldNotHaveFailed(MemoryTestCase):
         old_rule, _ = self.active_decision(project_id=project,
                                            content="V1 uses mem0 for long-term memory",
                                            rule_key="engine")
-        AuthorityStore(self.conn, schema_version=9).transition(old_rule, "supersede", {
+        AuthorityStore(self.conn, schema_version=SCHEMA_VERSION).transition(old_rule, "supersede", {
             "expected_revision": 2, "host_id": HOST, "kind": "DECISION",
             "severity": "HARD", "enforcement": "CONTEXT",
             "content": "V1 uses Hindsight for long-term memory", "matcher": {},
@@ -714,7 +714,7 @@ class GateRunnerG02WouldNotHaveFailed(MemoryTestCase):
         rule, _ = self.active_decision(project_id=project,
                                        content="V1 uses mem0 for long-term memory",
                                        rule_key="engine")
-        AuthorityStore(self.conn, schema_version=9).transition(rule, "retire", {
+        AuthorityStore(self.conn, schema_version=SCHEMA_VERSION).transition(rule, "retire", {
             "expected_revision": 2, "host_id": HOST,
         }, actor_id=HUMAN)
 
@@ -743,7 +743,7 @@ class TwoRealConnectionsStillWork(MemoryTestCase):
         from jasmine_core.models import NewEvent
 
         with db.transaction(other):
-            EventStore(other, schema_version=9).append(NewEvent(
+            EventStore(other, schema_version=SCHEMA_VERSION).append(NewEvent(
                 event_type="user.prompt", source_system="other", source_event_id=None,
                 occurred_at=clock.now(), actor_id=HUMAN, actor_kind="human", host_id=HOST,
                 payload={"text": "concurrent write"}))
