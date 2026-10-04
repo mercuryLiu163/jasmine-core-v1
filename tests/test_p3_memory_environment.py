@@ -91,9 +91,20 @@ print(json.dumps({'status':'empty','provider_id':os.environ['JASMINE_MEMORY_PROV
             value['environment']={**self.environment,'JASMINE_CORE_DB':str(self.root/'missing.db')};write()
             with self.assertRaises(InvalidRequest):MemoryProvider.from_deployment()
     def test_native_provider_starts_actual_p4_worker_with_explicit_settings(self):
-        p4=Path(__file__).resolve().parents[2]/'_worktrees'/'p4-memory'
+        # P3's layout puts this file in the P3 checkout, whose P4 sibling is at
+        # `<parent>/_worktrees/p4-memory`. On the integrated branch this same file
+        # is *inside* the P4 checkout, so that path never resolves and the test
+        # skipped for a reason that had nothing to do with the contract. Look in
+        # both places, and let an operator name the checkout outright.
+        override=os.environ.get('JASMINE_P4_CHECKOUT')
+        candidates=[]
+        if override:candidates.append(Path(override))
+        here=Path(__file__).resolve()
+        candidates.append(here.parents[2]/'_worktrees'/'p4-memory')
+        candidates.append(here.parents[1])
+        p4=next((path for path in candidates if (path/'scripts'/'p4-memory-worker.py').is_file()),None)
+        if p4 is None:self.skipTest('optional isolated P4 checkout is unavailable')
         worker=p4/'scripts'/'p4-memory-worker.py'
-        if not worker.is_file():self.skipTest('optional isolated P4 checkout is unavailable')
         code='''import sqlite3,json,sys
 from memory_support import MemoryTestCase,HUMAN
 x=MemoryTestCase();x.setUp()
