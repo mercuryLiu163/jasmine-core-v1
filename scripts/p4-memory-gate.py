@@ -423,7 +423,8 @@ class Gate:
         assert self.transport is not None
         return self.transport.get_document(bank=bank, document_id=document_id)
 
-    def engine_units(self, bank: scope.BankRef, document_id: str) -> list[dict[str, Any]]:
+    def engine_units(self, bank: scope.BankRef, document_id: str,
+                     *, state: str | None = None) -> list[dict[str, Any]]:
         """Every unit of the document.
 
         The Gate's assertions are counts — "exactly one document", "every unit
@@ -434,7 +435,8 @@ class Gate:
         """
         assert self.transport is not None
         return self.transport.list_all_document_memories(bank=bank,
-                                                         document_id=document_id)
+                                                         document_id=document_id,
+                                                         state=state)
 
     def recall(self, project_id: str, query: str, *, task_id: str | None = None,
                max_tokens: int = 600):
@@ -1140,9 +1142,16 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
         gate.drain(conn)
     finally:
         conn.close()
-    units = gate.engine_units(bank, document_id)
-    check(bool(units) and all(u.get("state") == "invalidated" for u in units),
-          f"the engine did not soft-retire its units: {units}")
+    # Asked for by name: the engine's default listing *excludes* invalidated units,
+    # so reading it here would prove nothing -- an engine that ignored the invalidate
+    # entirely would answer exactly the same way. The soft-retire is only observable
+    # by asking for the retired units.
+    retired = gate.engine_units(bank, document_id, state="invalidated")
+    check(bool(retired), "the engine holds no retired unit for an obsoleted document")
+    check(all(u.get("state") == "invalidated" for u in retired),
+          f"the engine did not soft-retire its units: {retired}")
+    check(gate.engine_units(bank, document_id) == [],
+          "a soft-retired unit is still in the default listing")
     check(gate.engine_document(bank, document_id) is not None,
           "obsolete must not physically remove the document")
 

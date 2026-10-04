@@ -200,9 +200,14 @@ class Wire(unittest.TestCase):
         units = self.transport.list_document_memories(bank=self.bank, document_id="doc-1")
         self.transport.invalidate_memory(bank=self.bank, memory_id=units[0]["id"],
                                          reason="obsoleted")
-        after = self.transport.list_document_memories(bank=self.bank, document_id="doc-1")
+        # By name, because the engine's default listing excludes invalidated units.
+        after = self.transport.list_document_memories(bank=self.bank, document_id="doc-1",
+                                                      state="invalidated")
         self.assertEqual(after[0]["state"], "invalidated",
                          "the engine keeps the unit; invalidate is not a delete")
+        self.assertEqual(self.transport.list_document_memories(
+            bank=self.bank, document_id="doc-1"), [],
+            "the default listing must not offer a retired unit")
         receipt = self.transport.delete_document(bank=self.bank, document_id="doc-1")
         self.assertEqual(receipt["memory_units_deleted"], 1)
         self.assertIsNone(self.transport.get_document(bank=self.bank, document_id="doc-1"))
@@ -582,8 +587,16 @@ class EndToEndOverTheWire(MemoryTestCase):
                                   {"expected_revision": 1, "host_id": HOST, "reason": "wrong"},
                                   actor_id=HUMAN, actor_kind="human", host_id=HOST)
         self.worker(transport=self.wire, lease_owner="w2").tick()
-        units = self.wire.list_document_memories(bank=bank, document_id=item["document_id"])
-        self.assertEqual(units[0]["state"], "invalidated")
+        # Asked for by name: the engine's default listing excludes invalidated units,
+        # and it has to -- otherwise an engine that ignored the invalidate entirely
+        # would be indistinguishable from one that honoured it.
+        retired = self.wire.list_document_memories(bank=bank, document_id=item["document_id"],
+                                                   state="invalidated")
+        self.assertTrue(retired, "the soft-retire left no retired unit behind")
+        self.assertTrue(all(u["state"] == "invalidated" for u in retired), retired)
+        self.assertEqual(self.wire.list_document_memories(
+            bank=bank, document_id=item["document_id"]), [],
+            "a soft-retired unit is still in the default listing")
         # Soft retire is not removal: the document is still readable.
         self.assertIsNotNone(self.wire.get_document(bank=bank, document_id=item["document_id"]))
 

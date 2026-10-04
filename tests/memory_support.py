@@ -351,6 +351,15 @@ class _StubHandler(BaseHTTPRequestHandler):
             wanted = self._query().get("document_id", "")
             document = self.server.documents.get((bank, wanted))
             units = list(document["units"].values()) if document else []
+            # Hindsight's default listing *excludes* invalidated units; they have to
+            # be asked for by name. The double used to return them either way, so a
+            # soft-retire that never reached the engine looked exactly like one that
+            # did -- which is how G07's own lifecycle check could not fail.
+            state_filter = self._query().get("state")
+            if state_filter:
+                units = [u for u in units if u.get("state") == state_filter]
+            else:
+                units = [u for u in units if u.get("state") != "invalidated"]
             return self._send(200, self._paged(units, default_limit=200))
         if suffix.startswith("/documents/"):
             document = self.server.documents.get((bank, _unquote(suffix.split("/", 2)[2])))

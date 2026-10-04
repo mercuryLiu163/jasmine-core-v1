@@ -594,24 +594,37 @@ class HindsightTransport:
                 "based_on_ids": memory_ids}
 
     def list_document_memories(self, *, bank: BankRef, document_id: str,
-                               limit: int = 200, offset: int = 0) -> list[dict[str, Any]]:
-        """One page of `GET .../memories/list?document_id=...`, envelope checked."""
+                               limit: int = 200, offset: int = 0,
+                               state: str | None = None) -> list[dict[str, Any]]:
+        """One page of `GET .../memories/list?document_id=...`, envelope checked.
+
+        `state` is the engine's own `state` filter. It is **not** set by default,
+        because the default listing excludes `invalidated` units: a caller that
+        wants to see what a soft-retire did has to ask for those units by name.
+        That asymmetry is the engine's, and it is why the lifecycle check has to
+        be explicit -- reading the default listing after an invalidate proves
+        nothing, since an engine that ignored the invalidate entirely would answer
+        exactly the same way.
+        """
         payload = self._document_page(bank=bank, document_id=document_id,
-                                      limit=limit, offset=offset)
+                                      limit=limit, offset=offset, state=state)
         return payload["items"]
 
     def _document_page(self, *, bank: BankRef, document_id: str, limit: int,
-                       offset: int) -> dict[str, Any]:
+                       offset: int, state: str | None = None) -> dict[str, Any]:
+        query: dict[str, Any] = {"document_id": document_id, "limit": limit,
+                                 "offset": offset}
+        if state is not None:
+            query["state"] = state
         payload = self._request(
-            "GET", self._bank_path(bank, "/memories/list"),
-            query={"document_id": document_id, "limit": limit, "offset": offset},
+            "GET", self._bank_path(bank, "/memories/list"), query=query,
         )
         payload = validated_page(payload, requested_offset=offset, what="memory listing")
         _validated_units(payload["items"], document_id=document_id)
         return payload
 
-    def list_all_document_memories(self, *, bank: BankRef,
-                                   document_id: str) -> list[dict[str, Any]]:
+    def list_all_document_memories(self, *, bank: BankRef, document_id: str,
+                                   state: str | None = None) -> list[dict[str, Any]]:
         """Every unit of a document — or a refusal, never a partial answer.
 
         Driven by `total`, not by a short page. A server is free to return fewer
@@ -630,7 +643,8 @@ class HindsightTransport:
         seen: set[str] = set()
         for _ in range(_MAX_DOCUMENT_PAGES):
             payload = self._document_page(bank=bank, document_id=document_id,
-                                          limit=UNIT_PAGE_SIZE, offset=offset)
+                                          limit=UNIT_PAGE_SIZE, offset=offset,
+                                          state=state)
             total = _page_total(payload)
             if first_total is None:
                 first_total = total
