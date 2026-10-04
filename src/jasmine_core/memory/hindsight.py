@@ -628,17 +628,80 @@ class HindsightTransport:
         }
 
     def get_document(self, *, bank: BankRef, document_id: str) -> dict[str, Any] | None:
-        """`GET /v1/default/banks/{bank_id}/documents/{document_id}`; None when absent."""
+        """`GET .../documents/{document_id}`; `None` only when it is proven absent.
+
+        Three answers used to collapse into `None`, and `None` means "the
+        document is not there" to every caller:
+
+        * a 404, whatever caused it — the route, the bank or the document;
+        * a 200 whose body was not an object, such as the collection endpoint's
+          `{items: []}`, which happens whenever the path resolves one level
+          short;
+        * a 200 with `null`.
+
+        The second and third are protocol errors and say nothing about any
+        document. The first is only read as absence after the documents
+        collection — same prefix, one level up — answers, which distinguishes
+        "this document is gone" from "this path does not exist here". Without
+        that, a wrong endpoint plus an empty unit listing is enough to record a
+        successful delete over a document that is still in the bank.
+        """
         try:
             payload = self._request(
                 "GET",
                 self._bank_path(bank, f"/documents/{urllib.parse.quote(document_id, safe='')}"),
             )
         except TransportError as exc:
+            if exc.http_status != 404:
+                raise
+            self._confirm_documents_route(bank=bank, document_id=document_id)
+            return None
+        if not isinstance(payload, dict):
+            raise TransportError(
+                "engine_protocol_error",
+                "the document read-back was not a JSON object",
+                retryable=False)
+        # `DocumentResponse` requires `id`. Without it a 200 carrying anything
+        # else — an error body, a list, a document-shaped echo of the wrong
+        # thing — would still be accepted as this document.
+        if not isinstance(payload.get("id"), str) or not payload["id"]:
+            raise TransportError(
+                "engine_protocol_error",
+                "the document read-back did not carry the required `id`",
+                retryable=False)
+        return payload
+
+    def _confirm_documents_route(self, *, bank: BankRef, document_id: str) -> None:
+        """Prove the 404 was about the document rather than about the route.
+
+        Raises unless the documents collection answers and does not list this
+        document. A 404 from the collection means the path itself is missing, so
+        nothing has been shown about any document; a collection that *does* list
+        this id means the per-document read contradicts itself. Both are protocol
+        errors, not absence.
+        """
+        try:
+            payload = self._request("GET", self._bank_path(bank, "/documents"))
+        except TransportError as exc:
             if exc.http_status == 404:
-                return None
+                raise TransportError(
+                    "engine_protocol_error",
+                    "the documents collection did not answer, so this 404 cannot "
+                    "be read as an absent document",
+                    retryable=False) from exc
             raise
-        return payload if isinstance(payload, dict) else None
+        if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+            raise TransportError(
+                "engine_protocol_error",
+                "the documents collection did not return an items array",
+                retryable=False)
+        for entry in payload["items"]:
+            if isinstance(entry, dict) and entry.get("id") == document_id:
+                raise TransportError(
+                    "engine_protocol_error",
+                    "the document is listed by the collection but its read-back "
+                    "returned 404",
+                    retryable=False)
 
 
 def _require_fields(payload: dict[str, Any], names: tuple[str, ...], what: str) -> None:

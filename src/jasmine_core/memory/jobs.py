@@ -333,8 +333,10 @@ class JobStore:
             budget_used = int(job["retry_count"]) + 1
             cursor = self._conn.execute(
                 "UPDATE memory_jobs SET status='RUNNING', lease_owner=?, lease_expires_at=?,"
-                " retry_count=?, updated_at=? WHERE job_id=? AND status=?",
-                (owner, expires, budget_used, stamp, job["job_id"], job["status"]),
+                " retry_count=?, claim_generation=?, updated_at=?"
+                " WHERE job_id=? AND status=?",
+                (owner, expires, budget_used, attempt_number, stamp,
+                 job["job_id"], job["status"]),
             )
             if cursor.rowcount != 1:
                 return None
@@ -365,13 +367,20 @@ class JobStore:
         match, and they are read in the same transaction that writes.
         """
         row = self._conn.execute(
-            "SELECT lease_owner, retry_count, status FROM memory_jobs WHERE job_id=?",
+            "SELECT lease_owner, claim_generation, status FROM memory_jobs WHERE job_id=?",
             (job.job["job_id"],),
         ).fetchone()
         if row is None:  # pragma: no cover - FK guarantees the row exists
             raise errors.NotFound("memory_job", job.job["job_id"])
+        # `claim_generation`, not `retry_count`. The budget is reset by
+        # `request_retry`, so after a reset the same worker claims again with
+        # the same `retry_count` it had the first time — its *older* claim then
+        # passes this check and can commit the newer attempt's job, writing the
+        # older receipt over the newer work. The generation is bumped on every
+        # claim and never reset, so it separates claims rather than allowances.
         held = (row["lease_owner"] == job.job["lease_owner"]
-                and int(row["retry_count"]) == int(job.job["retry_count"]))
+                and int(row["claim_generation"] or 0)
+                == int(job.job.get("claim_generation") or 0))
         if not held:
             raise errors.InvalidStateTransition(
                 "this Memory job was reclaimed by another worker while its lease "
@@ -392,9 +401,9 @@ class JobStore:
             "UPDATE memory_jobs SET status='DONE', lease_owner=NULL, lease_expires_at=NULL,"
             " last_error_code=NULL, safe_error_summary=NULL, receipt_json=?, completed_at=?,"
             " updated_at=? WHERE job_id=? AND status='RUNNING' AND lease_owner=?"
-            " AND retry_count=?",
+            " AND claim_generation=?",
             (canonical_json(receipt), at, at, job.job["job_id"],
-             job.job["lease_owner"], int(job.job["retry_count"])),
+             job.job["lease_owner"], int(job.job.get("claim_generation") or 0)),
         )
         if cursor.rowcount != 1:
             raise errors.InvalidStateTransition(
@@ -416,7 +425,8 @@ class JobStore:
 
     def _attempt_number_for(self, job: dict[str, Any]) -> int:
         """The number this job's next attempt record must carry."""
-        return max(self._latest_attempt_number(job["job_id"]), int(job["retry_count"]), 1)
+        return max(self._latest_attempt_number(job["job_id"]),
+                   int(job.get("claim_generation") or 0), 1)
 
     def _attempt(self, job_id: str, attempt_number: int, phase: str, outcome: str, *,
                  owner: str, at: str, receipt: dict[str, Any] | None = None,
@@ -510,9 +520,10 @@ class JobStore:
                 "UPDATE memory_jobs SET status=?, lease_owner=NULL, lease_expires_at=NULL,"
                 " last_error_code=?, safe_error_summary=?, next_attempt_at=?, completed_at=?,"
                 " updated_at=? WHERE job_id=? AND status='RUNNING' AND lease_owner=?"
-                " AND retry_count=?",
+                " AND claim_generation=?",
                 (status, error_code, summary, next_at, None if retry else stamp, stamp,
-                 job.job["job_id"], job.job["lease_owner"], int(job.job["retry_count"])),
+                 job.job["job_id"], job.job["lease_owner"],
+                 int(job.job.get("claim_generation") or 0)),
             )
             if cursor.rowcount != 1:
                 raise errors.InvalidStateTransition(

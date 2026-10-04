@@ -278,6 +278,20 @@ Transport safety, each item a real failure mode:
   works and does not;
 * a response over 4 MiB is refused rather than truncated, and a body that is not
   JSON becomes `engine_protocol_error` with the body **not** quoted;
+* **absence is proven, never inferred.** `get_document` used to return `None`
+  for three different answers — a 404 whatever caused it, a 200 whose body was
+  not an object (the collection endpoint's `{items: []}` is what a path
+  resolved one level short returns), and a 200 with `null` — and `None` means
+  "not there" to every caller, including the worker recording `DELETED`. A
+  non-object body is now `engine_protocol_error`; an object without the
+  required `id` is too; and a 404 is read as absence only after
+  `GET .../documents` — same prefix, one level up — answers with an items array
+  that does not list this document. A 404 from that collection means the path
+  itself is missing here, and a collection that *does* list the id means the two
+  reads contradict each other; both are protocol errors. Together with the unit
+  listing the worker already checks, a wrong endpoint or an unrecognised bank
+  can no longer be turned into a successful delete over a document that is
+  still in the bank;
 * every failure becomes a stable `error_code` plus a redacted, clipped
   `safe_error_summary`. A remote error never becomes a Core 500 and is never
   mapped onto "Truth is unavailable".
@@ -326,10 +340,23 @@ being yours:
   `WHERE job_id=? AND status='RUNNING'` after worker B has claimed the same job —
   and write `FAILED` over B's in-flight retain or `DONE` over B's result, with
   the rowcount check passing because the row really is `RUNNING`. `_finish`,
-  `fail` and `mark_document_deleted` all now match `lease_owner` *and*
-  `retry_count` in the same transaction, and `_assert_claim_held` runs before the
-  item write as well, so a stale worker cannot leave a changed engine state
-  behind even when the job row update would later have been refused.
+  `fail` and `mark_document_deleted` match the claim's identity in the same
+  transaction, and `_assert_claim_held` runs before the item write as well, so a
+  stale worker cannot leave a changed engine state behind even when the job row
+  update would later have been refused.
+
+  The identity is **`claim_generation`, not `retry_count`**. The first version
+  fenced on `lease_owner` *and* `retry_count`, which looked strict and was
+  wrong in one specific way: `retry_count` is the *budget*, and `request_retry`
+  zeroes it so an exhausted job gets another allowance. After a manual retry the
+  same worker claims again with the same `retry_count` it had the first time, so
+  its **older** claim passes the fence — and can commit the newer attempt's job
+  and write its own older receipt over the newer work. `claim_generation` is
+  bumped on every claim and never reset; it comes from the monotonic attempt
+  number of that claim, which is also the number recorded under
+  `memory_job_attempts.attempt_number`, so fencing and the attempt history name
+  the same claim. The budget stays a budget, and the sequence stays a sequence —
+  two questions, two answers, and neither may be asked of the other.
 
 **Remote success before DONE.** The document id is deterministic
 (`sha256(source_event_id)`, scoped by engine and type) and the engine upserts on

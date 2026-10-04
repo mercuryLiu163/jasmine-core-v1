@@ -505,3 +505,63 @@ class EndToEndOverTheWire(MemoryTestCase):
         units = self.wire.list_document_memories(bank=bank,
                                                 document_id=claimed.job["document_id"])
         self.assertEqual(len(units), 1, "one remote document, not two")
+
+
+class AbsenceIsProvenNotInferred(Wire):
+    """A 404 or an odd 200 is not, by itself, a document that is gone.
+
+    The worker records `DELETED` from this answer, so anything that collapses
+    into `None` becomes a claim that the remote copy is gone — and a wrong
+    endpoint plus an empty unit listing is enough to produce exactly that while
+    the document is still in the bank.
+    """
+
+    def test_a_200_that_is_not_a_document_is_a_protocol_error(self) -> None:
+        for body in ([], None, {"detail": "not found"}, {"id": None}):
+            with self.subTest(body=body):
+                with patch.object(HindsightTransport, "_request", return_value=body):
+                    with self.assertRaises(TransportError) as caught:
+                        self.transport.get_document(bank=self.bank, document_id="doc-1")
+                self.assertEqual(caught.exception.code, "engine_protocol_error")
+                self.assertFalse(caught.exception.retryable)
+
+    def test_a_404_is_read_as_absence_only_when_the_collection_answers(self) -> None:
+        gone = TransportError("engine_not_found", "no such document", retryable=False,
+                              http_status=404)
+        missing_route = TransportError("engine_not_found", "not found", retryable=False,
+                                       http_status=404)
+
+        def script(*responses):
+            queue = iter(responses)
+
+            def next_reply(*args, **kwargs):
+                reply = next(queue)
+                if isinstance(reply, Exception):
+                    raise reply
+                return reply
+
+            return next_reply
+
+        # The collection answers with an empty page: the bank and the `/documents`
+        # prefix are alive, so the per-document 404 is about this document.
+        with patch.object(HindsightTransport, "_request", side_effect=script(
+                gone, {"items": [], "total": 0, "limit": 100, "offset": 0})):
+            self.assertIsNone(self.transport.get_document(bank=self.bank,
+                                                          document_id="doc-1"))
+
+        # The collection 404s too: the path does not exist here, so nothing has
+        # been shown about any document.
+        with patch.object(HindsightTransport, "_request", side_effect=script(
+                gone, missing_route)):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.get_document(bank=self.bank, document_id="doc-1")
+        self.assertEqual(caught.exception.code, "engine_protocol_error")
+
+        # The collection *lists* the document while its read-back 404s: the two
+        # reads contradict each other, and neither may be reported as absence.
+        with patch.object(HindsightTransport, "_request", side_effect=script(
+                gone, {"items": [{"id": "doc-1"}], "total": 1,
+                       "limit": 100, "offset": 0})):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.get_document(bank=self.bank, document_id="doc-1")
+        self.assertEqual(caught.exception.code, "engine_protocol_error")

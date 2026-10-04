@@ -134,6 +134,12 @@ STATEMENTS = (
         next_attempt_at    TEXT NOT NULL,
         lease_owner        TEXT,
         lease_expires_at   TEXT,
+        -- Monotonic claim generation: bumped on every claim and never reset.
+        -- `retry_count` is the *budget* and `request_retry` zeroes it, so a
+        -- `(lease_owner, retry_count)` fence cannot tell two claims by the same
+        -- worker apart once the budget has been rewound — the older claim then
+        -- passes and can commit the newer attempt's job with the older receipt.
+        claim_generation   INTEGER NOT NULL DEFAULT 0,
         last_error_code    TEXT,
         safe_error_summary TEXT,
         receipt_json       TEXT CHECK(receipt_json IS NULL OR json_valid(receipt_json)),

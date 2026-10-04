@@ -1211,3 +1211,79 @@ class TheQueueSurvivesEveryWayToLoseTheObligation(MemoryTestCase):
                                                            item["document_id"])),
                              "the document is still there while Core says it is gone")
         self.assertNotIn(report.outcome, ("deleted",))
+
+
+class ClaimGenerationSeparatesTwoClaimsByTheSameWorker(MemoryTestCase):
+    """A reset allowance must not restore a dead claim's identity.
+
+    `request_retry` zeroes `retry_count` so an exhausted job gets another
+    allowance — and the same worker then claims again with the *same*
+    `retry_count` it had the first time. Fencing compared exactly that pair, so
+    the older claim passed, committed the newer attempt's job and wrote its own
+    older receipt over it.
+    """
+
+    def test_the_older_claim_cannot_finish_the_newer_attempt(self) -> None:
+        project = self.project()
+        self.active_decision(project_id=project)
+        # `max_attempts=1`, so the first failure is terminal and the retry below
+        # is a genuine re-queue rather than a normal backoff.
+        self.job_store().enqueue_from_sources(eligibility.SourceRegistry(),
+                                                       max_attempts=1)
+
+        first = self.job_store().claim_due(owner="worker-A")
+        self.assertIsNotNone(first)
+        self.assertEqual(first.job["claim_generation"], 1)
+        self.job_store().fail(first, error_code="engine_rejected",
+                              safe_error_summary="rejected")
+        job = self.job_store().jobs()[0]
+        self.assertEqual(job["status"], "FAILED")
+        self.assertEqual(job["retry_count"], 1)
+
+        self.job_store().request_retry(job["job_id"], actor_id=HUMAN,
+                                       actor_kind="human", host_id=HOST)
+        second = self.job_store().claim_due(owner="worker-A")   # the same worker
+        self.assertIsNotNone(second)
+        self.assertEqual(second.job["claim_generation"], 2, "the generation must move")
+        self.assertEqual(second.job["retry_count"], 1,
+                          "the budget is reset, which is precisely why it cannot fence")
+
+        # The stale claim has the same owner and the same `retry_count` as the
+        # live one — only the generation tells them apart.
+        item_id = second.item["memory_id"]
+        state_before = self.store.item(item_id)["engine_state"]
+        for label, act in (
+            ("complete", lambda: self.job_store().complete(
+                first, receipt={"document_id": first.job["document_id"]})),
+            ("fail", lambda: self.job_store().fail(
+                first, error_code="engine_http_error", safe_error_summary="stale")),
+        ):
+            with self.subTest(label=label):
+                with self.assertRaises(errors.InvalidStateTransition):
+                    act()
+            # The refusal has to happen *before* the item write, not after it.
+            # `_finish`'s WHERE would refuse the job row either way; only the
+            # up-front check stops the engine state moving first.
+            self.assertEqual(self.store.item(item_id)["engine_state"], state_before,
+                             f"a stale `{label}` rewrote the item before being refused")
+
+        after = self.job_store().jobs()[0]
+        self.assertEqual(after["status"], "RUNNING", "the stale claim finished the job")
+        self.assertEqual(after["lease_owner"], "worker-A")
+        self.assertEqual(after["claim_generation"], 2)
+        self.assertIsNone(after["receipt"],
+                          "the older claim's receipt was written over the newer attempt")
+
+        # The live claim still commits, and its receipt is the one recorded.
+        self.job_store().complete(second,
+                                  receipt={"document_id": second.job["document_id"],
+                                           "proof": "from the live claim"})
+        final = self.job_store().jobs()[0]
+        self.assertEqual(final["status"], "DONE")
+        self.assertEqual(final["receipt"]["proof"], "from the live claim")
+        attempts = self.job_store().attempts(final["job_id"])
+        self.assertEqual(len({(a["attempt_number"], a["phase"]) for a in attempts}),
+                         len(attempts), "an attempt number was reused")
+        self.assertEqual([a["attempt_number"] for a in attempts
+                          if a["phase"] == "CLAIMED"], [1, 2],
+                         "each claim must be recorded under its own number")
