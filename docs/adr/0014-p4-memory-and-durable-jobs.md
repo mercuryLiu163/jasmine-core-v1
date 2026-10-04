@@ -42,7 +42,22 @@ thing.
 | `ITEM_STATUSES` | `ACTIVE`, `OBSOLETE`, `DELETED` |
 | `ENGINE_STATES` | `PENDING_RETAIN`, `RETAINED`, `RETAIN_FAILED`, `DELETE_PENDING`, `DELETED`, `DELETE_FAILED` |
 | `RECALL_STATUSES` | `ok`, `empty`, `degraded`, `skipped` |
-| `FILTER_REASONS` | see `memory/types.py`; 13 machine-readable reasons |
+| `FILTER_REASONS` | see `memory/types.py`; 15 machine-readable reasons |
+
+**An optional namespace on every bank id.**
+`JASMINE_MEMORY_BANK_NAMESPACE`, defaulting to empty, prefixes whatever
+`project_bank` and `global_bank` return, so a Core that never sets it produces
+exactly the ids it produced before this existed. It exists because project banks
+were already unique per run — they embed a fresh `prj_` ULID — while
+`jasmine-global` was shared by every run *and* by the production deployment, so
+a Gate reading it was reading somebody else's memory while reporting its own
+namespace. A Gate sets it from the operator's `bank_suffix`, which is what makes
+that suffix shape addresses rather than sit in a config being checked for
+non-emptiness. `scope_of` and `is_valid_bank_id` strip the prefix before
+matching, so in a namespaced deployment a bare `jasmine-global` is no longer
+ours — somebody else's address, and refused. A malformed value is refused rather
+than dropped, because a silently empty namespace falls back to exactly the
+un-namespaced ids this exists to prevent.
 
 A type *name* is not evidence. `REQUIRED_PROVENANCE` binds each type to the
 committed fact it needs, and §4 implements those checks.
@@ -232,6 +247,16 @@ Five consequences, each a decision:
    `DONE`, item `RETAINED`, an Inspector reporting a document that was never
    stored. Delete was worse — `bool(payload.get("success", True))` turned an
    explicit `false` into `true`. A missing or non-boolean `success` is now
+**Reflect reports a reason, not an address.** `ReflectOutcome.error_code` is what
+a caller branches on, and it was filled with the *bank id* of the first failed
+bank — a value no error table contains, while the actual reason sat per-bank
+where nothing looked. It now carries that bank's `error_code`.
+
+**A type we do not have is a refusal.** `recall` accepted an unrecognised
+`types` entry, queried the engine for it, and the local type filter then matched
+nothing — so a typo returned `empty`, indistinguishable from a bank with nothing
+to say. `InvalidRequest` names the offender instead.
+
    `engine_protocol_error` (the response does not follow the schema), an explicit
    `false` is `engine_retain_failed` / `engine_delete_failed`, and a queued
    `async=true` is `engine_retain_unconfirmed`. None of them can reach `DONE`.
@@ -466,6 +491,38 @@ can cover a remote write and a local insert, so that gap is real. It needs an
 operator-side read-back sweep and is named as not covered rather than assumed
 away.
 
+**Every field that decides coverage is checked, not just read.** `total` that is
+negative satisfies the stopping rule `offset >= total` on page one and reports
+the whole collection covered without reading a row; a `total` that *changes*
+between pages means the pages do not describe one set; a page larger than its own
+stated `limit`, a mismatched `offset` echo, or more rows than the `total` allows
+each break the partition. The first three are schema violations; a changing total
+is concurrency, and that is `engine_conflict` — retryable, re-read from the start
+once the bank settles.
+
+**One page is not the document.** `list_document_memories` takes a `limit`, and
+obsoleting "every unit" against the default page left every unit past it `valid`
+while the job recorded `INVALIDATED`; the same truncation is how a document with
+units on a later page gets called absent. `_all_document_units` reads until a
+short page, with a page cap that raises rather than loops, and the invalidate
+path, the compensation path, the delete receipt and the absence check all use it.
+
+**A delete that provably failed is retryable.** When the read-back shows the
+document is still there, the 404 that started the exchange did not mean "the
+document is missing" — it meant the delete did not do what it said. Re-raising it
+recorded `engine_not_found`, a *permanent* code, so a delete that failed
+conclusively ended `FAILED` with no automatic retry. It is now
+`engine_delete_failed`, retryable, because what went wrong is that the document
+is *present*.
+
+**The worker's report list is bounded.** `run()` collects a `WorkerReport` per
+tick so a test and `jasmine-core memory drain` can assert on what happened — but
+a service runs with `max_ticks=None` until it is stopped, and appending every
+tick, including every `idle`, grows without limit for a value nobody can read
+until the process exits. A bounded run's history is capped by `max_ticks`
+already; an unbounded one keeps the most recent `_REPORT_HISTORY`, and the `log`
+callback remains the durable record.
+
 **Retry.** A retryable failure returns to `PENDING` with exponential backoff
 (30 s, doubling, clamped to 3600 s, ±25% jitter, clamped *after* the jitter) and a
 `next_attempt_at`; a permanent failure or an exhausted budget goes to `FAILED`.
@@ -554,6 +611,17 @@ bank selector exist, so an agent cannot retain arbitrary text, choose
 issuance, because an agent must not curate what it will be shown and must not be
 the thing that decides a history question is worth an LLM call.
 
+**Engine free text is withheld from an Agent key on every path.**
+`safe_error_summary` is redacted and clipped, but it is still text the engine
+produced about Core's own request, so an Agent key does not get it. Withholding
+it on the job *list* while the job detail, the item list and the item detail
+returned it is not a policy anyone can rely on: the same job appears at the top
+level of `GET /jobs/{id}`, inside `attempts` there, and inside `jobs` on an item
+detail. Responses therefore pass through one walker (`_respond`) at each return,
+so no nesting can be forgotten. `error_code` beside it is a stable enumerable
+value and is deliberately *not* withheld — an Agent needs to know a retain
+failed, just not what the engine said about it.
+
 New error: `503 memory_deployment_not_ready`.
 
 `GET /v1/health` says nothing about Memory. A dead Hindsight must not make the
@@ -625,6 +693,15 @@ the parsed source:
   separates a complete run from a partial one (Context pack, real Tool Evidence,
   real session, management audit) so a future operator knows exactly what to
   supply rather than finding a green verdict that means less than it appears to.
+* **`PASS` is a statement about a stage, so only a full clean run may say it.**
+  It used to mean "every case I happened to select passed", which let
+  `--case P4-G06` produce a stage PASS with six cases never looked at, and let
+  `--allow-dirty` — the flag that exists precisely so a development run cannot be
+  mistaken for the frozen candidate — do the same. The manifest now carries
+  `scope` (what was selected, what was not run) and `stage_acceptance` (whether
+  this run could mean acceptance at all, and why not), and the verdict is `PASS`
+  only when a full case set and a clean checkout are both in play; otherwise the
+  run is `BLOCKED`, which is what a partial evaluation is.
 * **G06 returns, and earns it.** Its two windows are crossed by real OS
   processes: one commits the Truth and dies before ever scanning, another runs
   the *real* `MemoryWorker` whose transport wrapper calls `os._exit(7)` after

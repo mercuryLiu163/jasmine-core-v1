@@ -694,6 +694,7 @@ class HindsightTransport:
         # `ListDocumentsResponse` requires `items`, `total`, `limit` and `offset`,
         # which is what makes full coverage provable rather than hoped for.
         offset = 0
+        first_total: int | None = None
         seen: set[str] = set()
         for _ in range(_MAX_DOCUMENT_PAGES):
             try:
@@ -721,12 +722,55 @@ class HindsightTransport:
                     "the documents collection did not report a total, so full "
                     "coverage cannot be proved",
                     retryable=False)
-            if payload.get("offset") != offset:
+            if total < 0:
+                # `offset >= total` is the stopping rule, and every negative
+                # total satisfies it on the first page — which would report the
+                # whole collection covered without reading a single row.
+                raise TransportError(
+                    "engine_protocol_error",
+                    "the documents collection reported a negative total, so "
+                    "coverage cannot be proved",
+                    retryable=False)
+            if first_total is None:
+                first_total = total
+            elif total != first_total:
+                # The collection changed while it was being read, so the pages
+                # do not describe one set and "every page was read" is untrue.
+                # Concurrency, not schema: this is retryable, and a retry
+                # re-reads from the start once it settles.
+                raise TransportError(
+                    "engine_conflict",
+                    f"the documents collection changed while it was read "
+                    f"(total {first_total} then {total}), so coverage cannot "
+                    "be proved",
+                    retryable=True)
+            echoed_offset = payload.get("offset")
+            if (isinstance(echoed_offset, bool) or not isinstance(echoed_offset, int)
+                    or echoed_offset != offset):
                 raise TransportError(
                     "engine_protocol_error",
                     "the documents collection answered from a different offset "
                     "than the one that was requested, so the pages are not "
                     "partitioned",
+                    retryable=False)
+            echoed_limit = payload.get("limit")
+            if isinstance(echoed_limit, bool) or not isinstance(echoed_limit, int) \
+                    or echoed_limit < 0:
+                raise TransportError(
+                    "engine_protocol_error",
+                    "the documents collection reported an invalid limit",
+                    retryable=False)
+            if echoed_limit and len(payload["items"]) > echoed_limit:
+                raise TransportError(
+                    "engine_protocol_error",
+                    "the documents collection returned more rows than its own "
+                    "stated limit, so the pages are not partitioned",
+                    retryable=False)
+            if offset + len(payload["items"]) > total:
+                raise TransportError(
+                    "engine_protocol_error",
+                    "the documents collection returned more rows than its total "
+                    "allows, so coverage cannot be proved",
                     retryable=False)
             for entry in payload["items"]:
                 # An entry we cannot read is not coverage. Skipping it would

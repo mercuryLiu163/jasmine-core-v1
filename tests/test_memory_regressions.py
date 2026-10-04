@@ -1335,3 +1335,164 @@ class AFailedReadBackKeepsTheJobRetrying(MemoryTestCase):
                          f"under {job['last_error_code']}")
         self.assertEqual(job["last_error_code"], "engine_unreachable")
         self.assertNotEqual(self.store.item(item["memory_id"])["engine_state"], "DELETED")
+
+
+class DeletingAThatsStillThereIsRetryable(MemoryTestCase):
+    """Proving the document is present means the delete failed, not that it is gone."""
+
+    def test_a_404_that_leaves_the_document_present_retries(self) -> None:
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        self.worker().run(max_ticks=6)
+        item = self.store.items()[0]
+        self.lifecycle().delete(item["memory_id"],
+                                {"expected_revision": 1, "host_id": HOST},
+                                actor_id=HUMAN, actor_kind="human", host_id=HOST)
+
+        def no_such_document(**kwargs):
+            raise TransportError("engine_not_found", "no such document", retryable=False,
+                                 http_status=404)
+
+        real_get = self.transport.get_document
+        self.transport.delete_document = no_such_document
+        try:
+            report = self.worker(lease_owner="worker-A").tick(scan=False)
+        finally:
+            del self.transport.delete_document
+            self.assertIsNotNone  # keep the reference used below honest
+
+        job = next(j for j in self.job_store().jobs()
+                   if j["memory_id"] == item["memory_id"] and j["kind"] == "delete")
+        self.assertEqual(report.error_code, "engine_delete_failed", report.as_dict())
+        self.assertEqual(job["status"], "PENDING",
+                         f"proving the document is present ended as {job['status']}: "
+                         f"{job['last_error_code']}")
+        self.assertEqual(job["last_error_code"], "engine_delete_failed")
+        self.assertNotEqual(self.store.item(item["memory_id"])["engine_state"], "DELETED")
+        self.assertIsNotNone(self.transport.documents.get((item["bank_id"],
+                                                           item["document_id"])),
+                             "the document is still there")
+        del real_get
+
+
+class EveryUnitOfADocumentIsHandled(MemoryTestCase):
+    """`list_document_memories` takes a `limit`; one page is not the document.
+
+    With 250 units and a 200-row page, obsoleting "all of them" left 50 valid
+    while the job recorded `INVALIDATED`.
+    """
+
+    def test_units_beyond_the_first_page_are_all_invalidated(self) -> None:
+        from jasmine_core.memory.worker import _UNIT_PAGE_SIZE
+
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        self.worker().run(max_ticks=6)
+        item = self.store.items()[0]
+        total = _UNIT_PAGE_SIZE + 50
+        units = [{"id": f"mu_{i:04d}", "state": "valid"} for i in range(total)]
+        real_list = self.transport.list_document_memories
+
+        def paged(*, bank, document_id, limit=200, offset=0):
+            return units[offset:offset + limit]
+
+        self.transport.list_document_memories = paged
+        try:
+            self.lifecycle().obsolete(item["memory_id"],
+                                      {"expected_revision": 1, "host_id": HOST},
+                                      actor_id=HUMAN, actor_kind="human", host_id=HOST)
+            self.worker().run(max_ticks=6)
+        finally:
+            self.transport.list_document_memories = real_list
+
+        job = next(j for j in self.job_store().jobs()
+                   if j["memory_id"] == item["memory_id"] and j["kind"] == "invalidate")
+        self.assertEqual(job["status"], "DONE", job)
+        receipt = job["receipt"]
+        self.assertEqual(receipt["memory_units_seen"], total)
+        self.assertEqual(receipt["memory_units_invalidated"], total,
+                         f"only {receipt['memory_units_invalidated']} of {total} units "
+                         f"were retired; the rest are still valid remotely")
+        self.assertEqual(len(self.transport.invalidated), total)
+
+
+class TheWorkerDoesNotGrowWithoutBound(MemoryTestCase):
+    """An unbounded run keeps a window, not every idle tick ever."""
+
+    def test_an_unbounded_run_keeps_a_bounded_history(self) -> None:
+        from jasmine_core.memory.worker import _REPORT_HISTORY
+
+        seen: list[int] = []
+        worker = self.worker()
+
+        def stop() -> bool:
+            seen.append(1)
+            return len(seen) >= _REPORT_HISTORY + 25
+
+        reports = worker.run(max_ticks=None, should_stop=stop, idle_sleep=0)
+        self.assertEqual(len(seen), _REPORT_HISTORY + 25)
+        self.assertLessEqual(len(reports), _REPORT_HISTORY,
+                             "an unbounded run accumulated every report")
+        self.assertGreater(len(reports), 1)
+
+    def test_a_bounded_run_keeps_everything_it_was_asked_for(self) -> None:
+        reports = self.worker().run(max_ticks=7)
+        self.assertEqual(len(reports), 7, "a bounded run must not drop reports")
+
+
+class UnknownMemoryTypesAreRefused(MemoryTestCase):
+    """The provider contract: refuse a type we do not have, do not answer `empty`."""
+
+    def test_an_unknown_type_is_a_request_error_not_an_empty_bank(self) -> None:
+        from jasmine_core.memory.types import RecallRequest
+
+        with self.assertRaises(errors.InvalidRequest) as caught:
+            self.adapter().recall(RecallRequest(
+                project_id=self.project(), actor_id=HUMAN, query="anything",
+                max_tokens=400, types=("CONFIRMED_DECISION", "NOT_A_MEMORY_TYPE")))
+        self.assertEqual(caught.exception.code, "invalid_request")
+        self.assertIn("NOT_A_MEMORY_TYPE", caught.exception.message)
+        self.assertEqual(caught.exception.details.get("field"), "types")
+
+    def test_a_known_type_still_reaches_the_engine(self) -> None:
+        from jasmine_core.memory.types import RecallRequest
+
+        project = self.project()
+        self.active_decision(project_id=project)
+        self.scan()
+        self.worker().run(max_ticks=6)
+        item = self.store.items()[0]
+        self.transport.answer_for(item["bank_id"], item["memory_id"], "lesson",
+                                  document_id=item["document_id"])
+        outcome = self.adapter().recall(RecallRequest(
+            project_id=project, actor_id=HUMAN, query="lesson", max_tokens=400,
+            types=("CONFIRMED_DECISION",)))
+        self.assertEqual([f.reason for f in outcome.filtered], [])
+
+
+class ReflectReportsAReasonNotABankId(MemoryTestCase):
+    """`error_code` is what a caller branches on; a bank id is not a reason."""
+
+    def test_a_failed_reflect_names_the_failure(self) -> None:
+        from jasmine_core.memory.types import ReflectRequest
+
+        project = self.project()
+        real = self.transport.reflect
+        self.transport.reflect = self._boom
+        try:
+            outcome = self.adapter().reflect(ReflectRequest(
+                project_id=project, actor_id=HUMAN, query="what did we learn",
+                max_tokens=400, explicit_user_request=True, requested_by=HUMAN))
+        finally:
+            self.transport.reflect = real
+        self.assertEqual(outcome.status, "degraded", outcome.as_dict())
+        self.assertEqual(outcome.error_code, "engine_timeout",
+                         f"the outcome reported {outcome.error_code!r}, which is an "
+                         f"id rather than a reason")
+        self.assertTrue(outcome.banks and outcome.banks[0].bank_id != outcome.error_code)
+
+    @staticmethod
+    def _boom(**kwargs):
+        raise TransportError("engine_timeout", "the engine timed out", retryable=True)

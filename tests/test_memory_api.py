@@ -436,3 +436,79 @@ class AuditTrail(MemoryApiTestCase):
         self.assertEqual(before, after)
         self.assertIsNone(self.conn.execute(
             "SELECT event_id FROM events WHERE event_type='memory.pinned'").fetchone())
+
+
+class EngineTextIsWithheldFromAgents(MemoryApiTestCase):
+    """The jobs list withholds `safe_error_summary`; nothing else did.
+
+    The same job is returned at the top level of `GET /jobs/{id}`, inside
+    `attempts` there, inside `jobs` on the item detail, and the item itself
+    carries the field on both the list and the detail. Withholding it on one
+    endpoint is a policy nobody can rely on.
+    """
+
+    ENGINE_TEXT = "the engine refused the document because of its own reason"
+
+    def setUp(self) -> None:
+        super().setUp()
+        with db.transaction(self.conn):
+            self.conn.execute(
+                "UPDATE memory_jobs SET safe_error_summary=? WHERE job_id=?",
+                (self.ENGINE_TEXT, self.job_id))
+            self.conn.execute(
+                "UPDATE memory_items SET safe_error_summary=? WHERE memory_id=?",
+                (self.ENGINE_TEXT, self.memory_id))
+            self.conn.execute(
+                "INSERT INTO memory_job_attempts (attempt_id, job_id, attempt_number, phase,"
+                " outcome, error_code, safe_error_summary, lease_owner, started_at)"
+                " VALUES (?, ?, 1, 'FAILED', 'FAILED', 'engine_rejected', ?, 'w', ?)",
+                (ids.new_id("mja"), self.job_id, self.ENGINE_TEXT, "2026-09-29T12:00:00Z"))
+        self.agent = self._agent_key()
+
+    def _agent_key(self) -> str:
+        from jasmine_core import auth, registry
+
+        conn = db.connect(self.db_path)
+        self.addCleanup(conn.close)
+        agent = ids.new_id("act")
+        with db.transaction(conn):
+            registry.Registry(conn).upsert_actor(agent, kind="agent", home_host_id=HOST)
+        return auth.Auth(conn).issue_key(actor_id=agent, label="agent-reader",
+                                         scopes=["memory:read", "objects:read",
+                                                 "events:read"])["token"]
+
+    def _human_key(self) -> str:
+        from jasmine_core import auth
+
+        conn = db.connect(self.db_path)
+        self.addCleanup(conn.close)
+        return auth.Auth(conn).issue_key(actor_id=ACTOR, label="human-reader",
+                                         scopes=["memory:read", "objects:read",
+                                                 "events:read"])["token"]
+
+    def test_the_human_key_still_sees_it(self) -> None:
+        human = self._human_key()
+        for path in (f"/v1/memory/jobs/{self.job_id}",
+                     f"/v1/memory/items/{self.memory_id}",
+                     "/v1/memory/items"):
+            with self.subTest(path=path):
+                status, body = self.call("GET", path, token=human)
+                self.assertEqual(status, 200)
+                self.assertIn(self.ENGINE_TEXT, json.dumps(body),
+                              f"a human key lost the engine text on {path}")
+
+    def test_the_agent_key_never_sees_it_on_any_path(self) -> None:
+        for path in (f"/v1/memory/jobs/{self.job_id}",
+                     "/v1/memory/jobs",
+                     f"/v1/memory/items/{self.memory_id}",
+                     "/v1/memory/items",
+                     "/v1/memory/health"):
+            with self.subTest(path=path):
+                status, body = self.call("GET", path, token=self.agent)
+                self.assertEqual(status, 200, body)
+                text = json.dumps(body)
+                self.assertNotIn(self.ENGINE_TEXT, text,
+                                 f"engine free text leaked to an agent on {path}")
+                self.assertIn("safe_error_summary", text,
+                              f"{path} stopped carrying the field entirely; the "
+                              f"policy is to withhold the text, not the shape")

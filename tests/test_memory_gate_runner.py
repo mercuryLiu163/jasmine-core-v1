@@ -24,6 +24,7 @@ from pathlib import Path
 
 from support import SRC  # noqa: F401  (path setup)
 
+from jasmine_core import errors  # noqa: E402
 from jasmine_core.memory import scope  # noqa: E402
 
 GATE = SRC.parent / "scripts" / "p4-memory-gate.py"
@@ -341,3 +342,161 @@ class DeploymentModeIsReported(unittest.TestCase):
             line for line in source.splitlines() if "ACL" in line))
         self.assertEqual(runner.CASES_BY_ID["P4-G04"].__name__, "case_g04")
         self.assertEqual(scope.SINGLE_USER, "single_user")
+
+
+class TheVerdictIsNotASubsetRun(unittest.TestCase):
+    """A run that did not evaluate every case cannot report the stage as passed.
+
+    `PASS` used to mean "every case I happened to select passed", so
+    `--case P4-G06` alone could produce a stage PASS with six cases never
+    looked at. A development run could too, which is the opposite of what
+    `--allow-dirty` is for.
+
+    Every invocation passes `--allow-dirty` so the test behaves the same on a
+    committed tree and a working one; the flag is itself one of the things being
+    asserted on.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="p4-gate-scope-")
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.out = self.root / "out"
+        self.config = self.root / "config.json"
+        self.config.write_text(json.dumps({"run_id": "p4-scope-test",
+                                           "bank_suffix": "p4-scope-test",
+                                           "dependency_commits": {"P2": "blocked",
+                                                                  "P3": "blocked"}}),
+                               encoding="utf-8")
+        env = dict(os.environ, PYTHONPATH=str(SRC),
+                   JASMINE_HINDSIGHT_URL="http://127.0.0.1:1",
+                   JASMINE_HINDSIGHT_TIMEOUT_SECONDS="1")
+        env.pop("JASMINE_HINDSIGHT_API_KEY", None)
+        self.env = env
+
+    def _run(self, *extra) -> dict:
+        completed = subprocess.run(
+            [sys.executable, str(GATE), "--out", str(self.out),
+             "--work", str(self.root / "work"), "--config", str(self.config),
+             "--allow-dirty", *extra],
+            capture_output=True, text=True, env=self.env, timeout=300)
+        summary = json.loads(completed.stdout.strip().splitlines()[-1])
+        return json.loads(Path(summary["result"]).read_text(encoding="utf-8"))
+
+    def test_a_partial_selection_is_not_a_stage_acceptance(self) -> None:
+        manifest = self._run("--case", "P4-G06")
+        self.assertEqual(manifest["scope"]["complete"], False)
+        self.assertEqual(len(manifest["scope"]["not_run"]), len(CASES) - 1)
+        self.assertIn("P4-G01", manifest["scope"]["not_run"])
+        self.assertEqual(manifest["stage_acceptance"]["eligible"], False)
+        self.assertTrue(any("selected" in reason
+                            for reason in manifest["stage_acceptance"]["reasons"]),
+                        manifest["stage_acceptance"]["reasons"])
+        self.assertNotEqual(manifest["verdict"], "PASS",
+                            "a subset run reported the stage as passed")
+
+    def test_a_development_run_is_not_a_stage_acceptance(self) -> None:
+        manifest = self._run()
+        self.assertEqual(manifest["scope"]["complete"], True)
+        self.assertEqual(manifest["stage_acceptance"]["eligible"], False)
+        self.assertTrue(any("dirty" in reason
+                            for reason in manifest["stage_acceptance"]["reasons"]),
+                        manifest["stage_acceptance"]["reasons"])
+        self.assertNotEqual(manifest["verdict"], "PASS",
+                            "--allow-dirty reported the stage as passed")
+
+    def test_a_full_run_has_no_other_reason_than_the_development_flag(self) -> None:
+        # The only thing standing between this run and eligibility is the flag
+        # that was passed deliberately. A full run without it therefore has no
+        # reasons at all, which is the only way `PASS` can ever be reached.
+        manifest = self._run()
+        self.assertEqual(manifest["scope"]["complete"], True)
+        self.assertEqual(manifest["scope"]["not_run"], [])
+        self.assertEqual(len(manifest["stage_acceptance"]["reasons"]), 1,
+                         manifest["stage_acceptance"]["reasons"])
+        self.assertIn("dirty", manifest["stage_acceptance"]["reasons"][0])
+        self.assertEqual(manifest["stage_acceptance"]["eligible"], False)
+
+    def test_the_manifest_records_the_namespace_it_wrote_to(self) -> None:
+        manifest = self._run()
+        self.assertEqual(manifest["bank_namespace"], "p4-scope-test")
+
+
+class TheBankNamespaceShapesAddresses(unittest.TestCase):
+    """`bank_suffix` had to reach `scope`, or it constrained nothing."""
+
+    def tearDown(self) -> None:
+        os.environ.pop("JASMINE_MEMORY_BANK_NAMESPACE", None)
+
+    def test_the_default_is_no_namespace_at_all(self) -> None:
+        from jasmine_core import ids as ids_module
+        from jasmine_core.memory import scope as scope_module
+
+        os.environ.pop("JASMINE_MEMORY_BANK_NAMESPACE", None)
+        self.assertEqual(scope_module.bank_namespace(), "")
+        self.assertEqual(scope_module.global_bank().bank_id, "jasmine-global")
+        project = ids_module.new_id("prj")
+        self.assertEqual(scope_module.project_bank(project).bank_id,
+                         f"jasmine-project-{project}")
+
+    def test_a_namespace_prefixes_and_round_trips(self) -> None:
+        from jasmine_core import ids as ids_module
+        from jasmine_core.memory import scope as scope_module
+
+        os.environ["JASMINE_MEMORY_BANK_NAMESPACE"] = "run-42"
+        self.assertEqual(scope_module.bank_namespace(), "run-42")
+        self.assertEqual(scope_module.global_bank().bank_id, "run-42jasmine-global")
+        project = ids_module.new_id("prj")
+        bank = scope_module.project_bank(project)
+        self.assertTrue(bank.bank_id.startswith("run-42"))
+        # round trip, and the bare address is now somebody else's
+        self.assertEqual(scope_module.scope_of(bank.bank_id).bank_id, bank.bank_id)
+        self.assertEqual(scope_module.scope_of(bank.bank_id).project_id, project)
+        self.assertEqual(scope_module.scope_of("run-42jasmine-global").bank_id,
+                         "run-42jasmine-global")
+        self.assertIsNone(scope_module.scope_of("jasmine-project-" + project),
+                          "a bare address in a namespaced deployment is not ours")
+        self.assertTrue(scope_module.is_valid_bank_id(bank.bank_id))
+        self.assertFalse(scope_module.is_valid_bank_id("jasmine-global"))
+
+    def test_a_malformed_namespace_is_refused_rather_than_dropped(self) -> None:
+        from jasmine_core.memory import scope as scope_module
+
+        # Silently falling back to un-namespaced ids is the sharing this exists
+        # to prevent, so a bad value must not be ignored.
+        os.environ["JASMINE_MEMORY_BANK_NAMESPACE"] = "not valid/space"
+        with self.assertRaises(errors.InvalidRequest):
+            scope_module.bank_namespace()
+
+
+class TheGateRefusesAnInactiveNamespace(unittest.TestCase):
+    """A non-empty `bank_suffix` that never reaches `scope` constrains nothing."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="p4-gate-ns-")
+        self.addCleanup(self._tmp.cleanup)
+        self.work = Path(self._tmp.name) / "work"
+        self.work.mkdir()
+        self._saved = os.environ.get("JASMINE_HINDSIGHT_URL")
+        os.environ["JASMINE_HINDSIGHT_URL"] = "http://127.0.0.1:1"
+        os.environ["JASMINE_HINDSIGHT_TIMEOUT_SECONDS"] = "1"
+        self.addCleanup(self._restore)
+        os.environ.pop("JASMINE_MEMORY_BANK_NAMESPACE", None)
+
+    def _restore(self) -> None:
+        if self._saved is None:
+            os.environ.pop("JASMINE_HINDSIGHT_URL", None)
+        else:
+            os.environ["JASMINE_HINDSIGHT_URL"] = self._saved
+        os.environ.pop("JASMINE_MEMORY_BANK_NAMESPACE", None)
+
+    def test_the_suffix_is_refused_until_open_puts_it_in_effect(self) -> None:
+        runner = load_runner()
+        gate = runner.Gate(self.work, {"bank_suffix": "p4-ns-test"}, "P4-NS")
+        with self.assertRaises(runner.Blocked) as caught:
+            gate.require_bank_namespace()
+        self.assertIn("not the one this process", "; ".join(caught.exception.items))
+        gate.open()
+        self.addCleanup(gate.close)
+        self.assertEqual(gate.require_bank_namespace(), "p4-ns-test")
+        self.assertEqual(os.environ.get("JASMINE_MEMORY_BANK_NAMESPACE"), "p4-ns-test")

@@ -135,6 +135,22 @@ class MemoryAdapter:
         """
         budget = tokens.effective_budget(request.max_tokens)
         types = request.types or tuple(_all_types())
+        # The provider contract is that an unrecognised type is refused. Accepting
+        # it and querying anyway is worse than useless: the engine is asked for a
+        # type it knows nothing about, the local type filter then matches nothing,
+        # and the caller is handed `empty` — indistinguishable from a bank that
+        # genuinely had nothing to say, so a typo in a type name looks like a
+        # memory gap. This is a request error, not memory's state, so it raises
+        # rather than degrading.
+        from .types import MEMORY_TYPE_SET
+
+        unknown = sorted({value for value in types if value not in MEMORY_TYPE_SET})
+        if unknown:
+            raise errors.InvalidRequest(
+                f"unknown memory type(s): {', '.join(unknown)}; expected one of "
+                f"{', '.join(sorted(MEMORY_TYPE_SET))}",
+                field="types", value=unknown,
+            )
         at = clock.now_rfc3339()
         if self._transport is None:
             return self._record(_unconfigured(request, types, budget, at),
@@ -403,13 +419,18 @@ class MemoryAdapter:
                     continue
                 answers.append(safe)
             based_on.extend(payload.get("based_on_ids") or [])
-        failed = [b.bank_id for b in outcomes if b.status == "failed"]
+        failed = [b for b in outcomes if b.status == "failed"]
+        # The top-level `error_code` is what a caller branches on, so it has to
+        # be a code — `engine_timeout`, `engine_unreachable` — and not the id of
+        # the bank that happened to fail first. Filling it with `bank_id` meant
+        # every degraded Reflect reported a value no error table contains, and
+        # the actual reason stayed buried per-bank where nothing looks.
         outcome = ReflectOutcome(
             status="degraded" if failed else ("ok" if answers else "empty"),
             text="\n\n".join(answers) if answers else None,
             based_on_memory_ids=tuple(based_on),
             banks=tuple(outcomes),
-            error_code=failed[0] if failed else None,
+            error_code=next((b.error_code for b in failed if b.error_code), None),
         )
         return self._record_reflect(outcome, request, at)
 

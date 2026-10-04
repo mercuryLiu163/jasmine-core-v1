@@ -179,23 +179,25 @@ def list_jobs(request: Request, core: "Core", principal: auth.Principal,
     )
     if actor_kind not in ("human", "system"):
         # An agent key may read jobs, but only for a project it may read, and the
-        # error summaries can carry engine text, so they are withheld. Applied to
-        # every job-returning path, not only this one.
+        # error summaries can carry engine text, so they are withheld.
         jobs = [_redact_job_for_agent(job) for job in jobs]
-    return Response(200, {"jobs": jobs, "count": len(jobs),
-                          "counts": svc.jobs.counts(project_id=project_id, projects=projects)})
+    return _respond(200, {"jobs": jobs, "count": len(jobs),
+                          "counts": svc.jobs.counts(project_id=project_id,
+                                                    projects=projects)},
+                    actor_kind)
 
 
 def get_job(request: Request, core: "Core", principal: auth.Principal,
             match: re.Match[str]) -> Response:
     svc = services(core)
+    actor_kind = core.actor_kind(principal.actor_id)
     job_id = match.group(1)
     _require_id(job_id, "mjb", "job_id")
     job = svc.jobs.job(job_id)
     if job is None or not _may_see(svc, principal, project_id=job["project_id"],
                                    bank_id=job["bank_id"]):
         raise errors.NotFound("memory_job", job_id)
-    return Response(200, {"job": job, "attempts": svc.jobs.attempts(job_id)})
+    return _respond(200, {"job": job, "attempts": svc.jobs.attempts(job_id)}, actor_kind)
 
 
 def retry_job(request: Request, core: "Core", principal: auth.Principal,
@@ -213,7 +215,7 @@ def retry_job(request: Request, core: "Core", principal: auth.Principal,
         actor_kind=core.actor_kind(principal.actor_id),
         host_id=body.get("host_id", ""), event_id=body.get("event_id"),
     )
-    return Response(200, result)
+    return _respond(200, result, core.actor_kind(principal.actor_id))
 
 
 def list_items(request: Request, core: "Core", principal: auth.Principal,
@@ -236,7 +238,8 @@ def list_items(request: Request, core: "Core", principal: auth.Principal,
         after_memory_id=_optional(request, "after_memory_id"),
     )
     rows = [{**item, "lifecycle": lifecycle_summary(item)} for item in items]
-    return Response(200, {"items": rows, "count": len(rows), "non_authoritative": True})
+    return _respond(200, {"items": rows, "count": len(rows), "non_authoritative": True},
+                    core.actor_kind(principal.actor_id))
 
 
 def get_item(request: Request, core: "Core", principal: auth.Principal,
@@ -245,7 +248,8 @@ def get_item(request: Request, core: "Core", principal: auth.Principal,
     memory_id = match.group(1)
     _require_id(memory_id, "mem", "memory_id")
     detail = svc.lifecycle.detail(memory_id, actor_id=principal.actor_id)
-    return Response(200, {**detail, "non_authoritative": True})
+    return _respond(200, {**detail, "non_authoritative": True},
+                    core.actor_kind(principal.actor_id))
 
 
 def _lifecycle_command(action: str) -> Handler:
@@ -260,7 +264,8 @@ def _lifecycle_command(action: str) -> Handler:
             actor_kind=core.actor_kind(principal.actor_id),
             host_id=body.get("host_id", ""),
         )
-        return Response(200, {**result, "non_authoritative": True})
+        return _respond(200, {**result, "non_authoritative": True},
+                        core.actor_kind(principal.actor_id))
 
     return handler
 
@@ -298,7 +303,8 @@ def memory_health(request: Request, core: "Core", principal: auth.Principal,
                   match: re.Match[str]) -> Response:
     """Memory availability, reported apart from Core liveness."""
     svc = services(core)
-    return Response(200, {**svc.health(), "non_authoritative": True})
+    return _respond(200, {**svc.health(), "non_authoritative": True},
+                    core.actor_kind(principal.actor_id))
 
 
 def reflect(request: Request, core: "Core", principal: auth.Principal,
@@ -327,7 +333,7 @@ def reflect(request: Request, core: "Core", principal: auth.Principal,
         max_tokens=body.get("max_tokens") if isinstance(body.get("max_tokens"), int) else None,
         explicit_user_request=True, requested_by=principal.actor_id,
     ))
-    return Response(200, outcome.as_dict())
+    return _respond(200, outcome.as_dict(), core.actor_kind(principal.actor_id))
 
 
 # -- helpers ------------------------------------------------------------------
@@ -360,24 +366,54 @@ def _require_id(value: str, prefix: str, field: str) -> None:
         raise errors.InvalidRequest(f"{field} must be a {prefix}_ id", field=field, value=value)
 
 
+def _respond(status: int, payload: dict[str, Any], actor_kind: str) -> Response:
+    """Every Memory response passes through the engine-text policy once.
+
+    A per-handler call is easy to forget — which is how the job list withheld
+    `safe_error_summary` while the job detail, the item list and the item detail
+    returned it. One wrapper applied at each return makes the rule visible at
+    every site and keeps the nesting from mattering.
+    """
+    return Response(status, _withhold_engine_text(payload, actor_kind))
+
+
 def _empty_counts() -> dict[str, int]:
     from .types import JOB_STATUSES
 
     return {status.lower(): 0 for status in JOB_STATUSES}
 
 
-def _redact_job_for_agent(job: dict[str, Any]) -> dict[str, Any]:
-    """Engine text reaches job rows; an Agent key does not get it.
+#: The one field that carries text the engine produced. `error_code` beside it
+#: is a stable, enumerable value and is deliberately *not* withheld: an Agent
+#: needs to know a retain failed, just not what the engine said about it.
+_ENGINE_TEXT_KEY = "safe_error_summary"
 
-    `safe_error_summary` is redacted and clipped, but it is still text the engine
-    produced about Core's own request. Withholding it is what the design intends
-    and it has to be withheld on *every* job-returning path, not just the list.
+
+def _withhold_engine_text(payload: Any, actor_kind: str) -> Any:
+    """Strip engine free text from a payload, wherever it is nested.
+
+    Applied by walking the response rather than by remembering which endpoint
+    nests what. The same job appears at the top level of `GET /jobs/{id}`, inside
+    `attempts` there, inside `jobs` on `GET /items/{id}`, and inside `memory` on
+    a lifecycle command — and the item carries the same field on the list and the
+    detail. One missed nesting is one missed policy, which is how the detail
+    endpoints came to differ from the list. For a human or system key the
+    payload is returned unchanged, so the common path costs nothing.
     """
-    return {**job, "safe_error_summary": None}
+    if actor_kind in ("human", "system"):
+        return payload
+    if isinstance(payload, dict):
+        return {key: (None if key == _ENGINE_TEXT_KEY
+                      else _withhold_engine_text(value, actor_kind))
+                for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [_withhold_engine_text(entry, actor_kind) for entry in payload]
+    return payload
 
 
-def _redact_attempt_for_agent(attempt: dict[str, Any]) -> dict[str, Any]:
-    return {**attempt, "safe_error_summary": None}
+def _redact_job_for_agent(job: dict[str, Any]) -> dict[str, Any]:
+    """Kept for the jobs list, which is the one place it was ever needed."""
+    return {**job, _ENGINE_TEXT_KEY: None}
 
 
 def _may_see(svc: MemoryServices, principal: auth.Principal, *, project_id: str | None,
@@ -391,7 +427,7 @@ def _may_see(svc: MemoryServices, principal: auth.Principal, *, project_id: str 
     "does not exist", so this is not a project-enumeration oracle.
     """
     if project_id is None:
-        return bank_id == scope_module.GLOBAL_BANK_ID
+        return bank_id == scope_module.global_bank().bank_id
     return svc.access.may_read(project_id=project_id, actor_id=principal.actor_id)
 
 

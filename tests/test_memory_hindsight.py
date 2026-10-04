@@ -675,3 +675,54 @@ class AbsenceIsProvenNotInferred(Wire):
             with self.assertRaises(TransportError) as caught:
                 self.transport.get_document(bank=self.bank, document_id="doc-1")
         self.assertEqual(caught.exception.code, "engine_protocol_error")
+
+    def test_a_collection_that_underscores_its_own_page_shape_is_refused(self) -> None:
+        """Every field that decides coverage has to hold up to inspection."""
+        gone = self._gone()
+        cases = [
+            ("negative total",
+             {"items": [], "total": -1, "limit": 100, "offset": 0},
+             "negative total"),
+            ("total shrinks mid-read",
+             ({"items": [{"id": f"a{i}"} for i in range(100)], "total": 250,
+               "limit": 100, "offset": 0},
+              {"items": [{"id": "b"}], "total": 10, "limit": 100, "offset": 100}),
+             "changed while it was read"),
+            ("total grows mid-read",
+             ({"items": [{"id": f"a{i}"} for i in range(100)], "total": 120,
+               "limit": 100, "offset": 0},
+              {"items": [{"id": "b"}], "total": 900, "limit": 100, "offset": 100}),
+             "changed while it was read"),
+            ("non-integer limit",
+             {"items": [], "total": 0, "limit": "100", "offset": 0}, "invalid limit"),
+            ("negative limit",
+             {"items": [], "total": 0, "limit": -5, "offset": 0}, "invalid limit"),
+            ("more rows than its own limit",
+             {"items": [{"id": "x"}, {"id": "y"}], "total": 2, "limit": 1, "offset": 0},
+             "stated limit"),
+            ("more rows than its total allows",
+             {"items": [{"id": "x"}], "total": 0, "limit": 100, "offset": 0},
+             "more rows than its total"),
+        ]
+        for label, replies, expected in cases:
+            with self.subTest(label=label):
+                batch = replies if isinstance(replies, tuple) else (replies,)
+                with patch.object(HindsightTransport, "_request",
+                                  side_effect=self._script(gone, *batch)):
+                    with self.assertRaises(TransportError) as caught:
+                        self.transport.get_document(bank=self.bank,
+                                                    document_id="our-document")
+                self.assertIn(expected, caught.exception.safe_error_summary, label)
+
+    def test_a_total_that_changes_under_us_is_retryable_not_terminal(self) -> None:
+        """Concurrency, not schema: a retry re-reads once the bank settles."""
+        gone = self._gone()
+        with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                gone,
+                {"items": [{"id": f"a{i}"} for i in range(100)], "total": 250,
+                 "limit": 100, "offset": 0},
+                {"items": [{"id": "b"}], "total": 10, "limit": 100, "offset": 100})):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.get_document(bank=self.bank, document_id="our-document")
+        self.assertEqual(caught.exception.code, "engine_conflict")
+        self.assertTrue(caught.exception.retryable)

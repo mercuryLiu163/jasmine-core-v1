@@ -81,6 +81,45 @@ class WorkerReport:
         }
 
 
+#: How many reports an unbounded `run()` keeps in memory (see `run`).
+_REPORT_HISTORY = 500
+
+#: `list_document_memories` takes a `limit`, and its default is one page.
+_UNIT_PAGE_SIZE = 200
+#: A page cap so a server that keeps handing back full pages cannot spin the
+#: reader. 1000 pages of 200 is 200k units, far past any real document.
+_MAX_UNIT_PAGES = 1000
+
+
+def _all_document_units(transport: MemoryTransport, *, bank: Any,
+                        document_id: str) -> list[dict[str, Any]]:
+    """Every memory unit of a document, not the first page of them.
+
+    A document with more units than one page returns a truncated list, and the
+    consequences of believing it are the ones that matter: obsoleting only the
+    first 200 leaves every unit after that `valid` while the job records
+    `INVALIDATED`, and the same truncation is how a document with units on a
+    later page gets called absent. A short page ends the read — the units are
+    ordered, so nothing earlier can appear later — and the page cap stops a
+    server that ignores `offset` from looping forever, with an error rather
+    than an answer it did not earn.
+    """
+    units: list[dict[str, Any]] = []
+    offset = 0
+    for _ in range(_MAX_UNIT_PAGES):
+        page = transport.list_document_memories(bank=bank, document_id=document_id,
+                                                limit=_UNIT_PAGE_SIZE, offset=offset)
+        units.extend(page)
+        if len(page) < _UNIT_PAGE_SIZE:
+            return units
+        offset += len(page)
+    raise TransportError(
+        "engine_protocol_error",
+        f"the memory listing for {document_id} exceeds {_MAX_UNIT_PAGES} pages, "
+        "so it cannot be read completely",
+        retryable=False)
+
+
 class MemoryWorker:
     """One process, one lease owner, one job at a time."""
 
@@ -319,8 +358,8 @@ class MemoryWorker:
                     "retain had just written",
                     retryable=True)
             return True
-        for unit in transport.list_document_memories(bank=claimed.bank,
-                                                     document_id=document_id):
+        for unit in _all_document_units(transport, bank=claimed.bank,
+                                        document_id=document_id):
             unit_id = unit.get("id")
             if isinstance(unit_id, str) and unit.get("state") != "invalidated":
                 transport.invalidate_memory(
@@ -341,8 +380,9 @@ class MemoryWorker:
         self._assert_no_transaction("delete")
         try:
             transport = self._require_transport("delete")
-            units = transport.list_document_memories(
-                bank=claimed.bank, document_id=claimed.job["document_id"]
+            units = _all_document_units(
+                transport, bank=claimed.bank,
+                document_id=claimed.job["document_id"],
             )
             try:
                 receipt = transport.delete_document(
@@ -359,7 +399,18 @@ class MemoryWorker:
                 # independent reads agree.
                 if not self._document_is_absent(transport, bank=claimed.bank,
                                                 document_id=claimed.job["document_id"]):
-                    raise
+                    # Absence was not shown, which means the document is still
+                    # there: the delete did not do what it said. Re-raising the
+                    # 404 here recorded `engine_not_found`, a *permanent* code,
+                    # so a delete that provably failed ended `FAILED` with no
+                    # automatic retry and an operator as the only way forward.
+                    # It did not fail because the document is missing — it failed
+                    # because it is present.
+                    raise TransportError(
+                        "engine_delete_failed",
+                        "the document is still present after the delete "
+                        "returned 404",
+                        retryable=True)
                 # The document is already absent, which is what this job exists
                 # to achieve. Recording it as anything else would strand a
                 # re-armed compensation — the retry path this exists for — as a
@@ -420,7 +471,7 @@ class MemoryWorker:
         ever. The probe's own error is the actionable one, and it has to reach
         the job.
         """
-        if transport.list_document_memories(bank=bank, document_id=document_id):
+        if _all_document_units(transport, bank=bank, document_id=document_id):
             return False
         return transport.get_document(bank=bank, document_id=document_id) is None
 
@@ -458,8 +509,9 @@ class MemoryWorker:
             # attempt record and no backoff — it just sat `RUNNING` until its
             # lease expired, forever. The `type: ignore` was the tell.
             transport = self._require_transport("invalidate")
-            units = transport.list_document_memories(
-                bank=claimed.bank, document_id=claimed.job["document_id"]
+            units = _all_document_units(
+                transport, bank=claimed.bank,
+                document_id=claimed.job["document_id"],
             )
             unit_ids = [u["id"] for u in units
                         if isinstance(u.get("id"), str) and u.get("state") != "invalidated"]
@@ -505,11 +557,19 @@ class MemoryWorker:
         """
         reports: list[WorkerReport] = []
         ticks = 0
+        # A bounded run's history is capped by `max_ticks` already. An
+        # unbounded one — a service — runs until it is stopped, so appending
+        # every report, including every `idle` tick, grows without limit for a
+        # value nobody can read until the process exits. Keep a window; the
+        # `log` callback is the durable record.
+        bounded = max_ticks is not None
         while max_ticks is None or ticks < max_ticks:
             if should_stop is not None and should_stop():
                 break
             report = self.tick()
             reports.append(report)
+            if not bounded and len(reports) > _REPORT_HISTORY:
+                del reports[:len(reports) - _REPORT_HISTORY]
             if log:
                 log(f"memory-worker {self.lease_owner}: {report.outcome}"
                     + (f" job={report.claimed}" if report.claimed else ""))

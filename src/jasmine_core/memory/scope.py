@@ -38,6 +38,7 @@ treated as proof of authorisation. Only `acl` mode plus a row is.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from typing import Any
 
@@ -49,6 +50,52 @@ ACL = "acl"
 DEPLOYMENT_MODES = (SINGLE_USER, ACL)
 
 MODE_ENV_VAR = "JASMINE_MEMORY_DEPLOYMENT_MODE"
+
+#: Optional prefix on every bank id this process derives.
+#:
+#: Empty by default, so a Core that never sets it produces exactly the ids it
+#: produced before this existed. A Gate sets it from the operator's
+#: `bank_suffix`, which is what makes that suffix mean anything: without it the
+#: only address two runs share is `jasmine-global`, and a Gate reading it would
+#: be reading the deployment's global bank while claiming its own namespace.
+NAMESPACE_ENV_VAR = "JASMINE_MEMORY_BANK_NAMESPACE"
+_NAMESPACE_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+def bank_namespace(env: dict[str, str] | None = None) -> str:
+    """The prefix this deployment puts on bank ids, or `""` for none.
+
+    Read on every derivation rather than at import, because a process that
+    configures itself after import — a Gate — has to be able to set it before
+    the first bank is built. A malformed value is refused rather than ignored:
+    a silently dropped namespace would fall back to un-namespaced ids, which is
+    the exact sharing this is meant to prevent.
+    """
+    import os
+
+    source = os.environ if env is None else env
+    value = (source.get(NAMESPACE_ENV_VAR) or "").strip()
+    if value and not _NAMESPACE_RE.fullmatch(value):
+        raise errors.InvalidRequest(
+            f"{NAMESPACE_ENV_VAR} must be 1 to 64 characters of "
+            "letters, digits, '.', '_' or '-'",
+            field=NAMESPACE_ENV_VAR, value=value)
+    return value
+
+
+def _qualified(bank_id: str) -> str:
+    namespace = bank_namespace()
+    return f"{namespace}{bank_id}" if namespace else bank_id
+
+
+def _unqualified(bank_id: object) -> str | None:
+    """The canonical id, or `None` when it is not in this namespace."""
+    if not isinstance(bank_id, str):
+        return None
+    namespace = bank_namespace()
+    if not namespace:
+        return bank_id
+    return bank_id[len(namespace):] if bank_id.startswith(namespace) else None
 
 
 def deployment_mode(env: dict[str, str] | None = None) -> str:
@@ -66,15 +113,15 @@ def deployment_mode(env: dict[str, str] | None = None) -> str:
 
 
 def global_bank() -> BankRef:
-    return BankRef(bank_id=GLOBAL_BANK_ID, scope_kind="global", project_id=None)
+    return BankRef(bank_id=_qualified(GLOBAL_BANK_ID), scope_kind="global", project_id=None)
 
 
 def project_bank(project_id: str) -> BankRef:
     if not ids.is_id(project_id, "prj"):
         raise errors.InvalidRequest("project_id must be a prj_ id", field="project_id",
                                     value=project_id)
-    return BankRef(bank_id=f"{PROJECT_BANK_PREFIX}{project_id}", scope_kind="project",
-                   project_id=project_id)
+    return BankRef(bank_id=_qualified(f"{PROJECT_BANK_PREFIX}{project_id}"),
+                   scope_kind="project", project_id=project_id)
 
 
 def is_valid_bank_id(bank_id: object) -> bool:
@@ -83,19 +130,26 @@ def is_valid_bank_id(bank_id: object) -> bool:
     Shape only. This is a filter against path traversal and against a
     V0-style bank name arriving from a remote response; it is not an
     authorisation check and never used as one.
+
+    With a namespace configured, an id that does not carry it is not one of
+    ours at all — which is the point: a bare `jasmine-global` from a remote
+    response in a namespaced deployment is somebody else's address.
     """
-    if not isinstance(bank_id, str):
+    canonical = _unqualified(bank_id)
+    if canonical is None:
         return False
-    return bool(GLOBAL_BANK_RE.fullmatch(bank_id) or PROJECT_BANK_RE.fullmatch(bank_id))
+    return bool(GLOBAL_BANK_RE.fullmatch(canonical)
+                or PROJECT_BANK_RE.fullmatch(canonical))
 
 
 def scope_of(bank_id: object) -> BankRef | None:
     """Recover the scope of a well-formed bank id, or None if it is not ours."""
-    if not isinstance(bank_id, str):
+    canonical = _unqualified(bank_id)
+    if canonical is None:
         return None
-    if GLOBAL_BANK_RE.fullmatch(bank_id):
+    if GLOBAL_BANK_RE.fullmatch(canonical):
         return global_bank()
-    match = PROJECT_BANK_RE.fullmatch(bank_id)
+    match = PROJECT_BANK_RE.fullmatch(canonical)
     if match:
         return project_bank(match.group(1))
     return None

@@ -57,7 +57,8 @@ from jasmine_core.models import NewEvent, NewObject  # noqa: E402
 from jasmine_core.objects import ObjectStore  # noqa: E402
 from jasmine_core.migrations import migrate  # noqa: E402
 from jasmine_core.memory import eligibility, jobs as jobs_module  # noqa: E402
-from jasmine_core.memory import scope  # noqa: E402
+from jasmine_core.memory import scope
+from jasmine_core.memory.scope import NAMESPACE_ENV_VAR  # noqa: E402
 from jasmine_core.memory.hindsight import (  # noqa: E402
     HindsightConfig,
     HindsightTransport,
@@ -158,6 +159,12 @@ class Gate:
     # -- lifecycle ---------------------------------------------------------
 
     def open(self) -> None:
+        # Before any bank is derived: `scope` reads the namespace on every
+        # construction, so setting it here is what makes `bank_suffix` shape the
+        # addresses this run writes to rather than being a string nothing uses.
+        suffix = self.config.get("bank_suffix")
+        if suffix:
+            self._set_env(NAMESPACE_ENV_VAR, str(suffix))
         self._set_env("JASMINE_CORE_WORKSPACE_ROOT", str(self.workspace))
         self._set_env("JASMINE_CORE_FINGERPRINT_EXTRA_PATHS", '["source.txt"]')
         env_config = config_from_env()
@@ -206,13 +213,35 @@ class Gate:
         return probed
 
     def require_bank_namespace(self) -> str:
+        """The declared namespace, refused unless it is actually in effect.
+
+        Checking that a string is non-empty proves nothing about where the data
+        goes. The suffix has to reach `scope`, or two runs — and a run and the
+        production deployment — share `jasmine-global` and a Gate's recall can
+        return memory it did not write while reporting its own namespace.
+        """
         suffix = self.config.get("bank_suffix")
         if not suffix:
             raise Blocked(
                 "no bank namespace is declared in the operator configuration; a Gate that "
                 "shares the production bank cannot prove project isolation"
             )
-        return str(suffix)
+        suffix = str(suffix)
+        if scope.bank_namespace() != suffix:
+            raise Blocked(
+                f"the declared bank namespace {suffix!r} is not the one this process "
+                f"derives banks with ({scope.bank_namespace()!r}); addresses are not "
+                "namespaced, so the run would touch the deployment's banks"
+            )
+        derived = {scope.global_bank().bank_id,
+                   scope.project_bank(ids.new_id("prj")).bank_id}
+        outside = {bank for bank in derived if not bank.startswith(suffix)}
+        if outside:
+            raise Blocked(
+                f"derived bank ids are outside the declared namespace {suffix!r}: "
+                f"{sorted(outside)}"
+            )
+        return suffix
 
     def require_dependency(self, phase: str) -> str:
         """A phase counts as available only with a real commit in the manifest.
@@ -1195,12 +1224,18 @@ def main() -> int:
     selected = args.case or list(CASES)
 
     records: list[CaseRecord] = []
+    # Captured from the first `open()`: each case's `finally` closes its Gate and
+    # `close()` restores whatever `_set_env` saw, so reading the namespace after
+    # the loop — or after the probe below — reports "" even though every case ran
+    # with it in effect.
+    namespace_used = ""
     for case_id in selected:
         record = CaseRecord(case_id, "BLOCKED", mode="not-run")
         gate = None
         try:
             gate = Gate(work, config, case_id)
             gate.open()
+            namespace_used = scope.bank_namespace()
             gate.require_engine()
             CASES_BY_ID[case_id](gate, record)
             record.verdict = "PASS"
@@ -1241,6 +1276,22 @@ def main() -> int:
     finally:
         probe_gate.close()
 
+    # A run that did not evaluate every case, or that was taken on a dirty
+    # checkout, is evidence about *something* but it is not the stage
+    # acceptance. Reporting PASS from it is how a subset run gets read as a
+    # full one, and `--allow-dirty` exists precisely so a development run can
+    # never be mistaken for the frozen candidate.
+    incomplete = [case_id for case_id in CASES if case_id not in selected]
+    stage_reasons: list[str] = []
+    if incomplete:
+        stage_reasons.append(
+            f"only {len(selected)} of {len(CASES)} cases were selected; not run: "
+            f"{', '.join(incomplete)}")
+    if args.allow_dirty:
+        stage_reasons.append(
+            "the checkout is dirty (--allow-dirty): a development run, never a "
+            "stage acceptance")
+    stage_acceptance = not stage_reasons
     payload = {
         "run_id": config.get("run_id") or f"p4-{int(time.time())}",
         "phase": "P4",
@@ -1258,10 +1309,14 @@ def main() -> int:
             "features": engine_probe.get("features") or {},
         },
         "deployment_mode": scope.deployment_mode(),
+        "bank_namespace": namespace_used,
         "provenance": meta,
         "cases": [record.as_dict() for record in records],
+        "scope": {"selected": sorted(selected), "ran": sorted(selected),
+                  "complete": not incomplete, "not_run": sorted(incomplete)},
+        "stage_acceptance": {"eligible": stage_acceptance, "reasons": stage_reasons},
         "verdict": (
-            "PASS" if all(r.verdict == "PASS" for r in records)
+            "PASS" if (stage_acceptance and all(r.verdict == "PASS" for r in records))
             else ("BLOCKED" if all(r.verdict != "FAIL" for r in records) else "FAIL")
         ),
         "notes": [

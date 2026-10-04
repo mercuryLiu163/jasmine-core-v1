@@ -26,9 +26,9 @@ from typing import Any, Iterable
 
 from .. import clock, errors, ids
 from ..canonical import canonical_json, sha256_hex
+from . import scope as scope_module
 from .types import (
     ENGINE_STATES,
-    GLOBAL_BANK_ID,
     ITEM_STATUSES,
     RECALL_STATUSES,
     BankOutcome,
@@ -149,7 +149,7 @@ class MemoryStore:
         params: list[Any] = []
         if project_id is not None:
             clauses.append("(project_id = ? OR bank_id = ?)")
-            params.extend([project_id, GLOBAL_BANK_ID])
+            params.extend([project_id, scope_module.global_bank().bank_id])
         if status is not None:
             clauses.append("status = ?")
             params.append(status)
@@ -527,7 +527,7 @@ def _scope_clause(clauses: list[str], params: list[Any], *, project_id: str | No
     if project_id is not None:
         if include_global_bank:
             clauses.append("(project_id = ? OR bank_id = ?)")
-            params.extend([project_id, GLOBAL_BANK_ID])
+            params.extend([project_id, scope_module.global_bank().bank_id])
         else:
             clauses.append("project_id = ?")
             params.append(project_id)
@@ -543,7 +543,7 @@ def _scope_clause(clauses: list[str], params: list[Any], *, project_id: str | No
     if include_global_bank:
         clauses.append(f"(project_id IN ({marks}) OR bank_id = ?)")
         params.extend(list(projects))
-        params.append(GLOBAL_BANK_ID)
+        params.append(scope_module.global_bank().bank_id)
     else:
         clauses.append(f"project_id IN ({marks})")
         params.extend(list(projects))
