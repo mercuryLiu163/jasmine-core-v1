@@ -6,7 +6,7 @@ the item and the receipt that describes it, or the trace and every result row
 inside it, are one fact and must be visible together or not at all.
 
 The lifecycle rules that are not expressible as a CHECK live in
-`migrations/m0009_memory.py` as triggers: no `DELETE` on an item, no `UPDATE` of
+`migrations/m0011_memory.py` as triggers: no `DELETE` on an item, no `UPDATE` of
 an identity column, and append-only traces. This module therefore never issues a
 `DELETE` and never updates `document_id`, `content_sha256` or `source_event_id`.
 

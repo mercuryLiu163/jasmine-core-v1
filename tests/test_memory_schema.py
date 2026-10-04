@@ -1,4 +1,4 @@
-"""P4: the schema guarantees `m0009_memory` is supposed to enforce.
+"""P4: the schema guarantees `m0011_memory` is supposed to enforce.
 
 The P4 tables are only as trustworthy as the constraints behind them, because
 every writer in P4 is a background process and P6 is explicitly forbidden from
@@ -8,6 +8,8 @@ store, so a `DELETE` or an identity `UPDATE` is refused by SQLite itself.
 """
 
 from __future__ import annotations
+
+import re
 
 import sqlite3
 
@@ -39,9 +41,9 @@ def _write(conn, sql: str, params=()) -> None:
 class SchemaShape(MemoryTestCase):
     def test_the_migration_is_recorded_with_a_checksum(self) -> None:
         records = {row["name"]: row for row in applied_migrations(self.conn)}
-        self.assertIn("m0009_memory", records)
-        self.assertEqual(records["m0009_memory"]["version"], SCHEMA_VERSION)
-        self.assertEqual(len(records["m0009_memory"]["checksum"]), 64)
+        self.assertIn("m0011_memory", records)
+        self.assertEqual(records["m0011_memory"]["version"], SCHEMA_VERSION)
+        self.assertEqual(len(records["m0011_memory"]["checksum"]), 64)
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
 
     def test_the_expected_triggers_and_unique_indexes_exist(self) -> None:
@@ -64,13 +66,36 @@ class SchemaShape(MemoryTestCase):
         self.assertIn("ux_memory_jobs_source", _indexes(self.conn))
 
     def test_p4_created_no_table_it_does_not_own(self) -> None:
-        # P4 owns Memory and nothing else. In particular it creates no P3
-        # Checkpoint/Context table and no P6 Dashboard table, so the P3 contract
-        # stays single-sourced.
+        """P4's own migration touches Memory tables and nothing else.
+
+        Scoped to `m0011_memory` rather than to the whole schema: P3's
+        Checkpoint/Context tables *do* exist on an integrated Core, and it is
+        P3 that owns them. Asserting they are absent from the schema would
+        assert that P3 was not merged, which is the opposite of what this test
+        is for. So the check is that P4's migration text names no table it does
+        not own -- which is what would actually make P4 a second source of the
+        P3 contract.
+        """
+        from jasmine_core.migrations import m0011_memory as migration
+
+        created = set(re.findall(r"CREATE TABLE(?: IF NOT EXISTS)?\s+(\w+)",
+                                 "\n".join(migration.STATEMENTS)))
+        self.assertTrue(created, "P4's migration creates no table at all")
+        for owned in ("memory_items", "memory_item_sources", "memory_jobs",
+                      "memory_job_attempts", "memory_query_traces",
+                      "memory_query_trace_items", "memory_engine_status",
+                      "memory_project_actors"):
+            self.assertIn(owned, created)
+        for foreign in ("checkpoints", "context_packs", "context_pack_sections",
+                        "resume_results", "tasks", "events", "evidence", "rules"):
+            self.assertNotIn(foreign, created,
+                             f"P4's migration must not create {foreign}: it is not P4's")
+
+        # And the P6 Dashboard table does not exist anywhere yet, because no
+        # phase has shipped it. That one stays a whole-schema assertion.
         tables = {row["name"] for row in self.conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")}
-        for forbidden in ("checkpoints", "context_packs", "context_pack_sections", "dashboard"):
-            self.assertNotIn(forbidden, tables)
+        self.assertNotIn("dashboard", tables)
 
 
 class Constraints(MemoryTestCase):
@@ -251,9 +276,12 @@ class MigrationFromP1(MemoryTestCase):
                                                       home_host_id=HOST)
 
         applied = migrate(self.conn)
-        # P2-02 shipped m0008_resolutions, so the upgrade from a P1-era
-        # database has to apply that one as well as P4's.
-        self.assertEqual(applied, ["m0008_resolutions", "m0009_memory"])
+        # P2-02 shipped m0008_resolutions and P3 shipped m0009_continuity and
+        # m0010_context, so the upgrade from a P1-era database applies those as
+        # well as P4's. This is the test that would catch a renumber done
+        # without the migrations it renumbers past actually existing.
+        self.assertEqual(applied, ["m0008_resolutions", "m0009_continuity",
+                                   "m0010_context", "m0011_memory"])
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
         self.assertEqual(
             self.conn.execute("SELECT display_name FROM hosts WHERE host_id=?",

@@ -25,7 +25,8 @@ RANDOM_BYTES = RANDOM_BITS // 8
 
 #: prefix -> what the identifier names. `stp` and `evd` are reserved here so
 #: that P1 cannot introduce a different shape; the columns are not created yet.
-#: `int` is P2's interpretation id, `res`/`rvw` its resolution and review ids.
+#: `int` is P2's interpretation id, `res`/`rvw` its resolution and review ids;
+#: `ckp`/`rms`/`ctx` are P3's checkpoint, resume marker and Context Pack ids.
 #:
 #: P4 registers five further prefixes (ADR 0014 §2): `mem` Memory item, `mjb`
 #: durable Memory job, `mja` job attempt, `mtr` Recall/Reflect trace, `mqi` one
@@ -34,6 +35,7 @@ RANDOM_BYTES = RANDOM_BITS // 8
 #: same thing would give clients two ways to name one command.
 PREFIXES = frozenset({"prj", "tsk", "stp", "ses", "hst", "act", "evt", "evd", "aud", "key",
                       "rul", "int", "res", "rvw",
+                      "ckp", "rms", "ctx",
                       "mem", "mjb", "mja", "mtr", "mqi"})
 
 #: Every shipped prefix is three characters; the pattern is exact rather than a

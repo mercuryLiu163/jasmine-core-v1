@@ -48,6 +48,8 @@ P0/P1 tokens是整个Core实例的scope，尚无project ACL；过滤是查询上
 
 ## 7 Provider合同评审附录
 
+2026-10-01 CLI0.159.3兼容复验：独立实际binary/owned local mock Responses probe验证Interpreter实际_argv 8/8、P2 admission 8/8、P3 app-server 11/11；包含精确工具边界、Default模式Plan-only request_user_input不可用及未知工具拒绝。证据为artifacts/codex-01593-component-probe/summary.json。据此允许SHA256 4d210f7c5a18fd0386434df23b5bdbb8c0e7257d3e8a2b30b0769c8bbe99a878，保留旧0.159.0 fingerprint；配置版本按精确binary SHA选择，执行前仍复核。此为无付费model的component边界证据，七个真实Gate均NOT_RUN，不证明新版真实模型提取或Gate通过。未修改全局config/hooks/trust。
+
 初始独立component preflight捕获CLI0.159.0实际请求，顶层tools字段缺省、model精确gpt-6.1-sol、strict json_schema；同配置真实saved-auth调用13.8167秒产出结构候选。但后续完整检查发现input.additional_tools仍含code-mode functions.exec，因此初始记录不证明工具面为空。固定actual catalog条目清除apply_patch_tool_type/experimental_supported_tools/supports_search_tool及tool_mode（null），模型slug保持原值。禁用features与进程env whitelist以src/jasmine_core/interpreter_provider.py为准；CLI二进制SHA固定，其他版本拒绝直到重新评审。operator用JASMINE_CORE_INTERPRETER_CODEX和JASMINE_CORE_INTERPRETER_CATALOG显式启用；HTTP不可设置。catalog内容/hash与绝对executable路径/hash记录config digest；每调用重新核二进制hash，实际临时catalog由冻结字节生成。继承环境仅HOME/PATH/TMPDIR/LANG/LC_ALL/SYSTEMROOT和固定saved-auth CODEX_HOME，清除API key/BASE_URL/nonce/proxy/provider覆盖。没有修改全局config/hooks/trust。
 
 不同processor actor同源Event各有解释；后续Resolver必须按源Event及已应用历史去重，不能仅按interpretation_id。human assistant.message映射AGENT_PROPOSED（非用户明确），仅human user.prompt可标USER_EXPLICIT。schema版本不由model输出。

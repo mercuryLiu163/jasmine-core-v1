@@ -190,7 +190,7 @@ class MemoryCommands(CliTestCase):
         self.assertEqual(code, 0)
         payload = json.loads(output)
         self.assertEqual(payload["schema_version"], SCHEMA_VERSION)
-        self.assertIn("m0009_memory", [m["name"] for m in payload["migrations"]])
+        self.assertIn("m0011_memory", [m["name"] for m in payload["migrations"]])
         self.assertEqual(payload["drift"], [])
 
 

@@ -29,8 +29,8 @@ refusal an out-of-band writer cannot route around:
 
 from __future__ import annotations
 
-NAME = "m0009_memory"
-VERSION = 9
+NAME = "m0011_memory"
+VERSION = 11
 
 #: Frozen by ADR 0014 §2. Repeated here because SQLite cannot CHECK against a
 #: constant declared in Python: the constraint has to live in the table.

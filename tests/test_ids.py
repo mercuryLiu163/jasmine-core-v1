@@ -23,7 +23,8 @@ class IdFormat(unittest.TestCase):
         self.assertEqual(
             ids.PREFIXES,
             {"prj", "tsk", "stp", "ses", "hst", "act", "evt", "evd", "aud", "key", "rul",
-             "int", "res", "rvw", "mem", "mjb", "mja", "mtr", "mqi"},
+             "int", "res", "rvw", "ckp", "rms", "ctx",
+             "mem", "mjb", "mja", "mtr", "mqi"},
         )
 
     def test_prefix_appears_in_the_identifier(self) -> None:

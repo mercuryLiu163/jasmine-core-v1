@@ -113,10 +113,21 @@ class UnavailableProvider:
 class CodexProvider:
     """No command, model, credential or catalog is selected by an API request.
 
-    CLI0.159.0's no-execution contract was independently measured at its Responses
-    boundary. Other executables fail closed until independently revalidated.
+    Each allowed binary's no-execution contract must be independently measured
+    at its Responses boundary. Versions are identified by exact bytes, never by
+    trusting executable output. Other executables fail closed.
     """
     SUPPORTED_EXECUTABLE_SHA256='e89718aa1969bfc4a471277bdc4679a3a3529293de0a309909822dfd67ddb77a'
+    # Preserve the original validated fingerprint and component-test seam.
+    # Add newer version -> exact SHA entries only after independent boundary QA.
+    ADDITIONAL_VALIDATED_EXECUTABLES={
+        'codex-cli/0.159.3':'4d210f7c5a18fd0386434df23b5bdbb8c0e7257d3e8a2b30b0769c8bbe99a878',
+    }
+
+    @classmethod
+    def validated_executables(cls):
+        return {'codex-cli/0.159.0':cls.SUPPORTED_EXECUTABLE_SHA256,
+                **cls.ADDITIONAL_VALIDATED_EXECUTABLES}
 
     def __init__(self,executable: str,catalog_path: str):
         self.executable=Path(executable)
@@ -127,7 +138,9 @@ class CodexProvider:
                 raise ValueError('absolute operator paths required')
             executable_bytes=self.executable.read_bytes()
             digest=hashlib.sha256(executable_bytes).hexdigest()
-            if digest!=self.SUPPORTED_EXECUTABLE_SHA256:
+            versions=[version for version,expected in self.validated_executables().items()
+                      if digest==expected]
+            if len(versions)!=1:
                 raise ValueError('unsupported executable')
             if self.catalog_path.stat().st_size>512*1024:
                 raise ValueError('catalog too large')
@@ -144,7 +157,7 @@ class CodexProvider:
                 or entry['tool_mode'] is not None):
                 raise ValueError('catalog exposes tools')
             self.catalog_bytes=raw.encode('utf-8')
-            self.config.update(version='codex-cli/0.159.0',executable_sha256=digest,
+            self.config.update(version=versions[0],executable_sha256=digest,
                 catalog_sha256=hashlib.sha256(self.catalog_bytes).hexdigest(),
                 executable_path=str(self.executable.resolve()),catalog_path=str(self.catalog_path))
             self.valid=True

@@ -45,7 +45,7 @@ The complete review report will be saved in the root repository at
 - `src/jasmine_core/memory/` — `types`, `tokens`, `filtering`, `scope`, `transport`,
   `hindsight`, `provenance`, `adapter`, `store`, `eligibility`, `jobs`, `worker`,
   `lifecycle`, `health`, `api` (~6.0k lines).
-- `src/jasmine_core/migrations/m0009_memory.py` — P4 schema, version 9.
+- `src/jasmine_core/migrations/m0011_memory.py` — P4 schema, version 11.
 - `scripts/p4-memory-gate.py` — the real G01–G07 runner.
 - HTTP API `/v1/memory/*`, CLI `jasmine-core memory …` and `jasmine-core memory-worker`.
 - Docs: ADR 0014, `docs/p4-memory-operations.md`, `docs/api/core-api-v1.md`.
@@ -59,7 +59,7 @@ never writes a Rule, State, Evidence, Checkpoint or Task revision.
 
 | | P4 claims now | Taken by | Can P4 move? |
 |---|---|---|---|
-| migration | `m0009_memory`, `VERSION = 9` | P3 PR #11: `m0009_continuity`, `m0010_context` | **not yet** |
+| migration | `m0011_memory`, `VERSION = 11` | P3 PR #11: `m0009_continuity`, `m0010_context` | **merged on `p4-integration`** |
 | ADR | `0014-p4-memory-…` | P3 PR #11: 0011, 0012, 0013 | moved in `1f25555`→follow-up |
 
 History: cut as `m0007_memory` / ADR 0008 → `m0008_memory` / ADR 0009 when

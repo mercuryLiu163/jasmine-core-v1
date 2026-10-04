@@ -64,7 +64,7 @@ committed fact it needs, and §4 implements those checks.
 
 ## 3. Schema
 
-`m0009_memory` adds eight tables and touches nothing that exists. It creates no
+`m0011_memory` adds eight tables and touches nothing that exists. It creates no
 P3 Checkpoint/Context table and no P6 Dashboard table, so the P3 contract stays
 single-sourced.
 
@@ -689,14 +689,14 @@ directly.
 ## 12. Shared files, and what the integration owner owns
 
 P4 changed these files outside `src/jasmine_core/memory/` and
-`src/jasmine_core/migrations/m0009_memory.py`. They are all resolved **in this
+`src/jasmine_core/migrations/m0011_memory.py`. They are all resolved **in this
 branch** as of the rebase onto `850fbec`; none was applied by pushing to
 `main`, and the integration owner still has to take them in the merge.
 
 | File | Change | Action needed |
 | --- | --- | --- |
 | `__init__.py` | `SCHEMA_VERSION` 8 → **9** (`main` is at 8) | renumber with the migration |
-| `migrations/m0009_memory.py` | new | **renumbered three times**: cut as `m0007_memory`, then `m0008_memory`, then `m0009_memory` as P2 claimed `m0007_interpretations` and `m0008_resolutions`. Ships at `VERSION = 9`, `SCHEMA_VERSION = 9`. **P3 PR #11 also claims migration 9** (`m0009_continuity`), so whoever merges second renumbers. P4 cannot pre-empt by moving to `m0011`: `discover()` requires versions contiguous from 1, and with 9 and 10 absent `m0011` fails at import with `MigrationConflict: migration versions must be contiguous from 1: position 9 holds version 11`. The move to `m0011`/`SCHEMA_VERSION = 11` happens in the rebase onto P3, which P4 needs anyway for its Context Pack. |
+| `migrations/m0011_memory.py` | new | **renumbered four times**: cut as `m0007_memory`, then `m0008_memory`, then `m0009_memory` as P2 claimed `m0007_interpretations` and `m0008_resolutions`, and finally `m0011_memory` on the integration branch, because P3's branch also claims slot 9 (`m0009_continuity`) and adds `m0010_context`. That renumber was impossible before P3's migrations existed: `discover()` requires versions contiguous from 1, so with 9 and 10 absent `m0011` failed at import with `MigrationConflict: migration versions must be contiguous from 1: position 9 holds version 11`. Ships at `VERSION = 11`, `SCHEMA_VERSION = 11`. |
 | `ids.py` | five prefixes | register |
 | `models.py` | five `EVENT_TYPES` | register |
 | `auth.py` | three scopes + two actor-kind refusals | register |

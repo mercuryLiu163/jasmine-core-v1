@@ -17,13 +17,17 @@ from . import clock, db, errors, ids
 from .canonical import canonical_json, sha256_hex
 
 TOKEN_BYTES = 32
-SCOPES = ("admin", "objects:read", "objects:write", "events:read", "events:write",
+SCOPES = ("adapter:report", "adapter:attest", "adapter:read", "admin", "objects:read", "objects:write", "events:read", "events:write",
           "authority:read", "authority:propose", "authority:manage", "guard:check",
           "state:read", "state:write", "state:accept", "evidence:read",
-          "evidence:write", "evidence:attest", "evidence:confirm", "fingerprint:scan",
-          "fingerprint:read", "interpretations:read", "interpretations:process",
-          "interpretations:manage", "resolutions:read", "resolutions:process",
+          "evidence:write", "evidence:attest", "evidence:confirm",
+          "fingerprint:scan", "fingerprint:read",
+          "interpretations:read", "interpretations:process", "interpretations:manage",
+          "resolutions:read", "resolutions:process",
           "reviews:read", "reviews:manage",
+          # P3's continuity and Context scopes.
+          "checkpoint:read", "checkpoint:write", "resume:read", "resume:build",
+          "context:read", "context:build",
           # P4 (ADR 0014 §6). `memory:read` is read-only and non-authoritative,
           # so an Agent key may hold it: the Inspector shows Memory as history.
           # `memory:manage` (obsolete/delete/pin) and `memory:reflect` (an
@@ -62,6 +66,12 @@ class Auth:
             raise errors.InvalidRequest(
                 f"unknown scopes: {', '.join(unknown)}", unknown_scopes=unknown, allowed=list(SCOPES)
             )
+        if any(scope.startswith("adapter:") for scope in scopes):
+            from .adapter.config import AdapterConfig
+            adapter=AdapterConfig.load()
+            row=self._conn.execute("SELECT kind,home_host_id FROM actors WHERE actor_id=?",(actor_id,)).fetchone()
+            if row is None or row["kind"]!="system" or actor_id!=adapter.value["actor_id"] or row["home_host_id"]!=adapter.value["host_id"]:
+                raise errors.ForbiddenActorKind("adapter capabilities require a trusted system actor")
         if not scopes:
             raise errors.InvalidRequest("at least one scope is required", field="scopes")
         if self._conn.execute("SELECT 1 FROM actors WHERE actor_id = ?", (actor_id,)).fetchone() is None:
