@@ -817,6 +817,28 @@ class AbsenceIsProvenNotInferred(Wire):
                           "two engine namespaces saw each other's document")
         self.assertEqual(bank.bank_id, canonical)
 
+    def test_a_namespaced_read_back_is_not_mistaken_for_another_bank(self) -> None:
+        """The engine echoes its own address; Core's id is not it.
+
+        Comparing the collection's `bank_id` to `bank.bank_id` refused every
+        correct row the moment a namespace was configured, which broke the
+        read-back the absence proof depends on.
+        """
+        bank = scope.project_bank("prj_01K742SG00BMSDET9BTP151RAR")
+        os.environ["JASMINE_MEMORY_BANK_NAMESPACE"] = "run-b"
+        try:
+            self.transport.retain(bank=bank, document_id="doc-1", content="c",
+                                  context="x", metadata={}, tags=(),
+                                  memory_type="FAILURE_LESSON", timestamp=None)
+            # An absent document sends the read-back to the collection, whose
+            # entries name the *engine* bank. Before the fix this raised.
+            self.assertIsNone(self.transport.get_document(bank=bank,
+                                                          document_id="absent"))
+            self.assertIsNotNone(self.transport.get_document(bank=bank,
+                                                             document_id="doc-1"))
+        finally:
+            os.environ.pop("JASMINE_MEMORY_BANK_NAMESPACE", None)
+
     def test_a_document_from_another_bank_is_refused(self) -> None:
         """The collection was asked about one bank; its rows must be that bank's."""
         gone = self._gone()

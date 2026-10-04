@@ -66,6 +66,24 @@ import sys
 from pathlib import Path
 from typing import Any
 
+#: The environment this worker needs from the **deployment**, by name.
+#:
+#: P3 does not inherit a shell environment: `MemoryProvider` hands the child
+#: `PATH`, `LANG`, `PYTHONHASHSEED`, `PYTHONNOUSERSITE`, `PYTHONDONTWRITEBYTECODE`
+#: and `PYTHONPATH`, plus the two identity variables, and refuses any other key
+#: an operator tries to add (`environment` is allowlisted to
+#: `PYTHONPATH`/`LANG`/`LC_ALL`). So these names have to be on that allowlist or
+#: the worker is spawned with no database, no identity and no engine, and every
+#: answer is degraded however healthy the deployment is.
+#:
+#: Environment is the right channel rather than a config file: P3 folds the
+#: values into `config_digest`, so changing one changes the pinned deployment
+#: identity instead of quietly changing behaviour underneath it.
+REQUIRED_ENV = ("JASMINE_CORE_DB", "JASMINE_MEMORY_ACTOR_ID")
+#: Needed for results rather than for answering; absent means an engine-less Core,
+#: which the adapter reports as `engine_not_configured` rather than failing.
+ENGINE_ENV = ("JASMINE_HINDSIGHT_URL", "JASMINE_HINDSIGHT_API_KEY")
+
 #: P3 writes a bounded request and reads at most this much back.
 MAX_BYTES = 65536
 #: P3's own item cap, and its rule that an empty result carries none.
@@ -243,7 +261,10 @@ def main() -> int:
 
     db_path = os.environ.get("JASMINE_CORE_DB")
     if not db_path:
-        return _fail("no Core database configured for the Memory worker")
+        # The message names the variable, because the operator's fix is to add
+        # it to the provider's `environment` — and the provider's allowlist is
+        # the other half of that fix.
+        return _fail(f"no Core database configured; set {REQUIRED_ENV[0]} for the worker")
 
     repo = Path(__file__).resolve().parents[1]
     src = str(repo / "src")
@@ -252,6 +273,7 @@ def main() -> int:
 
     from jasmine_core import db as db_module
     from jasmine_core import errors
+    from jasmine_core.memory import scope as scope_module
     from jasmine_core.memory.adapter import MemoryAdapter
     from jasmine_core.memory.hindsight import HindsightTransport, config_from_env
     from jasmine_core.memory.store import MemoryStore
@@ -305,28 +327,35 @@ def main() -> int:
         project_id = query.get("project_id")
         if not isinstance(project_id, str) or not project_id:
             return _fail("the query did not name a project")
-        # The acting identity. P3's query does not carry one, so it comes from
-        # the operator's environment — a real, configured actor whose id is part
-        # of the pinned deployment digest — or the answer is degraded. It is
-        # never invented: the trace records who asked, and a made-up `actor_id`
-        # either fails the foreign key or, worse, is one that happens to be
-        # granted something.
-        actor_id = query.get("actor_id") if isinstance(query.get("actor_id"), str) else None
-        actor_id = actor_id or os.environ.get("JASMINE_MEMORY_ACTOR_ID")
+        # The acting identity comes from the deployment and nowhere else.
+        #
+        # The query is built from an HTTP request body upstream, so anything it
+        # carries is caller-influenced: if the request could name the actor, a
+        # caller could name one with a grant it does not have, and the trace
+        # would record the lie. So an `actor_id` in the query is refused rather
+        # than ignored — a future P3 that adds one should fail loudly here and
+        # be agreed, not be silently overridden.
+        if query.get("actor_id") is not None:
+            return answer([], None, "memory_actor_not_trusted", {})
+        actor_id = os.environ.get("JASMINE_MEMORY_ACTOR_ID")
         if not actor_id:
+            # Degraded rather than fatal: the answer shape is still owed to the
+            # caller, and the code names what the deployment has to supply.
             return answer([], None, "memory_actor_not_supplied", {})
         if conn.execute("SELECT 1 FROM actors WHERE actor_id=?",
                         (actor_id,)).fetchone() is None:
             return answer([], None, "memory_actor_unknown", {})
         engine = config_from_env()
         transport = HindsightTransport(engine) if engine is not None else None
-        adapter = MemoryAdapter(conn, MemoryStore(conn, schema_version=0), transport)
+        adapter = MemoryAdapter(conn, MemoryStore(conn, schema_version=0), transport,
+                                # The deployment's own mode, not the adapter's
+                                # `single_user` default: a worker that ignores
+                                # `acl` reads every project in the database and
+                                # answers for actors with no grant at all.
+                                mode=scope_module.deployment_mode())
         outcome = adapter.recall(RecallRequest(
             project_id=project_id,
-            # `single_user` does not read this: the mode has no second user to
-            # check against, which is why a placeholder is not a security claim
-            # here and why `acl` above refuses instead of using one.
-            actor_id=actor_id or "act_" + "0" * 26,
+            actor_id=actor_id,
             query=query.get("query_text") if isinstance(query.get("query_text"), str) else "",
             task_id=query.get("task_id") if isinstance(query.get("task_id"), str) else None,
             session_id=query.get("session_id") if isinstance(query.get("session_id"), str)

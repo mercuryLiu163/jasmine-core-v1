@@ -514,6 +514,13 @@ shorter than we asked — but a server is free to cap the page below the `limit`
 and *that* short page looks exactly like the last one, so the read stopped early
 and reported work done on units it never loaded.
 
+**The engine names its own address.** The documents collection echoes
+`bank_id` as the *engine's* bank — the namespaced one — while Core's `bank_id`
+stays canonical. Comparing the echo to the Core id refused every correct row the
+moment a namespace was configured, so the read-back the absence proof depends on
+answered `engine_protocol_error` for a bank that was in fact ours. It compares
+`engine_bank_id(bank)`, the address the request was actually made to.
+
 **An entry we cannot read is not an entry we may skip.** Completeness is not
 only "every page was fetched" but "every row on it was understood": a caller that
 filters the list for the entries it recognises turns a malformed, duplicated or
@@ -710,6 +717,9 @@ What the contract costs, each learned from P3's validator rather than assumed:
 
 * the result has **exactly** seven keys and each bank exactly five; P3 rejects
   unknown ones, so this is not "at least";
+* the banks are named by **Core's** canonical ids, because that is what the
+  contract compares; the engine's namespaced address is a wire detail and never
+  appears in an answer;
 * the `banks` are echoed from the request rather than derived, because P3
   compares the declared set to the requested one and degrades the whole answer
   on a mismatch;
@@ -734,17 +744,40 @@ what makes P3's re-check pass. This is why an item with no Evidence behind it is
 not sent at all: a failure nobody recorded a result for is not a lesson P3 will
 accept, and it should not be.
 
-Two consequences, both reported rather than papered over:
+**The environment is the whole configuration interface.** P3 hands the child
+five fixed values, the two identity variables and whatever the operator
+configured — allowlisted to `PYTHONPATH`/`LANG`/`LC_ALL`. The worker needs
+`JASMINE_CORE_DB` and `JASMINE_MEMORY_ACTOR_ID` to answer at all, and
+`JASMINE_HINDSIGHT_URL`/`JASMINE_HINDSIGHT_API_KEY` for an engine, so **those
+names have to be on that allowlist**; until they are, every answer is `degraded`
+however healthy the deployment is. Environment is the right channel rather than a
+config file: P3 folds the values into `config_digest`, so a change moves the
+pinned deployment identity instead of quietly changing behaviour under it. The
+worker declares the names (`REQUIRED_ENV`, `ENGINE_ENV`) so the allowlist can be
+extended to exactly them, and both halves are verified against P3's own provider:
+uncoordinated it returns `degraded / memory_invalid_or_unavailable / 0 items`,
+and with the allowlist extended the same run returns `ok` with the
+Evidence-backed lesson.
 
-* **`VERIFIED_OUTCOME` is not emitted yet.** It needs P1's `verified_transition`
-  proof, which lives in P3's branch; sending one without it produces an item P3
-  filters as `unverified_outcome`. It is deferred until that lands.
-* **P3's query carries no acting identity.** Every recall writes a trace that
-  records who asked, so the worker takes `JASMINE_MEMORY_ACTOR_ID` from the
-  operator's environment — part of the pinned deployment digest — and degrades
-  with `memory_actor_not_supplied` otherwise. It never invents one: a fabricated
-  `actor_id` either fails the foreign key or is one that happens to be granted
-  something. P3 adding the actor to the query would remove the requirement.
+**Identity comes from the deployment, and only from there.** Every recall writes
+a trace naming who asked, so the actor is `JASMINE_MEMORY_ACTOR_ID` — part of the
+pinned deployment digest — and a query carrying an `actor_id` is **refused** with
+`memory_actor_not_trusted` rather than obeyed. The query is built from an HTTP
+request body upstream, so anything in it is caller-influenced, and a worker that
+honoured it would let a caller name an actor with a grant it does not have, with
+the trace recording the lie. A missing variable is `memory_actor_not_supplied`
+and an unknown actor is `memory_actor_unknown`; none of the three invents an
+identity.
+
+**The deployment's authorisation mode is passed through.** `MemoryAdapter`
+defaults to `single_user`, so a worker that does not hand it
+`scope.deployment_mode()` answers with every project in the database while an
+`acl` deployment believes it is enforcing grants. In `acl` mode an actor with no
+row in `memory_project_actors` reads nothing, which is what the mode is for.
+
+**Still open:** `VERIFIED_OUTCOME` needs P1's `verified_transition` proof, which
+lives in P3's branch; sending one without it produces an item P3 filters as
+`unverified_outcome`, so only `FAILURE_LESSON` is emitted today.
 
 Worker claim/retain/completion is *not* an Event: those rows live in the
 append-only `memory_job_attempts`, because a background worker holds a lease owner

@@ -72,7 +72,8 @@ class P4sWorkerSpeaksP3sSlotProtocol(EndToEndOverTheWire):
                 "banks": banks, "max_items": MAX_ITEMS, "max_tokens": 600}
 
     def _spawn(self, payload: bytes | str, *, db: str | None = None,
-               identity: bool = True) -> subprocess.CompletedProcess:
+               identity: bool = True,
+               extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
         env = dict(os.environ)
         env["JASMINE_CORE_DB"] = db if db is not None else str(self.db_path)
         env["JASMINE_HINDSIGHT_URL"] = self.server.base_url
@@ -86,6 +87,9 @@ class P4sWorkerSpeaksP3sSlotProtocol(EndToEndOverTheWire):
         else:
             env.pop("JASMINE_MEMORY_PROVIDER_ID", None)
             env.pop("JASMINE_MEMORY_CONFIG_DIGEST", None)
+        env.pop("JASMINE_MEMORY_DEPLOYMENT_MODE", None)
+        if extra_env:
+            env.update(extra_env)
         body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
         return subprocess.run([sys.executable, str(WORKER)], input=body,
                               capture_output=True, env=env, timeout=60)
@@ -185,6 +189,42 @@ class P4sWorkerSpeaksP3sSlotProtocol(EndToEndOverTheWire):
         self.assertEqual(result["banks"][0]["bank_id"], "jasmine-global")
         self.assertIsNone(result["banks"][0]["project_id"])
 
+    def test_the_request_may_not_name_the_actor(self) -> None:
+        """The query is built from an HTTP body: a caller must not choose identity."""
+        self._retain_lesson()
+        query = self._query()
+        query["actor_id"] = "act_" + "0" * 26
+        result = json.loads(self._spawn(query).stdout)
+        self.assertEqual(result["error_code"], "memory_actor_not_trusted",
+                         "a caller-supplied actor was accepted")
+        self.assertEqual(result["items"], [])
+        self.assertEqual(result["banks"][0]["status"], "degraded")
+
+    def test_a_cli_deployment_mode_is_honoured_not_ignored(self) -> None:
+        """`acl` with no grant for this actor reads nothing.
+
+        The adapter's own default is `single_user`, so a worker that does not
+        pass the deployment's mode answers with every project in the database —
+        the mode exists to stop exactly that.
+        """
+        self._retain_lesson()
+        other = self.project("other")
+        # A populated table with somebody else's grant: the deployment is a
+        # legitimate `acl` one, and the worker's actor still has no row.
+        self.grant_project(other, actor_id=self.agent_actor)
+        in_acl = json.loads(self._spawn(
+            self._query(), extra_env={"JASMINE_MEMORY_DEPLOYMENT_MODE": "acl"}).stdout)
+        self.assertEqual(in_acl["items"], [],
+                         "an actor with no grant read this project's memory")
+        self.assertEqual(in_acl["banks"][0]["status"], "degraded")
+
+        # The grant is the same authority the rest of Core uses, so granting it
+        # is all that changes.
+        self.grant_project(self.project_id, actor_id=HUMAN)
+        granted = json.loads(self._spawn(
+            self._query(), extra_env={"JASMINE_MEMORY_DEPLOYMENT_MODE": "acl"}).stdout)
+        self.assertTrue(granted["items"], granted)
+
     def test_the_identity_is_echoed_from_the_environment(self) -> None:
         self._retain_lesson()
         result = json.loads(self._spawn(self._query()).stdout)
@@ -263,3 +303,78 @@ class TheWorkerBuildsItsOwnPathToTheCore(unittest.TestCase):
         # It refused the request rather than failing to import Core.
         self.assertNotEqual(completed.returncode, 0)
         self.assertNotIn(b"ModuleNotFoundError", completed.stderr)
+
+
+class TheDeploymentEnvironmentIsTheWholeInterface(unittest.TestCase):
+    """P3 hands the child a fixed environment; the worker must work in it.
+
+    `MemoryProvider` builds the child's environment from five fixed values, the
+    two identity variables and whatever the operator configured — allowlisted to
+    `PYTHONPATH`/`LANG`/`LC_ALL`. A worker that needs anything else is a worker
+    that returns degraded in production while passing every test run from a
+    shell.
+    """
+
+    #: Exactly what P3 constructs, before the operator's allowlisted fields.
+    P3_CHILD_ENV = {"PATH": os.defpath, "LANG": "C.UTF-8", "PYTHONHASHSEED": "0",
+                    "PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1"}
+
+    def setUp(self) -> None:
+        from test_memory_hindsight import EndToEndOverTheWire
+
+        self.fixture = EndToEndOverTheWire("runTest")
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.tearDown)
+        evidence_id, _ = self.fixture.evidence(
+            task_id=self.fixture.task_id, status="FAIL",
+            detail="callback task_id did not match the task")
+        self.evidence_id = evidence_id
+        self.fixture.scan()
+        self.fixture.worker(transport=self.fixture.wire).run(max_ticks=6)
+
+    def _env(self, **extra: str) -> dict[str, str]:
+        return {**self.P3_CHILD_ENV,
+                "JASMINE_MEMORY_PROVIDER_ID": "p4-env-test",
+                "JASMINE_MEMORY_CONFIG_DIGEST": "c" * 64, **extra}
+
+    def _query(self) -> dict:
+        project = self.fixture.project_id
+        return {"project_id": project, "task_id": self.fixture.task_id,
+                "query_text": "COMMAND_RESULT FAIL evidence", "query_sha256": "0" * 64,
+                "types": ["FAILURE_LESSON"],
+                "banks": [{"scope": "PROJECT", "bank_id": f"jasmine-project-{project}",
+                           "project_id": project}],
+                "max_items": 8, "max_tokens": 600}
+
+    def _run(self, env: dict[str, str]) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(WORKER)],
+                              input=json.dumps(self._query()).encode(),
+                              capture_output=True, env=env, timeout=60)
+
+    def test_it_answers_in_the_environment_p3_builds(self) -> None:
+        completed = self._run(self._env(
+            JASMINE_CORE_DB=str(self.fixture.db_path),
+            JASMINE_MEMORY_ACTOR_ID=HUMAN,
+            JASMINE_HINDSIGHT_URL=self.fixture.server.base_url))
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["status"], "ok", result)
+        self.assertTrue(result["items"],
+                        "the worker found nothing under P3's own environment shape")
+        self.assertEqual(result["items"][0]["memory_id"],
+                         next(i["memory_id"] for i in self.fixture.store.items()
+                              if self.evidence_id in i["evidence_ids"]))
+
+    def test_the_reporting_is_specific_when_the_environment_is_incomplete(self) -> None:
+        """Each missing variable names itself, so the operator knows what to add."""
+        without_db = self._run(self._env(JASMINE_MEMORY_ACTOR_ID=HUMAN))
+        self.assertNotEqual(without_db.returncode, 0)
+        self.assertIn(b"JASMINE_CORE_DB", without_db.stderr)
+
+        without_actor = self._run(self._env(
+            JASMINE_CORE_DB=str(self.fixture.db_path),
+            JASMINE_HINDSIGHT_URL=self.fixture.server.base_url))
+        self.assertEqual(without_actor.returncode, 0)
+        result = json.loads(without_actor.stdout)
+        self.assertEqual(result["error_code"], "memory_actor_not_supplied")
+        self.assertEqual(result["items"], [])

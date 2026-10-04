@@ -810,7 +810,12 @@ class HindsightTransport:
                         "id, so its pages cannot be checked",
                         retryable=False)
                 owner = entry.get("bank_id")
-                if owner is not None and owner != bank.bank_id:
+                # The engine names its own address, which carries the namespace;
+                # Core's `bank_id` does not. Comparing the echo to the Core id
+                # rejected every correct row the moment a namespace was
+                # configured, which is the opposite of the check's purpose.
+                expected_engine = scope_module.engine_bank_id(bank)
+                if owner is not None and owner != expected_engine:
                     # The collection was queried under one bank; an entry naming
                     # another is a row this call did not ask about, and treating
                     # it as part of the set is how a foreign document's presence
@@ -818,7 +823,7 @@ class HindsightTransport:
                     raise TransportError(
                         "engine_protocol_error",
                         "the documents collection returned a document belonging "
-                        f"to another bank ({owner!r} for {bank.bank_id!r})",
+                        f"to another bank ({owner!r} for {expected_engine!r})",
                         retryable=False)
                 if identifier == document_id:
                     raise TransportError(
