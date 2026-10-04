@@ -282,14 +282,30 @@ Transport safety, each item a real failure mode:
   for three different answers — a 404 whatever caused it, a 200 whose body was
   not an object (the collection endpoint's `{items: []}` is what a path
   resolved one level short returns), and a 200 with `null` — and `None` means
-  "not there" to every caller, including the worker recording `DELETED`. A
-  non-object body is now `engine_protocol_error`; an object without the
-  required `id` is too; and a 404 is read as absence only after
-  `GET .../documents` — same prefix, one level up — answers with an items array
-  that does not list this document. A 404 from that collection means the path
-  itself is missing here, and a collection that *does* list the id means the two
-  reads contradict each other; both are protocol errors. Together with the unit
-  listing the worker already checks, a wrong endpoint or an unrecognised bank
+  "not there" to every caller, including the worker recording `DELETED`. Three
+  separate requirements now stand between a404 and that conclusion:
+
+  * **the read-back must be this document.** `DocumentResponse` requires `id`,
+    and an id that is missing or that names a *different* document says nothing
+    about the one asked for — yet it was accepted, and every caller reads a
+    returned document as "the target is present";
+  * **the route must be reachable.** `GET .../documents`, same prefix one level
+    up, has to answer with an items array that does not list this document. A
+    404 from it means the path itself does not exist here; a collection that
+    *does* list the id means the two reads contradict each other;
+  * **every page must be read.** `limit` defaults to 100, so one page proves
+    nothing — a document on page 2 is present while a first-page-only check
+    reports it gone. `ListDocumentsResponse` requires `items`, `total`, `limit`
+    and `offset`, which is what makes full coverage *checkable* rather than
+    hoped for: the loop advances until `offset >= total`, and refuses to
+    conclude anything when the server ignores the requested offset, repeats an
+    id across pages, omits `total`, stops before its stated total, or exceeds a
+    hard page cap. Every one of those means "coverage not proved", which is an
+    error and not an absence.
+
+  A non-object body and a missing `id` are `engine_protocol_error` as well.
+  Together with the unit listing the worker already checks, a wrong endpoint,
+  an unrecognised bank, a paginated bank, or an answer about the wrong document
   can no longer be turned into a successful delete over a document that is
   still in the bank;
 * every failure becomes a stable `error_code` plus a redacted, clipped

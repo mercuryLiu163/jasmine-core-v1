@@ -661,13 +661,22 @@ class HindsightTransport:
                 "engine_protocol_error",
                 "the document read-back was not a JSON object",
                 retryable=False)
-        # `DocumentResponse` requires `id`. Without it a 200 carrying anything
-        # else — an error body, a list, a document-shaped echo of the wrong
-        # thing — would still be accepted as this document.
-        if not isinstance(payload.get("id"), str) or not payload["id"]:
+        # `DocumentResponse` requires `id`, and the answer must be *this*
+        # document. An id that is missing, or that names a different document,
+        # proves nothing about the one we asked for — yet it would still be
+        # accepted, and every caller reads a returned document as "the target is
+        # present".
+        identifier = payload.get("id")
+        if not isinstance(identifier, str) or not identifier:
             raise TransportError(
                 "engine_protocol_error",
                 "the document read-back did not carry the required `id`",
+                retryable=False)
+        if identifier != document_id:
+            raise TransportError(
+                "engine_protocol_error",
+                "the document read-back named a different document than the one "
+                "that was requested",
                 retryable=False)
         return payload
 
@@ -680,28 +689,88 @@ class HindsightTransport:
         this id means the per-document read contradicts itself. Both are protocol
         errors, not absence.
         """
-        try:
-            payload = self._request("GET", self._bank_path(bank, "/documents"))
-        except TransportError as exc:
-            if exc.http_status == 404:
+        # `limit` defaults to 100, so one page proves nothing: the document can
+        # sit on page 2 and a single-page check would still conclude it is gone.
+        # `ListDocumentsResponse` requires `items`, `total`, `limit` and `offset`,
+        # which is what makes full coverage provable rather than hoped for.
+        offset = 0
+        seen: set[str] = set()
+        for _ in range(_MAX_DOCUMENT_PAGES):
+            try:
+                payload = self._request("GET", self._bank_path(bank, "/documents"),
+                                        query={"limit": _DOCUMENT_PAGE_SIZE,
+                                               "offset": offset})
+            except TransportError as exc:
+                if exc.http_status == 404:
+                    raise TransportError(
+                        "engine_protocol_error",
+                        "the documents collection did not answer, so this 404 "
+                        "cannot be read as an absent document",
+                        retryable=False) from exc
+                raise
+            if (not isinstance(payload, dict)
+                    or not isinstance(payload.get("items"), list)):
                 raise TransportError(
                     "engine_protocol_error",
-                    "the documents collection did not answer, so this 404 cannot "
-                    "be read as an absent document",
-                    retryable=False) from exc
-            raise
-        if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
-            raise TransportError(
-                "engine_protocol_error",
-                "the documents collection did not return an items array",
-                retryable=False)
-        for entry in payload["items"]:
-            if isinstance(entry, dict) and entry.get("id") == document_id:
-                raise TransportError(
-                    "engine_protocol_error",
-                    "the document is listed by the collection but its read-back "
-                    "returned 404",
+                    "the documents collection did not return an items array",
                     retryable=False)
+            total = payload.get("total")
+            if isinstance(total, bool) or not isinstance(total, int):
+                raise TransportError(
+                    "engine_protocol_error",
+                    "the documents collection did not report a total, so full "
+                    "coverage cannot be proved",
+                    retryable=False)
+            if payload.get("offset") != offset:
+                raise TransportError(
+                    "engine_protocol_error",
+                    "the documents collection answered from a different offset "
+                    "than the one that was requested, so the pages are not "
+                    "partitioned",
+                    retryable=False)
+            for entry in payload["items"]:
+                if not isinstance(entry, dict):
+                    continue
+                identifier = entry.get("id")
+                if identifier == document_id:
+                    raise TransportError(
+                        "engine_protocol_error",
+                        "the document is listed by the collection but its "
+                        "read-back returned 404",
+                        retryable=False)
+                if isinstance(identifier, str):
+                    if identifier in seen:
+                        raise TransportError(
+                            "engine_protocol_error",
+                            "the documents collection returned a document "
+                            "twice, so its pages are not partitioned",
+                            retryable=False)
+                    seen.add(identifier)
+            offset += len(payload["items"])
+            if offset >= total:
+                return
+            if not payload["items"]:
+                # The total says there is more, but no more rows arrived: the
+                # cursor cannot advance, so the remaining pages are unread and
+                # absence is not proved.
+                raise TransportError(
+                    "engine_protocol_error",
+                    f"the documents collection reported {total} documents but "
+                    f"stopped after {offset}",
+                    retryable=False)
+        raise TransportError(
+            "engine_protocol_error",
+            f"the documents collection exceeds {_MAX_DOCUMENT_PAGES} pages, so "
+            "full coverage cannot be proved",
+            retryable=False)
+
+
+#: `GET .../documents` defaults to 100 rows per page, and a proof of absence
+#: has to read every page rather than the first one.
+_DOCUMENT_PAGE_SIZE = 100
+#: A hard stop so a server whose `total` never settles cannot spin this loop.
+#: 1000 pages of 100 is 100k documents, well past any real bank.
+_MAX_DOCUMENT_PAGES = 1000
 
 
 def _require_fields(payload: dict[str, Any], names: tuple[str, ...], what: str) -> None:

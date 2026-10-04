@@ -525,22 +525,112 @@ class AbsenceIsProvenNotInferred(Wire):
                 self.assertEqual(caught.exception.code, "engine_protocol_error")
                 self.assertFalse(caught.exception.retryable)
 
-    def test_a_404_is_read_as_absence_only_when_the_collection_answers(self) -> None:
-        gone = TransportError("engine_not_found", "no such document", retryable=False,
+    def _gone(self) -> TransportError:
+        return TransportError("engine_not_found", "no such document", retryable=False,
                               http_status=404)
+
+    @staticmethod
+    def _script(*responses):
+        queue = iter(responses)
+
+        def next_reply(*args, **kwargs):
+            reply = next(queue)
+            if isinstance(reply, Exception):
+                raise reply
+            return reply
+
+        return next_reply
+
+    @staticmethod
+    def _page(ids, *, total, offset, limit=100):
+        return {"items": [{"id": identifier} for identifier in ids],
+                "total": total, "limit": limit, "offset": offset}
+
+    def test_the_collection_is_read_through_every_page(self) -> None:
+        """One page proves nothing: `limit` defaults to 100.
+
+        A document on page 2 is present, but a first-page-only check would
+        conclude it is gone and the worker would record `DELETED`.
+        """
+        gone = self._gone()
+        first_page = [f"doc-{i:03d}" for i in range(100)]
+        # Page 0 does not contain it; page 1 does.
+        with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                gone,
+                self._page(first_page, total=102, offset=0),
+                self._page(["our-document", "doc-100"], total=102, offset=100))):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.get_document(bank=self.bank, document_id="our-document")
+        self.assertEqual(caught.exception.code, "engine_protocol_error")
+        self.assertIn("listed by the collection", caught.exception.safe_error_summary)
+
+        # The same shape with our document absent on the last page is absence.
+        with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                gone,
+                self._page(first_page, total=102, offset=0),
+                self._page(["doc-100", "doc-101"], total=102, offset=100))):
+            self.assertIsNone(self.transport.get_document(bank=self.bank,
+                                                          document_id="our-document"))
+
+    def test_coverage_that_cannot_be_proved_is_an_error_not_absence(self) -> None:
+        gone = self._gone()
+        full = [f"doc-{i:03d}" for i in range(100)]
+
+        # A server that answers from the first offset whatever is asked has not
+        # partitioned its pages, so "we read them all" would be untrue. The
+        # target is deliberately absent from every page: the refusal must come
+        # from the offset check, not from the document being listed.
+        with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                gone, self._page(full, total=250, offset=0),
+                self._page(full, total=250, offset=0))):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.get_document(bank=self.bank,
+                                            document_id="our-document")
+        self.assertIn("different offset", caught.exception.safe_error_summary)
+
+        # The total says there is more, but the cursor cannot advance.
+        with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                gone, self._page([], total=5, offset=0))):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.get_document(bank=self.bank, document_id="doc-001")
+        self.assertIn("stopped after 0", caught.exception.safe_error_summary)
+
+        # No total at all: coverage cannot be measured.
+        with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                gone, {"items": [], "limit": 100, "offset": 0})):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.get_document(bank=self.bank, document_id="doc-001")
+        self.assertIn("total", caught.exception.safe_error_summary)
+
+        # A repeated id across pages: the pages overlap, so nothing was covered.
+        with patch.object(HindsightTransport, "_request", side_effect=self._script(
+                gone, self._page(["dup", "a"], total=4, offset=0),
+                self._page(["dup", "b"], total=4, offset=2))):
+            with self.assertRaises(TransportError) as caught:
+                self.transport.get_document(bank=self.bank, document_id="doc-001")
+        self.assertIn("twice", caught.exception.safe_error_summary)
+
+    def test_the_read_back_must_be_the_document_that_was_asked_for(self) -> None:
+        """A document-shaped answer for a *different* document is not an answer."""
+        for body in ({"id": "somebody-elses-document", "bank_id": self.bank.bank_id},
+                     {"id": ""}):
+            with self.subTest(body=body):
+                with patch.object(HindsightTransport, "_request", return_value=body):
+                    with self.assertRaises(TransportError) as caught:
+                        self.transport.get_document(bank=self.bank, document_id="mine")
+                self.assertEqual(caught.exception.code, "engine_protocol_error")
+                self.assertFalse(caught.exception.retryable)
+
+        matching = {"id": "mine", "bank_id": self.bank.bank_id}
+        with patch.object(HindsightTransport, "_request", return_value=matching):
+            self.assertEqual(self.transport.get_document(bank=self.bank,
+                                                         document_id="mine"), matching)
+
+    def test_a_404_is_read_as_absence_only_when_the_collection_answers(self) -> None:
+        gone = self._gone()
         missing_route = TransportError("engine_not_found", "not found", retryable=False,
                                        http_status=404)
-
-        def script(*responses):
-            queue = iter(responses)
-
-            def next_reply(*args, **kwargs):
-                reply = next(queue)
-                if isinstance(reply, Exception):
-                    raise reply
-                return reply
-
-            return next_reply
+        script = self._script
 
         # The collection answers with an empty page: the bank and the `/documents`
         # prefix are alive, so the per-document 404 is about this document.
