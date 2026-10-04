@@ -51,13 +51,21 @@ DEPLOYMENT_MODES = (SINGLE_USER, ACL)
 
 MODE_ENV_VAR = "JASMINE_MEMORY_DEPLOYMENT_MODE"
 
-#: Optional prefix on every bank id this process derives.
+#: Optional prefix on the bank id *as the engine sees it*.
 #:
-#: Empty by default, so a Core that never sets it produces exactly the ids it
-#: produced before this existed. A Gate sets it from the operator's
+#: Empty by default, so a Core that never sets it addresses exactly the banks it
+#: addressed before this existed. A Gate sets it from the operator's
 #: `bank_suffix`, which is what makes that suffix mean anything: without it the
 #: only address two runs share is `jasmine-global`, and a Gate reading it would
 #: be reading the deployment's global bank while claiming its own namespace.
+#:
+#: It applies at the **transport boundary** (`engine_bank_id`) and never to
+#: `BankRef.bank_id`. Core's own ids stay canonical — `jasmine-global`,
+#: `jasmine-project-{prj}` — because they are part of the scope model other
+#: phases read: P3's Memory provider validates exactly those two shapes, and a
+#: namespaced deployment is still obliged to hand it canonical ids. Two Gate runs
+#: are isolated because their *engine* banks differ, which is where the data
+#: lives; what Core calls them is its own business.
 NAMESPACE_ENV_VAR = "JASMINE_MEMORY_BANK_NAMESPACE"
 _NAMESPACE_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
@@ -83,19 +91,15 @@ def bank_namespace(env: dict[str, str] | None = None) -> str:
     return value
 
 
-def _qualified(bank_id: str) -> str:
-    namespace = bank_namespace()
-    return f"{namespace}{bank_id}" if namespace else bank_id
+def engine_bank_id(bank: BankRef) -> str:
+    """The bank id to address the engine with.
 
-
-def _unqualified(bank_id: object) -> str | None:
-    """The canonical id, or `None` when it is not in this namespace."""
-    if not isinstance(bank_id, str):
-        return None
+    The one place the configured namespace is applied. Every engine path goes
+    through `hindsight.HindsightTransport._bank_path`, so there is one address
+    to get right rather than one per operation.
+    """
     namespace = bank_namespace()
-    if not namespace:
-        return bank_id
-    return bank_id[len(namespace):] if bank_id.startswith(namespace) else None
+    return f"{namespace}{bank.bank_id}" if namespace else bank.bank_id
 
 
 def deployment_mode(env: dict[str, str] | None = None) -> str:
@@ -113,15 +117,15 @@ def deployment_mode(env: dict[str, str] | None = None) -> str:
 
 
 def global_bank() -> BankRef:
-    return BankRef(bank_id=_qualified(GLOBAL_BANK_ID), scope_kind="global", project_id=None)
+    return BankRef(bank_id=GLOBAL_BANK_ID, scope_kind="global", project_id=None)
 
 
 def project_bank(project_id: str) -> BankRef:
     if not ids.is_id(project_id, "prj"):
         raise errors.InvalidRequest("project_id must be a prj_ id", field="project_id",
                                     value=project_id)
-    return BankRef(bank_id=_qualified(f"{PROJECT_BANK_PREFIX}{project_id}"),
-                   scope_kind="project", project_id=project_id)
+    return BankRef(bank_id=f"{PROJECT_BANK_PREFIX}{project_id}", scope_kind="project",
+                   project_id=project_id)
 
 
 def is_valid_bank_id(bank_id: object) -> bool:
@@ -131,25 +135,23 @@ def is_valid_bank_id(bank_id: object) -> bool:
     V0-style bank name arriving from a remote response; it is not an
     authorisation check and never used as one.
 
-    With a namespace configured, an id that does not carry it is not one of
-    ours at all — which is the point: a bare `jasmine-global` from a remote
-    response in a namespaced deployment is somebody else's address.
+    These are Core's ids, which are canonical whatever namespace the engine is
+    addressed with; `engine_bank_id` is where the two forms differ, and it is
+    applied on the wire rather than here.
     """
-    canonical = _unqualified(bank_id)
-    if canonical is None:
+    if not isinstance(bank_id, str):
         return False
-    return bool(GLOBAL_BANK_RE.fullmatch(canonical)
-                or PROJECT_BANK_RE.fullmatch(canonical))
+    return bool(GLOBAL_BANK_RE.fullmatch(bank_id)
+                or PROJECT_BANK_RE.fullmatch(bank_id))
 
 
 def scope_of(bank_id: object) -> BankRef | None:
     """Recover the scope of a well-formed bank id, or None if it is not ours."""
-    canonical = _unqualified(bank_id)
-    if canonical is None:
+    if not isinstance(bank_id, str):
         return None
-    if GLOBAL_BANK_RE.fullmatch(canonical):
+    if GLOBAL_BANK_RE.fullmatch(bank_id):
         return global_bank()
-    match = PROJECT_BANK_RE.fullmatch(canonical)
+    match = PROJECT_BANK_RE.fullmatch(bank_id)
     if match:
         return project_bank(match.group(1))
     return None

@@ -74,6 +74,7 @@ from typing import Any
 
 from .. import errors
 from . import filtering
+from . import scope as scope_module
 from .transport import TransportError
 from .types import BankRef, EngineResult
 
@@ -372,10 +373,13 @@ class HindsightTransport:
                               retryable=False, http_status=status)
 
     def _bank_path(self, bank: BankRef, suffix: str) -> str:
-        # `bank_id` is validated as a closed character class by
-        # `memory.scope` before it ever reaches here, and is additionally
-        # percent-encoded so a future prefix cannot become a path traversal.
-        return f"/banks/{urllib.parse.quote(bank.bank_id, safe='')}{suffix}"
+        # `engine_bank_id` is where the configured namespace is applied, so this
+        # is the single place a bank address is formed. `bank_id` is validated as
+        # a closed character class by `memory.scope` before it ever reaches here,
+        # and the result is percent-encoded so even a namespace cannot become a
+        # path traversal.
+        return (f"/banks/{urllib.parse.quote(scope_module.engine_bank_id(bank), safe='')}"
+                f"{suffix}")
 
     # -- MemoryTransport ---------------------------------------------------
 
@@ -466,7 +470,7 @@ class HindsightTransport:
                 "the engine queued the retain instead of storing it; the document "
                 "has not been confirmed and must not be marked retained",
                 retryable=True)
-        if payload["bank_id"] != bank.bank_id:
+        if payload["bank_id"] != scope_module.engine_bank_id(bank):
             # Acknowledging a different bank is not an acknowledgement of this
             # one. Recording it would let a retained document be filed under a
             # receipt that says it went somewhere else.
@@ -478,7 +482,10 @@ class HindsightTransport:
         usage = payload.get("usage")
         return {
             "document_id": document_id,
-            "bank_id": payload.get("bank_id") or bank.bank_id,
+            # Core's canonical id, not the engine's address: the echo was
+            # validated against the namespaced form above, and every Core row
+            # joins on the canonical one.
+            "bank_id": bank.bank_id,
             "items_count": _as_int(payload.get("items_count")),
             "engine_api_version": None,
             "operation_id": payload.get("operation_id"),

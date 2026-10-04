@@ -439,25 +439,33 @@ class TheBankNamespaceShapesAddresses(unittest.TestCase):
         self.assertEqual(scope_module.project_bank(project).bank_id,
                          f"jasmine-project-{project}")
 
-    def test_a_namespace_prefixes_and_round_trips(self) -> None:
+    def test_a_namespace_moves_the_engine_address_not_the_core_id(self) -> None:
+        """The namespace is the engine's, and Core's ids stay canonical.
+
+        P3's Memory provider validates `jasmine-global` and
+        `jasmine-project-{prj}` exactly, so a namespaced deployment still has to
+        hand it those. Isolation holds where the data is: the engine addresses
+        differ.
+        """
         from jasmine_core import ids as ids_module
         from jasmine_core.memory import scope as scope_module
 
         os.environ["JASMINE_MEMORY_BANK_NAMESPACE"] = "run-42"
         self.assertEqual(scope_module.bank_namespace(), "run-42")
-        self.assertEqual(scope_module.global_bank().bank_id, "run-42jasmine-global")
         project = ids_module.new_id("prj")
         bank = scope_module.project_bank(project)
-        self.assertTrue(bank.bank_id.startswith("run-42"))
-        # round trip, and the bare address is now somebody else's
-        self.assertEqual(scope_module.scope_of(bank.bank_id).bank_id, bank.bank_id)
+        # Core-side: canonical, whatever the engine is called.
+        self.assertEqual(scope_module.global_bank().bank_id, "jasmine-global")
+        self.assertEqual(bank.bank_id, f"jasmine-project-{project}")
         self.assertEqual(scope_module.scope_of(bank.bank_id).project_id, project)
-        self.assertEqual(scope_module.scope_of("run-42jasmine-global").bank_id,
-                         "run-42jasmine-global")
-        self.assertIsNone(scope_module.scope_of("jasmine-project-" + project),
-                          "a bare address in a namespaced deployment is not ours")
+        self.assertIsNotNone(scope_module.scope_of("jasmine-global"))
         self.assertTrue(scope_module.is_valid_bank_id(bank.bank_id))
-        self.assertFalse(scope_module.is_valid_bank_id("jasmine-global"))
+        self.assertTrue(scope_module.is_valid_bank_id("jasmine-global"))
+        # Engine-side: namespaced, which is what two runs must not share.
+        self.assertEqual(scope_module.engine_bank_id(scope_module.global_bank()),
+                         "run-42jasmine-global")
+        self.assertEqual(scope_module.engine_bank_id(bank),
+                         f"run-42jasmine-project-{project}")
 
     def test_a_malformed_namespace_is_refused_rather_than_dropped(self) -> None:
         from jasmine_core.memory import scope as scope_module

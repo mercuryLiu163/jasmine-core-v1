@@ -90,6 +90,34 @@ The rebase also resolved the shared files against `850fbec` — `ids.py`
 `models.py`, `auth.py`, `api/handlers.py`, `core-api-v1.md` and the five test
 files that enumerate migrations.
 
+## P3 integration state
+
+`origin/main` is still `850fbec`; P3's PR #11 (`p3-checkpoint-context-resume`) is
+**open**, so the migration renumber (`m0009_memory` → `m0011_memory`,
+`SCHEMA_VERSION` 9 → 11) cannot happen yet: `migrations.discover()` requires
+versions contiguous from 1, and with `m0009`/`m0010` absent a `m0011` at position
+9 raises `MigrationConflict` at import. That renumber is mechanical and belongs
+to the rebase onto P3.
+
+What was done against the published P3 branch:
+
+* **Bank ids reconciled.** P3's Memory provider validates `jasmine-global` and
+  `jasmine-project-{prj}` exactly, so `JASMINE_MEMORY_BANK_NAMESPACE` now applies
+  at the **transport boundary** (`scope.engine_bank_id`) and never to
+  `BankRef.bank_id`. Two runs are isolated because their *engine* banks differ;
+  Core's ids stay canonical, which is what P3 is handed. A wire-level test drives
+  the real transport against the stub to show both halves at once.
+* **The worker exists**: `scripts/p4-memory-worker.py`, driven in tests exactly
+  the way P3 drives it — a real subprocess, the identity environment, one JSON
+  query on stdin, one JSON result on stdout — and checked against the rules P3's
+  validator enforces (exact key sets, bank echo, item cap, fact/Evidence
+  equalities, digest recomputation).
+
+Two contract gaps, reported rather than worked around: P3's query carries no
+acting identity (the worker requires `JASMINE_MEMORY_ACTOR_ID` and degrades
+otherwise, never inventing one), and `VERIFIED_OUTCOME` needs P1's
+`verified_transition` from P3's branch, so only `FAILURE_LESSON` is emitted today.
+
 ## Verification actually performed
 
 The independent run below used the clean candidate

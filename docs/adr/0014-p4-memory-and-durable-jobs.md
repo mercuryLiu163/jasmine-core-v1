@@ -698,6 +698,54 @@ branch** as of the rebase onto `850fbec`; none was applied by pushing to
 | `api/dispatch.py` | a 500 with code `internal_error` no longer echoes its message | **review separately**: this is a pre-existing ADR 0003 gap that P4 surfaced, and it changes P0 behaviour |
 | `cli.py` | `memory` and `memory-worker` | apply as a patch |
 
+### The Memory worker P3 spawns
+
+P3 owns the `jasmine.memory-slot.v1` contract — `context/memory_provider.py`
+starts an operator-configured `argv` as a subprocess, writes one JSON query to
+its stdin and reads one JSON result from its stdout — and P4 owns the process:
+`scripts/p4-memory-worker.py`. P3's own tests use inline one-liners as the worker
+and ship only a failing one, so there is nothing else to point `argv` at.
+
+What the contract costs, each learned from P3's validator rather than assumed:
+
+* the result has **exactly** seven keys and each bank exactly five; P3 rejects
+  unknown ones, so this is not "at least";
+* the `banks` are echoed from the request rather than derived, because P3
+  compares the declared set to the requested one and degrades the whole answer
+  on a mismatch;
+* identity is echoed from `JASMINE_MEMORY_PROVIDER_ID` /
+  `JASMINE_MEMORY_CONFIG_DIGEST`, so a worker cannot answer for another
+  deployment;
+* at most 8 items and 64 KiB, and an answer that would not fit is degraded with
+  a code rather than truncated;
+* nothing exits non-zero except an unreadable request or a missing identity. A
+  degraded answer is information the caller can render; a dead process is a
+  hole. Core's own refusals (`CoreError`) come back as `degraded` with their
+  code for the same reason.
+
+**The worker does not forward an engine hit, it re-states it.** P3's
+`filter_memory` re-derives every claim from the local database: only
+`VERIFIED_OUTCOME` and `FAILURE_LESSON` survive, the item's `fact` must name a
+real Evidence row, `fact.subject_event_id` must be that row's `change_event_id`,
+`fact.value` must equal `evidence[fact.key]`, and **both** of the Evidence's own
+events must appear in `source_event_ids`. So the worker reads the Evidence row
+itself and cites that row's two events — which is what the memory is about, and
+what makes P3's re-check pass. This is why an item with no Evidence behind it is
+not sent at all: a failure nobody recorded a result for is not a lesson P3 will
+accept, and it should not be.
+
+Two consequences, both reported rather than papered over:
+
+* **`VERIFIED_OUTCOME` is not emitted yet.** It needs P1's `verified_transition`
+  proof, which lives in P3's branch; sending one without it produces an item P3
+  filters as `unverified_outcome`. It is deferred until that lands.
+* **P3's query carries no acting identity.** Every recall writes a trace that
+  records who asked, so the worker takes `JASMINE_MEMORY_ACTOR_ID` from the
+  operator's environment — part of the pinned deployment digest — and degrades
+  with `memory_actor_not_supplied` otherwise. It never invents one: a fabricated
+  `actor_id` either fails the foreign key or is one that happens to be granted
+  something. P3 adding the actor to the query would remove the requirement.
+
 Worker claim/retain/completion is *not* an Event: those rows live in the
 append-only `memory_job_attempts`, because a background worker holds a lease owner
 rather than a registered device actor, and a job row is not Truth another

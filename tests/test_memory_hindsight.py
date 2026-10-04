@@ -16,6 +16,7 @@ speaks the documented protocol.
 
 from __future__ import annotations
 
+import os
 import unittest
 from unittest.mock import patch
 
@@ -783,6 +784,38 @@ class AbsenceIsProvenNotInferred(Wire):
                 self.transport.get_document(bank=self.bank, document_id="our-document")
         self.assertEqual(caught.exception.code, "engine_conflict")
         self.assertTrue(caught.exception.retryable)
+
+    def test_a_namespace_moves_the_engine_address_not_the_core_id(self) -> None:
+        """The isolation is real, and it happens where the data lives.
+
+        Two runs — or a run and the deployment — must not share an engine bank;
+        P3's Memory provider must still be handed Core's canonical ids. Both hold
+        at once only if the namespace is applied on the wire. This drives the
+        real transport against the stub to say so, rather than asserting on a
+        helper.
+        """
+        bank = scope.project_bank("prj_01K742SG00BMSDET9BTP151RAR")
+        canonical = bank.bank_id
+        os.environ["JASMINE_MEMORY_BANK_NAMESPACE"] = "run-a"
+        try:
+            self.transport.retain(bank=bank, document_id="doc-1", content="c",
+                                  context="x", metadata={}, tags=(),
+                                  memory_type="FAILURE_LESSON", timestamp=None)
+            self.assertIn(("run-a" + canonical, "doc-1"), self.server.httpd.documents,
+                          "the engine was not addressed with the namespace")
+            self.assertNotIn((canonical, "doc-1"), self.server.httpd.documents)
+            self.assertEqual(bank.bank_id, canonical,
+                             "Core's own id changed with the engine's address")
+            self.assertIsNotNone(self.transport.get_document(bank=bank,
+                                                             document_id="doc-1"))
+        finally:
+            os.environ.pop("JASMINE_MEMORY_BANK_NAMESPACE", None)
+
+        # Same Core bank, no namespace: a different engine bank, so the document
+        # that run-a wrote is not visible to it.
+        self.assertIsNone(self.transport.get_document(bank=bank, document_id="doc-1"),
+                          "two engine namespaces saw each other's document")
+        self.assertEqual(bank.bank_id, canonical)
 
     def test_a_document_from_another_bank_is_refused(self) -> None:
         """The collection was asked about one bank; its rows must be that bank's."""

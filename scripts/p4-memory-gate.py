@@ -233,8 +233,10 @@ class Gate:
                 f"derives banks with ({scope.bank_namespace()!r}); addresses are not "
                 "namespaced, so the run would touch the deployment's banks"
             )
-        derived = {scope.global_bank().bank_id,
-                   scope.project_bank(ids.new_id("prj")).bank_id}
+        # The namespace lives on the engine address, which is where the data is;
+        # Core's own ids stay canonical so a P3 Memory provider accepts them.
+        derived = {scope.engine_bank_id(scope.global_bank()),
+                   scope.engine_bank_id(scope.project_bank(ids.new_id("prj")))}
         outside = {bank for bank in derived if not bank.startswith(suffix)}
         if outside:
             raise Blocked(
