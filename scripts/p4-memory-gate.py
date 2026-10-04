@@ -791,7 +791,15 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
     check(recovered.status == "ok", f"the engine did not recover: {recovered.as_dict()}")
     bank = scope.project_bank(project)
     units = gate.engine_units(bank, document_id)
-    check(len(units) == 1, f"recovery produced {len(units)} remote documents, expected 1")
+    # Not a unit count. Hindsight extracts *several* facts from one document --
+    # two from a single short lesson -- and how many is the engine's business, not
+    # P4's: `document_id` is the idempotency key, so "recovery did not duplicate
+    # anything" is a statement about documents and about Core, both of which are
+    # counted below. Asserting one unit would mean this Gate could only ever pass
+    # against a double that fabricates one unit per document.
+    check(bool(units), "recovery left the document in the engine with no memory unit")
+    check(gate.engine_document(bank, document_id) is not None,
+          "recovery lost the remote document")
     record.engine_evidence["probe"] = probed
     record.engine_evidence["recovered_document_units"] = len(units)
     record.receipts.append(gate.receipt("g05-degraded", {
@@ -946,7 +954,11 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
         from jasmine_core.memory import scope as _scope
         bank = _scope.project_bank(project)
         units_before = gate.engine_units(bank, document_id)
-        check(len(units_before) == 1,
+        # The window is "the engine has it, Core does not know yet", so what has to
+        # be true is that the document reached the engine with at least one
+        # extracted unit -- not that it has exactly one. The real engine extracts
+        # several facts per document.
+        check(bool(units_before),
               f"the doomed retain did not reach the engine: {len(units_before)} units")
         # Time passes; the lease is what makes a second worker allowed to take over.
         with db.transaction(conn):
@@ -996,11 +1008,18 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
         attempts = job_store.attempts(interrupted_job)
         bank = scope.project_bank(project)
         units_after = gate.engine_units(bank, document_id)
-        check(len(units_after) == 1,
-              f"the interrupted retain left {len(units_after)} remote memory units, "
-              f"expected 1")
+        check(bool(units_after),
+              "the interrupted retain left the document with no remote memory unit "
+              "after recovery")
         document = gate.engine_document(bank, document_id)
         check(document is not None, "the remote document is missing after recovery")
+        # Idempotency where it is actually countable: one document, carrying every
+        # unit the engine extracted from it, and no second document for the same
+        # memory. The count of units is the engine's; the count of documents is
+        # the property P4 promised.
+        check(int(document.get("memory_unit_count") or 0) == len(units_after),
+              f"the engine reports {document.get('memory_unit_count')} units but lists "
+              f"{len(units_after)}; the Gate would be reading one page as the whole")
         # The Core source is untouched by either window.
         check(conn.execute("SELECT 1 FROM rules WHERE status='ACTIVE'").fetchone() is not None,
               "a Memory crash changed Authority")
