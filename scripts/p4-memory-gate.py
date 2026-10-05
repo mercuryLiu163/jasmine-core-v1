@@ -1674,8 +1674,9 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
     # it would fold window 1's own effect into the baseline and check nothing.
     conn = gate.conn()
     try:
-        jobs_before = {j["job_id"] for j in jobs_module.JobStore(
-            conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)).jobs()}
+        store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
+        jobs_before = {j["job_id"] for j in store.jobs()}
+        cursor_before = store.cursor()
     finally:
         conn.close()
 
@@ -1699,8 +1700,12 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
         jobs_after = {j["job_id"] for j in job_store.jobs()}
         check(jobs_after == jobs_before,
               f"the committed process enqueued work: {sorted(jobs_after - jobs_before)}")
-        check(job_store.cursor() == 0,
-              "a dead process still moved the recovery cursor")
+        # Same shape as the job comparison: window 1 must leave the cursor where it
+        # found it, not at zero. An absolute 0 is only true on a first run -- phase 1's
+        # window 2 legitimately advanced it, which is the whole point of that window.
+        check(job_store.cursor() == cursor_before,
+              f"the committed process moved the recovery cursor: {cursor_before} -> "
+              f"{job_store.cursor()}")
         record.source_event_ids.append(_latest_decision_event(conn, project))
     finally:
         conn.close()
