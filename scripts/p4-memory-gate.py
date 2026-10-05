@@ -1516,12 +1516,24 @@ def _verify_g05_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
                                           "not available", "unavailable", "down",
                                           "could not reach", "cannot reach")),
           f"the agent did not notice its Memory was unavailable: {answer[:300]!r}")
+    # These phrases are only false when *asserted*. "degraded does not mean the project
+    # has no history" says the opposite of "there is no history", and a substring test
+    # cannot tell them apart -- it rejected a correct answer on exactly that
+    # distinction. So each occurrence is only counted when nothing negates it nearby.
+    # This is a heuristic and it is documented as one: an LLM judge would read the
+    # sentence properly but would not be reproducible run to run, and an acceptance
+    # gate that changes its mind is worse than one with a blunt rule.
+    negated = ("not ", "n't", "never", "no ", "cannot", "can't", "is not", "was not",
+               "rather than", "instead of", "does not", "did not")
     for invention in ("no memory", "no history", "nothing remembered", "never recorded",
                       "no records"):
-        check(invention not in answer,
-              f"the agent reported {invention!r} from a degraded Memory, which is a "
-              f"false claim about the project rather than a gap in its context: "
-              f"{answer[:300]!r}")
+        for match in re.finditer(re.escape(invention), answer):
+            window = answer[max(0, match.start() - 60):match.start()]
+            if not any(neg in window for neg in negated):
+                raise Failed(
+                    f"the agent asserted {invention!r} from a degraded Memory, which is "
+                    f"a false claim about the project rather than a gap in its context: "
+                    f"{answer[max(0, match.start() - 60):match.end() + 40]!r}")
 
     # And the tool result it reported is recorded as real Tool Evidence, output and
     # all -- the capture is only worth having if the bytes are the ones the command
