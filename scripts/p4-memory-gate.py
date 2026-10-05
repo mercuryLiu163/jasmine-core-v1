@@ -1337,17 +1337,6 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
     record.receipts.append(gate.receipt("g04-recall", {"project_a": project_a,
                                                        "project_b": project_b}))
 
-    # Project B's own pack: the question A was never allowed to see, asked in B.
-    # A pack is where cross-project isolation has to hold, because a pack is what
-    # an agent actually reads.
-    task_id = gate.new_task(project_b, "API compatibility")
-    prompt = gate.event(project_b, "user.prompt",
-                        "may I change the API shape?", task_id=task_id)
-    record.source_event_ids.append(prompt)
-    pack = gate.build_pack(project_id=project_b, task_id=task_id,
-                           prompt_event_id=prompt, key=key)
-    _verify_g04_pack(gate, record, pack)
-
     # The ACL leg, in its own database and its own namespace, over the real
     # authenticated API with real keys. It cannot run in this one: `acl` is read from
     # the environment on every `ProjectAccess` construction, so proving it would mean
@@ -1369,6 +1358,17 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
         "agent_manage_key_refused_at_issuance":
             acl["agent_manage_key_refused_at_issuance"],
     }
+
+    # Project B's own pack: the question A was never allowed to see, asked in B.
+    # A pack is where cross-project isolation has to hold, because a pack is what
+    # an agent actually reads.
+    task_id = gate.new_task(project_b, "API compatibility")
+    prompt = gate.event(project_b, "user.prompt",
+                        "may I change the API shape?", task_id=task_id)
+    record.source_event_ids.append(prompt)
+    pack = gate.build_pack(project_id=project_b, task_id=task_id,
+                           prompt_event_id=prompt, key=key)
+    _verify_g04_pack(gate, record, pack)
 
 
 
