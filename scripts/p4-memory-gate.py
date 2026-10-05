@@ -1324,10 +1324,14 @@ def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     record.context_pack_ids.append(pack["context_pack_id"])
     project_b = pack["project_id"]
 
-    rendered = pack["rendered_content"]
-    check("must stay API compatible" in rendered.lower(),
+    # Both sides are lowercased. The needle used to keep its capitals while the
+    # haystack was lowercased, so the check could never be true -- the case would
+    # have failed on a perfectly correct pack, and the reason read like a missing
+    # Decision rather than a broken comparison.
+    rendered = pack["rendered_content"].lower()
+    check("must stay api compatible" in rendered,
           "project B's pack does not carry B's own Decision")
-    check("change the api shape freely" not in rendered.lower(),
+    check("change the api shape freely" not in rendered,
           "project B's pack carries project A's Decision; isolation did not hold at the "
           "pack, where an agent would actually read it")
     named = set(re.findall(r"prj_[0-9A-Z]{26}", rendered))
