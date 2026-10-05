@@ -13,6 +13,7 @@ extractor, no real Agent session, and no P3 Context Pack.
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 import pathlib
@@ -337,7 +338,16 @@ class NoCaseReturnsWithoutItsEvidence(unittest.TestCase):
         # because a case that cannot finish has not passed.
         evidenced = set()
         for case_id in CASES:
-            source = __import__("inspect").getsource(self.runner.CASES_BY_ID[case_id])
+            module = self.runner
+            source = inspect.getsource(module.CASES_BY_ID[case_id])
+            # A case may hand its last statement to a module-level verifier, and the
+            # evidence is then performed there -- so follow the delegation rather than
+            # looking only inside the case body.
+            if isinstance(final, ast.Return) and isinstance(final.value, ast.Call):
+                callee = getattr(final.value.func, "id", None)
+                helper = getattr(module, callee, None) if callee else None
+                if helper is not None:
+                    source += inspect.getsource(helper)
             if "verify_session" in source or "spawn_worker" in source:
                 evidenced.add(case_id)
         self.assertEqual(set(returning), evidenced,
