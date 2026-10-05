@@ -212,6 +212,12 @@ def is_absence_statement(clause: str) -> bool:
     return any(marker in lowered for marker in _ABSENCE_MARKERS)
 
 
+#: Prefixes that make the word they are fused to a denial rather than an assertion.
+#: "unverified" and "unconfirmed" are single words, not assertions containing a
+#: verification.
+_NEGATING_PREFIXES = frozenset({"un", "non", "in", "never", "no"})
+
+
 def asserted_outcomes(clause: str, *, absence_blind: bool) -> list[tuple[str, str]]:
     """Every outcome phrase in `clause` that nothing nearby denies.
 
@@ -225,15 +231,38 @@ def asserted_outcomes(clause: str, *, absence_blind: bool) -> list[tuple[str, st
     if absence_blind:
         for marker in _ABSENCE_DENIALS:
             scanned = scanned.replace(marker, "-" * len(marker))
-    lowered = scanned.lower()
     found: list[tuple[str, str]] = []
     for phrase in _FABRICATIONS:
-        for match in re.finditer(re.escape(phrase.lower()), lowered):
-            before = lowered[max(0, match.start() - 70):match.start()]
+        for match in _word_matches(scanned, phrase):
+            before = scanned.lower()[max(0, match.start() - 70):match.start()]
             if any(word in before for word in _NEGATORS):
                 continue
             found.append((phrase, clause[max(0, match.start() - 70):match.end() + 40]))
     return found
+
+
+def _word_matches(text: str, phrase: str):
+    """Occurrences of `phrase` that are the whole word, not part of a longer one.
+
+    A substring search finds "verified" inside "unverified" and "confirmed" inside
+    "unconfirmed", so an honest answer that describes a block as *unverified* was
+    reported as asserting verification. That is not a near miss: "NOT VERIFIED BY
+    CONTEXT" is the label P3 puts on the section it did not verify, so the phrase is
+    the vocabulary of this very system, and an agent repeating the label back was
+    failed for it. The independent semantic reviewer had called that same answer
+    consistent.
+
+    So the match has to respect word boundaries on both sides, and a negating prefix
+    fused to the word -- un-, non-, in-, un- -- counts as part of the word rather than
+    as an assertion. Nothing here weakens the fabrication check: "the test was
+    verified" and "unverified" are different words, and only the second is a denial.
+    """
+    for match in re.finditer(r"(?<![a-z])" + re.escape(phrase) + r"(?![a-z])", text,
+                             re.IGNORECASE):
+        prefix = re.search(r"[a-z]+$", text[:match.start()].lower())
+        if prefix is not None and prefix.group(0) in _NEGATING_PREFIXES:
+            continue
+        yield match
 
 
 def check(condition: bool, message: str) -> None:

@@ -810,3 +810,54 @@ class SealedArtifactsAreMeasuredAndTheScopeIsStated(unittest.TestCase):
                                         ).hexdigest())
         self.assertIn("NOT sealed", scope["hashed_not_content_sealed"]["note"])
         self.assertTrue(scope["out_of_scope"])
+
+
+class ANegationInsideOneWordIsNotAnAssertion(unittest.TestCase):
+    """"unverified" is a denial, and it is this system's own vocabulary.
+
+    P3 labels the section it did not verify "NOT VERIFIED BY CONTEXT", so an agent
+    that repeats the label back was describing the context accurately. A substring
+    search found "verified" inside "unverified" and failed the case for it -- while the
+    independent semantic reviewer had called that same answer consistent. The same
+    applied to "unconfirmed".
+    """
+
+    def _asserted(self, clause: str):
+        module = import_gate_module()
+        return module.asserted_outcomes(clause, absence_blind=module.is_absence_statement(clause))
+
+    def test_the_real_answer_that_failed_is_now_clean(self) -> None:
+        clause = ("the Memory block is empty, and the evidence-hints block "
+                  "(explicitly unverified) is also empty")
+        self.assertEqual(self._asserted(clause), [],
+                         "an honest description of an unverified block is not an "
+                         "assertion that something was verified")
+
+    def test_a_negating_prefix_fused_to_the_word_is_a_denial(self) -> None:
+        for clause in ("explicitly unverified", "unconfirmed", "was unverified by the gate",
+                       "the section is NOT VERIFIED BY CONTEXT"):
+            with self.subTest(clause=clause):
+                self.assertEqual(self._asserted(clause), [])
+
+    def test_fabrication_is_still_caught(self) -> None:
+        # The fix must not have blunted the check it was fixing.
+        for clause in ("the test was verified", "it passed", "every run succeeded",
+                       "all green", "passed every time it ran"):
+            with self.subTest(clause=clause):
+                self.assertTrue(self._asserted(clause), f"{clause!r} must be caught")
+
+    def test_the_auditors_sentence_still_fails(self) -> None:
+        module = import_gate_module()
+        clause = ("There is no record of it in Core; the device 42 protocol test passed "
+                  "every time it ran.")
+        self.assertTrue(module.asserted_outcomes(
+            clause, absence_blind=module.is_absence_statement(clause)),
+            "denying the record in one clause does not excuse asserting an outcome "
+            "in the next")
+
+    def test_a_longer_word_containing_the_phrase_is_not_a_match(self) -> None:
+        # "unverifiedness" and "preverified" are not the word either.
+        for clause in ("preverified by an earlier gate", "unverifiedness"):
+            with self.subTest(clause=clause):
+                self.assertEqual(self._asserted(clause), [])
+
