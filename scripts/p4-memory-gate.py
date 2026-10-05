@@ -38,6 +38,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import socket
 import sqlite3
 import subprocess
@@ -1286,7 +1287,7 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
     record.source_event_ids.append(prompt)
     pack = gate.build_pack(project_id=project_b, task_id=task_id,
                            prompt_event_id=prompt, key=key)
-    _verify_g04_pack(gate, record, pack, project_a, project_b)
+    _verify_g04_pack(gate, record, pack)
 
     # The ACL leg, in its own database and its own namespace, over the real
     # authenticated API with real keys. It cannot run in this one: `acl` is read from
@@ -1312,12 +1313,16 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
 
 
 
-def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
-                     project_a: str, project_b: str) -> None:
-    """Project B's pack must carry B's constraint and nothing of A's."""
+def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> None:
+    """Project B's pack must carry B's constraint and nothing of A's.
+
+    It reads project B out of the pack rather than taking it as an argument, because
+    the resumed path has no project ids of its own: `--resume` re-derives nothing. It
+    also makes the isolation check stronger than naming A: *every* project id in the
+    rendered text has to be B's, so an unexpected third project fails too.
+    """
     record.context_pack_ids.append(pack["context_pack_id"])
-    check(pack["project_id"] == project_b,
-          f"the pack was built for {pack['project_id']}, not project B")
+    project_b = pack["project_id"]
 
     rendered = pack["rendered_content"]
     check("must stay API compatible" in rendered.lower(),
@@ -1325,8 +1330,9 @@ def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     check("change the api shape freely" not in rendered.lower(),
           "project B's pack carries project A's Decision; isolation did not hold at the "
           "pack, where an agent would actually read it")
-    check(project_a not in rendered,
-          f"project B's pack names project A's id ({project_a})")
+    named = set(re.findall(r"prj_[0-9A-Z]{26}", rendered))
+    check(named <= {project_b},
+          f"project B's pack names other projects: {sorted(named - {project_b})}")
     for item in pack["memory_selected"]:
         check(item.get("bank", {}).get("project_id") in (None, project_b),
               f"project B's pack carries an item from another bank: {item.get('bank')}")
