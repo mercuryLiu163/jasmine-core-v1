@@ -954,6 +954,11 @@ def _verify_g01_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
 
 def case_g02(gate: Gate, record: CaseRecord) -> None:
     """The current Truth wins over an older remembered Decision (VC-14/VC-15)."""
+    gate.require_real_agent()
+    key = "g02-current-decision"
+    resumed = gate.existing_pack(key)
+    if resumed is not None:
+        return _verify_g02_pack(gate, record, resumed)
     gate.require_p3_pack()
     from jasmine_core.authority import AuthorityStore
 
@@ -1055,12 +1060,58 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
     finally:
         conn.close()
     record.receipts.append(gate.receipt("g02-recall", outcome.as_dict()))
-    raise Blocked(
-        "the filtering half and the State-is-not-rewritten half are recorded against a "
-        "real engine; the answering half needs a real P3 Context Pack and a real new "
-        "session, so what the agent actually says about the current Decision is not yet "
-        "observed."
-    )
+
+    # A Task whose prompt is the question the engine just answered, so the pack asks
+    # for the same thing the recall did. Both versions of the Decision are in the
+    # bank; only version 2 may arrive.
+    task_id = gate.new_task(project, "V1 memory engine")
+    prompt = gate.event(project, "user.prompt",
+                        "which memory engine does V1 use?", task_id=task_id)
+    record.source_event_ids.append(prompt)
+    pack = gate.build_pack(project_id=project, task_id=task_id, prompt_event_id=prompt,
+                           key=key)
+    _verify_g02_pack(gate, record, pack)
+
+
+def _verify_g02_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> None:
+    """Version 2 must be what arrives; version 1 must not appear anywhere."""
+    record.context_pack_ids.append(pack["context_pack_id"])
+    check(pack["memory_status"] == "ok",
+          f"the current Decision was not recalled: {pack['memory_status']} "
+          f"{pack['memory_filtered']}")
+    versions = [item.get("origin_rule_version") for item in pack["memory_selected"]]
+    check(versions and all(v == 2 for v in versions),
+          f"the pack carries Decision versions {versions}; only the current one may "
+          f"reach it")
+    check(any(item["memory_type"] == "CONFIRMED_DECISION"
+              for item in pack["memory_selected"]),
+          f"no Decision reached the pack: {pack['memory_selected']}")
+    check(all(item["historical"] for item in pack["memory_selected"]),
+          "a Decision must reach the pack as history, never as current Truth")
+
+    # The rendered text is the stronger assertion. 'mem0' was the superseded engine,
+    # so if it appears anywhere in the pack the superseded version leaked -- filtered
+    # items are dropped, not rendered with a warning.
+    rendered = pack["rendered_content"]
+    check("hindsight" in rendered.lower(),
+          "the pack does not state the current engine (Hindsight)")
+    check("mem0" not in rendered.lower(),
+          "the superseded engine (mem0) is still in the rendered pack, so the current "
+          "Truth did not win")
+    record.receipts.append(gate.receipt("g02-pack", {k: v for k, v in pack.items()
+                                                     if k != "rendered_content"}))
+
+    # As in G03, no tool action is required: there is nothing to run to answer
+    # "which engine does V1 use" from an injected context. What is asserted is the
+    # answer itself, and it is asserted on both counts -- the current engine named,
+    # the superseded one not named.
+    session = gate.verify_session(pack, "g02", require_tool_actions=False)
+    record.receipts.append(gate.receipt("g02-session", session["verified"]))
+    answer = (session.get("final_answer") or "").lower()
+    check("hindsight" in answer,
+          f"the agent did not name the current engine: {answer[:300]!r}")
+    check("mem0" not in answer,
+          f"the agent named the superseded engine: {answer[:300]!r}")
 
 
 def case_g03(gate: Gate, record: CaseRecord) -> None:
