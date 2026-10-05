@@ -157,6 +157,20 @@ class Gate:
         # reproduce the same pack bytes to verify the session against Core. New ids
         # per invocation would make that impossible -- and G06 already relied on
         # re-entering a work directory another process created.
+        # The run's identity lives beside it, so `--resume` can only continue *this*
+        # run: a different `run_id` means a different bank namespace, and continuing
+        # one run's Core under another's namespace would silently mix two runs.
+        run_marker = self.root.parent / "run-id"
+        if run_marker.is_file():
+            recorded = run_marker.read_text(encoding="utf-8").strip()
+            if recorded != self.run_id:
+                raise Blocked(
+                    f"this work directory belongs to run {recorded!r}, the configuration "
+                    f"declares {self.run_id!r}; a resumed run must be the same run, because "
+                    f"the bank namespace is derived from it")
+        else:
+            run_marker.parent.mkdir(parents=True, exist_ok=True)
+            run_marker.write_text(self.run_id, encoding="utf-8")
         identity_path = self.root / "gate-identity.json"
         if identity_path.is_file():
             saved = json.loads(identity_path.read_text(encoding="utf-8"))
@@ -1687,10 +1701,23 @@ def main() -> int:
                         help="run only these cases (default: all)")
     parser.add_argument("--allow-dirty", action="store_true",
                         help="development only; cannot count as a Gate")
+    parser.add_argument("--resume", action="store_true",
+                        help="continue a run whose work directory already exists, for the "
+                             "same run_id. The agent-session flow needs it: one invocation "
+                             "builds the Context Pack, an agent reads it outside this "
+                             "process, and a later invocation has to verify its receipt "
+                             "against the same Core. Isolation is unchanged -- the bank "
+                             "namespace is derived from run_id, so a *new* run still cannot "
+                             "see a previous run's documents")
     args = parser.parse_args()
     out, work = Path(args.out).resolve(), Path(args.work).resolve()
-    if out.exists() or work.exists() or out == work or out in work.parents or work in out.parents:
-        parser.error("--out and --work must be distinct new directories")
+    if out.exists() or out == work or out in work.parents or work in out.parents:
+        parser.error("--out must be a new directory, distinct from --work")
+    if work.exists() and not args.resume:
+        parser.error(f"--work {work} already exists; pass --resume to continue that run, "
+                     f"or choose a new directory so a rerun cannot pass on its content")
+    if args.resume and not work.is_dir():
+        parser.error(f"--resume was given but --work {work} does not exist")
     meta = run_provenance()
     if meta["dirty"] and not args.allow_dirty:
         print("BLOCKED: checkout is dirty; freeze a candidate commit before a Gate run",
