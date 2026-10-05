@@ -1467,7 +1467,7 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
     record.source_event_ids.append(prompt)
     pack = gate.build_pack(project_id=project, task_id=task_id, prompt_event_id=prompt,
                            key=key, engine_url="http://127.0.0.1:1")
-    _verify_g05_pack(gate, record, pack, task_id, prompt)
+    _verify_g05_pack(gate, record, pack)
 
 
 def _verify_g05_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> None:
