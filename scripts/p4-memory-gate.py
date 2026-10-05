@@ -687,6 +687,7 @@ class Gate:
             "prompt_event_id": prompt_event_id,
             "check_current": current["current"],
         }
+        pack["idempotency_key"] = key
         path = self.root / f"pack-{context['context_pack_id']}.json"
         path.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
         os.chmod(path, 0o600)
@@ -700,6 +701,26 @@ class Gate:
                                   capture_output=True, text=True, timeout=15).stdout.strip()
         except (subprocess.SubprocessError, OSError):
             return ""
+
+    def existing_pack(self, key: str) -> dict[str, Any] | None:
+        """The pack a previous phase of *this* run already built, or `None`.
+
+        The pack is the unit of resumption. Re-running a case must not re-seed: P3
+        refuses an idempotency key replayed with a different request body
+        (`Conflict: idempotency_conflict`), and re-seeding produces a different Task
+        and a different source Event, so the second phase would be refused for
+        having built a second, different pack rather than continuing the first.
+        """
+        for path in sorted(self.root.glob("pack-*.json")):
+            try:
+                pack = json.loads(path.read_text(encoding="utf-8"))
+            except ValueError:
+                continue
+            if pack.get("idempotency_key") == key:
+                pack["receipt"] = {"path": str(path),
+                                   "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+                return pack
+        return None
 
     def session_path(self, label: str) -> Path:
         return self.root / f"session-{label}.json"
@@ -814,6 +835,10 @@ class Gate:
 def case_g01(gate: Gate, record: CaseRecord) -> None:
     """A historical failure is recalled in a new session and changes what the agent does."""
     gate.require_real_agent()
+    key = "g01-with-lesson"
+    resumed = gate.existing_pack(key)
+    if resumed is not None:
+        return _verify_g01_pack(gate, record, resumed, key)
     project = gate.seed_project("g01")
     record.project_ids.append(project)
 
@@ -837,7 +862,13 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
     record.source_event_ids.append(prompt)
 
     pack = gate.build_pack(project_id=project, task_id=current, prompt_event_id=prompt,
-                           key="g01-with-lesson")
+                           key=key)
+    _verify_g01_pack(gate, record, pack, key)
+
+
+def _verify_g01_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
+                     key: str) -> None:
+    """Everything G01 asserts about the pack and the session that consumed it."""
     record.context_pack_ids.append(pack["context_pack_id"])
     check(pack["memory_status"] == "ok",
           f"the pack's Memory section is {pack['memory_status']}, not ok: {pack}")
