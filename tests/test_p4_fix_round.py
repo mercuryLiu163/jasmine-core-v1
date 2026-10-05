@@ -137,7 +137,7 @@ def _review_for(answer, *, verdict="consistent", digest=None, reviewer="a review
     return {"reviewer": reviewer, "verdict": verdict,
             "reviewed_answer_sha256": (digest if digest is not None
                                        else hashlib.sha256(answer.encode("utf-8")).hexdigest()),
-            "findings": "read it"}
+            "findings": f"reviewed the quoted answer {answer[:60]!r}: consistent"}
 
 
 # -- STEP 1: tool actions bound to Core Evidence ------------------------------
@@ -990,7 +990,7 @@ class SemanticReviewBindsTheAnswer(unittest.TestCase):
         return gate_cls, pack, session
 
     def test_g02_missing_block_digest_verdict_reviewer(self) -> None:
-        answer = "V1 uses Hindsight"
+        answer = "V1 uses Hindsight for long-term memory"
         for name, review, needle in (
             ("missing", "absent", "no semantic_review block"),
             ("digest", _review_for(answer, digest="a" * 64),
@@ -1136,6 +1136,9 @@ class G05DegradedPackHoldsSessionAndReview(unittest.TestCase):
             def semantic_review(self, session, label):
                 return real.semantic_review(session, label)
 
+            def collect_tool_evidence(self, task_id, **kwargs):
+                return real.collect_tool_evidence(task_id, **kwargs)
+
         record = self.module.CaseRecord("P4-G05", "PASS")
         self.module._verify_g05_pack(_Gate(self.module), record, dict(self.pack))
         return record
@@ -1262,6 +1265,8 @@ class G01RunsEndToEndOnEvidenceBackedSessions(unittest.TestCase):
         final_output = "Ran 1 test in 0.001s\n\nOK\n"
         # Every declared command is collected on its pack's task first: that is
         # the harness side of the contract the orchestrator must honour.
+        self.gate.collect_tool_evidence(self.baseline_task, command="ls",
+                                        output="source.txt\n", exit_code=0)
         self.gate.collect_tool_evidence(self.baseline_task, command="git log --oneline",
                                         output="abc123\n", exit_code=0)
         self.gate.collect_tool_evidence(self.baseline_task, command="pytest -q",
@@ -1271,12 +1276,13 @@ class G01RunsEndToEndOnEvidenceBackedSessions(unittest.TestCase):
         _write_session(self.gate, "g01-baseline", {
             "commit": self.gate.git_commit(), "context_pack_id": "ctx_" + "B" * 26,
             "pack_sha256": hashlib.sha256(baseline_rendered.encode("utf-8")).hexdigest(),
-            "tool_actions": [{"command": "git log --oneline", "output": "abc123\n"}],
+            "tool_actions": [{"command": "ls", "output": "source.txt\n"},
+                             {"command": "git log --oneline", "output": "abc123\n"}],
             "task_completed": True,
             "final_verification": {"command": "pytest -q", "output": final_output},
             "exploration": {name: name in {"enumerate_repository", "read_history"}
                             for name in self.module.EXPLORATION_CATEGORIES},
-            "exploration_actions": {"enumerate_repository": ["git log --oneline"],
+            "exploration_actions": {"enumerate_repository": ["ls"],
                                     "read_history": ["git log --oneline"]},
             "final_answer": "done"})
         _write_session(self.gate, "g01-lesson", {
@@ -1288,9 +1294,9 @@ class G01RunsEndToEndOnEvidenceBackedSessions(unittest.TestCase):
             "tool_actions": [{"command": "pytest -q", "output": final_output}],
             "task_completed": True,
             "final_verification": {"command": "pytest -q", "output": final_output},
-            "exploration": {name: name in {"read_history"}
+            "exploration": {name: name in {"reproduce_failure"}
                             for name in self.module.EXPLORATION_CATEGORIES},
-            "exploration_actions": {"read_history": ["pytest -q"]},
+            "exploration_actions": {"reproduce_failure": ["pytest -q"]},
             "final_answer": (
                 f"Historically {self.memory_id} from task {self.historical_task} "
                 f"recorded the callback mismatch ({self.lesson_evidence}); "
@@ -1303,7 +1309,7 @@ class G01RunsEndToEndOnEvidenceBackedSessions(unittest.TestCase):
         record = self._run()
         self.assertEqual(record.verdict, "PASS")
         self.assertEqual(record.engine_evidence["differential"]["omitted_categories"],
-                         ["enumerate_repository"])
+                         ["enumerate_repository", "read_history"])
         self.assertEqual(
             record.engine_evidence["differential"]["lesson_completion"]["markers"],
             list(self.module.SUITE_SUCCESS_MARKERS))

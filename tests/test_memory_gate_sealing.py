@@ -442,17 +442,22 @@ class G05sToolCaptureIsContentAddressed(unittest.TestCase):
         record = self._capture()
         sealed = json.loads(Path(record.receipts[0]["path"]).read_text(encoding="utf-8"))
         self.assertEqual(sealed["evidence_rows_for_task"], 1)
-        # The ids are a pure function of the command, which is what makes the replay
-        # path in `record_tool_result` reachable at all.
-        seed = f"P4-G05|{self.session['tool_actions'][0]['command']}"
-        self.assertEqual(sealed["turn_id"],
-                         "t-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8])
-        self.assertEqual(sealed["tool_use_id"],
-                         hashlib.sha256(f"{seed}|tool".encode("utf-8")).hexdigest()[:8])
-        self.assertEqual(sealed["command_sha256"],
-                         hashlib.sha256(
-                             self.session["tool_actions"][0]["command"].encode("utf-8")
-                         ).hexdigest())
+        # The receipt records every captured evidence_id as a list.
+        self.assertEqual(sealed["evidence_ids"], record.evidence_ids)
+        self.assertEqual(len(sealed["evidence_ids"]), 1)
+        command = self.session["tool_actions"][0]["command"]
+        output = self.session["tool_actions"][0]["output"]
+        self.assertEqual(sealed["commands"], [command])
+        self.assertEqual(sealed["command_sha256s"],
+                         [hashlib.sha256(command.encode("utf-8")).hexdigest()])
+        self.assertEqual(sealed["output_sha256s"],
+                         [hashlib.sha256(output.encode("utf-8")).hexdigest()])
+        # The ids are a pure function of case|task|command|output: an identical
+        # repeat reuses the row through the single `collect_tool_evidence`
+        # derivation.
+        again = self.gate.collect_tool_evidence(self.task, command=command,
+                                                output=output, exit_code=0)
+        self.assertEqual(again, sealed["evidence_ids"][0])
 
     def _insert_another_row_on_the_task(self) -> None:
         """A second real Evidence row on this task, the way a second capture would.
@@ -512,9 +517,8 @@ class G05sToolCaptureIsContentAddressed(unittest.TestCase):
         sealed = json.loads(Path(record.receipts[0]["path"]).read_text(encoding="utf-8"))
         first = json.loads((self.root / "g05-tool-evidence.json").read_text(
             encoding="utf-8"))
-        self.assertNotEqual(sealed["turn_id"], first["turn_id"])
-        self.assertNotEqual(sealed["tool_use_id"], first["tool_use_id"])
-        self.assertNotEqual(sealed["evidence_id"], first["evidence_id"])
+        self.assertNotEqual(sealed["evidence_ids"], first["evidence_ids"])
+        self.assertNotEqual(sealed["commands"], first["commands"])
         self.assertFalse(record.tool_uses[0]["evidence_reused"])
 
 

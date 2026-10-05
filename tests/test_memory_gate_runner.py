@@ -873,10 +873,10 @@ class G01IsAControlledExperiment(unittest.TestCase):
              lesson_question=None, baseline_title=None, lesson_title=None,
              baseline_pack=None, lesson_pack=None):
         baseline = baseline if baseline is not None else self._session(
-            performed={"enumerate_repository", "read_history", "inspect_toolchain"},
-            memory_seen=False, commands=("ls", "git log", "pytest -q"))
+            performed={"enumerate_repository", "read_history", "reproduce_failure"},
+            memory_seen=False, commands=("ls", "git log --oneline", "pytest -q"))
         lesson = lesson if lesson is not None else self._session(
-            performed={"read_history"},
+            performed={"reproduce_failure"},
             commands=("pytest -q",))
         gate = _ScriptedGate(
             self.module, self.root,
@@ -902,7 +902,7 @@ class G01IsAControlledExperiment(unittest.TestCase):
         record = self._run()
         differential = record.engine_evidence["differential"]
         self.assertEqual(differential["omitted_categories"],
-                         ["enumerate_repository", "inspect_toolchain"])
+                         ["enumerate_repository", "read_history"])
         self.assertEqual(differential["vocabulary"], list(self.CATEGORIES))
         self.assertEqual(record.verdict, "PASS")
 
@@ -1058,7 +1058,7 @@ class G01IsAControlledExperiment(unittest.TestCase):
     def test_a_session_that_did_not_finish_is_refused(self) -> None:
         # The defect in its most flattering form: one action against eleven, and the
         # case called it a saving.
-        lesson = self._session(performed=set(), completed=False)
+        lesson = self._session(performed={"reproduce_failure"}, completed=False)
         with self.assertRaises(self.module.Failed) as caught:
             self._run(lesson=lesson)
         message = str(caught.exception)
@@ -1066,7 +1066,7 @@ class G01IsAControlledExperiment(unittest.TestCase):
         self.assertIn("not completing the task", message)
 
     def test_a_verification_that_did_not_pass_is_refused(self) -> None:
-        lesson = self._session(performed=set(),
+        lesson = self._session(performed={"reproduce_failure"},
                                output="Ran 1 test in 0.001s\n\nFAILED (failures=1)\n")
         with self.assertRaises(self.module.Failed) as caught:
             self._run(lesson=lesson)
@@ -1080,8 +1080,9 @@ class G01IsAControlledExperiment(unittest.TestCase):
         self.assertIn("did not declare task_completed", str(caught.exception))
 
     def test_no_omitted_category_is_not_a_benefit(self) -> None:
-        lesson = self._session(performed={"enumerate_repository", "read_history",
-                                          "inspect_toolchain"})
+        lesson = self._session(
+            performed={"enumerate_repository", "read_history", "reproduce_failure"},
+            commands=("ls", "git log --oneline", "pytest -q"))
         with self.assertRaises(self.module.Failed) as caught:
             self._run(lesson=lesson)
         message = str(caught.exception)
@@ -1158,7 +1159,7 @@ class G03JudgesAbsenceAndFabricationTogether(unittest.TestCase):
                   "reviewed_answer_sha256": digest
                   if digest is not None
                   else hashlib.sha256(text.encode("utf-8")).hexdigest(),
-                  "findings": "read it"}
+                  "findings": f"reviewed the quoted answer {text[:40]!r}: consistent"}
         return {"final_answer": text, "tool_actions": [], "memory_seen": [],
                 "semantic_review": review,
                 "verified": {"tool_actions": 0, "memory_carried": [],
@@ -1296,7 +1297,7 @@ class G04ReadsProjectIdentityFromTheWholePack(unittest.TestCase):
     def _run(self, pack=None):
         import hashlib
 
-        answer = "you must stay API compatible"
+        answer = "you must stay API compatible for project B"
         gate = _PackGate(self.module, self.root,
                          session={"final_answer": answer,
                                   "tool_actions": [],
@@ -1305,7 +1306,7 @@ class G04ReadsProjectIdentityFromTheWholePack(unittest.TestCase):
                                       "verdict": "consistent",
                                       "reviewed_answer_sha256": hashlib.sha256(
                                           answer.encode("utf-8")).hexdigest(),
-                                      "findings": "states B's constraint alone"},
+                                      "findings": f"quotes {answer[:25]!r}: states B's constraint alone"},
                                   "verified": {"tool_actions": 0, "memory_carried": [],
                                                "session_transcript": {},
                                                "injection": {}, "sealed": []}},
@@ -1443,7 +1444,7 @@ class G02StatesItsSupersessionPremise(unittest.TestCase):
             recall_filtered = [{"bank_id": f"jasmine-project-{self.project}",
                                 "memory_id": "mem_" + "F" * 26,
                                 "reason": "superseded_decision"}]
-        answer = "V1 uses Hindsight"
+        answer = "V1 uses Hindsight for long-term memory"
         gate = _PackGate(self.module, self.root,
                          session={"final_answer": answer,
                                   "tool_actions": [],
@@ -1452,7 +1453,7 @@ class G02StatesItsSupersessionPremise(unittest.TestCase):
                                       "verdict": "consistent",
                                       "reviewed_answer_sha256": hashlib.sha256(
                                           answer.encode("utf-8")).hexdigest(),
-                                      "findings": "names the current engine"},
+                                      "findings": f"quotes {answer[:30]!r}: names the current engine"},
                                   "verified": {"tool_actions": 0, "memory_carried": [],
                                                "session_transcript": {},
                                                "injection": {}, "sealed": []}},
