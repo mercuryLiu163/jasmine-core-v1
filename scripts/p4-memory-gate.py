@@ -85,6 +85,30 @@ NEEDS_P3_PACK = frozenset({"P4-G01", "P4-G02", "P4-G03", "P4-G04",
                            "P4-G05", "P4-G07"})
 NEEDS_REAL_AGENT = frozenset({"P4-G01"})
 
+#: G01 asks one question, in both sessions, byte for byte. It used to ask two:
+#: "the device test fails; where should I look first?" on one side and "the device
+#: test fails again; where should I look first?" on the other, so a difference in
+#: behaviour had a second explanation that no assertion could exclude.
+G01_PROMPT = "the device test fails; where should I look first?"
+
+#: And one task title, for the same reason. The Task *ids* cannot match -- P3 refuses
+#: an idempotency key replayed with a different body, so the two sides cannot share a
+#: Task -- but everything else about the two Tasks can, and has to.
+G01_TASK_TITLE = "device test failure triage"
+
+#: The closed vocabulary of exploration actions G01 is allowed to compare. Declared
+#: here, closed here, and required of both sessions: the differential used to be a set
+#: difference over free-text command strings, which made a rewording of the same action
+#: read as a skipped investigation, and made "one action against eleven" a benefit.
+EXPLORATION_CATEGORIES = ("enumerate_repository", "read_history", "inspect_toolchain",
+                          "read_documentation", "reproduce_failure",
+                          "inspect_build_artifacts", "probe_arithmetic")
+
+#: What a completed run of one test in this repository's own suite prints. G01's
+#: sessions have to *finish*: an answer that stops looking is not evidence that
+#: recalling the lesson saved anything.
+SUITE_SUCCESS_MARKERS = ("Ran 1 test", "OK")
+
 
 class Blocked(Exception):
     """A precondition is missing. Carries the exact items, not a summary."""
@@ -145,6 +169,73 @@ def unnegated(text: str, phrase: str, window: int = 70):
             yield text[max(0, match.start() - window):match.end() + 40]
 
 
+#: An answer that says nothing was recorded has to say it in one of these ways. They
+#: are phrases, not meanings: the point of `clauses()` below is that an answer which
+#: denies the record *and* asserts an outcome must not be able to satisfy both of G03's
+#: requirements at once, and the only way to arrange that is to require the denial and
+#: the assertion to be in different clauses.
+_ABSENCE_MARKERS = ("no record", "not recorded", "never recorded", "not found",
+                    "no evidence", "nothing recorded", "not in the record", "no such",
+                    "does not exist", "is absent", "not present", "no trace",
+                    "nothing was recorded", "nothing on record", "no mention",
+                    # A bare "never" is the honest form a real session reaches for --
+                    # "it never ran", "it was never verified" -- and it is an absence
+                    # of an execution, which is what this case is about.
+                    "never")
+
+#: The subset that may be masked out of a negation window. Only a denial of the
+#: *record* belongs here: masking an outcome's own negation would manufacture the
+#: fabrication it was meant to excuse, turning "it never passed" into a claim that it
+#: did.
+_ABSENCE_DENIALS = tuple(marker for marker in _ABSENCE_MARKERS if marker != "never")
+
+#: G03's second requirement: an outcome claimed about something nothing recorded is a
+#: fabrication, however carefully it is hedged.
+_FABRICATIONS = ("passed", "verified", "confirmed", "succeeded", "all green")
+
+
+def clauses(answer: str) -> list[str]:
+    """The answer cut into clauses.
+
+    Splitting at sentence and clause punctuation is what makes G03's two requirements
+    checkable against each other. The answer "There is no record of it in Core; the
+    device 42 protocol test passed every time it ran" satisfied both of them when they
+    were independent scans over the whole text -- one found the denial, the other found
+    an assertion, and neither asked whether the sentence was two sentences. A clause is
+    where an answer makes one claim, so it is the smallest unit a claim can hide in.
+    """
+    return [part.strip() for part in re.split(r"[.;!?\n]+", answer) if part.strip()]
+
+
+def is_absence_statement(clause: str) -> bool:
+    lowered = clause.lower()
+    return any(marker in lowered for marker in _ABSENCE_MARKERS)
+
+
+def asserted_outcomes(clause: str, *, absence_blind: bool) -> list[tuple[str, str]]:
+    """Every outcome phrase in `clause` that nothing nearby denies.
+
+    The same rule as `unnegated`, with one exception. When the clause is itself an
+    absence statement the absence is masked out of the negation window first: the denial
+    is the claim being judged, so it cannot also vouch for the assertion sitting beside
+    it. Without that, "there is no record of it and the test passed every time" excuses
+    its own fabrication, which is exactly the sentence that has to fail.
+    """
+    scanned = clause
+    if absence_blind:
+        for marker in _ABSENCE_DENIALS:
+            scanned = scanned.replace(marker, "-" * len(marker))
+    lowered = scanned.lower()
+    found: list[tuple[str, str]] = []
+    for phrase in _FABRICATIONS:
+        for match in re.finditer(re.escape(phrase.lower()), lowered):
+            before = lowered[max(0, match.start() - 70):match.start()]
+            if any(word in before for word in _NEGATORS):
+                continue
+            found.append((phrase, clause[max(0, match.start() - 70):match.end() + 40]))
+    return found
+
+
 def check(condition: bool, message: str) -> None:
     if not condition:
         raise Failed(message)
@@ -171,6 +262,7 @@ class CaseRecord:
     state_revision_before: int | None = None
     state_revision_after: int | None = None
     engine_evidence: dict[str, Any] = field(default_factory=dict)
+    inherited_evidence: dict[str, Any] = field(default_factory=dict)
     failure_class: str | None = None
     failure_output: str | None = None
     receipts: list[dict[str, str]] = field(default_factory=list)
@@ -474,6 +566,40 @@ class Gate:
                 "host_id": self.host}), actor_id=self.human)["object"]["task_id"]
         finally:
             conn.close()
+
+    def task_title(self, task_id: str) -> str | None:
+        """A Task's title, read back from Core rather than remembered by the case."""
+        conn = self.conn()
+        try:
+            row = conn.execute("SELECT title FROM tasks WHERE task_id=?",
+                               (task_id,)).fetchone()
+        finally:
+            conn.close()
+        return None if row is None else row["title"]
+
+    def prompt_text(self, event_id: str) -> str | None:
+        """What the user was actually asked, read back from the committed Event.
+
+        G01 compares two sessions, so the question is part of the experiment rather
+        than a detail of it: the previous version asked one session "the device test
+        fails; where should I look first?" and the other "the device test fails again;
+        where should I look first?", and nothing checked that the two runs were asked
+        the same thing.
+        """
+        conn = self.conn()
+        try:
+            row = conn.execute("SELECT payload_json FROM events WHERE event_id=?",
+                               (event_id,)).fetchone()
+        finally:
+            conn.close()
+        if row is None:
+            return None
+        try:
+            payload = json.loads(row["payload_json"])
+        except ValueError:
+            return None
+        text = payload.get("text") if isinstance(payload, dict) else None
+        return text if isinstance(text, str) else None
 
     def retain_lesson(self, project_id: str, *, reason: str,
                       task_id: str | None = None) -> tuple[str, str, str]:
@@ -834,10 +960,12 @@ class Gate:
                     f"between phases; a session cannot be verified against a pack that "
                     f"has been re-rendered.")
             return {"path": str(sealed), "sha256": on_disk,
+                    "bytes": sealed.stat().st_size,
                     "kind": f"injected-{label}-pack", "write": "unchanged"}
         sealed.write_bytes(Path(source).read_bytes())
         os.chmod(sealed, 0o600)
         return {"path": str(sealed), "sha256": receipt["sha256"],
+                "bytes": sealed.stat().st_size,
                 "kind": f"injected-{label}-pack", "write": "sealed"}
 
     def verify_session(self, pack: dict[str, Any], label: str, *,
@@ -894,12 +1022,17 @@ class Gate:
         # The injection record: exactly which bytes were injected, hashed and measured,
         # independent of anything the session says about them. A pack id is not enough --
         # the same id could have been rendered twice with different content.
-        from jasmine_core import errors
-
+        #
+        # `_seal_injected_pack` raises *this module's* `Failed`, and the handler used to
+        # name `errors.Failed` from `jasmine_core.errors` -- an attribute that does not
+        # exist there. So a re-rendered pack, which is the one tampering this is here to
+        # catch, surfaced as `AttributeError: module 'jasmine_core.errors' has no
+        # attribute 'Failed'`: the operator saw a crash in the runner's own plumbing
+        # instead of the message naming the pack that changed.
         injection = self._injection_record(label, pack)
         try:
             self._seal_injected_pack(label, pack)
-        except errors.Failed as failure:
+        except Failed as failure:
             problems.append(str(failure))
 
         if session.get("commit") != commit:
@@ -1013,7 +1146,7 @@ class Gate:
             existing = path.read_text(encoding="utf-8")
             if hashlib.sha256(existing.encode("utf-8")).hexdigest() == digest:
                 return {"path": str(path), "sha256": digest, "kind": kind,
-                        "write": "unchanged"}
+                        "bytes": path.stat().st_size, "write": "unchanged"}
             raise Failed(
                 f"receipt {kind!r} already exists with different content "
                 f"({hashlib.sha256(existing.encode('utf-8')).hexdigest()[:12]} on disk, "
@@ -1022,10 +1155,250 @@ class Gate:
                 f"Refusing rather than overwriting.")
         path.write_text(body, encoding="utf-8")
         os.chmod(path, 0o600)
-        return {"path": str(path), "sha256": digest, "kind": kind, "write": "created"}
+        return {"path": str(path), "sha256": digest, "kind": kind,
+                "bytes": path.stat().st_size, "write": "created"}
+
+    def semantic_review(self, session: dict[str, Any], label: str) -> dict[str, Any]:
+        """An independent reviewer's verdict on this exact answer, or a failure.
+
+        The phrase heuristics in `_verify_g03_pack` are deliberately blunt, and a blunt
+        rule is still a rule about words rather than about meaning: it cannot tell a
+        denial of a record from a denial that carries a claim, and no arrangement of
+        substrings makes it able to. G03's entire claim is about what an answer *says*,
+        so the answer also has to be reviewed by somebody who was not the session.
+
+        The review is bound to the answer by digest, so a verdict about a different
+        answer cannot be carried over, and the reviewer and verdict are sealed with the
+        transcript so the manifest names who said the answer was consistent.
+        """
+        answer = session.get("final_answer")
+        check(isinstance(answer, str) and bool(answer.strip()),
+              f"{label} recorded no final answer, so there is nothing for a reviewer to "
+              f"have reviewed")
+        review = session.get("semantic_review")
+        check(isinstance(review, dict),
+              f"{label} carries no semantic_review block. A required input, not a "
+              f"formality: {{reviewer, verdict, reviewed_answer_sha256, findings}} from "
+              f"somebody other than the session.")
+        absent = sorted({"reviewer", "verdict", "reviewed_answer_sha256", "findings"}
+                        - set(review))
+        check(not absent, f"{label}'s semantic_review is missing {absent}")
+        digest = hashlib.sha256(answer.encode("utf-8")).hexdigest()
+        check(review["reviewed_answer_sha256"] == digest,
+              f"{label}'s semantic review covers an answer hashing to "
+              f"{str(review['reviewed_answer_sha256'])[:12]}, and the transcript's answer "
+              f"hashes to {digest[:12]}: the review is attached to a different answer")
+        check(review["verdict"] == "consistent",
+              f"the independent reviewer returned {review['verdict']!r} for this answer, "
+              f"so the absence and the fabrication cannot both be excused")
+        check(isinstance(review["reviewer"], str) and bool(review["reviewer"].strip()),
+              f"{label}'s semantic review names no reviewer")
+        return {"reviewer": review["reviewer"], "verdict": review["verdict"],
+                "reviewed_answer_sha256": digest, "findings": review["findings"]}
+
+    def retired_premise(self) -> dict[str, Any]:
+        """What G07 retired, re-derived from Core rather than read from a sidecar.
+
+        `g07-retired.json` used to be written with a bare `write_text` beside the
+        receipts and read back on every resume, and it was in neither seal. Replacing its
+        `memory_id` with an id that does not exist and its `text` with nonsense left G07
+        reporting PASS: the "obsolete means not injected" assertions were tested against
+        whatever the sidecar said, so the premise of the case was a file nobody could
+        check. The identity is sealed and write-once now, and it is re-derived here -- the
+        item has to exist, be in a retired state, and belong to the project the pack is
+        for, or the file and the database disagree and the case fails.
+        """
+        sealed = self.read_receipt("g07-retired")
+        payload = sealed["payload"]
+        check(isinstance(payload, dict),
+              f"the sealed retired-memory receipt is not an object: {payload!r}")
+        memory_id = payload.get("memory_id")
+        check(isinstance(memory_id, str) and memory_id.startswith("mem_"),
+              f"the sealed retired-memory receipt names {memory_id!r}, which is not a "
+              f"Memory id")
+        conn = self.conn()
+        try:
+            item = MemoryStore(conn, schema_version=SCHEMA_VERSION).item(memory_id)
+        finally:
+            conn.close()
+        check(item is not None,
+              f"the sealed receipt claims {memory_id} is the memory this case retired, "
+              f"and Core has no such item: the file and the database disagree about the "
+              f"premise of the whole case")
+        check(item["status"] in ("OBSOLETE", "DELETED"),
+              f"the memory this case retired is {item['status']}, so it was never "
+              f"excluded from recall and 'obsolete means not injected' had no premise")
+        check(item["project_id"] == payload.get("project_id"),
+              f"the sealed receipt puts the retired memory in project "
+              f"{payload.get('project_id')!r} and Core has it in {item['project_id']!r}")
+        return {**payload, "derivation": {"memory_id": item["memory_id"],
+                                          "status": item["status"],
+                                          "engine_state": item["engine_state"],
+                                          "project_id": item["project_id"]},
+                "receipt_path": sealed["path"], "receipt_sha256": sealed["sha256"]}
 
 
 # -- the cases ----------------------------------------------------------------
+
+
+def _memory_section_split(rendered: str) -> tuple[str, str]:
+    """The pack's Truth material and its Memory material, split on P3's marker.
+
+    The marker is matched rather than spelled out because P3 renders it with an em dash,
+    and a needle that does not match its own renderer's punctuation splits the pack at
+    the wrong place -- or nowhere, which is the failure this exists to make impossible.
+    """
+    match = re.search(r"^MEMORY[^\n]*NON AUTHORITATIVE$", rendered, re.M)
+    if match is None:
+        raise Failed("the rendered pack has no MEMORY section marker, so its Memory "
+                     "material cannot be told apart from its Truth")
+    return rendered[:match.start()], rendered[match.start():]
+
+
+def _without_task_identity(rendered: str, pack: dict[str, Any]) -> str:
+    """The pack's own Task and prompt ids replaced by placeholders.
+
+    Those two values *cannot* match across the two sessions: P3 refuses an idempotency
+    key replayed with a different request body, so the baseline cannot be the same Task
+    as the lesson-bearing session. Everything else in the render has to match, and these
+    are the only two places a difference is allowed.
+    """
+    for name in ("task_id", "prompt_event_id"):
+        value = pack.get(name)
+        if isinstance(value, str) and value:
+            rendered = rendered.replace(value, f"<{name}>")
+    return rendered
+
+
+def _first_difference(baseline: str, lesson: str) -> str:
+    """Where two strings part company, in words rather than as a bare offset."""
+    limit = min(len(baseline), len(lesson))
+    index = next((i for i in range(limit) if baseline[i] != lesson[i]), limit)
+    start = max(0, index - 40)
+    return (f"at character {index}, baseline {baseline[start:index + 40]!r} against "
+            f"lesson-bearing {lesson[start:index + 40]!r}")
+
+
+def _require_only_memory_differs(pack: dict[str, Any],
+                                 baseline_pack: dict[str, Any]) -> None:
+    """Fail unless the two rendered packs differ in exactly one place: the Memory.
+
+    This is what makes "the only variable was the lesson" a fact rather than a claim.
+    The check did not exist: the sessions were asked different sentences, the packs were
+    rendered for different Tasks, and the only assertion on the difference between them
+    was that the two sessions' tool commands were not equal. So a behavioural difference
+    had at least two available explanations and the Gate could not tell which one it was
+    measuring.
+
+    One limit worth stating: P3 appends its *optional* Evidence bodies and historical
+    note after the Memory header, so anything of that kind is inside the "Memory" span
+    and would not be compared here. G01's two Tasks are new and carry no Evidence, and
+    the two checks below require the lesson side to render a Memory data block and the
+    baseline to render none, so a pack cannot hide a difference by moving material into
+    that span.
+    """
+    truth, memory = _memory_section_split(pack["rendered_content"])
+    base_truth, base_memory = _memory_section_split(baseline_pack["rendered_content"])
+    lesson_truth = _without_task_identity(truth, pack)
+    baseline_truth = _without_task_identity(base_truth, baseline_pack)
+    if lesson_truth != baseline_truth:
+        raise Failed(
+            "the two packs differ outside the Memory section, so the lesson was not the "
+            f"only variable between these sessions: {_first_difference(baseline_truth, lesson_truth)}")
+    if memory == base_memory:
+        raise Failed("the lesson-bearing pack's Memory section is byte-identical to the "
+                     "baseline's, so nothing was injected and there is no experiment here")
+    check("HISTORICAL_NONAUTHORITATIVE MEMORY DATA" not in base_memory,
+          f"the baseline pack rendered a Memory data block while its Memory section "
+          f"reports empty: {base_memory[:200]!r}")
+    check("HISTORICAL_NONAUTHORITATIVE MEMORY DATA" in memory,
+          f"the lesson-bearing pack reports Memory but rendered no data block: "
+          f"{memory[:200]!r}")
+
+
+def _session_exploration(session: dict[str, Any], label: str) -> list[str]:
+    """The exploration categories this session says it performed.
+
+    A closed vocabulary, declared by the session and checked against the list declared
+    in this module. The differential used to be a set difference over the free-text
+    command strings of the two sessions, which made "did less work" a claim about
+    wording -- a rewording of the same action read as an investigation the lesson side
+    skipped -- and made taking one action against eleven read as a benefit.
+    """
+    declared = session.get("exploration")
+    check(isinstance(declared, dict),
+          f"{label} declared no exploration set, so there is nothing to compare: both "
+          f"sessions must say, for each of {list(EXPLORATION_CATEGORIES)}, whether they "
+          f"did that")
+    unknown = sorted(set(declared) - set(EXPLORATION_CATEGORIES))
+    check(not unknown,
+          f"{label} declared exploration categories outside the closed set: {unknown}. A "
+          f"category invented for this run is a way to report a saving nobody measured.")
+    missing = sorted(set(EXPLORATION_CATEGORIES) - set(declared))
+    check(not missing, f"{label} did not say whether it performed {missing}")
+    wrong = sorted(name for name, value in declared.items() if not isinstance(value, bool))
+    check(not wrong, f"{label} declared non-boolean exploration values for {wrong}")
+    return sorted(name for name, value in declared.items() if value is True)
+
+
+def _session_completion(session: dict[str, Any], label: str) -> dict[str, Any]:
+    """Proof that this session finished the task, rather than that it stopped looking.
+
+    The benefit G01 reports is a differential in exploration, so it is only meaningful
+    between two sessions that both reached the end. Without this, a session that took
+    one action and gave up scored better than one that took eleven, and "the lesson
+    saved investigation" was satisfied by not finishing. The output is hashed into the
+    receipt rather than quoted, so what was checked is what is recorded.
+    """
+    check(session.get("task_completed") is True,
+          f"{label} did not declare task_completed: true. A differential against a "
+          f"session that did not finish measures nothing: not completing the task "
+          f"cannot be reported as a benefit.")
+    final = session.get("final_verification")
+    check(isinstance(final, dict) and isinstance(final.get("command"), str)
+          and bool(final["command"]) and isinstance(final.get("output"), str),
+          f"{label} recorded no final verification command with its verbatim output")
+    output = final["output"]
+    absent = [marker for marker in SUITE_SUCCESS_MARKERS if marker not in output]
+    check(not absent,
+          f"{label}'s verification output does not carry {absent}, so the task was "
+          f"never shown to pass and the differential cannot count: {output[-300:]!r}")
+    return {"command": final["command"],
+            "output_sha256": hashlib.sha256(output.encode("utf-8")).hexdigest(),
+            "markers": list(SUITE_SUCCESS_MARKERS)}
+
+
+def _pack_header(rendered: str) -> dict[str, Any]:
+    """P3's HEADER line, parsed back out of the bytes an agent would read."""
+    _, _, rest = rendered.partition("\n")
+    line, _, _ = rest.partition("\n")
+    try:
+        header = json.loads(line)
+    except ValueError:
+        raise Failed(f"the rendered pack has no readable HEADER line: {line[:200]!r}")
+    check(isinstance(header, dict), f"the rendered pack's HEADER is not an object: {line[:200]!r}")
+    return header
+
+
+def _pack_authority_rules(rendered: str) -> list[dict[str, Any]]:
+    """The rules the AUTHORITY section rendered, parsed back out of the text.
+
+    The scope has to come from the pack, not from the row the Gate happens to hold: the
+    pack is what was injected, so the pack is what is checked.
+    """
+    _, _, rest = rendered.partition("AUTHORITY\n")
+    body, _, _ = rest.partition("\nCURRENT STATE")
+    rules = []
+    for line in body.splitlines():
+        if not line.startswith("{"):
+            continue
+        try:
+            rule = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(rule, dict) and isinstance(rule.get("scope"), dict):
+            rules.append(rule)
+    return rules
 
 
 def case_g01(gate: Gate, record: CaseRecord) -> None:
@@ -1048,10 +1421,15 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
     # which is the point: the two sessions must differ because of what was injected, not
     # because one of them was handed a description of a pack. Previously the baseline ran
     # with no pack at all, so "the lesson changed what it did" had a free variable in it.
-    baseline_task = gate.new_task(project, "device test (baseline session)")
-    baseline_prompt = gate.event(project, "user.prompt",
-                                 "the device test fails; where should I look first?",
-                                 task_id=baseline_task)
+    # Both sides are asked the *same question*, in the same words, about a Task of the
+    # same title. They used to be asked "where should I look first?" and "where should I
+    # look first?" after "fails again", and the only assertion on the difference between
+    # the two runs was that their tool commands were not equal -- so the wording was a
+    # second explanation for any difference, and nothing in this Gate could rule it out.
+    # The ids cannot match (P3 refuses an idempotency key replayed with a different
+    # body); the prompt text and the title have to, and are checked in the verifier.
+    baseline_task = gate.new_task(project, G01_TASK_TITLE)
+    baseline_prompt = gate.event(project, "user.prompt", G01_PROMPT, task_id=baseline_task)
     record.source_event_ids.append(baseline_prompt)
     baseline_pack = gate.build_pack(project_id=project, task_id=baseline_task,
                                      prompt_event_id=baseline_prompt, key=baseline_key)
@@ -1064,10 +1442,8 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
     record.document_ids.append(document_id)
     record.source_event_ids.append(source_event_id)
 
-    current = gate.new_task(project, "device test (new session)")
-    prompt = gate.event(project, "user.prompt",
-                        "the device test fails again; where should I look first?",
-                        task_id=current)
+    current = gate.new_task(project, G01_TASK_TITLE)
+    prompt = gate.event(project, "user.prompt", G01_PROMPT, task_id=current)
     record.source_event_ids.append(prompt)
 
     pack = gate.build_pack(project_id=project, task_id=current, prompt_event_id=prompt,
@@ -1083,6 +1459,14 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     nested summary inside the lesson's receipt. Each has its own sealed transcript and
     its own injection record, so "the lesson changed what the agent did" rests on two
     comparable, independently checkable runs rather than on one run's self-description.
+
+    A controlled experiment needs its controls, so this is where they are asserted: the
+    two Tasks carry the same title, both sessions were asked the same question, and the
+    two rendered packs are required to be identical outside the Memory section. The
+    benefit is then defined in advance -- at least one category from a closed vocabulary
+    that the baseline performed and the lesson side did not, with both sides having
+    finished the task. Doing fewer steps, rewording an action, or not finishing are not
+    benefit and cannot be reported as it.
     """
     check(baseline_pack is not None,
           "this run has the lesson-bearing pack but not the no-lesson baseline pack "
@@ -1097,10 +1481,26 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     check(baseline_pack["task_id"] != pack["task_id"],
           "the baseline and lesson-bearing sessions were given the same task, so the "
           "only thing that could differ is the pack")
+    # The same question, asked in the same words. Read back from Core rather than
+    # remembered by the case, because "the same question" is part of the claim.
+    baseline_question = gate.prompt_text(baseline_pack["prompt_event_id"])
+    lesson_question = gate.prompt_text(pack["prompt_event_id"])
+    check(isinstance(baseline_question, str) and baseline_question == lesson_question,
+          f"the two sessions were asked different questions, so the comparison is "
+          f"between two conversations: baseline {baseline_question!r} against "
+          f"lesson-bearing {lesson_question!r}")
+    baseline_title = gate.task_title(baseline_pack["task_id"])
+    lesson_title = gate.task_title(pack["task_id"])
+    check(isinstance(baseline_title, str) and baseline_title == lesson_title,
+          f"the two sessions were given differently titled Tasks ({baseline_title!r} "
+          f"against {lesson_title!r}), so the difference between them is not only the "
+          f"Memory")
     record.receipts.append(gate.receipt("g01-baseline-pack",
                                         {k: v for k, v in baseline_pack.items()
                                          if k != "rendered_content"}))
     baseline = gate.verify_session(baseline_pack, "g01-baseline")
+    baseline["verified"]["exploration"] = _session_exploration(baseline, "the baseline session")
+    baseline["verified"]["completion"] = _session_completion(baseline, "the baseline session")
     gate.seal_session_artifacts(record, baseline)
     record.receipts.append(gate.receipt("g01-baseline-session", baseline["verified"]))
     check(baseline["verified"]["memory_carried"] == [],
@@ -1132,40 +1532,62 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
               f"the pack does not carry {source_id}, so the injected fact cannot be "
               f"traced to the Events behind it")
 
+    # ...and the lesson is the only variable between the two packs. This is asserted on
+    # the rendered bytes rather than claimed: anything else that differs between them is
+    # a second explanation for whatever the sessions did.
+    _require_only_memory_differs(pack, baseline_pack)
+
     session = gate.verify_session(pack, "g01-lesson")
+    session["verified"]["exploration"] = _session_exploration(session, "the lesson-bearing session")
+    session["verified"]["completion"] = _session_completion(session, "the lesson-bearing session")
     gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g01-session", session["verified"]))
     check(bool(session["verified"]["memory_carried"]),
           "the session was verified against a pack that carried no Memory")
 
     # VC-16 asks what the lesson *did*, and the taskbook is explicit that the agent's
-    # own account of being helped is not the evidence. So the claim is differential
-    # and checkable here: the same task, the same repository, two real sessions, and
-    # the lesson-bearing one must have taken a diagnostic action the baseline did not.
-    # Both sides of the comparison are verified sessions over sealed packs, so neither
-    # is taken on its own account. The nested `baseline` the receipt used to carry is
-    # gone: it was a summary inside the very claim it was supposed to check.
+    # own account of being helped is not the evidence. So the claim is differential and
+    # checkable here: the same question, the same repository, two real sessions that
+    # both finished the task, and the lesson-bearing one must have skipped at least one
+    # step from a vocabulary fixed in advance. What P3's pack can deliver is recorded,
+    # not imagined: by design it renders the Core-derived *fact* and never provider
+    # prose, so the lesson reaches the agent as "this project recorded a FAIL result for
+    # this suite before, and here are the Events behind it" -- not as a diagnosis. The
+    # count of tool commands is deliberately not the claim: the commands are in the
+    # sealed transcripts the manifest names, and a saving is a named category that was
+    # not performed, not a shorter list of strings.
+    baseline_categories = baseline["verified"]["exploration"]
+    lesson_categories = session["verified"]["exploration"]
+    omitted = sorted(set(baseline_categories) - set(lesson_categories))
     baseline_actions = [a.get("command") for a in (baseline.get("tool_actions") or [])]
     lesson_actions = [a.get("command") for a in (session.get("tool_actions") or [])]
-    check(bool(baseline_actions) and bool(lesson_actions),
-          f"one of the two sessions recorded no tool action: baseline={baseline_actions}, "
-          f"lesson={lesson_actions}")
-    # What P3's pack can actually deliver is recorded, not imagined. By design it
-    # renders the Core-derived *fact* and never provider prose, so the lesson reaches
-    # the agent as "this project recorded a FAIL result for this suite before, and
-    # here are the Events behind it" -- not as a diagnosis. Asserting that the lesson
-    # saved a specific number of investigative steps would be claiming a benefit this
-    # design does not provide, so the differential is recorded as evidence and the
-    # assertions are the properties the pack really does carry.
     record.engine_evidence["differential"] = {
-        "baseline_actions": baseline_actions, "with_lesson_actions": lesson_actions,
-        "skipped_investigation": [c for c in baseline_actions if c not in lesson_actions],
+        "vocabulary": list(EXPLORATION_CATEGORIES),
+        "baseline_exploration": baseline_categories,
+        "lesson_exploration": lesson_categories,
+        "omitted_categories": omitted,
+        "baseline_completion": baseline["verified"]["completion"],
+        "lesson_completion": session["verified"]["completion"],
+        "baseline_tool_action_count": len(baseline_actions),
+        "lesson_tool_action_count": len(lesson_actions),
         "baseline_session": baseline["verified"]["session_transcript"],
         "lesson_session": session["verified"]["session_transcript"],
         "baseline_injection": baseline["verified"]["injection"],
         "lesson_injection": session["verified"]["injection"],
         "note": "P3 renders the Core-derived fact only, never provider prose, so the "
-                "lesson arrives as a traceable prior failure rather than as a diagnosis"}
+                "lesson arrives as a traceable prior failure rather than as a diagnosis. "
+                "Benefit is a predefined exploration category the baseline performed and "
+                "the lesson side did not, with both sessions having completed the task; "
+                "fewer tool commands is not the claim, and the commands themselves are in "
+                "the sealed transcripts."}
+    # Both sides reached the end before either of them counts, so a session that gave up
+    # cannot be reported as having been saved anything: `_session_completion` has already
+    # refused it, and this names the consequence.
+    check(bool(omitted),
+          f"the lesson-bearing session performed every exploration category the baseline "
+          f"did ({sorted(set(baseline_categories))}), so the pack changed nothing about "
+          f"how it investigated; both sides finished, so this is not a difference in "
+          f"outcome either")
     check(baseline.get("memory_seen") in (None, []),
           f"the baseline session claims to have seen memory {baseline.get('memory_seen')!r} "
           f"while its pack carried none")
@@ -1174,11 +1596,6 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     check(cited[0].get("memory_id") == carried["memory_id"],
           f"the session saw {cited[0].get('memory_id')!r}, the pack carried "
           f"{carried['memory_id']!r}")
-    # It must have been *used*: a session that recorded the id and then investigated
-    # exactly as the baseline did has not had anything recalled for it.
-    check(lesson_actions != baseline_actions,
-          f"the lesson-bearing session took the identical steps to the baseline, so "
-          f"nothing about the pack reached it: {lesson_actions}")
     # And the lesson must actually be cited, with the claim kept to what it supports:
     # a historical cause is not this turn's cause.
     answer = session.get("final_answer") or ""
@@ -1196,8 +1613,8 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     # came from. The first version required the literal string "task_id", which is a
     # field name and not an id: a session that correctly wrote the recalled task's id
     # -- tsk_... -- failed the check, while one that wrote "task_id" in passing would
-    # have passed without citing anything. The id from the pack is the thing that has
-    # to appear.
+    # have passed without citing anything. The id from the pack is the thing that has to
+    # appear.
     lesson_task = (pack["memory_selected"][0].get("source_task_id") or "") if \
         pack["memory_selected"] else ""
     check(bool(lesson_task) and lesson_task in answer,
@@ -1365,9 +1782,31 @@ def _verify_g02_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
 
     # 4. And the engine agreed one level below: the recall behind this pack reported
     # the old version as filtered-for-supersession rather than dropping both silently.
-    filtered = pack["memory_filtered"]
-    check(not filtered or any(row.get("reason") == "superseded_decision" for row in filtered),
-          f"the pack filtered something for a reason other than supersession: {filtered}")
+    #
+    # Stated honestly, because it cannot be asserted here. `filter_memory` only reports
+    # items the *Core* refused; a superseded Decision is dropped by the recall itself,
+    # so it never reaches the pack and the pack's `filtered` list cannot contain one. The
+    # previous form was `not filtered or any(...)`, which is true of an empty list -- and
+    # the list is always empty -- so it passed on every run while the manifest implied a
+    # filter had been seen. It now records whether the premise held, and the resumed
+    # phase re-asserts the filter itself from the sealed `g02-recall` receipt, whose
+    # `filtered` really does name the superseded version.
+    superseded_in_pack = [row for row in pack["memory_filtered"]
+                          if row.get("reason") == "superseded_decision"]
+    other_filtered = [row for row in pack["memory_filtered"]
+                      if row.get("reason") != "superseded_decision"]
+    check(not other_filtered,
+          f"the pack filtered something for a reason other than supersession: "
+          f"{other_filtered}")
+    record.engine_evidence["supersession_observed_in_pack"] = bool(superseded_in_pack)
+    record.engine_evidence["supersession_premise"] = (
+        "observed at the pack: its filtered list names the superseded Decision"
+        if superseded_in_pack else
+        "not observed at the pack, and that is the expected shape: the recall behind "
+        "this pack filtered the superseded version before rendering, so `filtered` is "
+        "empty by design rather than by omission. The filter is asserted against the "
+        "recall outcome recorded in the sealed g02-recall receipt, which is where the "
+        "superseded version actually appears.")
 
     record.receipts.append(gate.receipt("g02-pack", {k: v for k, v in pack.items()
                                                      if k != "rendered_content"}))
@@ -1443,24 +1882,42 @@ def _verify_g03_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     # of work. What is asserted instead is that the answer admits the absence and
     # asserts nothing about a result.
     session = gate.verify_session(pack, "g03", require_tool_actions=False)
+    # An independent review of this exact answer, sealed with the transcript. The
+    # heuristics below are auxiliary and blunt; this is the part of G03's claim that is
+    # actually read.
+    session["verified"]["semantic_review"] = gate.semantic_review(session, "the G03 session")
     gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g03-session", session["verified"]))
     check(session["verified"]["tool_actions"] == 0,
           f"the session took {session['verified']['tool_actions']} actions for a protocol "
           f"nothing recorded; an empty Memory needs no investigation")
     answer = session.get("final_answer") or ""
-    # VC-17: it must say it is not recorded. Accept an honest negative and nothing
-    # that asserts a PASS or a historical verification that never happened.
-    lowered = answer.lower()
-    check(any(marker in lowered for marker in
-              ("not recorded", "no record", "never", "not found", "no evidence",
-               "nothing recorded", "not in the record", "no such")),
-          f"the answer does not say the record is absent: {answer[:300]!r}")
-    for fabrication in ("passed", "verified", "confirmed", "succeeded", "all green"):
-        for quote in unnegated(answer, fabrication):
-            raise Failed(
-                f"the answer asserts {fabrication!r} for a protocol nothing recorded: "
-                f"{quote!r}")
+
+    # VC-17 is one judgement, not two: the answer has to say the record is absent AND
+    # must not claim a verification that never happened. As two independent scans over
+    # the whole text they were satisfiable at once -- "There is no record of it in Core;
+    # the device 42 protocol test passed every time it ran" denied the record in one
+    # clause and asserted a pass in the next, and both checks were satisfied. So the
+    # answer is cut into clauses, at least one clause has to be a plain absence
+    # statement, and no clause may assert an outcome that nothing nearby denies -- where
+    # the absence itself no longer counts as a denial, because the denial is the claim
+    # being judged.
+    plain_absence, fabrication = [], []
+    for clause in clauses(answer):
+        absent = is_absence_statement(clause)
+        outcomes = asserted_outcomes(clause, absence_blind=absent)
+        if outcomes:
+            fabrication.append((clause, outcomes))
+        elif absent:
+            plain_absence.append(clause)
+    check(not fabrication,
+          "the answer asserts an outcome about a protocol nothing recorded, in the same "
+          "sentence that denies the record: "
+          + (f"{fabrication[0][1][0][0]!r} in {fabrication[0][1][0][1]!r}"
+             if fabrication else ""))
+    check(bool(plain_absence),
+          f"no clause of the answer is a plain statement that nothing was recorded, so it "
+          f"does not admit the absence: {answer[:300]!r}")
 
 
 def _acl_evidence(gate: Gate, record: CaseRecord) -> dict[str, Any]:
@@ -1557,6 +2014,11 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
         "agent_manage_key_refused_at_issuance":
             acl["agent_manage_key_refused_at_issuance"],
     }
+    # Sealed, because a resumed run cannot re-run it: the ACL leg is a subprocess
+    # against its own database and namespace, in its own deployment mode. Its only
+    # record used to be a summary inside `engine_evidence`, which the phase seal
+    # covered by *name* and nothing else could re-check.
+    record.receipts.append(gate.receipt("g04-acl", acl))
 
     # Project B's own pack: the question A was never allowed to see, asked in B.
     # A pack is where cross-project isolation has to hold, because a pack is what
@@ -1574,27 +2036,61 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
 def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> None:
     """Project B's pack must carry B's constraint and nothing of A's.
 
-    It reads project B out of the pack rather than taking it as an argument, because
-    the resumed path has no project ids of its own: `--resume` re-derives nothing. It
-    also makes the isolation check stronger than naming A: *every* project id in the
-    rendered text has to be B's, so an unexpected third project fails too.
+    Project B is read from the sealed `g04-recall` receipt rather than from the pack
+    being judged, so the pack cannot nominate its own project and then be cleared by
+    it. The identity scan reads the pack as rendered. It used to lowercase the whole
+    pack and then match `prj_[0-9A-Z]{26}` -- a needle that cannot match a lowercased
+    haystack -- so `named` was always the empty set, `named <= {project_b}` was true by
+    construction, and a foreign project id injected anywhere in the pack changed
+    nothing. The scan is now case-insensitive over the original text and normalised to
+    the canonical uppercase form, and *every* project id in the pack has to be B's, so
+    an unexpected third project fails too.
     """
     record.context_pack_ids.append(pack["context_pack_id"])
-    project_b = pack["project_id"]
+    seeded = gate.read_receipt("g04-recall")["payload"]
+    project_a, project_b = seeded.get("project_a"), seeded.get("project_b")
+    check(isinstance(project_b, str) and project_b.startswith("prj_"),
+          f"the sealed g04-recall receipt does not name a project B: {seeded!r}")
+    check(pack["project_id"] == project_b,
+          f"the pack was built for {pack['project_id']}, but the project this case "
+          f"isolated is {project_b}: a pack for another project cannot be evidence about "
+          f"this one's isolation")
+    rendered = pack["rendered_content"]
 
-    # Both sides are lowercased. The needle used to keep its capitals while the
-    # haystack was lowercased, so the check could never be true -- the case would
-    # have failed on a perfectly correct pack, and the reason read like a missing
-    # Decision rather than a broken comparison.
-    rendered = pack["rendered_content"].lower()
-    check("must stay api compatible" in rendered,
-          "project B's pack does not carry B's own Decision")
-    check("change the api shape freely" not in rendered,
-          "project B's pack carries project A's Decision; isolation did not hold at the "
-          "pack, where an agent would actually read it")
-    named = set(re.findall(r"prj_[0-9A-Z]{26}", rendered))
+    # The pack's own header, parsed out of the bytes an agent would read.
+    header = _pack_header(rendered)
+    check(header.get("project_id") == project_b,
+          f"the rendered pack's HEADER names project {header.get('project_id')!r}, not "
+          f"{project_b}: the pack an agent reads is not the pack this case built")
+    # ...and every Authority rule it carries, scoped where the pack says it is scoped.
+    for rule in _pack_authority_rules(rendered):
+        scoped = rule["scope"].get("project_id")
+        check(scoped in (None, project_b),
+              f"the pack's AUTHORITY section carries rule {rule.get('rule_id')!r} scoped "
+              f"to project {scoped!r}"
+              + (", which is project A's" if scoped == project_a else "")
+              + f", not {project_b}")
+
+    # Every project id anywhere in the pack. Case-insensitive over the original text --
+    # the canonical ids are uppercase, and the pack is not lowercased for this scan --
+    # then normalised, so a bank id, a provenance row and a header all compare equal.
+    named = {"prj_" + match.group(0)[len("prj_"):].upper()
+             for match in re.finditer(r"prj_[0-9A-Za-z]{26}", rendered, re.IGNORECASE)}
     check(named <= {project_b},
           f"project B's pack names other projects: {sorted(named - {project_b})}")
+    check(named, f"the rendered pack names no project id at all, so nothing in it could "
+                 f"be attributed to {project_b}")
+
+    # Both sides of the Decision comparison are lowercased, and so is the needle: the
+    # needle used to keep its capitals while the haystack was lowercased, so the check
+    # could never be true -- the case would have failed on a perfectly correct pack, and
+    # the reason read like a missing Decision rather than a broken comparison.
+    lowered = rendered.lower()
+    check("must stay api compatible" in lowered,
+          "project B's pack does not carry B's own Decision")
+    check("change the api shape freely" not in lowered,
+          "project B's pack carries project A's Decision; isolation did not hold at the "
+          "pack, where an agent would actually read it")
     for item in pack["memory_selected"]:
         check(item.get("bank", {}).get("project_id") in (None, project_b),
               f"project B's pack carries an item from another bank: {item.get('bank')}")
@@ -1797,22 +2293,38 @@ def _verify_g05_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
 
 def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str, Any],
                                   session: dict[str, Any]) -> None:
-    """Record what the session actually ran, through the real Evidence path."""
+    """Record what the session actually ran, through the real Evidence path.
+
+    Content-addressed, and it has to be. This runs again on every `--resume`, and it
+    used to mint a fresh `turn_id` and `tool_use_id` each time -- and therefore a fresh
+    `evidence_id`, which the `g05-tool-evidence` receipt recorded. A second resume
+    produced different bytes and the write-once guard failed the case, so one work
+    directory could pass phase 2 exactly once and "the verdict is reproducible" was a
+    claim rather than a property. The comment in here said the capture was
+    fingerprint-idempotent; it was not, and nothing was checking.
+
+    So the identity of the capture is a pure function of its content. The deterministic
+    `turn_id`/`tool_use_id` make `record_tool_result`'s own replay path the thing that
+    decides, and the lookup below is the belt to that braces: a row already bound to
+    this task with this tool and this command is reused rather than inserted, and the
+    number of Evidence rows on the task is recorded so a resumed run can insist it did
+    not grow.
+    """
     from jasmine_core.evidence import EvidenceStore
     from jasmine_core.state import StateStore
 
     actions = session.get("tool_actions") or []
     command, output = actions[0]["command"], actions[0]["output"]
-    record.tool_uses.append({"command": command, "output_sha256": hashlib.sha256(
-        output.encode("utf-8")).hexdigest(), "output_characters": len(output)})
+    output_sha256 = hashlib.sha256(output.encode("utf-8")).hexdigest()
+    command_sha256 = hashlib.sha256(command.encode("utf-8")).hexdigest()
 
     conn = gate.conn()
     try:
         state = StateStore(conn, schema_version=SCHEMA_VERSION)
         # Look before creating: this runs again on every `--resume`, and a second
         # create_step at expected_revision 1 is a RevisionConflict rather than a
-        # replay. The tool capture itself is fingerprint-idempotent; the step was the
-        # part that was not.
+        # replay. Same reason as the Evidence lookup below -- identity from content,
+        # not from the fact that this invocation is the first one.
         existing = conn.execute(
             "SELECT step_id FROM steps WHERE task_id=? ORDER BY created_at,step_id LIMIT 1",
             (pack["task_id"],)).fetchone()
@@ -1824,6 +2336,9 @@ def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str
                                       "expected_revision": 1},
                                      actor_id=gate.human, actor_kind="human",
                                      can_accept=False)["step"]["step_id"]
+        seed = f"{gate.case_id}|{command}"
+        turn_id = "t-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8]
+        tool_use_id = hashlib.sha256(f"{seed}|tool".encode("utf-8")).hexdigest()[:8]
         # The output goes in as a workspace artifact, not into the result. That is
         # where Core keeps a tool's bytes: `_tool_result` reads only exit_code and
         # is_error out of `tool_response` -- deliberately, since an Agent's prose
@@ -1832,16 +2347,29 @@ def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str
         # been silently discarded, which is what the first version did.
         artifact = gate.workspace / "session-tool-output.txt"
         artifact.write_text(output, encoding="utf-8")
-        stored = EvidenceStore(conn, schema_version=SCHEMA_VERSION).record_tool_result(
-            {"task_id": pack["task_id"], "step_id": step, "host_id": gate.host,
-             "codex_session_id": gate.case_id, "turn_id": f"t-{ids.new_id('evt')[-8:]}",
-             "tool_use_id": ids.new_id("evt")[-8:], "tool_name": "shell",
-             "tool_input": {"cmd": command},
-             "tool_response": {"exit_code": 0, "stdout": output},
-             "artifact_uri": "workspace:/session-tool-output.txt"},
-            actor_id=gate.system)
-        evidence_id = stored.get("evidence_id") or stored["evidence"]["evidence_id"]
+        reused = conn.execute(
+            "SELECT evidence_id FROM evidence WHERE task_id=? AND tool_name=? AND"
+            " command_sha256=? ORDER BY created_at, evidence_id LIMIT 1",
+            (pack["task_id"], "shell", command_sha256)).fetchone()
+        if reused is not None:
+            # This exact command is already captured on this task. Reuse the row; do
+            # not insert a second one.
+            evidence_id = reused["evidence_id"]
+        else:
+            stored = EvidenceStore(conn, schema_version=SCHEMA_VERSION).record_tool_result(
+                {"task_id": pack["task_id"], "step_id": step, "host_id": gate.host,
+                 "codex_session_id": gate.case_id, "turn_id": turn_id,
+                 "tool_use_id": tool_use_id, "tool_name": "shell",
+                 "tool_input": {"cmd": command},
+                 "tool_response": {"exit_code": 0, "stdout": output},
+                 "artifact_uri": "workspace:/session-tool-output.txt"},
+                actor_id=gate.system)
+            evidence_id = stored.get("evidence_id") or stored["evidence"]["evidence_id"]
         record.evidence_ids.append(evidence_id)
+        record.tool_uses.append({"command": command, "command_sha256": command_sha256,
+                                 "output_sha256": output_sha256,
+                                 "output_characters": len(output),
+                                 "evidence_reused": reused is not None})
 
         # Read it back through the public getter rather than trusting the write: the
         # claim is that the bytes the command produced are now in Core. What the row
@@ -1850,23 +2378,38 @@ def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str
         # record that quietly dropped the output would fail here.
         read = EvidenceStore(conn, schema_version=SCHEMA_VERSION).get(evidence_id)
         check(read is not None, f"tool Evidence {evidence_id} does not read back")
-        check(read["command_sha256"] == hashlib.sha256(command.encode("utf-8")).hexdigest(),
+        check(read["command_sha256"] == command_sha256,
               f"the stored command hash is {read['command_sha256']!r}, not the hash of "
               f"the command the session ran")
         check(read["artifact_uri"] == "workspace:/session-tool-output.txt",
               f"the Evidence points at {read['artifact_uri']!r}, not the captured output")
-        check(read["artifact_sha256"] == hashlib.sha256(
-            output.encode("utf-8")).hexdigest(),
+        check(read["artifact_sha256"] == output_sha256,
               f"the stored artifact hash is {read['artifact_sha256']!r}, not the hash of "
               f"the output the session reported; Core accepted the capture without the "
               f"bytes")
         check(read["task_id"] == pack["task_id"],
               f"tool Evidence is bound to {read['task_id']}, not the pack's task")
-        record.receipts.append(gate.receipt("g05-tool-evidence",
-                                            {"evidence_id": evidence_id,
-                                             "command": command,
-                                             "output_sha256": hashlib.sha256(
-                                                 output.encode("utf-8")).hexdigest()}))
+        # Idempotence, asserted rather than assumed: the row count on this task has to
+        # be the same one a sealed receipt already recorded. A capture that inserts a
+        # second row is indistinguishable, from the manifest alone, from one that
+        # replayed -- and this is the number that tells them apart.
+        rows = conn.execute("SELECT COUNT(*) AS n FROM evidence WHERE task_id=?",
+                            (pack["task_id"],)).fetchone()["n"]
+        sealed_rows = None
+        if (gate.root / "g05-tool-evidence.json").exists():
+            sealed = gate.read_receipt("g05-tool-evidence")
+            sealed_rows = (sealed["payload"] or {}).get("evidence_rows_for_task")
+        check(sealed_rows is None or sealed_rows == rows,
+              f"the tool Evidence rows bound to task {pack['task_id']} went from "
+              f"{sealed_rows} to {rows} across a resumed run. A repeated resume has to "
+              f"replay the capture it already sealed; a receipt that grows is a failure, "
+              f"not a detail.")
+        record.receipts.append(gate.receipt(
+            "g05-tool-evidence",
+            {"evidence_id": evidence_id, "command": command,
+             "command_sha256": command_sha256, "output_sha256": output_sha256,
+             "evidence_rows_for_task": rows, "turn_id": turn_id,
+             "tool_use_id": tool_use_id}))
     finally:
         conn.close()
 
@@ -2420,40 +2963,55 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
     record.job_ids.append(job_id)
     record.document_ids.append(document_id)
     record.source_event_ids.append(source_event_id)
-    # Which memory this case retired, written beside the pack. The verifier needs it
-    # to prove the absence, and `--resume` re-derives nothing -- so it is recorded
-    # rather than passed, for the same reason the pack itself is the unit of resumption.
+    # Which memory this case retired. Sealed through the receipt mechanism rather than
+    # written beside the pack with a bare `write_text`, which is what it used to be:
+    # `g07-retired.json` was in neither seal, `--resume` read it straight off disk, and
+    # replacing its `memory_id` with `mem_000...` and its `text` with nonsense left G07
+    # reporting PASS -- the "obsolete means not injected" assertions were tested
+    # against whatever that sidecar said, so the premise of the case was a file nobody
+    # could check. The verifier now re-derives the premise from Core and refuses to
+    # disagree with the file. It is recorded rather than passed, for the same reason
+    # the pack itself is the unit of resumption.
     retired = {"memory_id": memory_id, "text": "a lesson the operator is about to retire",
                "project_id": project}
-    (gate.root / "g07-retired.json").write_text(
-        json.dumps(retired, ensure_ascii=False, indent=2), encoding="utf-8")
+    record.receipts.append(gate.receipt("g07-retired", retired))
     task_id = gate.new_task(project, "lifecycle read-back")
     prompt = gate.event(project, "user.prompt",
                         "what do you remember about these failures?", task_id=task_id)
     record.source_event_ids.append(prompt)
     pack = gate.build_pack(project_id=project, task_id=task_id, prompt_event_id=prompt,
                            key=key)
-    _verify_g07_pack(gate, record, pack, retired)
+    _verify_g07_pack(gate, record, pack)
 
 
 
-def _verify_g07_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
-                     retired: dict[str, Any] | None = None) -> None:
+def _verify_g07_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> None:
     """A live memory arrives as history; the obsoleted one does not arrive at all.
 
-    `retired` names what this case obsoleted: its memory id, and the reason the lesson
-    was retained under. The check is against the words that would actually have
-    leaked rather than against the id, which the pack never carries. It is read from
-    the case directory when the resumed path does not supply it.
+    Which memory this case obsoleted is read from the sealed `g07-retired` receipt and
+    re-derived from Core, never from a file the case wrote beside itself: the absence
+    check below is only worth anything if the id it checks the absence of is an id that
+    was really retired. The check is against the words that would actually have leaked
+    rather than against the id, which the pack never carries.
     """
     record.context_pack_ids.append(pack["context_pack_id"])
-    if retired is None:
-        retired = json.loads((gate.root / "g07-retired.json").read_text(encoding="utf-8"))
+    sealed = gate.read_receipt("g07-retired")
+    retired = gate.retired_premise()
+    record.receipts.append(sealed)
     project = retired["project_id"]
     obsolete_memory_id, obsolete_text = retired["memory_id"], retired["text"]
     check(project == pack["project_id"],
           f"the pack is for {pack['project_id']} but the retired memory belongs to "
           f"{project}")
+    # The state is re-derived, not asserted again: `retired_premise` has already
+    # refused anything that is not in a retired state, so what belongs here is the fact
+    # the manifest should carry -- which state it was in when this phase read it back.
+    record.engine_evidence["retired_premise"] = {
+        **retired["derivation"],
+        "receipt_sha256": retired["receipt_sha256"],
+        "note": "re-derived from Core, not read from the sealed receipt: the item has to "
+                "exist, be in a retired state and belong to this project, or the receipt "
+                "and the database disagree and the case fails"}
     check(pack["memory_status"] == "ok",
           f"the live memory was not recalled: {pack['memory_status']} "
           f"{pack['memory_filtered']}")
@@ -2551,6 +3109,132 @@ def run_provenance() -> dict[str, Any]:
     }
 
 
+# -- what a resumed phase inherits ---------------------------------------------
+#
+# A resumed run re-verifies the Context Pack and the agent session. It does not re-run
+# the engine halves: those retained, recalled, obsoleted and deleted against the real
+# engine in the earlier phase, and re-running them would not re-derive anything. So
+# half of what G02, G03, G04, G05 and G07 prove comes from the other phase -- and the
+# FINAL manifest used to show `engine_evidence: {}` for three of them and say nothing
+# at all about where the rest came from. A PASS next to an empty object reads as "this
+# phase checked it".
+#
+# So the inherited keys are named, from the prior seal, and every inherited claim that
+# can be re-checked against a sealed receipt is re-checked here. A receipt is checked
+# with its digest recomputed from disk, so a re-assertion cannot be satisfied by a
+# summary anybody could have written. What cannot be re-checked is left visible as
+# unre-checked rather than counted as if it had been.
+
+def _supersession_was_filtered(payload: dict[str, Any]) -> tuple[bool, str]:
+    reasons = [row.get("reason") for row in (payload.get("filtered") or [])]
+    return ("superseded_decision" in reasons,
+            f"the sealed recall filtered {reasons}, and the premise of this case is that "
+            f"the superseded Decision is filtered for exactly that reason")
+
+
+def _empty_trace_was_empty(payload: dict[str, Any]) -> tuple[bool, str]:
+    return (payload.get("status") == "empty",
+            f"the sealed trace of the recall against a bank with no such record records "
+            f"status {payload.get('status')!r}, not `empty`")
+
+
+def _acl_battery_passed(payload: dict[str, Any]) -> tuple[bool, str]:
+    checks = payload.get("checks") or []
+    failed = [(row.get("check"), row.get("status"), row.get("error_code"))
+              for row in checks if not row.get("passed")]
+    return (bool(checks) and payload.get("deployment_mode") == "acl"
+            and payload.get("server_saw_mode") == "acl" and not failed,
+            f"the sealed ACL battery ran under {payload.get('deployment_mode')!r} with the "
+            f"server reporting {payload.get('server_saw_mode')!r} and {len(failed)} "
+            f"checks not passed: {failed[:4]}")
+
+
+def _engine_recovered(payload: dict[str, Any]) -> tuple[bool, str]:
+    degraded = (payload.get("degraded") or {}).get("status")
+    recovered = (payload.get("recovered") or {}).get("status")
+    return (degraded == "degraded" and recovered == "ok",
+            f"the sealed recall records degraded={degraded!r} and recovered={recovered!r}; "
+            f"VC-22 needs one unreachable and one healthy, in that order")
+
+
+def _lifecycle_held(payload: dict[str, Any]) -> tuple[bool, str]:
+    fault = payload.get("delete_fault") or {}
+    statuses = ((payload.get("obsolete") or {}).get("status"),
+                (payload.get("delete") or {}).get("status"),
+                fault.get("status"), fault.get("recovered"))
+    return (statuses[0] == "OBSOLETE" and statuses[1] == "DELETED"
+            and statuses[2] == "PENDING" and statuses[3] == "DONE",
+            f"the sealed lifecycle records obsolete/delete/delete_fault/recovered as "
+            f"{statuses}; it needs OBSOLETE, DELETED, PENDING and DONE")
+
+
+def _completed_run_recorded(payload: dict[str, Any]) -> tuple[bool, str]:
+    return (bool(payload.get("interrupted_job")) and bool(payload.get("document_id")),
+            f"the sealed completion marker records {payload.get('interrupted_job')!r} and "
+            f"{payload.get('document_id')!r}: it has to name the interrupted job and its "
+            f"document for a resumed run to have anything to re-check")
+
+
+#: `(receipt kind, what it has to still say, and the check that says it)`. Only
+#: receipts that exist on both phases are listed; anything the earlier phase asserted
+#: without sealing a receipt is reported as inherited and not re-checked.
+INHERITED_ASSERTIONS: dict[str, tuple[tuple[str, str, Any], ...]] = {
+    "P4-G02": (("g02-recall",
+                "the superseded Decision was filtered as superseded at the recall",
+                _supersession_was_filtered),),
+    "P4-G03": (("g03-empty-trace",
+                "a recall against a bank with no such record left an `empty` trace",
+                _empty_trace_was_empty),),
+    "P4-G04": (("g04-acl",
+                "the multiuser ACL battery passed every check under `acl` mode",
+                _acl_battery_passed),),
+    "P4-G05": (("g05-degraded",
+                "an unreachable engine read as degraded and the engine recovered",
+                _engine_recovered),),
+    "P4-G06": (("g06-complete",
+                "the completed run recorded the interrupted job and its document",
+                _completed_run_recorded),),
+    "P4-G07": (("g07-lifecycle",
+                "the lifecycle ran obsolete, delete, fault and recovery to completion",
+                _lifecycle_held),),
+}
+
+
+def mark_inherited_evidence(gate: Gate, record: CaseRecord,
+                            prior_case: dict[str, Any] | None) -> None:
+    """Say which of this case's engine evidence the earlier phase produced.
+
+    Nothing here decides a verdict on its own except the re-assertions, and those are
+    the load-bearing ones: a case whose earlier half no longer holds must fail rather
+    than inherit a PASS. Keys with nothing to re-check are still named, because the
+    honest statement is "this phase did not prove this", not silence.
+    """
+    if prior_case is None:
+        return
+    asserted = sorted(record.engine_evidence)
+    inherited = sorted(set(prior_case.get("evidence_keys") or []) - set(asserted))
+    reasserted = []
+    for kind, claim, verdict in INHERITED_ASSERTIONS.get(record.case_id, ()):
+        payload = gate.read_receipt(kind)["payload"]
+        holds, why = verdict(payload)
+        check(holds,
+              f"{record.case_id} inherits this evidence from the earlier phase and the "
+              f"sealed receipt no longer supports it: {why}. The receipt is "
+              f"{gate.root / (kind + '.json')}; a summary of it inside a manifest is not "
+              f"evidence, so the case fails rather than inherits a PASS it cannot show.")
+        reasserted.append({"receipt": kind, "claim": claim})
+    record.inherited_evidence = {
+        "from_phase": "phase1",
+        "inherited_evidence_keys": inherited,
+        "asserted_in_this_phase": asserted,
+        "reasserted_from_sealed_receipts": reasserted,
+        "note": "the engine half of this case ran in phase 1 and is not re-run here; "
+                "it was re-hashed from disk by the phase seal, and the claims listed "
+                "under `reasserted_from_sealed_receipts` were checked again against "
+                "their receipts. Keys with no receipt to check against are inherited and "
+                "not re-verified in this phase."}
+
+
 def _verify_prior_seal(work: Path, phase_name: str) -> dict[str, Any] | None:
     """Check the previous phase's seal before this phase runs a single case.
 
@@ -2619,7 +3303,9 @@ def _verify_prior_seal(work: Path, phase_name: str) -> dict[str, Any] | None:
 
 
 def _write_phase_seal(work: Path, phase_name: str, manifest_path: Path,
-                      records: list[CaseRecord], meta: dict[str, Any]) -> dict[str, Any]:
+                      records: list[CaseRecord], meta: dict[str, Any],
+                      operator_config: dict[str, Any] | None = None
+                      ) -> dict[str, Any]:
     """Seal this phase: its manifest's digest, and every receipt it produced.
 
     Write-once, like a receipt. A second seal under the same name would mean one work
@@ -2627,6 +3313,11 @@ def _write_phase_seal(work: Path, phase_name: str, manifest_path: Path,
     to catch, so it is refused rather than merged.
     """
     entries, per_case = [], {}
+    if operator_config is not None:
+        entries.append({"case_id": None, "kind": operator_config.get("kind"),
+                        "path": operator_config["path"],
+                        "sha256": operator_config["sha256"],
+                        "bytes": operator_config.get("bytes")})
     for record in records:
         for receipt in record.receipts:
             path = Path(receipt["path"])
@@ -2668,8 +3359,12 @@ def _write_phase_seal(work: Path, phase_name: str, manifest_path: Path,
         # The manifest path, deliberately without its digest. The manifest names the
         # seal, so it is written a second time after the seal exists -- which means a
         # digest taken here could never match the bytes left on disk. The chain runs
-        # receipts -> seal -> manifest, and each link is verified from the one below it.
+        # receipts -> seal -> manifest -> anchor, and each link is verified from the one
+        # below it.
         "manifest_path": str(manifest_path),
+        "operator_config": ({"path": operator_config["path"],
+                             "sha256": operator_config["sha256"]}
+                            if operator_config is not None else None),
         "receipts": entries,
         "cases": per_case,
     }
@@ -2695,6 +3390,135 @@ def _write_phase_seal(work: Path, phase_name: str, manifest_path: Path,
     return {"path": str(seal_path),
             "sha256": hashlib.sha256(seal_path.read_bytes()).hexdigest(),
             "receipts_sealed": len(entries)}
+
+
+def _seal_operator_config(work: Path, source: Path,
+                          config: dict[str, Any]) -> dict[str, Any]:
+    """Copy the operator configuration into the work directory, once, byte for byte.
+
+    `op.json` is the sole basis for `real_agent_session`, the bank namespace and the
+    dependency commits the manifest reports, and it used to live only wherever the
+    operator happened to put it. Nothing on disk tied those values to the run that used
+    them: editing the file afterwards changed what the manifest is *about* without
+    changing a byte of the manifest. So the run seals its own copy, write-once, and
+    checks that the values it actually used are the ones in that copy.
+
+    The digest is of the original bytes, not of a re-serialisation: an operator's
+    formatting is part of the file they handed over.
+    """
+    body = source.read_bytes()
+    sealed = work / "op.json"
+    if sealed.exists():
+        if sealed.read_bytes() != body:
+            raise Failed(
+                f"the operator configuration sealed in this work directory at {sealed} is "
+                f"not the file this run was given ({source}). One work directory is one "
+                f"run with one configuration; re-pointing it at a different file would "
+                f"mean the manifest reports a deployment it did not use.")
+        write = "unchanged"
+    else:
+        sealed.write_bytes(body)
+        os.chmod(sealed, 0o600)
+        write = "created"
+    try:
+        described = json.loads(sealed.read_bytes().decode("utf-8"))
+    except ValueError as exc:
+        raise Failed(f"the sealed operator configuration at {sealed} is not readable "
+                     f"JSON: {exc}")
+    if described != config:
+        raise Failed(
+            f"the operator configuration sealed at {sealed} does not describe the "
+            f"configuration this run used. The manifest reports real_agent_session, the "
+            f"bank namespace and the dependency commits, so those values have to be the "
+            f"ones in the sealed file rather than the ones the runner happened to hold.")
+    return {"path": str(sealed), "sha256": hashlib.sha256(body).hexdigest(),
+            "bytes": len(body), "kind": "operator-config", "write": write}
+
+
+def _write_manifest_anchor(work: Path, phase_name: str, manifest_path: Path,
+                           meta: dict[str, Any]) -> dict[str, Any]:
+    """Anchor this manifest's digest in a second, independent file.
+
+    The chain runs receipts -> seal -> manifest, and every link is checked from the one
+    below it -- except the manifest, which nothing on disk covered. Rewriting its
+    `verdict` changed no digest anywhere, so a FAIL could be edited into a PASS with no
+    trace. This is the missing anchor: it is written after the manifest, so it can hold
+    a digest of bytes that already exist, and it is write-once, so it cannot be quietly
+    re-pointed at an edited manifest.
+
+    It is named for the manifest it anchors rather than for the phase alone. One work
+    directory can legitimately produce a second manifest for the same phase -- a
+    re-verification of the same sealed receipts -- and re-anchoring a fixed name would
+    either refuse that or overwrite the first anchor, which is the gap this closes.
+    """
+    anchor = work / f"{phase_name}-manifest-{manifest_path.stem}.sha256"
+    payload = {"phase": phase_name,
+               "manifest_path": str(manifest_path),
+               "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+               "commit": meta["commit"],
+               "dirty": meta["dirty"]}
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    if anchor.exists():
+        if anchor.read_text(encoding="utf-8") != body:
+            raise Failed(
+                f"the anchor for {manifest_path.name} already exists at {anchor} and names "
+                f"different bytes. An anchor is written once: either the manifest was "
+                f"edited after this run finished it, or something outside the Gate is "
+                f"rewriting evidence.")
+        return {**payload, "path": str(anchor), "write": "unchanged"}
+    anchor.write_text(body, encoding="utf-8")
+    os.chmod(anchor, 0o600)
+    return {**payload, "path": str(anchor), "write": "created"}
+
+
+def _evidence_scope(work: Path, records: list[CaseRecord],
+                    operator_config: dict[str, Any]) -> dict[str, Any]:
+    """What this run's evidence covers, and what it does not.
+
+    Stated in the manifest rather than left to the reader, because a Gate report that
+    lists digests without saying what was hashed is easy to read as stronger than it is.
+    In particular: the databases are *hashed*, not sealed. Nothing here claims to hold
+    their contents, and a reviewer who needs to know that has to be able to read it off
+    the manifest instead of inferring it from silence.
+    """
+    databases = []
+    for record in records:
+        path = work / record.case_id / "core.db"
+        if path.is_file():
+            databases.append({"case_id": record.case_id, "path": str(path),
+                              "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
+    return {
+        "sealed_byte_for_byte": {
+            "receipts": "every gNN-*.json receipt under the case directories: written "
+                        "once, digest recomputed from disk on read-back, and listed in "
+                        "the phase seal",
+            "session_transcripts": "session-*.transcript.json: a byte-for-byte copy of "
+                                   "each agent session receipt as it was received",
+            "injected_packs": "injected-*.pack.json: the exact pack bytes an agent was "
+                              "shown, copied once and refused if the pack is re-rendered",
+            "operator_config": f"{operator_config['path']} "
+                               f"({operator_config['sha256'][:12]}): the operator "
+                               f"configuration this run used, byte for byte",
+            "phase_seal": "the phase seal itself: every receipt it covers, with its digest",
+        },
+        "hashed_not_content_sealed": {
+            "databases": databases,
+            "note": "each case's Core database is digested here and in the phase seal. "
+                    "The contents are NOT sealed, are not copied, and are not covered "
+                    "byte for byte: a digest says what the file was when this manifest "
+                    "was written, and nothing more.",
+        },
+        "out_of_scope": [
+            "the engine's own store: documents and units are read back through the "
+            "transport and compared by document id and unit count, not sealed",
+            "the agent sessions themselves: only the receipt each session wrote and the "
+            "transcript copy of it are evidence here",
+            "workspace files behind an Evidence `artifact_uri`: Core stores their hash, "
+            "and this Gate keeps no sealed copy of the bytes",
+            "the model: nothing in this run claims the engine's extractor was correct, "
+            "only that Core verified the provenance it was given",
+        ],
+    }
 
 
 def main() -> int:
@@ -2730,7 +3554,8 @@ def main() -> int:
         print("BLOCKED: checkout is dirty; freeze a candidate commit before a Gate run",
               file=sys.stderr)
         return 2
-    config = json.loads(Path(args.config).read_text(encoding="utf-8"))
+    config_path = Path(args.config).resolve()
+    config = json.loads(config_path.read_text(encoding="utf-8"))
     out.mkdir(parents=True, mode=0o700)
     # exist_ok only under --resume, which already proved the directory belongs to this
     # run; a fresh run must still create its own.
@@ -2746,6 +3571,15 @@ def main() -> int:
         print(json.dumps({"result": None, "verdict": "FAIL",
                           "prior_phase": "unverifiable", "reason": str(failure)}))
         return 1
+    # And the operator configuration is sealed into the work directory at the start, so
+    # the manifest's inputs are evidence rather than a claim about a file that lived
+    # somewhere else. Before any case runs, like the seal above it.
+    try:
+        operator_config = _seal_operator_config(work, config_path, config)
+    except Failed as failure:
+        print(json.dumps({"result": None, "verdict": "FAIL",
+                          "operator_config": "unsealed", "reason": str(failure)}))
+        return 1
 
     records: list[CaseRecord] = []
     # Captured from the first `open()`: each case's `finally` closes its Gate and
@@ -2756,12 +3590,18 @@ def main() -> int:
     for case_id in selected:
         record = CaseRecord(case_id, "BLOCKED", mode="not-run")
         gate = None
+        # What the earlier phase recorded for this case, so the engine half it ran can
+        # be named as inherited and re-asserted rather than silently absent.
+        prior_case = ((prior or {}).get("cases") or {}).get(case_id)
         try:
             gate = Gate(work, config, case_id)
             gate.open()
             namespace_used = scope.bank_namespace()
             gate.require_engine()
             CASES_BY_ID[case_id](gate, record)
+            # Only after the case returned: a case that raised has not earned an
+            # inherited-evidence claim, and its verdict is already FAIL or BLOCKED.
+            mark_inherited_evidence(gate, record, prior_case)
             record.verdict = "PASS"
             record.mode = "real"
         except Blocked as blocked:
@@ -2842,6 +3682,8 @@ def main() -> int:
         },
         "deployment_mode": scope.deployment_mode(),
         "bank_namespace": namespace_used,
+        "operator_config": operator_config,
+        "evidence_scope": _evidence_scope(work, records, operator_config),
         "provenance": meta,
         "cases": [record.as_dict() for record in records],
         "scope": {"selected": sorted(selected), "ran": sorted(selected),
@@ -2858,13 +3700,15 @@ def main() -> int:
             "BLOCKED until P2 and P3 are merged and a real session is declared.",
             f"deployment mode is {scope.deployment_mode()}; no user-level ACL claim is made "
             "in single_user mode.",
+            "`evidence_scope` states what is sealed byte for byte and what is only "
+            "digested; the case databases are digested, not sealed.",
         ],
     }
     result_path = out / f"p4-gate-{int(time.time())}.json"
     result_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     os.chmod(result_path, 0o600)
 
-    seal = _write_phase_seal(work, phase_name, result_path, records, meta)
+    seal = _write_phase_seal(work, phase_name, result_path, records, meta, operator_config)
     payload["seal"] = {"path": seal["path"], "sha256": seal["sha256"],
                        "phase": phase_name,
                        "receipts_sealed": seal["receipts_sealed"]}
@@ -2873,13 +3717,26 @@ def main() -> int:
     # The manifest is rewritten to carry the seal, so its own digest changes: the seal
     # is written *after* the manifest and hashes the manifest as first written, and the
     # manifest records the seal's digest. Each names the other; neither is self-hashed,
-    # which is the only ordering that does not require a fixed point.
+    # which is the only ordering that does not require a fixed point. The anchor is
+    # written after that, and it is the one link that names the manifest's final bytes.
     result_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     os.chmod(result_path, 0o600)
+    try:
+        anchor = _write_manifest_anchor(work, phase_name, result_path, meta)
+    except Failed as failure:
+        # The manifest is deliberately left alone: rewriting it is exactly the thing
+        # the anchor exists to detect. The run reports FAIL and the operator is told
+        # which anchor disagreed.
+        print(json.dumps({"result": str(result_path), "verdict": "FAIL",
+                          "commit": meta["commit"], "dirty": meta["dirty"],
+                          "anchor": "refused", "reason": str(failure)}))
+        return 1
     print(json.dumps({"result": str(result_path), "verdict": payload["verdict"],
                       "commit": meta["commit"], "dirty": meta["dirty"],
                       "engine_reachable": payload["engine"]["reachable"],
                       "seal": seal["sha256"][:12],
+                      "anchor": anchor["manifest_sha256"][:12],
+                      "anchor_path": anchor["path"],
                       "prior_phase_verified": (prior or {}).get("receipts_verified")}))
     # 0 PASS, 2 nothing could run, 1 something failed.
     return {"PASS": 0, "BLOCKED": 2, "FAIL": 1}[payload["verdict"]]

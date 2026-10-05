@@ -13,6 +13,7 @@ extractor, no real Agent session, and no P3 Context Pack.
 
 from __future__ import annotations
 
+import hashlib
 import inspect
 import json
 import os
@@ -276,6 +277,73 @@ class Preconditions(unittest.TestCase):
         self.assertEqual(manifest["phase"], "P4")
         self.assertIsNone(manifest["final_commit"])
         self.assertIn("not Gate evidence", " ".join(manifest["notes"]))
+
+
+class AWholeRunAnchorsAndScopesItsEvidence(unittest.TestCase):
+    """What a finished run leaves on disk for whoever reads the manifest afterwards.
+
+    End to end rather than per helper, because these are the parts that only exist if
+    `main()` wires them: the operator configuration sealed into the work directory, the
+    scope statement in the manifest, and the anchor file that holds the manifest's own
+    digest -- the one link in the chain nothing else covered, which is why a FAIL could
+    be rewritten as a PASS with no trace.
+    """
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory(prefix="p4-gate-anchor-e2e-")
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name)
+        self.out = self.root / "out"
+        self.work = self.root / "work"
+        self.config = self.root / "op.json"
+        self.config.write_text(json.dumps(
+            {"run_id": "p4-anchor", "bank_suffix": "p4-anchor",
+             "real_agent_session": True,
+             "dependency_commits": {"P2": "0" * 40, "P3": "0" * 40}}), encoding="utf-8")
+        env = dict(os.environ, PYTHONPATH=str(SRC),
+                   JASMINE_HINDSIGHT_URL="http://127.0.0.1:1",
+                   JASMINE_HINDSIGHT_TIMEOUT_SECONDS="1")
+        env.pop("JASMINE_HINDSIGHT_API_KEY", None)
+        completed = subprocess.run(
+            [sys.executable, str(GATE), "--out", str(self.out), "--work", str(self.work),
+             "--config", str(self.config), "--allow-dirty"],
+            capture_output=True, text=True, env=env, timeout=300)
+        self.summary = json.loads(completed.stdout.strip().splitlines()[-1])
+        self.manifest_path = Path(self.summary["result"])
+
+    def test_the_anchor_holds_this_manifests_digest(self) -> None:
+        anchor = Path(self.summary["anchor_path"])
+        self.assertTrue(anchor.is_file(), self.summary)
+        body = json.loads(anchor.read_text(encoding="utf-8"))
+        self.assertEqual(body["manifest_path"], str(self.manifest_path))
+        self.assertEqual(body["manifest_sha256"],
+                         hashlib.sha256(self.manifest_path.read_bytes()).hexdigest())
+        self.assertEqual(body["phase"], "phase1")
+        self.assertEqual(body["commit"], self.summary["commit"])
+
+    def test_the_operator_configuration_is_sealed_into_the_work_directory(self) -> None:
+        sealed = self.work / "op.json"
+        self.assertTrue(sealed.is_file())
+        self.assertEqual(sealed.read_bytes(), self.config.read_bytes())
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["operator_config"]["sha256"],
+                         hashlib.sha256(self.config.read_bytes()).hexdigest())
+        # ...and the phase seal covers it, so a resumed run re-hashes it before a case runs.
+        seal = json.loads((self.work / "phase1-seal.json").read_text(encoding="utf-8"))
+        self.assertIn(str(sealed.resolve()),
+                      [entry["path"] for entry in seal["receipts"]])
+
+    def test_the_manifest_states_what_is_sealed_and_what_is_only_hashed(self) -> None:
+        manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+        scope = manifest["evidence_scope"]
+        self.assertIn("receipts", scope["sealed_byte_for_byte"])
+        self.assertIn("injected_packs", scope["sealed_byte_for_byte"])
+        self.assertIn("op.json", scope["sealed_byte_for_byte"]["operator_config"])
+        self.assertIn("NOT sealed", scope["hashed_not_content_sealed"]["note"])
+        for row in scope["hashed_not_content_sealed"]["databases"]:
+            self.assertTrue(Path(row["path"]).is_file())
+            self.assertEqual(len(row["sha256"]), 64)
+        self.assertTrue(scope["out_of_scope"])
 
 
 class NoCaseReturnsWithoutItsEvidence(unittest.TestCase):
@@ -622,3 +690,839 @@ class TheGateRefusesAnInactiveNamespace(unittest.TestCase):
         self.addCleanup(gate.close)
         self.assertEqual(gate.require_bank_namespace(), "p4-ns-test")
         self.assertEqual(os.environ.get("JASMINE_MEMORY_BANK_NAMESPACE"), "p4-ns-test")
+
+
+# -- the audit round: what each case's assertions are actually made of ----------
+#
+# Every test below drives the real verifier. The defect each one is aimed at was a
+# *vacuous* check -- one that could not fail, or could not fail for the reason it
+# names -- and a vacuous check cannot be shown to work by running it: it has to be
+# shown to fail when the bad thing is supplied. So the shape throughout is: build
+# the honest case, then supply the defect, and require the refusal.
+
+
+def _render_pack(*, project: str, task_id: str, source_event_id: str, title: str,
+                 status: str, memory_block: str = "",
+                 authority: str = "") -> str:
+    """A pack rendered the way P3 renders one, from the same pieces P3 renders.
+
+    Written out rather than produced by the real builder because these tests are about
+    what the verifier reads, and the builder is covered by its own tests. What has to
+    match is the *shape*: the HEADER line, the section markers, and the Memory
+    material after the Memory marker -- because that boundary is what "the only
+    variable was the lesson" is checked against.
+    """
+    compact = dict(separators=(",", ":"), ensure_ascii=False)
+    header = "JASMINE CONTEXT v1\n" + json.dumps({
+        "project_id": project, "task_id": task_id, "task_revision": 1,
+        "source_event_id": source_event_id,
+        "precedence": "CURRENT TRUTH > CHECKPOINT > NON-AUTHORITATIVE MEMORY",
+        "tokenizer_qualification": "cl100k_base", "reconciliation_required": True},
+        **compact) + "\n"
+    authority_text = "AUTHORITY\n" + authority
+    state = "CURRENT STATE\n" + json.dumps({
+        "task": {"task_id": task_id, "title": title, "description": None,
+                 "status": "PLANNED", "revision": 1, "acceptance_criteria": None},
+        "current_step_id": None, "steps": [],
+        "safety": "Context never verifies or accepts Evidence or State."}, **compact) + "\n"
+    memory = "MEMORY — NON AUTHORITATIVE\n" + json.dumps({"status": status},
+                                                         **compact) + "\n" + memory_block
+    return header + authority_text + state + memory
+
+
+class _ScriptedGate:
+    """A Gate with real receipts and prepared sessions, and nothing else.
+
+    `receipt` is the runner's own, so the write-once guard is real in these tests; the
+    rest is scripted because the engine half is not what any of these defects is about.
+    """
+
+    def __init__(self, module, root, *, sessions, questions, titles):
+        self.module = module
+        self._gate = module.Gate.__new__(module.Gate)
+        self._gate.root = root
+        self._gate.case_id = "P4-G01"
+        self.sessions = sessions
+        self.questions = questions
+        self.titles = titles
+
+    def receipt(self, kind, payload):
+        return self._gate.receipt(kind, payload)
+
+    def read_receipt(self, kind):
+        return self._gate.read_receipt(kind)
+
+    def verify_session(self, pack, label, *, require_tool_actions=True):
+        session = self.sessions[label]
+        if require_tool_actions and not (session.get("tool_actions") or []):
+            raise self.module.Failed(f"{label} recorded no tool action")
+        return session
+
+    def seal_session_artifacts(self, record, session):
+        self.module.Gate.seal_session_artifacts(self, record, session)
+
+    def prompt_text(self, event_id):
+        return self.questions.get(event_id)
+
+    def task_title(self, task_id):
+        return self.titles.get(task_id)
+
+
+class G01IsAControlledExperiment(unittest.TestCase):
+    """Same question, same state, lesson as the only variable, benefit defined first.
+
+    The defect was that none of that was true and none of it was checked: the two
+    sessions were asked different sentences, the benefit was "the command lists differ",
+    and a session that took one action against eleven passed.
+    """
+
+    CATEGORIES = load_runner().EXPLORATION_CATEGORIES
+
+    def setUp(self) -> None:
+        from jasmine_core import ids
+
+        self.module = load_runner()
+        self._tmp = tempfile.TemporaryDirectory(prefix="p4-gate-g01-")
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "work" / "P4-G01"
+        self.root.mkdir(parents=True)
+        self.project = ids.new_id("prj")
+        self.baseline_task, self.lesson_task = ids.new_id("tsk"), ids.new_id("tsk")
+        self.baseline_prompt, self.lesson_prompt = ids.new_id("evt"), ids.new_id("evt")
+        self.historical_task = ids.new_id("tsk")
+        self.memory_id, self.evidence_id = ids.new_id("mem"), ids.new_id("evd")
+        self.source_event = ids.new_id("evt")
+
+    # -- fixtures -------------------------------------------------------
+    def _pack(self, *, task_id, prompt_event_id, status, memory_block=""):
+        return {
+            "context_pack_id": f"ctx_{task_id[4:12]}", "project_id": self.project,
+            "task_id": task_id, "prompt_event_id": prompt_event_id,
+            "memory_status": status, "memory_selected": [], "memory_filtered": [],
+            "qualified_provenance": [], "truth_digest": "d" * 64, "check_current": True,
+            "rendered_content": _render_pack(
+                project=self.project, task_id=task_id, source_event_id=prompt_event_id,
+                title=self.module.G01_TASK_TITLE, status=status,
+                memory_block=memory_block),
+            "receipt": {"path": None, "sha256": None},
+        }
+
+    def _baseline_pack(self, **kwargs):
+        return self._pack(task_id=self.baseline_task, prompt_event_id=self.baseline_prompt,
+                          status="empty", **kwargs)
+
+    def _lesson_pack(self, **kwargs):
+        pack = self._pack(task_id=self.lesson_task, prompt_event_id=self.lesson_prompt,
+                          status="ok", **kwargs)
+        pack["memory_selected"] = [{
+            "memory_id": self.memory_id, "memory_type": "FAILURE_LESSON",
+            "bank": {"bank_id": f"jasmine-project-{self.project}",
+                     "scope": "PROJECT", "project_id": self.project},
+            "source_event_ids": [self.source_event], "source_task_id": self.historical_task,
+            "fact": "the callback task id did not match"}]
+        pack["qualified_provenance"] = [{"memory_id": self.memory_id,
+                                         "evidence_ids": [self.evidence_id],
+                                         "source_event_ids": [self.source_event]}]
+        return pack
+
+    def _memory_block(self):
+        return "HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n" + json.dumps({
+            "memory_id": self.memory_id, "memory_type": "FAILURE_LESSON",
+            "bank": {"scope": "PROJECT", "bank_id": f"jasmine-project-{self.project}",
+                     "project_id": self.project},
+            "source_event_ids": [self.source_event], "source_task_id": self.historical_task,
+            "fact": "the callback task id did not match"},
+            separators=(",", ":")) + "\n"
+
+    def _session(self, *, performed, completed=True, output=None, answer=None,
+                 memory_seen=True, commands=("pytest -q",)):
+        answer = answer if answer is not None else (
+            f"{self.memory_id} was recorded before, from task {self.historical_task}; "
+            f"historically the callback task id did not match the request.")
+        body = {
+            "final_answer": answer,
+            "tool_actions": [{"command": command,
+                              "output": "Ran 1 test\n\nOK\n"} for command in commands],
+            "task_completed": completed,
+            "final_verification": {"command": "python -m unittest tests/test_x.py",
+                                   "output": output if output is not None
+                                   else "Ran 1 test in 0.001s\n\nOK\n"},
+            "exploration": {name: name in performed for name in self.CATEGORIES},
+        }
+        if memory_seen:
+            body["memory_seen"] = [{"memory_id": self.memory_id,
+                                    "evidence_ids": [self.evidence_id],
+                                    "source_event_ids": [self.source_event]}]
+        body["verified"] = {"memory_carried": [] if not memory_seen else [self.memory_id],
+                            "tool_actions": len(body["tool_actions"]),
+                            "session_transcript": {"path": "t", "sha256": "0" * 64},
+                            "injection": {"injected_sha256": "1" * 64},
+                            "sealed": []}
+        return body
+
+    def _run(self, *, baseline=None, lesson=None, baseline_question=None,
+             lesson_question=None, baseline_title=None, lesson_title=None,
+             baseline_pack=None, lesson_pack=None):
+        baseline = baseline if baseline is not None else self._session(
+            performed={"enumerate_repository", "read_history", "inspect_toolchain"},
+            memory_seen=False, commands=("ls", "git log", "pytest -q"))
+        lesson = lesson if lesson is not None else self._session(
+            performed={"read_history"},
+            commands=("pytest -q",))
+        gate = _ScriptedGate(
+            self.module, self.root,
+            sessions={"g01-baseline": baseline, "g01-lesson": lesson},
+            questions={self.baseline_prompt: baseline_question
+                       if baseline_question is not None else self.module.G01_PROMPT,
+                       self.lesson_prompt: lesson_question
+                       if lesson_question is not None else self.module.G01_PROMPT},
+            titles={self.baseline_task: baseline_title
+                    if baseline_title is not None else f"P4-G01 {self.module.G01_TASK_TITLE}",
+                    self.lesson_task: lesson_title
+                    if lesson_title is not None else f"P4-G01 {self.module.G01_TASK_TITLE}"})
+        record = self.module.CaseRecord("P4-G01", "PASS")
+        self.module._verify_g01_packs(
+            gate, record,
+            lesson_pack if lesson_pack is not None else self._lesson_pack(
+                memory_block=self._memory_block()),
+            baseline_pack if baseline_pack is not None else self._baseline_pack())
+        return record
+
+    # -- the honest case -------------------------------------------------
+    def test_one_omitted_category_with_both_sides_finished_is_a_benefit(self) -> None:
+        record = self._run()
+        differential = record.engine_evidence["differential"]
+        self.assertEqual(differential["omitted_categories"],
+                         ["enumerate_repository", "inspect_toolchain"])
+        self.assertEqual(differential["vocabulary"], list(self.CATEGORIES))
+        self.assertEqual(record.verdict, "PASS")
+
+    # -- reverse tests ---------------------------------------------------
+    def test_two_real_p3_packs_for_different_tasks_differ_only_in_their_task_ids(self) -> None:
+        """The sole-variable requirement has to be satisfiable by P3's own render.
+
+        Built with the real `ContextBuilder` and the real renderer, for two Tasks of one
+        project. If anything else in a genuine render varied between two Tasks of the
+        same shape, this Gate would fail every correct run -- and an assertion nobody can
+        satisfy is not a control, it is a new way to report FAIL.
+        """
+        from jasmine_core import SCHEMA_VERSION, db, ids
+        from jasmine_core.context.builder import ContextBuilder
+        from jasmine_core.context.tokens import Tokenizer, TokenizerUnavailable
+        from jasmine_core.events import EventStore
+        from jasmine_core.migrations import migrate
+        from jasmine_core.models import NewEvent, NewObject
+        from jasmine_core.objects import ObjectStore
+        from jasmine_core.registry import Registry
+
+        try:
+            tokenizer = Tokenizer()
+        except TokenizerUnavailable as exc:  # pragma: no cover - depends on the cache
+            self.skipTest(str(exc))
+        self._tmp_db = tempfile.TemporaryDirectory(prefix="p4-gate-realpack-")
+        self.addCleanup(self._tmp_db.cleanup)
+        conn = db.connect(Path(self._tmp_db.name) / "core.db")
+        self.addCleanup(conn.close)
+        migrate(conn)
+        host, human, agent = ids.new_id("hst"), ids.new_id("act"), ids.new_id("act")
+        reg = Registry(conn)
+        reg.upsert_host(host)
+        reg.upsert_actor(human, kind="human", home_host_id=host)
+        reg.upsert_actor(agent, kind="agent", home_host_id=host)
+        objects = ObjectStore(conn, schema_version=SCHEMA_VERSION)
+        project = objects.create(NewObject.project({"name": "g01", "host_id": host}),
+                                 actor_id=human)["object"]["project_id"]
+        builder = ContextBuilder(conn, schema_version=SCHEMA_VERSION, tokenizer=tokenizer,
+                                 scanner=lambda budget, *, conn: {
+                                     "snapshot": {"complete": False,
+                                                  "partial_reasons": ["gate test"]},
+                                     "sample_window": {"started_at_unix": 1,
+                                                       "finished_at_unix": 2}})
+        packs = []
+        for index, key in enumerate(("g01-no-lesson", "g01-with-lesson")):
+            task = objects.create(NewObject.task({
+                "project_id": project, "title": self.module.G01_TASK_TITLE,
+                "host_id": host}), actor_id=human)["object"]["task_id"]
+            prompt = EventStore(conn, schema_version=SCHEMA_VERSION).append(NewEvent(
+                event_type="user.prompt", source_system="p4-gate-test", source_event_id=None,
+                occurred_at=self.module.clock.now(), actor_id=human, actor_kind="human",
+                host_id=host, project_id=project, task_id=task,
+                payload={"text": self.module.G01_PROMPT}))[0]["event_id"]
+            packs.append(builder.build(
+                {"task_id": task, "host_id": host, "source_event_id": prompt,
+                 "reason": "USER_PROMPT", "idempotency_key": key},
+                actor_id=agent)["context"] | {"task_id": task, "prompt_event_id": prompt}
+                         if False else dict(
+                             builder.build(
+                                 {"task_id": task, "host_id": host,
+                                  "source_event_id": prompt, "reason": "USER_PROMPT",
+                                  "idempotency_key": key},
+                                 actor_id=agent)["context"],
+                                 task_id=task, prompt_event_id=prompt))
+        baseline, lesson = packs
+        self.assertNotEqual(baseline["task_id"], lesson["task_id"])
+        split = self.module._memory_section_split
+        self.assertEqual(
+            self.module._without_task_identity(split(baseline["rendered_content"])[0],
+                                               baseline),
+            self.module._without_task_identity(split(lesson["rendered_content"])[0],
+                                               lesson),
+            "two real P3 packs for two Tasks of one project must agree outside the "
+            "Memory section once their own ids are replaced")
+
+    def test_two_different_questions_are_refused(self) -> None:
+        # The defect. One side said "the device test fails", the other "the device test
+        # fails again", and a behavioural difference had a second explanation that
+        # nothing could rule out.
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(lesson_question="the device test fails again; where should I "
+                                      "look first?")
+        message = str(caught.exception)
+        self.assertIn("different questions", message)
+        self.assertIn("fails again", message)
+
+    def test_differently_titled_tasks_are_refused(self) -> None:
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(lesson_title="P4-G01 device test (new session)")
+        self.assertIn("differently titled Tasks", str(caught.exception))
+
+    def test_a_difference_outside_the_memory_section_is_refused_and_named(self) -> None:
+        # Same question, same title, and still two variables: the CURRENT STATE section
+        # differs. This is what the case cannot see, and it must not be able to claim
+        # the experiment when it cannot.
+        drifted = _render_pack(project=self.project, task_id=self.lesson_task,
+                               source_event_id=self.lesson_prompt,
+                               title=self.module.G01_TASK_TITLE, status="ok",
+                               memory_block=self._memory_block(),
+                               authority=json.dumps(
+                                   {"rule_id": "rul_" + "A" * 26, "version": 1,
+                                    "scope": {"kind": "project", "project_id": self.project}},
+                                   separators=(",", ":")) + "\n")
+        pack = self._lesson_pack(memory_block=self._memory_block())
+        pack["rendered_content"] = drifted
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(lesson_pack=pack)
+        message = str(caught.exception)
+        self.assertIn("differ outside the Memory section", message)
+        self.assertIn("only variable", message)
+        self.assertIn("at character", message)
+
+    def test_two_packs_with_the_same_memory_section_are_refused(self) -> None:
+        # If the Memory material is identical there was no injection, and a
+        # differential over two identical contexts is a comparison of nothing. The
+        # packs here claim different things in their JSON fields and render the same
+        # Memory bytes: that disagreement is the tamper.
+        shared = json.dumps({"status": "ok"}, separators=(",", ":")) + \
+            f"\nCITED {self.source_event}\n"
+        lesson = self._lesson_pack(memory_block=shared)
+        lesson["rendered_content"] = _render_pack(
+            project=self.project, task_id=self.lesson_task,
+            source_event_id=self.lesson_prompt,
+            title=self.module.G01_TASK_TITLE, status="ok", memory_block=shared)
+        baseline = self._baseline_pack(memory_block=shared)
+        baseline["rendered_content"] = _render_pack(
+            project=self.project, task_id=self.baseline_task,
+            source_event_id=self.baseline_prompt,
+            title=self.module.G01_TASK_TITLE, status="ok", memory_block=shared)
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(lesson_pack=lesson, baseline_pack=baseline)
+        self.assertIn("identical to the", str(caught.exception))
+
+    def test_a_category_outside_the_closed_vocabulary_is_refused(self) -> None:
+        # A category invented for this run is a way to report a saving nobody measured.
+        lesson = self._session(performed=set())
+        lesson["exploration"] = dict(lesson["exploration"])
+        lesson["exploration"]["ask_the_model"] = True
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(lesson=lesson)
+        message = str(caught.exception)
+        self.assertIn("outside the closed set", message)
+        self.assertIn("ask_the_model", message)
+
+    def test_an_undeclared_category_is_refused(self) -> None:
+        lesson = self._session(performed=set())
+        del lesson["exploration"]["read_documentation"]
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(lesson=lesson)
+        self.assertIn("did not say whether it performed", str(caught.exception))
+
+    def test_a_session_that_did_not_finish_is_refused(self) -> None:
+        # The defect in its most flattering form: one action against eleven, and the
+        # case called it a saving.
+        lesson = self._session(performed=set(), completed=False)
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(lesson=lesson)
+        message = str(caught.exception)
+        self.assertIn("task_completed", message)
+        self.assertIn("not completing the task", message)
+
+    def test_a_verification_that_did_not_pass_is_refused(self) -> None:
+        lesson = self._session(performed=set(),
+                               output="Ran 1 test in 0.001s\n\nFAILED (failures=1)\n")
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(lesson=lesson)
+        self.assertIn("does not carry", str(caught.exception))
+
+    def test_a_baseline_that_did_not_finish_is_refused(self) -> None:
+        baseline = self._session(performed={"enumerate_repository"}, completed=False,
+                                 memory_seen=False, commands=("ls",))
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(baseline=baseline)
+        self.assertIn("did not declare task_completed", str(caught.exception))
+
+    def test_no_omitted_category_is_not_a_benefit(self) -> None:
+        lesson = self._session(performed={"enumerate_repository", "read_history",
+                                          "inspect_toolchain"})
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(lesson=lesson)
+        message = str(caught.exception)
+        self.assertIn("performed every exploration category", message)
+        self.assertIn("not a difference in", message)
+
+
+class _PackGate:
+    """A Gate that only has receipts, one sealed pack receipt, and a scripted session.
+
+    `read_receipt` is the runner's own, so the re-derivation of a sealed fact out of the
+    receipt file is real: these tests cannot pass by handing the verifier the answer.
+    """
+
+    def __init__(self, module, root, *, session, seeded=None):
+        self.module = module
+        self.root = root
+        self._gate = module.Gate.__new__(module.Gate)
+        self._gate.root = root
+        self._gate.case_id = "P4-G0X"
+        self.session = session
+        if seeded is not None:
+            self._gate.receipt(seeded[0], seeded[1])
+
+    def receipt(self, kind, payload):
+        return self._gate.receipt(kind, payload)
+
+    def read_receipt(self, kind):
+        return self._gate.read_receipt(kind)
+
+    def verify_session(self, pack, label, *, require_tool_actions=True):
+        session = self.session
+        if require_tool_actions and not (session.get("tool_actions") or []):
+            raise self.module.Failed(f"{label} recorded no tool action")
+        return session
+
+    def seal_session_artifacts(self, record, session):
+        self.module.Gate.seal_session_artifacts(self, record, session)
+
+    def semantic_review(self, session, label):
+        return self._gate.semantic_review(session, label)
+
+
+class G03JudgesAbsenceAndFabricationTogether(unittest.TestCase):
+    """The two requirements are one judgement, and an answer can fail it by both.
+
+    Verified directly against the sealed pack: "There is no record of it in Core; the
+    device 42 protocol test passed every time it ran" satisfied an absence scan and a
+    fabrication scan at the same time, because they were two independent substring tests
+    over one string.
+    """
+
+    def setUp(self) -> None:
+        from jasmine_core import ids
+
+        self.module = load_runner()
+        self._tmp = tempfile.TemporaryDirectory(prefix="p4-gate-g03-")
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "work" / "P4-G03"
+        self.root.mkdir(parents=True)
+        self.project = ids.new_id("prj")
+        self.pack = {"context_pack_id": "ctx_" + ids.new_id("ctx")[4:],
+                     "project_id": self.project, "task_id": ids.new_id("tsk"),
+                     "prompt_event_id": ids.new_id("evt"), "memory_status": "empty",
+                     "memory_selected": [], "memory_filtered": [],
+                     "qualified_provenance": [],
+                     "rendered_content": 'JASMINE CONTEXT v1\n{"status":"empty"}\n'}
+
+    def _answer(self, text, *, verdict="consistent", digest=None, reviewer="a reviewer"):
+        import hashlib
+
+        review = {"reviewer": reviewer, "verdict": verdict,
+                  "reviewed_answer_sha256": digest
+                  if digest is not None
+                  else hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                  "findings": "read it"}
+        return {"final_answer": text, "tool_actions": [], "memory_seen": [],
+                "semantic_review": review,
+                "verified": {"tool_actions": 0, "memory_carried": [],
+                             "session_transcript": {"path": "t", "sha256": "0" * 64},
+                             "injection": {}, "sealed": []}}
+
+    def _run(self, text, **kwargs):
+        gate = _PackGate(self.module, self.root, session=self._answer(text, **kwargs))
+        record = self.module.CaseRecord("P4-G03", "PASS")
+        self.module._verify_g03_pack(gate, record, self.pack)
+        return record
+
+    def test_an_honest_negative_with_a_review_is_accepted(self) -> None:
+        record = self._run("There is no record of the device 42 protocol test in Core, "
+                           "so nothing about its results is available.")
+        self.assertEqual(record.receipts[-1]["kind"], "g03-session")
+
+    def test_the_two_sentence_answer_is_refused(self) -> None:
+        # The defect, verbatim.
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run("There is no record of it in Core; the device 42 protocol test "
+                      "passed every time it ran.")
+        message = str(caught.exception)
+        self.assertIn("same sentence that denies the record", message)
+        self.assertIn("passed", message)
+
+    def test_one_clause_that_denies_and_asserts_is_refused(self) -> None:
+        # Same failure without the semicolon: the absence must not vouch for the
+        # assertion sitting beside it.
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run("There is no record of the device 42 protocol test in Core and it "
+                      "passed every time it ran.")
+        self.assertIn("asserts", str(caught.exception))
+
+    def test_an_answer_that_only_asserts_is_refused(self) -> None:
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run("The device 42 protocol test passed every time it ran.")
+        self.assertIn("asserts", str(caught.exception))
+
+    def test_an_answer_that_never_admits_the_absence_is_refused(self) -> None:
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run("The device 42 protocol test was green across the board.")
+        self.assertIn("does not admit the absence", str(caught.exception))
+
+    def test_a_negated_mention_is_still_honest(self) -> None:
+        # "Nothing verified it" is the denial, not a fabrication, and a session that
+        # says so correctly must not be failed for it.
+        self._run("Nothing verified the device 42 protocol test; it never ran in this "
+                  "project.")
+
+    def test_a_missing_review_is_refused(self) -> None:
+        session = self._answer("There is no record of the device 42 protocol test in "
+                               "Core.")
+        del session["semantic_review"]
+        gate = _PackGate(self.module, self.root, session=session)
+        with self.assertRaises(self.module.Failed) as caught:
+            self.module._verify_g03_pack(gate, self.module.CaseRecord("P4-G03", "PASS"),
+                                         self.pack)
+        self.assertIn("no semantic_review block", str(caught.exception))
+
+    def test_a_review_of_a_different_answer_is_refused(self) -> None:
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run("There is no record of the device 42 protocol test in Core.",
+                      digest="a" * 64)
+        message = str(caught.exception)
+        self.assertIn("attached to a different answer", message)
+
+    def test_an_inconsistent_review_is_refused(self) -> None:
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run("There is no record of the device 42 protocol test in Core.",
+                      verdict="inconsistent")
+        self.assertIn("returned 'inconsistent'", str(caught.exception))
+
+    def test_the_reviewer_reaches_the_receipt(self) -> None:
+        import hashlib
+
+        record = self._run("There is no record of the device 42 protocol test in Core.",
+                           reviewer="jasmine independent reviewer")
+        sealed = json.loads(Path(record.receipts[-1]["path"]).read_text(encoding="utf-8"))
+        review = sealed["semantic_review"]
+        self.assertEqual(review["reviewer"], "jasmine independent reviewer")
+        self.assertEqual(review["verdict"], "consistent")
+        self.assertEqual(
+            review["reviewed_answer_sha256"],
+            hashlib.sha256("There is no record of the device 42 protocol test in Core."
+                           .encode("utf-8")).hexdigest())
+
+
+class G04ReadsProjectIdentityFromTheWholePack(unittest.TestCase):
+    """The identity scan lowercased the haystack and kept the needle's capitals.
+
+    So `re.findall(r"prj_[0-9A-Z]{26}", rendered.lower())` found nothing, `named` was
+    always the empty set, and `named <= {project_b}` was true by construction. A foreign
+    project id injected into a pack changed nothing.
+    """
+
+    def setUp(self) -> None:
+        from jasmine_core import ids
+
+        self.module = load_runner()
+        self._tmp = tempfile.TemporaryDirectory(prefix="p4-gate-g04-")
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "work" / "P4-G04"
+        self.root.mkdir(parents=True)
+        self.project_a = ids.new_id("prj")
+        self.project_b = ids.new_id("prj")
+        self.foreign = ids.new_id("prj")
+
+    def _pack(self, *, rendered=None, project_id=None, memory_selected=()):
+        body = rendered if rendered is not None else self._rendered(
+            rules=[{"rule_id": "rul_" + "B" * 26, "version": 1,
+                    "scope": {"kind": "project", "project_id": self.project_b},
+                    "content": "Project B must stay API compatible"}])
+        return {"context_pack_id": "ctx_" + "C" * 26,
+                "project_id": project_id if project_id is not None else self.project_b,
+                "task_id": "tsk_" + "D" * 26, "prompt_event_id": "evt_" + "E" * 26,
+                "memory_status": "ok", "memory_selected": list(memory_selected),
+                "memory_filtered": [], "qualified_provenance": [],
+                "rendered_content": body}
+
+    def _rendered(self, *, rules, header_project=None):
+        compact = dict(separators=(",", ":"), ensure_ascii=False)
+        header = "JASMINE CONTEXT v1\n" + json.dumps({
+            "project_id": header_project or self.project_b, "task_id": "tsk_" + "D" * 26,
+            "task_revision": 1, "source_event_id": "evt_" + "E" * 26}, **compact) + "\n"
+        authority = "AUTHORITY\n" + "".join(
+            json.dumps({**rule, "content": rule["content"]}, **compact) + "\n"
+            + rule["content"] + "\n" for rule in rules)
+        state = "CURRENT STATE\n" + json.dumps({"task": {"task_id": "tsk_" + "D" * 26}},
+                                               **compact) + "\n"
+        memory = "MEMORY — NON AUTHORITATIVE\n" + json.dumps({"status": "ok"},
+                                                            **compact) + "\n"
+        return header + authority + state + memory
+
+    def _run(self, pack=None):
+        gate = _PackGate(self.module, self.root,
+                         session={"final_answer": "you must stay API compatible",
+                                  "tool_actions": [],
+                                  "verified": {"tool_actions": 0, "memory_carried": [],
+                                               "session_transcript": {},
+                                               "injection": {}, "sealed": []}},
+                         seeded=("g04-recall", {"project_a": self.project_a,
+                                                "project_b": self.project_b}))
+        record = self.module.CaseRecord("P4-G04", "PASS")
+        self.module._verify_g04_pack(gate, record,
+                                     pack if pack is not None else self._pack())
+        return record
+
+    def test_a_clean_pack_of_project_b_is_accepted(self) -> None:
+        self.assertEqual(self._run().verdict, "PASS")
+
+    def test_a_foreign_project_id_anywhere_in_the_pack_is_refused(self) -> None:
+        # The defect. A bank id, a provenance row, a lowercase copy: the scan has to
+        # see all of them, and the comparison has to be case-blind on purpose so that a
+        # differently-cased copy of the *same* id is not mistaken for a foreign one.
+        foreign_lowercase = "prj_" + self.foreign[4:].lower()
+        for injection in (
+            f"jasmine-project-{self.foreign}",
+            f"jasmine-project-{self.project_a}",
+            foreign_lowercase,
+        ):
+            with self.subTest(injection=injection):
+                rendered = self._rendered(
+                    rules=[{"rule_id": "rul_" + "B" * 26, "version": 1,
+                            "scope": {"kind": "project", "project_id": self.project_b},
+                            "content": "Project B must stay API compatible"}])
+                leaked = rendered.replace("CURRENT STATE",
+                                          f"BANK {injection}\nCURRENT STATE")
+                with self.assertRaises(self.module.Failed) as caught:
+                    self._run(self._pack(rendered=leaked))
+                self.assertIn("names other projects", str(caught.exception))
+
+    def test_a_lowercase_copy_of_project_b_is_not_a_foreign_project(self) -> None:
+        # The normalisation is case-blind so that a re-cased copy of B compares equal.
+        rendered = self._rendered(
+            rules=[{"rule_id": "rul_" + "B" * 26, "version": 1,
+                    "scope": {"kind": "project", "project_id": self.project_b},
+                    "content": "Project B must stay API compatible"}])
+        recased = rendered.replace("CURRENT STATE",
+                                   f"NOTE {self.project_b.lower()}\nCURRENT STATE")
+        self.assertEqual(self._run(self._pack(rendered=recased)).verdict, "PASS")
+
+    def test_a_pack_built_for_another_project_is_refused(self) -> None:
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(self._pack(project_id=self.project_a))
+        self.assertIn("cannot be evidence about", str(caught.exception))
+
+    def test_a_header_naming_another_project_is_refused(self) -> None:
+        rendered = self._rendered(
+            rules=[{"rule_id": "rul_" + "B" * 26, "version": 1,
+                    "scope": {"kind": "project", "project_id": self.project_b},
+                    "content": "Project B must stay API compatible"}],
+            header_project=self.project_a)
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(self._pack(rendered=rendered))
+        message = str(caught.exception)
+        self.assertIn("HEADER names project", message)
+        self.assertIn(self.project_a, message)
+
+    def test_an_authority_rule_scoped_to_another_project_is_refused(self) -> None:
+        rendered = self._rendered(
+            rules=[{"rule_id": "rul_" + "B" * 26, "version": 1,
+                    "scope": {"kind": "project", "project_id": self.project_b},
+                    "content": "Project B must stay API compatible"},
+                   {"rule_id": "rul_" + "A" * 26, "version": 1,
+                    "scope": {"kind": "project", "project_id": self.project_a},
+                    "content": "Project A may change the API shape freely"}])
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(self._pack(rendered=rendered))
+        message = str(caught.exception)
+        self.assertIn("AUTHORITY section carries rule", message)
+        self.assertIn("project A's", message)
+        self.assertIn(self.project_a, message)
+
+    def test_a_pack_with_no_project_id_at_all_is_refused(self) -> None:
+        rendered = "JASMINE CONTEXT v1\n" + json.dumps({"task_id": "tsk_" + "D" * 26}) + \
+            "\nAUTHORITY\nCURRENT STATE\nMEMORY — NON AUTHORITATIVE\n"
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(self._pack(rendered=rendered))
+        self.assertIn("HEADER names project", str(caught.exception))
+
+    def test_the_other_projects_decision_is_still_refused(self) -> None:
+        # The assertion that did work, and has to keep working next to the new ones: a
+        # correctly scoped rule whose *text* still carries project A's freedom.
+        rendered = self._rendered(
+            rules=[{"rule_id": "rul_" + "B" * 26, "version": 1,
+                    "scope": {"kind": "project", "project_id": self.project_b},
+                    "content": "Project B must stay API compatible; unlike A it may not "
+                               "change the API shape freely"}])
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run(self._pack(rendered=rendered))
+        self.assertIn("carries project A's Decision", str(caught.exception))
+
+
+class G02StatesItsSupersessionPremise(unittest.TestCase):
+    """`not filtered or any(...)` is true of an empty list, and the list is empty.
+
+    P3's `filter_memory` can only report items the *Core* refused; the superseded
+    Decision is dropped by the recall, so the pack's filtered list cannot contain one.
+    The check therefore never fired, and the manifest implied a filter had been seen.
+    """
+
+    def setUp(self) -> None:
+        from jasmine_core import ids
+
+        self.module = load_runner()
+        self._tmp = tempfile.TemporaryDirectory(prefix="p4-gate-g02-")
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "work" / "P4-G02"
+        self.root.mkdir(parents=True)
+        self.project = ids.new_id("prj")
+        self.rendered = (
+            "JASMINE CONTEXT v1\n"
+            + json.dumps({"project_id": self.project, "task_id": "tsk_" + "D" * 26},
+                         separators=(",", ":")) + "\n"
+            + "AUTHORITY\n"
+            + json.dumps({"rule_id": "rul_" + "B" * 26, "version": 2,
+                          "kind": "DECISION",
+                          "scope": {"kind": "project", "project_id": self.project}},
+                         separators=(",", ":")) + "\n"
+            + "V1 will use Hindsight for long-term memory\n"
+            + "CURRENT STATE\n"
+            + "MEMORY — NON AUTHORITATIVE\n")
+
+    def _run(self, filtered):
+        pack = {"context_pack_id": "ctx_" + "C" * 26, "project_id": self.project,
+                "task_id": "tsk_" + "D" * 26, "prompt_event_id": "evt_" + "E" * 26,
+                "memory_status": "ok", "memory_selected": [], "memory_filtered": filtered,
+                "qualified_provenance": [], "rendered_content": self.rendered}
+        gate = _PackGate(self.module, self.root,
+                         session={"final_answer": "V1 uses Hindsight",
+                                  "tool_actions": [],
+                                  "verified": {"tool_actions": 0, "memory_carried": [],
+                                               "session_transcript": {},
+                                               "injection": {}, "sealed": []}})
+        record = self.module.CaseRecord("P4-G02", "PASS")
+        self.module._verify_g02_pack(gate, record, pack)
+        return record
+
+    def test_an_unobserved_premise_is_stated_in_the_manifest(self) -> None:
+        record = self._run([])
+        self.assertFalse(record.engine_evidence["supersession_observed_in_pack"])
+        premise = record.engine_evidence["supersession_premise"]
+        self.assertIn("not observed at the pack", premise)
+        self.assertIn("g02-recall", premise)
+        # ...and it reaches the manifest, rather than being implied by a check that
+        # could not fire.
+        self.assertIn("supersession_observed_in_pack", record.as_dict()["engine_evidence"])
+
+    def test_an_observed_premise_is_recorded_as_observed(self) -> None:
+        record = self._run([{"bank_id": f"jasmine-project-{self.project}",
+                             "memory_id": "mem_" + "F" * 26,
+                             "reason": "superseded_decision"}])
+        self.assertTrue(record.engine_evidence["supersession_observed_in_pack"])
+        self.assertIn("observed at the pack",
+                      record.engine_evidence["supersession_premise"])
+
+    def test_a_filter_for_another_reason_is_still_refused(self) -> None:
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run([{"bank_id": f"jasmine-project-{self.project}",
+                        "memory_id": "mem_" + "F" * 26, "reason": "foreign_project"}])
+        self.assertIn("other than supersession", str(caught.exception))
+
+
+class InheritedEvidenceIsMarkedAndReasserted(unittest.TestCase):
+    """A resumed phase has to say which half of its evidence came from the other phase.
+
+    G01..G05 and G07 re-verify the pack and the session on `--resume`; the engine halves
+    ran in the earlier phase and are only re-hashed. The FINAL manifest used to show
+    `engine_evidence: {}` for three of them and nothing anywhere saying that half the
+    assertions came from a phase whose own verdict may have been BLOCKED.
+    """
+
+    def setUp(self) -> None:
+        self.module = load_runner()
+        self._tmp = tempfile.TemporaryDirectory(prefix="p4-gate-inherit-")
+        self.addCleanup(self._tmp.cleanup)
+        self.root = Path(self._tmp.name) / "work" / "P4-G03"
+        self.root.mkdir(parents=True)
+
+    def _gate(self, payload):
+        gate = _PackGate(self.module, self.root, session={})
+        gate.receipt("g03-empty-trace", payload)
+        return gate
+
+    def test_the_inherited_keys_are_named_and_the_load_bearing_one_rechecked(self) -> None:
+        record = self.module.CaseRecord("P4-G03", "PASS")
+        self.module.mark_inherited_evidence(
+            self._gate({"status": "empty", "trace_id": "trc_1"}), record,
+            {"evidence_keys": ["probe", "recall"], "verdict": "PASS"})
+        inherited = record.inherited_evidence
+        self.assertEqual(inherited["inherited_evidence_keys"], ["probe", "recall"])
+        self.assertEqual(inherited["asserted_in_this_phase"], [])
+        self.assertEqual([row["receipt"] for row in inherited["reasserted_from_sealed_receipts"]],
+                         ["g03-empty-trace"])
+        self.assertEqual(record.as_dict()["inherited_evidence"], inherited)
+
+    def test_a_receipt_that_no_longer_supports_the_claim_fails_the_case(self) -> None:
+        # The reverse test. A tampered or edited receipt cannot be used to inherit a
+        # PASS: the claim is re-checked here, and a claim that no longer holds is a FAIL
+        # of this case rather than a quiet inheritance.
+        record = self.module.CaseRecord("P4-G03", "PASS")
+        with self.assertRaises(self.module.Failed) as caught:
+            self.module.mark_inherited_evidence(
+                self._gate({"status": "ok", "trace_id": "trc_1"}), record,
+                {"evidence_keys": ["probe"], "verdict": "PASS"})
+        message = str(caught.exception)
+        self.assertIn("inherits this evidence from the earlier phase", message)
+        self.assertIn("not `empty`", message)
+
+    def test_a_missing_inherited_receipt_is_refused_rather_than_skipped(self) -> None:
+        # The case whose inherited claim has no receipt on disk to check it against
+        # cannot quietly inherit: it fails, rather than reporting the claim as verified.
+        record = self.module.CaseRecord("P4-G04", "PASS")
+        with self.assertRaises(self.module.Failed) as caught:
+            self.module.mark_inherited_evidence(self._gate({"status": "empty"}), record,
+                                                {"evidence_keys": ["acl"]})
+        self.assertIn("is missing", str(caught.exception))
+
+    def test_a_first_phase_inherits_nothing(self) -> None:
+        record = self.module.CaseRecord("P4-G03", "PASS")
+        record.engine_evidence["differential"] = {"x": 1}
+        self.module.mark_inherited_evidence(self._gate({"status": "empty"}), record, None)
+        self.assertEqual(record.inherited_evidence, {})
+        self.assertNotIn("inherited_evidence", record.as_dict())
+
+    def test_a_case_with_no_receipt_names_what_it_could_not_recheck(self) -> None:
+        # Honesty in the other direction: G01's inherited keys are listed, and the note
+        # says plainly that they were not re-verified here rather than leaving the
+        # reader to assume they were.
+        record = self.module.CaseRecord("P4-G01", "PASS")
+        self.module.mark_inherited_evidence(self._gate({"status": "empty"}), record,
+                                            {"evidence_keys": ["probe"]})
+        self.assertEqual(record.inherited_evidence["inherited_evidence_keys"], ["probe"])
+        self.assertEqual(record.inherited_evidence["reasserted_from_sealed_receipts"], [])
+        self.assertIn("not re-verified in this phase",
+                      record.inherited_evidence["note"])
