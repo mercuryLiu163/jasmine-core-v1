@@ -608,6 +608,12 @@ class Gate:
                          "JASMINE_MEMORY_ACTOR_ID": self.human,
                          "JASMINE_MEMORY_DEPLOYMENT_MODE": os.environ.get(
                              "JASMINE_MEMORY_DEPLOYMENT_MODE", "single_user"),
+                         # The namespace has to travel with the request. Without it the
+                         # worker recalls `jasmine-project-...` while everything this Gate
+                         # retained went to `<suffix>jasmine-project-...`, so the pack came
+                         # back `empty` against an engine that held the lesson -- the same
+                         # isolation the namespace exists for, applied to the Gate itself.
+                         "JASMINE_MEMORY_BANK_NAMESPACE": self.bank_suffix,
                          "JASMINE_HINDSIGHT_URL": str(self.transport.config.base_url),
                          "JASMINE_HINDSIGHT_TIMEOUT_SECONDS": os.environ.get(
                              "JASMINE_HINDSIGHT_TIMEOUT_SECONDS", "300")})
