@@ -358,3 +358,39 @@ Found while fixing the above, and worth knowing because they silently weakened t
 - No service deployed, no user service, config, hook or secret touched.
 - The authorized follow-up edits update this handoff and add the shared test-runner
   version guard; they are uncommitted and were made after clean-candidate validation.
+
+## Historical source audit and new execution candidate (2026-10-05)
+
+Read-only audit of the original `/tmp/valid-p4/v1/work/P4-G01/core.db`
+(`op.json` run `p4-acc5-1791222589`, excluding all tamper copies) found the
+historical Task's sole FAIL Evidence `evd_01M46JZAC1Q35YM2TXH9B1QNX0`.
+Its source `evt_EEG9ZQP6MWM9B7A446NSPW5Z5H` contains only
+`tool_response: {exit_code: 1}`, and its artifact is `workspace:/source.txt`.
+There is no failing assertion, error-to-file association, executed repair, or
+post-repair validation behind that historical lesson. The earlier handwritten
+callback reason cannot establish the failure's cause. Later triage Tasks contain
+more outputs, but their observations are not the historical Task's chain and
+cannot repair its provenance. Earlier producer commands were reported independently
+as handwritten rather than real Agent execution; no old PASS is adopted here.
+
+Fresh G01 now requires the actual historical execution configuration documented
+in operations. Source association has no same-tool fallback: Evidence names the
+result Event, that result names its exact call, and Task/turn/tool-use/tool-name
+and command hash must agree. The worker emits only locally sourced observations;
+it does not append engine prose that could invent a cause. Output artifacts now
+include Task and output hash, preserving FAIL and PASS from the same command.
+
+The added targeted regression executes an actual failing unittest fixture,
+performs file edits with actual hash/diff output, then executes post-edit unittest.
+It verifies all four Evidence IDs and eight source Events survive the summary.
+The regression intentionally has no real engine, so it proves execution/capture
+and mapping only, not retention or formal Gate acceptance. Independent review,
+real engine retention, all seven Gates and repeated resume at one clean frozen
+commit remain required. Nothing was pushed, merged to main, or submitted to CI.
+
+Implementation verification: `PYTHONDONTWRITEBYTECODE=1 PYTHON=python3.13
+./scripts/run-tests.sh` ran 1028 tests, OK with 10 skips (31.391s), raw log
+`/tmp/p4-history-candidate-tests.log`. Final targeted checks ran 55 tests with no
+skips, including exact command/source linkage, output digest binding, separate
+FAIL/PASS artifacts and real failure/edit/validation admission/rendering. These
+checks do not certify the skipped native/deployment paths or formal Gates.

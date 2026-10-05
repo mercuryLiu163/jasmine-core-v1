@@ -764,6 +764,76 @@ class Gate:
         finally:
             conn.close()
 
+    def retain_g01_history(self, project_id: str, task_id: str) -> tuple[str, str, str]:
+        """Run the historical task in a private copy, then retain actual observations."""
+        import shlex
+        import tarfile
+        fixture = self.config.get("g01_historical_fixture") or {}
+        repo = fixture.get("repository")
+        ref = fixture.get("ref")
+        python = fixture.get("python")
+        if not all(isinstance(v, str) and v for v in (repo, ref, python)):
+            raise Blocked("G01 requires g01_historical_fixture repository/ref/python for actual failure, repair and validation capture")
+        directory = self.root / "historical-repository"
+        check(not directory.exists(), "partial G01 historical execution exists; preserve it and start a fresh run rather than selecting a retry")
+        directory.mkdir()
+        archive = subprocess.run(["git", "-C", repo, "archive", ref], capture_output=True, check=True)
+        import io
+        with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as bundle:
+            bundle.extractall(directory, filter="data")
+        actions = []
+        def execute(role, command):
+            completed = subprocess.run(command, shell=True, cwd=directory, stdout=subprocess.PIPE,
+                                       stderr=subprocess.STDOUT, text=True, timeout=120)
+            evidence_id = self.collect_tool_evidence(task_id, command=command,
+                        output=completed.stdout, exit_code=completed.returncode)
+            actions.append({"role": role, "evidence_id": evidence_id})
+            self.receipt("g01-historical-" + role, {"command": command, "output": completed.stdout,
+                         "exit_code": completed.returncode, "evidence_id": evidence_id})
+            return completed
+        failed = execute("failure", shlex.quote(python) + " -B -m unittest -v")
+        check(failed.returncode != 0 and "AssertionError" in failed.stdout,
+              "historical task did not produce a real failing assertion")
+        inspected = execute("inspection", "cat NOTES.md calc.py test_calc.py")
+        check(inspected.returncode == 0, "historical source inspection failed")
+        # This repair is an explicit attempted change to this fixed fixture, based
+        # on its percentage specification. Output and outcome are captured below,
+        # never predicted or substituted for the execution.
+        repair_program = """from pathlib import Path
+import hashlib,difflib,json
+for name,old,new in [('calc.py','return sum(prices) - discount','return sum(prices) * (1 - discount / 100)'),('test_calc.py','27.5','28.5')]:
+ p=Path(name); before=p.read_text()
+ if old not in before: raise SystemExit('fixture precondition differs: '+name)
+ after=before.replace(old,new); p.write_text(after)
+ print(json.dumps({'file':name,'before_sha256':hashlib.sha256(before.encode()).hexdigest(),'after_sha256':hashlib.sha256(after.encode()).hexdigest()}))
+ print(''.join(difflib.unified_diff(before.splitlines(True),after.splitlines(True),fromfile=name,tofile=name)))
+"""
+        repaired = execute("repair", shlex.quote(python) + " -c " + shlex.quote(repair_program))
+        check(repaired.returncode == 0, "historical attempted repair failed; no successful chain claimed")
+        validated = execute("validation", shlex.quote(python) + " -B -m unittest -v")
+        check(validated.returncode == 0 and "OK" in validated.stdout,
+              "historical post-repair verification failed")
+        linked = self.event(project_id, "project.notes", json.dumps({
+            "schema": "jasmine.historical-execution.v1", "actions": actions,
+            "claim": "historical observations and attempted repair; no exclusive or current cause established"}), task_id=task_id)
+        conn = self.conn()
+        try:
+            store = MemoryStore(conn, schema_version=SCHEMA_VERSION)
+            jobs = jobs_module.JobStore(conn, store)
+            jobs.enqueue_from_sources(eligibility.SourceRegistry())
+            self.drain(conn)
+            candidates = [item for item in self.all_items(store)
+                          if item['task_id'] == task_id and item['engine_state'] == 'RETAINED'
+                          and item['memory_type'] == 'FAILURE_LESSON']
+            check(bool(candidates), "real historical failure did not reach RETAINED")
+            item = candidates[0]
+            job = next(j for j in jobs.jobs() if j['memory_id'] == item['memory_id'] and j['kind'] == 'retain')
+            self.receipt("g01-historical-chain", {"link_event_id": linked, "actions": actions,
+                         "repository": repo, "ref": ref})
+            return job['job_id'], item['document_id'], item['source_event_id']
+        finally:
+            conn.close()
+
     def engine_document(self, bank: scope.BankRef, document_id: str) -> dict[str, Any] | None:
         assert self.transport is not None
         return self.transport.get_document(bank=bank, document_id=document_id)
@@ -1336,7 +1406,7 @@ class Gate:
                                   "host_id": self.host, "expected_revision": 1},
                         actor_id=self.human, actor_kind="human",
                         can_accept=False)["step"]["step_id"]
-            artifact_name = f"tool-output-{command_sha256[:12]}.txt"
+            artifact_name = f"tool-output-{task_id}-{command_sha256[:12]}-{output_sha256[:12]}.txt"
             artifact = self.workspace / artifact_name
             artifact.write_text(output, encoding="utf-8")
             reused = conn.execute(
@@ -1772,7 +1842,9 @@ def _verify_g01_actionable_history(pack: dict[str, Any], *,
                   f"the history for {memory_id} does not cite its source pointer "
                   f"{pointer!r}")
         if resolve_command is not None:
-            for evidence_id in record.get("evidence_ids") or []:
+            fact = record.get("fact")
+            failure_evidence = fact.get("evidence_id") if isinstance(fact, dict) else None
+            for evidence_id in ([failure_evidence] if failure_evidence else record.get("evidence_ids") or []):
                 stored = resolve_command(evidence_id)
                 check(stored is not None,
                       f"Core holds no command behind Evidence {evidence_id}, so the "
@@ -1996,9 +2068,7 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
                                      prompt_event_id=baseline_prompt, key=baseline_key)
 
     historical = gate.new_task(project, "device test (historical)")
-    job_id, document_id, source_event_id = gate.retain_lesson(
-        project, reason="callback task_id did not match the task id in the request",
-        task_id=historical)
+    job_id, document_id, source_event_id = gate.retain_g01_history(project, historical)
     record.job_ids.append(job_id)
     record.document_ids.append(document_id)
     record.source_event_ids.append(source_event_id)

@@ -156,7 +156,7 @@ def _evidence_rows(conn: Any, evidence_ids: tuple[str, ...]) -> list[Any]:
     for evidence_id in evidence_ids:
         row = conn.execute(
             "SELECT evidence_id, task_id, step_id, status, source_event_id, change_event_id,"
-            " turn_id, tool_use_id, tool_name"
+            " turn_id, tool_use_id, tool_name, command_sha256, artifact_sha256"
             " FROM evidence WHERE evidence_id=?", (evidence_id,)).fetchone()
         if row is not None and row["change_event_id"]:
             rows.append(row)
@@ -172,31 +172,45 @@ def _command_for(conn: Any, row: Any) -> str | None:
     descriptive: a session can read the failing command and run it again,
     instead of reading that a failure happened somewhere.
     """
-    try:
-        events = conn.execute(
-            "SELECT payload_json FROM events WHERE task_id=? AND event_type='tool.call'"
-            " ORDER BY seq", (row["task_id"],)).fetchall()
-    except Exception:
+    chain = _execution_for(conn, row)
+    return chain[0] if chain else None
+
+
+def _execution_for(conn: Any, row: Any) -> tuple[str, dict, str] | None:
+    """Exact Evidence -> result -> call linkage; never a same-tool fallback."""
+    import hashlib
+    result = conn.execute(
+        "SELECT task_id, event_type, payload_json FROM events WHERE event_id=?",
+        (row["source_event_id"],)).fetchone()
+    if result is None or result["task_id"] != row["task_id"] or result["event_type"] != "tool.result":
         return None
-    fallback: str | None = None
-    for event in events:
-        try:
-            payload = json.loads(event["payload_json"])
-        except (TypeError, ValueError):
-            continue
-        if not isinstance(payload, dict):
-            continue
-        tool_input = payload.get("tool_input")
-        command = (tool_input.get("cmd", tool_input.get("command"))
-                   if isinstance(tool_input, dict) else None)
+    try:
+        payload = json.loads(result["payload_json"])
+        call_id = payload["call_event_id"]
+        call = conn.execute("SELECT task_id,event_type,payload_json FROM events WHERE event_id=?", (call_id,)).fetchone()
+        if call is None or call["task_id"] != row["task_id"] or call["event_type"] != "tool.call":
+            return None
+        called = json.loads(call["payload_json"])
+        for key in ("turn_id", "tool_use_id", "tool_name"):
+            if payload.get(key) != row[key] or called.get(key) != row[key]:
+                return None
+        tool_input = called["tool_input"]
+        command = tool_input.get("cmd", tool_input.get("command"))
         if not isinstance(command, str) or not command:
-            continue
-        if (payload.get("turn_id") == row["turn_id"]
-                and payload.get("tool_use_id") == row["tool_use_id"]):
-            return command
-        if fallback is None and payload.get("tool_name") == row["tool_name"]:
-            fallback = command
-    return fallback
+            return None
+        if hashlib.sha256(command.encode()).hexdigest() != row["command_sha256"]:
+            return None
+        response = payload["tool_response"]
+        if not isinstance(response, dict):
+            return None
+        # Captured stdout is the artifact's original bytes. Reject a source
+        # whose output cannot be bound to the stored Evidence digest.
+        if isinstance(response.get("stdout"), str) and row["artifact_sha256"]:
+            if hashlib.sha256(response["stdout"].encode()).hexdigest() != row["artifact_sha256"]:
+                return None
+        return command, response, call_id
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def _fact_for(conn: Any, row: Any) -> dict[str, Any] | None:
@@ -309,7 +323,8 @@ def _item_for(conn: Any, item: Any) -> dict[str, Any] | None:
         # skip; one that names the command does. The `text` is engine prose
         # bounded by P3, so the history line goes first: truncation may cut the
         # prose, never the provenance.
-        command = _command_for(conn, row)
+        execution = _execution_for(conn, row)
+        command = execution[0] if execution else None
         history = (f"history: prior {row['status']} result"
                    + (f" from `{command}`" if command else "")
                    + f" (task {row['task_id']}, step {row['step_id']};"
@@ -327,15 +342,103 @@ def _item_for(conn: Any, item: Any) -> dict[str, Any] | None:
             "origin_rule_ref": None,
             "evidence_ids": [row["evidence_id"]],
             "backend_classification": None,
-            "text": (history + "\n" + item.text)[:MAX_TEXT],
+            "text": _history_text(history, execution),
             "confidence": 1.0,
             "verified_transition_event_id": transition_event_id,
             "recorded_at": recorded_at,
             "fact": fact,
         }
+        _add_history_chain(conn, row, mapped)
         mapped["provenance_digest"] = _provenance_digest(mapped)
         return mapped
     return None
+
+
+def _add_history_chain(conn: Any, failure: Any, mapped: dict) -> None:
+    """Explicit ordered same-task links, checked against each original execution."""
+    if failure['status'] != 'FAIL':
+        return
+    for event in conn.execute("SELECT event_id,payload_json FROM events WHERE task_id=? AND event_type='project.notes' ORDER BY seq", (failure['task_id'],)):
+        try:
+            chain = json.loads(json.loads(event['payload_json'])['text'])
+            if chain['schema'] != 'jasmine.historical-execution.v1':
+                continue
+            actions = chain['actions']
+            if [a['role'] for a in actions] != ['failure','inspection','repair','validation'] or actions[0]['evidence_id'] != failure['evidence_id']:
+                continue
+            observations = []
+            related = []
+            prior_seq = -1
+            for action in actions:
+                row = conn.execute("SELECT * FROM evidence WHERE evidence_id=?", (action['evidence_id'],)).fetchone()
+                if row is None or row['task_id'] != failure['task_id'] or row['step_id'] != failure['step_id']:
+                    raise ValueError('foreign execution')
+                execution = _execution_for(conn, row)
+                if execution is None:
+                    raise ValueError('unlinked execution')
+                seq = conn.execute("SELECT seq FROM events WHERE event_id=?", (row['source_event_id'],)).fetchone()[0]
+                if seq <= prior_seq:
+                    raise ValueError('unordered execution')
+                prior_seq = seq
+                related.append(row)
+                command, response, call_id = execution
+                role = action['role']
+                output = response.get('stdout', '')
+                observations.append({'role': role, 'evidence_index': len(related)-1,
+                    'status': row['status'],
+                    'output_excerpt': output[:350] if role == 'repair' else output[-280:]})
+            if related[0]['status'] != 'FAIL' or any(r['status'] != 'PASS' for r in related[1:]):
+                continue
+            source_ids = [failure['source_event_id'], failure['change_event_id'], event['event_id']]
+            source_ids.append(related[1]['source_event_id'])
+            for row in related[2:]:
+                source_ids.extend([row['source_event_id'], row['change_event_id']])
+            evidence_ids = [r['evidence_id'] for r in related]
+            # Put complete attribution first; excerpts are allocated only from
+            # remaining room, so truncation never removes an action's source.
+            refs = {'chain_event_id': event['event_id'], 'source_event_ids': source_ids,
+                    'evidence_ids': evidence_ids,
+                    'claim': 'attempted repair followed by PASS; no exclusive or current cause established'}
+            prefix = mapped['text'].split('\n', 1)[0] + '\nHISTORICAL_NONAUTHORITATIVE ' + json.dumps(refs, separators=(',',':'))
+            for observation in observations:
+                observation.pop('output_excerpt')
+            metadata = '\n' + json.dumps(observations, separators=(',',':'))
+            if len(prefix + metadata) > MAX_TEXT:
+                return  # keep the original local observation; never partial sources
+            available = MAX_TEXT - len(prefix + metadata)
+            excerpts = []
+            for role, row in zip(['failure','inspection','repair','validation'], related):
+                out = _execution_for(conn,row)[1].get('stdout','')
+                cap = available // 4
+                if role == 'repair':
+                    lines = [line for line in out.splitlines() if line.startswith(('+','-')) and not line.startswith(('+++','---'))]
+                    lines.sort(key=lambda line: line.startswith('-'))
+                    out = '\n'.join(line if len(line)<80 else line[0]+'...'+line[-72:] for line in lines)
+                elif role == 'failure':
+                    out = '\n'.join(line for line in out.splitlines() if 'AssertionError' in line) + '\n' + '\n'.join(line for line in out.splitlines() if 'File ' in line)
+                excerpt = out[:cap] if role in ('repair','failure') else out[-cap:] if cap else ''
+                excerpts.append(role + ': ' + excerpt)
+            text = prefix + metadata + '\n' + '\n'.join(excerpts)
+            mapped['text'] = text[:MAX_TEXT]
+            mapped['source_event_ids'] = source_ids
+            mapped['evidence_ids'] = evidence_ids
+            return
+        except (ValueError, KeyError, TypeError, IndexError):
+            continue
+
+
+def _history_text(history: str, execution: tuple[str, dict, str] | None) -> str:
+    """Only local source observations; engine prose cannot supply a cause."""
+    if execution is None:
+        return (history + "\nHISTORICAL_NONAUTHORITATIVE: execution linkage unavailable; no cause established.")[:MAX_TEXT]
+    _, response, call_id = execution
+    details = {"call_event_id": call_id, "observed_exit_code": response.get("exit_code"),
+               "observation": "historical output; current cause not established",
+               "repair_and_post_validation": "not established by this execution"}
+    # Keep complete source attribution ahead of the bounded output excerpt.
+    prefix = history + "\nHISTORICAL_NONAUTHORITATIVE " + json.dumps(details, ensure_ascii=False) + "\noutput_excerpt: "
+    output = "\n".join(str(response[k]) for k in ("stdout", "stderr", "output") if isinstance(response.get(k), str))
+    return (prefix + output)[:MAX_TEXT]
 
 
 def _provenance_digest(item: dict[str, Any]) -> str:

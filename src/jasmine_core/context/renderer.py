@@ -88,11 +88,13 @@ def render(projection,comparison,checkpoint,memory,tokenizer,*,source_event_id,c
         data = {k: item[k] for k in ('memory_id', 'memory_type', 'bank',
                                      'source_event_ids', 'source_task_id', 'fact',
                                      'text')}
+        if "evidence_ids" in item:
+            data["evidence_ids"] = item["evidence_ids"]
         # Room for the actionable text: a worker item carries up to 2000
         # characters, and omitting the lesson for budget while reporting it
         # selected would be a silent empty. The whole-pack budget still bounds.
         optional.append(('MEMORY', 'memory:'+item['bank']['bank_id']+':'+item['memory_id'],
-            'HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n'+canonical_json(data)+'\n', 800, item['source_event_ids']))
+            'HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n'+canonical_json(data)+'\n', 1200, item['source_event_ids']))
     omissions=[];used={};selected=[]
     for section,ident,text,cap,source_ids in optional:
         count=tokenizer.count(text)

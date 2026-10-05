@@ -421,7 +421,7 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
 
         conn = db.connect(self.gate.db_path)
         try:
-            row = conn.execute("SELECT task_id, turn_id, tool_use_id, tool_name"
+            row = conn.execute("SELECT task_id, turn_id, tool_use_id, tool_name, source_event_id, command_sha256, artifact_sha256"
                                " FROM evidence WHERE task_id=?", (self.task,)).fetchone()
             spec = importlib.util.spec_from_file_location(
                 "p4_memory_worker",
@@ -460,6 +460,90 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
         self.assertIn(self.task, out["text"])
         self.assertIn(evidence_id, out["text"])
         self.assertLessEqual(len(out["text"]), 2000)
+
+    def test_missing_exact_call_link_cannot_borrow_another_command(self) -> None:
+        import importlib.util
+        from jasmine_core import db
+        evidence_id = self.gate.collect_tool_evidence(self.task, command="python -m unittest", output="AssertionError: 25 != 27.5", exit_code=1)
+        spec = importlib.util.spec_from_file_location("strict_history", Path(__file__).resolve().parents[1] / "scripts" / "p4-memory-worker.py")
+        worker = importlib.util.module_from_spec(spec); spec.loader.exec_module(worker)
+        conn = db.connect(self.gate.db_path)
+        try:
+            row = conn.execute("SELECT * FROM evidence WHERE evidence_id=?", (evidence_id,)).fetchone()
+            chain = worker._execution_for(conn, row)
+            self.assertEqual(chain[0], "python -m unittest")
+            text = worker._history_text("history: observation", chain)
+            self.assertIn("AssertionError: 25 != 27.5", text)
+            self.assertIn(chain[2], text)
+            self.assertIn("current cause not established", text)
+            changed = dict(row); changed['source_event_id'] = row['change_event_id']
+            self.assertIsNone(worker._execution_for(conn, changed))
+            changed = dict(row); changed['command_sha256'] = '0' * 64
+            self.assertIsNone(worker._execution_for(conn, changed))
+        finally:
+            conn.close()
+
+    def test_repeated_command_preserves_each_output_artifact(self) -> None:
+        from jasmine_core import db
+        first = self.gate.collect_tool_evidence(self.task, command="python -m unittest", output="AssertionError\n", exit_code=1)
+        second = self.gate.collect_tool_evidence(self.task, command="python -m unittest", output="OK\n", exit_code=0)
+        conn = db.connect(self.gate.db_path)
+        try:
+            rows = conn.execute("SELECT artifact_uri FROM evidence WHERE evidence_id IN (?,?)", (first, second)).fetchall()
+            self.assertEqual(len({r['artifact_uri'] for r in rows}), 2)
+            contents = {(self.gate.workspace / r['artifact_uri'].removeprefix('workspace:/')).read_text() for r in rows}
+            self.assertEqual(contents, {"AssertionError\n", "OK\n"})
+        finally:
+            conn.close()
+
+    def test_real_historical_execution_keeps_assertion_edit_and_validation_sources(self) -> None:
+        import subprocess, sys, importlib.util
+        from jasmine_core import db
+        directory = self.gate.root / 'fixture'; directory.mkdir()
+        (directory/'NOTES.md').write_text('discount is a percentage of subtotal\n')
+        (directory/'calc.py').write_text('def total(prices, discount):\n    return sum(prices) - discount\n')
+        (directory/'test_calc.py').write_text('import unittest\nfrom calc import total\nclass Test(unittest.TestCase):\n def test_total(self): self.assertAlmostEqual(total([10.,20.],5.),27.5)\n')
+        subprocess.run(['git','init','-q',str(directory)],check=True)
+        subprocess.run(['git','-C',str(directory),'add','.'],check=True)
+        subprocess.run(['git','-C',str(directory),'-c','user.name=Test','-c','user.email=test@example.invalid','commit','-qm','baseline'],check=True)
+        self.gate.config['g01_historical_fixture'] = {'repository':str(directory),'ref':'HEAD','python':sys.executable}
+        # No engine is supplied: actual execution/capture happens, retention is
+        # honestly unavailable. This test does not masquerade as a real Gate.
+        with self.assertRaises(self.module.Failed):
+            self.gate.retain_g01_history(self.project,self.task)
+        conn = db.connect(self.gate.db_path)
+        try:
+            rows = conn.execute('SELECT * FROM evidence WHERE task_id=? ORDER BY created_at,evidence_id',(self.task,)).fetchall()
+            self.assertEqual(len(rows),4)
+            spec=importlib.util.spec_from_file_location('chain_worker',Path(__file__).resolve().parents[1]/'scripts'/'p4-memory-worker.py')
+            worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)
+            failure=next(r for r in rows if r['status']=='FAIL')
+            item=SimpleNamespace(memory_type='FAILURE_LESSON',memory_id='mem_'+'M'*26,scope_kind='project',bank_id=f'jasmine-project-{self.project}',project_id=self.project,text='invented engine cause',provenance=SimpleNamespace(evidence_ids=(failure['evidence_id'],)))
+            result=worker._item_for(conn,item)
+            self.assertEqual(len(result['evidence_ids']),4)
+            self.assertEqual(len(result['source_event_ids']),8)
+            self.assertNotIn('invented engine cause',result['text'])
+            for source in result['source_event_ids']+result['evidence_ids']:
+                self.assertIn(source,result['text'])
+            self.assertIn('AssertionError',result['text'])
+            self.assertIn('repair',result['text'])
+            self.assertIn('validation',result['text'])
+            self.assertIn('discount / 100',result['text'])
+            self.assertIn('28.5',result['text'])
+            self.assertIn('OK',result['text'])
+            self.assertLessEqual(len(result['text']),2000)
+            from jasmine_core.context.memory_provider import filter_memory
+            from jasmine_core.context import renderer
+            projection={'project_id':self.project,'task_id':self.task,'task':{'revision':1},'active_rules':[],'steps':[],'evidence_refs':[],'evidence':[]}
+            admitted=filter_memory(conn,{'items':[result],'banks':[{**result['bank'],'status':'ok'}],'status':'ok'},projection,schema_version=self.module.SCHEMA_VERSION)
+            self.assertEqual(admitted['filtered'],[])
+            tokenizer=SimpleNamespace(count=lambda text:len(text)//3,identity={'qualification':'test conservative approximation'})
+            rendered=renderer.render(projection,{'reconciliation_required':False},None,admitted,tokenizer,source_event_id=result['source_event_ids'][0])
+            self.assertEqual(rendered['omissions'],[])
+            for source in result['source_event_ids']+result['evidence_ids']:
+                self.assertIn(source,rendered['rendered_content'])
+        finally:
+            conn.close()
 
     def test_the_renderer_keeps_actionable_text_in_the_labelled_block(self) -> None:
         from jasmine_core.context import renderer

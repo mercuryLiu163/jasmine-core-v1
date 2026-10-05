@@ -178,3 +178,34 @@ Design §14: a dead Hindsight pauses long-term Memory and nothing else.
 | `status: unconfigured` | no endpoint on this process | set `JASMINE_HINDSIGHT_URL` for the worker |
 | Recall returns `skipped` / `no_memory_budget` | the Context Pack allocated no Memory partition | a P3 budget decision, not an engine problem |
 | Recall returns `degraded` with items | one bank failed, the other answered | the items are usable; the trace names the bank |
+
+### G01 historical execution input
+
+`g01_historical_fixture` is required for a fresh G01. Supply `repository` (a
+local Git repository), `ref` (the frozen commit used for both controlled Agent
+copies), and `python` (the absolute existing interpreter). The fixed fixture is
+`calc.py`, `test_calc.py`, and `NOTES.md`: its documented percentage behavior,
+initial subtract-discount implementation, and initial 27.5 test expectation are
+reviewable inputs, rather than prefilled execution results. The runner archives
+that commit into a private `historical-repository`; it never edits the supplied
+repository. It runs unittest, reads the source, attempts the percentage formula
+and corrected 28.5 expectation, captures file hashes and the actual diff, then
+runs unittest again. Every output comes from the subprocess, each action gets
+its own Evidence and immutable output artifact, and any unexpected fixture or
+failed verification fails the historical setup. No alternate successful trial
+is selected. An interrupted historical directory must be preserved; a fresh run
+is necessary rather than overwriting the attempted execution.
+
+A task-bound `project.notes` Event links the four executed Evidence IDs. The
+worker rechecks their exact result-to-call linkage, command hashes, same Task and
+Step, and chronological order. P3 receives all four Evidence IDs and eight source
+Events, preserving complete attribution before bounded output excerpts. It may
+present attempted repair followed by PASS as **HISTORICAL_NONAUTHORITATIVE**;
+this establishes neither an exclusive historical cause nor the current cause.
+Engine-generated prose cannot supply a missing cause, repair, or validation.
+The optional Memory allocation is 1200 selected-encoding tokens, still bounded
+by the unchanged whole-pack limit; omissions remain explicit.
+
+G01's prompt, seven exploration categories, benefit threshold and controlled
+baseline/lesson comparison are unchanged. Real Agent execution and its independent
+receipts remain required; historical subprocess capture alone is not acceptance.
