@@ -1065,7 +1065,11 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
 
 def case_g03(gate: Gate, record: CaseRecord) -> None:
     """Asking about something never recorded yields an honest empty (VC-17)."""
-    gate.require_p3_pack()
+    gate.require_real_agent()
+    key = "g03-unknown-protocol"
+    resumed = gate.existing_pack(key)
+    if resumed is not None:
+        return _verify_g03_pack(gate, record, resumed)
     project = gate.seed_project("g03")
     record.project_ids.append(project)
     outcome = gate.recall(project, "device 42 new protocol test results", max_tokens=600)
@@ -1076,10 +1080,50 @@ def case_g03(gate: Gate, record: CaseRecord) -> None:
     trace = MemoryStore(gate.conn(), schema_version=SCHEMA_VERSION).trace(outcome.trace_id)
     check(trace is not None and trace["status"] == "empty", "the empty trace is missing")
     record.receipts.append(gate.receipt("g03-empty-trace", trace or {}))
-    raise Blocked(
-        "the empty trace is recorded; answering 'not found' honestly needs a real P3 "
-        "Context Pack and a real Agent response, which must not be simulated."
-    )
+
+    # A pack for a Task that has never recorded this protocol. The Memory section
+    # must come back honest -- `empty`, with no injected fact at all.
+    task_id = gate.new_task(project, "device 42 protocol (never recorded)")
+    prompt = gate.event(project, "user.prompt",
+                        "did we ever record results for device 42's new protocol test?",
+                        task_id=task_id)
+    record.source_event_ids.append(prompt)
+    pack = gate.build_pack(project_id=project, task_id=task_id, prompt_event_id=prompt,
+                           key=key)
+    _verify_g03_pack(gate, record, pack)
+
+
+def _verify_g03_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> None:
+    """The pack must be honestly empty, and the session must say so."""
+    record.context_pack_ids.append(pack["context_pack_id"])
+    check(pack["memory_status"] == "empty",
+          f"a protocol nothing recorded came back {pack['memory_status']}: "
+          f"{pack['memory_selected']} {pack['memory_filtered']}")
+    check(pack["memory_selected"] == [] and pack["qualified_provenance"] == [],
+          "the pack injected a memory for a record that does not exist")
+    rendered = pack["rendered_content"]
+    check("HISTORICAL_NONAUTHORITATIVE MEMORY DATA" not in rendered,
+          "the pack rendered a Memory data block for an unknown protocol")
+    check(f'"status":"{pack["memory_status"]}"' in rendered,
+          "the pack does not state its Memory status, so a reader cannot tell an "
+          "empty answer from a missing one")
+    record.receipts.append(gate.receipt("g03-pack", {k: v for k, v in pack.items()
+                                                     if k != "rendered_content"}))
+
+    session = gate.verify_session(pack, "g03", require_tool_actions=True)
+    record.receipts.append(gate.receipt("g03-session", session["verified"]))
+    answer = session.get("final_answer") or ""
+    # VC-17: it must say it is not recorded. Accept an honest negative and nothing
+    # that asserts a PASS or a historical verification that never happened.
+    lowered = answer.lower()
+    check(any(marker in lowered for marker in
+              ("not recorded", "no record", "never", "not found", "no evidence",
+               "nothing recorded", "not in the record", "no such")),
+          f"the answer does not say the record is absent: {answer[:300]!r}")
+    for fabrication in ("passed", "verified", "confirmed", "succeeded", "all green"):
+        check(fabrication not in lowered,
+              f"the answer asserts {fabrication!r} for a protocol nothing recorded: "
+              f"{answer[:300]!r}")
 
 
 def _acl_evidence(gate: Gate, record: CaseRecord) -> dict[str, Any]:
