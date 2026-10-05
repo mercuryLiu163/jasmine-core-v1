@@ -421,7 +421,7 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
 
         conn = db.connect(self.gate.db_path)
         try:
-            row = conn.execute("SELECT task_id, turn_id, tool_use_id, tool_name, source_event_id, command_sha256, artifact_sha256"
+            row = conn.execute("SELECT task_id, turn_id, tool_use_id, tool_name, source_event_id, command_sha256, artifact_sha256, status"
                                " FROM evidence WHERE task_id=?", (self.task,)).fetchone()
             spec = importlib.util.spec_from_file_location(
                 "p4_memory_worker",
@@ -483,6 +483,36 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_unhashed_stderr_or_output_cannot_enter_history(self) -> None:
+        import importlib.util
+        from jasmine_core import db
+        evidence_id = self.gate.collect_tool_evidence(self.task,command='python -m unittest',output='actual bytes',exit_code=1)
+        spec=importlib.util.spec_from_file_location('output_bound_worker',Path(__file__).resolve().parents[1]/'scripts'/'p4-memory-worker.py')
+        worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)
+        conn=db.connect(self.gate.db_path)
+        try:
+            row=conn.execute('SELECT * FROM evidence WHERE evidence_id=?',(evidence_id,)).fetchone()
+            payload=json.loads(conn.execute('SELECT payload_json FROM events WHERE event_id=?',(row['source_event_id'],)).fetchone()[0])
+            for response in ({'stderr':'INVENTED ASSERTION AND CAUSE','exit_code':1},{'output':'INVENTED ASSERTION AND CAUSE','exit_code':1},{'stdout':'wrong bytes','exit_code':1}):
+                payload['tool_response']=response
+                # Roll back each independent tamper; the production event log is immutable.
+                conn.execute('DROP TRIGGER IF EXISTS trg_events_immutable_update')
+                conn.execute('UPDATE events SET payload_json=? WHERE event_id=?',(json.dumps(payload),row['source_event_id']))
+                self.assertIsNone(worker._execution_for(conn,row))
+                conn.rollback()
+            payload['tool_response']={'stdout':'actual bytes','stderr':'INVENTED ASSERTION AND CAUSE','output':'INVENTED ASSERTION AND CAUSE','exit_code':1}
+            conn.execute('DROP TRIGGER IF EXISTS trg_events_immutable_update')
+            conn.execute('UPDATE events SET payload_json=? WHERE event_id=?',(json.dumps(payload),row['source_event_id']))
+            execution=worker._execution_for(conn,row)
+            text=worker._history_text('history: original',execution)
+            self.assertIn('actual bytes',text)
+            self.assertNotIn('INVENTED',text)
+            changed=dict(row);changed['artifact_sha256']=None
+            self.assertIsNone(worker._execution_for(conn,changed))
+            conn.rollback()
+        finally:
+            conn.close()
+
     def test_repeated_command_preserves_each_output_artifact(self) -> None:
         from jasmine_core import db
         first = self.gate.collect_tool_evidence(self.task, command="python -m unittest", output="AssertionError\n", exit_code=1)
@@ -493,6 +523,26 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
             self.assertEqual(len({r['artifact_uri'] for r in rows}), 2)
             contents = {(self.gate.workspace / r['artifact_uri'].removeprefix('workspace:/')).read_text() for r in rows}
             self.assertEqual(contents, {"AssertionError\n", "OK\n"})
+        finally:
+            conn.close()
+
+    def test_declared_echo_actions_do_not_establish_repair_or_validation(self) -> None:
+        import importlib.util
+        from jasmine_core import db
+        actions=[]
+        for role,command,output,exit_code in [('failure','python -B -m unittest -v','AssertionError: actual failed',1),('inspection','echo inspected','inspected',0),('repair','echo nothing changed','nothing changed',0),('validation','echo OK','OK',0)]:
+            eid=self.gate.collect_tool_evidence(self.task,command=command,output=output,exit_code=exit_code)
+            actions.append({'role':role,'evidence_id':eid})
+        self.gate.event(self.project,'project.notes',json.dumps({'schema':'jasmine.historical-execution.v1','actions':actions}),task_id=self.task)
+        spec=importlib.util.spec_from_file_location('false_role_worker',Path(__file__).resolve().parents[1]/'scripts'/'p4-memory-worker.py')
+        worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)
+        conn=db.connect(self.gate.db_path)
+        try:
+            item=SimpleNamespace(memory_type='FAILURE_LESSON',memory_id='mem_'+'M'*26,scope_kind='project',bank_id=f'jasmine-project-{self.project}',project_id=self.project,text='engine prose',provenance=SimpleNamespace(evidence_ids=(actions[0]['evidence_id'],)))
+            result=worker._item_for(conn,item)
+            self.assertEqual(result['evidence_ids'],[actions[0]['evidence_id']])
+            self.assertIn('not established by this execution',result['text'])
+            self.assertNotIn('attempted repair then PASS',result['text'])
         finally:
             conn.close()
 
@@ -520,6 +570,22 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
             failure=next(r for r in rows if r['status']=='FAIL')
             item=SimpleNamespace(memory_type='FAILURE_LESSON',memory_id='mem_'+'M'*26,scope_kind='project',bank_id=f'jasmine-project-{self.project}',project_id=self.project,text='invented engine cause',provenance=SimpleNamespace(evidence_ids=(failure['evidence_id'],)))
             result=worker._item_for(conn,item)
+            from jasmine_core.memory.history import verified_records
+            ordered=[conn.execute('SELECT * FROM evidence WHERE evidence_id=?',(eid,)).fetchone() for eid in result['evidence_ids']]
+            executions=[worker._execution_for(conn,row) for row in ordered]
+            self.assertIsNotNone(verified_records(executions,[row['status'] for row in ordered]))
+            import copy
+            for mutation in ('wrong_validation','wrong_exit','empty_diff','wrong_hash','unchanged_file'):
+                changed=copy.deepcopy(executions)
+                if mutation=='wrong_validation': changed[3]=('echo OK',changed[3][1],changed[3][2])
+                elif mutation=='wrong_exit': changed[3][1]['exit_code']=1
+                else:
+                    records=[json.loads(line) for line in changed[2][1]['stdout'].splitlines()]
+                    if mutation=='empty_diff': records[0]['diff']=''
+                    elif mutation=='wrong_hash': records[0]['after_sha256']='0'*64
+                    else: records[0]['after']=records[0]['before']
+                    changed[2][1]['stdout']='\n'.join(json.dumps(r) for r in records)
+                self.assertIsNone(verified_records(changed,[row['status'] for row in ordered]),mutation)
             self.assertEqual(len(result['evidence_ids']),4)
             self.assertEqual(len(result['source_event_ids']),8)
             self.assertNotIn('invented engine cause',result['text'])
@@ -537,7 +603,11 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
             projection={'project_id':self.project,'task_id':self.task,'task':{'revision':1},'active_rules':[],'steps':[],'evidence_refs':[],'evidence':[]}
             admitted=filter_memory(conn,{'items':[result],'banks':[{**result['bank'],'status':'ok'}],'status':'ok'},projection,schema_version=self.module.SCHEMA_VERSION)
             self.assertEqual(admitted['filtered'],[])
-            tokenizer=SimpleNamespace(count=lambda text:len(text)//3,identity={'qualification':'test conservative approximation'})
+            from jasmine_core.context.tokens import Tokenizer, TokenizerUnavailable
+            try:
+                tokenizer=Tokenizer()
+            except TokenizerUnavailable:
+                tokenizer=SimpleNamespace(count=lambda text:len(text)//3,identity={'qualification':'test conservative approximation'})
             rendered=renderer.render(projection,{'reconciliation_required':False},None,admitted,tokenizer,source_event_id=result['source_event_ids'][0])
             self.assertEqual(rendered['omissions'],[])
             for source in result['source_event_ids']+result['evidence_ids']:

@@ -205,9 +205,13 @@ def _execution_for(conn: Any, row: Any) -> tuple[str, dict, str] | None:
             return None
         # Captured stdout is the artifact's original bytes. Reject a source
         # whose output cannot be bound to the stored Evidence digest.
-        if isinstance(response.get("stdout"), str) and row["artifact_sha256"]:
-            if hashlib.sha256(response["stdout"].encode()).hexdigest() != row["artifact_sha256"]:
-                return None
+        if not isinstance(response.get("stdout"), str) or not row["artifact_sha256"]:
+            return None
+        if hashlib.sha256(response["stdout"].encode()).hexdigest() != row["artifact_sha256"]:
+            return None
+        exit_code = response.get("exit_code")
+        if type(exit_code) is not int or row["status"] != ("PASS" if exit_code == 0 else "FAIL"):
+            return None
         return command, response, call_id
     except (KeyError, TypeError, ValueError):
         return None
@@ -358,7 +362,7 @@ def _add_history_chain(conn: Any, failure: Any, mapped: dict) -> None:
     """Explicit ordered same-task links, checked against each original execution."""
     if failure['status'] != 'FAIL':
         return
-    for event in conn.execute("SELECT event_id,payload_json FROM events WHERE task_id=? AND event_type='project.notes' ORDER BY seq", (failure['task_id'],)):
+    for event in conn.execute("SELECT event_id,seq,payload_json FROM events WHERE task_id=? AND event_type='project.notes' ORDER BY seq", (failure['task_id'],)):
         try:
             chain = json.loads(json.loads(event['payload_json'])['text'])
             if chain['schema'] != 'jasmine.historical-execution.v1':
@@ -366,7 +370,7 @@ def _add_history_chain(conn: Any, failure: Any, mapped: dict) -> None:
             actions = chain['actions']
             if [a['role'] for a in actions] != ['failure','inspection','repair','validation'] or actions[0]['evidence_id'] != failure['evidence_id']:
                 continue
-            observations = []
+            executions = []
             related = []
             prior_seq = -1
             for action in actions:
@@ -381,13 +385,12 @@ def _add_history_chain(conn: Any, failure: Any, mapped: dict) -> None:
                     raise ValueError('unordered execution')
                 prior_seq = seq
                 related.append(row)
-                command, response, call_id = execution
-                role = action['role']
-                output = response.get('stdout', '')
-                observations.append({'role': role, 'evidence_index': len(related)-1,
-                    'status': row['status'],
-                    'output_excerpt': output[:350] if role == 'repair' else output[-280:]})
-            if related[0]['status'] != 'FAIL' or any(r['status'] != 'PASS' for r in related[1:]):
+                executions.append(execution)
+            if event['seq'] <= prior_seq:
+                continue
+            from jasmine_core.memory.history import verified_records
+            repaired = verified_records(executions, [r['status'] for r in related])
+            if repaired is None:
                 continue
             source_ids = [failure['source_event_id'], failure['change_event_id'], event['event_id']]
             source_ids.append(related[1]['source_event_id'])
@@ -396,30 +399,24 @@ def _add_history_chain(conn: Any, failure: Any, mapped: dict) -> None:
             evidence_ids = [r['evidence_id'] for r in related]
             # Put complete attribution first; excerpts are allocated only from
             # remaining room, so truncation never removes an action's source.
-            refs = {'chain_event_id': event['event_id'], 'source_event_ids': source_ids,
-                    'evidence_ids': evidence_ids,
-                    'claim': 'attempted repair followed by PASS; no exclusive or current cause established'}
-            prefix = mapped['text'].split('\n', 1)[0] + '\nHISTORICAL_NONAUTHORITATIVE ' + json.dumps(refs, separators=(',',':'))
-            for observation in observations:
-                observation.pop('output_excerpt')
-            metadata = '\n' + json.dumps(observations, separators=(',',':'))
-            if len(prefix + metadata) > MAX_TEXT:
-                return  # keep the original local observation; never partial sources
-            available = MAX_TEXT - len(prefix + metadata)
-            excerpts = []
-            for role, row in zip(['failure','inspection','repair','validation'], related):
-                out = _execution_for(conn,row)[1].get('stdout','')
-                cap = available // 4
-                if role == 'repair':
-                    lines = [line for line in out.splitlines() if line.startswith(('+','-')) and not line.startswith(('+++','---'))]
-                    lines.sort(key=lambda line: line.startswith('-'))
-                    out = '\n'.join(line if len(line)<80 else line[0]+'...'+line[-72:] for line in lines)
-                elif role == 'failure':
-                    out = '\n'.join(line for line in out.splitlines() if 'AssertionError' in line) + '\n' + '\n'.join(line for line in out.splitlines() if 'File ' in line)
-                excerpt = out[:cap] if role in ('repair','failure') else out[-cap:] if cap else ''
-                excerpts.append(role + ': ' + excerpt)
-            text = prefix + metadata + '\n' + '\n'.join(excerpts)
-            mapped['text'] = text[:MAX_TEXT]
+            command = executions[0][0]
+            prefix = (f"history: prior FAIL result from `{command}` (task {failure['task_id']}; memory {mapped['memory_id']}; evidence {failure['evidence_id']}; sources {failure['source_event_id']},{failure['change_event_id']})"
+                      + f"\nHISTORICAL_NONAUTHORITATIVE chain {event['event_id']}; attempted repair then PASS; no current or exclusive cause.")
+            for role, row in zip(['inspection','repair','validation'], related[1:]):
+                pointers = row['source_event_id'] + (',' + row['change_event_id'] if role != 'inspection' else '')
+                prefix += f"\n{role}: {row['evidence_id']} {pointers}"
+            failure_output = executions[0][1]['stdout']
+            assertion = '\n'.join(line for line in failure_output.splitlines() if 'AssertionError' in line)
+            edits = []
+            for record in repaired:
+                lines = [line for line in record['diff'].splitlines() if line.startswith('+') and not line.startswith('+++')]
+                edits.append(record['file'] + ': ' + ' '.join(line if len(line)<80 else line[0]+'...'+line[-72:] for line in lines))
+            validation_output = '\n'.join(line for line in executions[3][1]['stdout'].splitlines() if line == 'OK' or line.startswith('Ran '))
+            excerpts = '\nfailure: ' + assertion[:130] + '\nrepair: ' + '; '.join(edits)[:220] + '\nvalidation: ' + validation_output[:60]
+            text = prefix + excerpts
+            if len(text) > MAX_TEXT:
+                return  # never discard action attribution to fit a claim
+            mapped['text'] = text
             mapped['source_event_ids'] = source_ids
             mapped['evidence_ids'] = evidence_ids
             return
@@ -437,7 +434,7 @@ def _history_text(history: str, execution: tuple[str, dict, str] | None) -> str:
                "repair_and_post_validation": "not established by this execution"}
     # Keep complete source attribution ahead of the bounded output excerpt.
     prefix = history + "\nHISTORICAL_NONAUTHORITATIVE " + json.dumps(details, ensure_ascii=False) + "\noutput_excerpt: "
-    output = "\n".join(str(response[k]) for k in ("stdout", "stderr", "output") if isinstance(response.get(k), str))
+    output = response["stdout"]
     return (prefix + output)[:MAX_TEXT]
 
 

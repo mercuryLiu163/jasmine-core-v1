@@ -768,6 +768,7 @@ class Gate:
         """Run the historical task in a private copy, then retain actual observations."""
         import shlex
         import tarfile
+        from jasmine_core.memory.history import INSPECTION_PROGRAM, REPAIR_PROGRAM
         fixture = self.config.get("g01_historical_fixture") or {}
         repo = fixture.get("repository")
         ref = fixture.get("ref")
@@ -794,21 +795,12 @@ class Gate:
         failed = execute("failure", shlex.quote(python) + " -B -m unittest -v")
         check(failed.returncode != 0 and "AssertionError" in failed.stdout,
               "historical task did not produce a real failing assertion")
-        inspected = execute("inspection", "cat NOTES.md calc.py test_calc.py")
+        inspected = execute("inspection", shlex.quote(python) + " -c " + shlex.quote(INSPECTION_PROGRAM))
         check(inspected.returncode == 0, "historical source inspection failed")
         # This repair is an explicit attempted change to this fixed fixture, based
         # on its percentage specification. Output and outcome are captured below,
         # never predicted or substituted for the execution.
-        repair_program = """from pathlib import Path
-import hashlib,difflib,json
-for name,old,new in [('calc.py','return sum(prices) - discount','return sum(prices) * (1 - discount / 100)'),('test_calc.py','27.5','28.5')]:
- p=Path(name); before=p.read_text()
- if old not in before: raise SystemExit('fixture precondition differs: '+name)
- after=before.replace(old,new); p.write_text(after)
- print(json.dumps({'file':name,'before_sha256':hashlib.sha256(before.encode()).hexdigest(),'after_sha256':hashlib.sha256(after.encode()).hexdigest()}))
- print(''.join(difflib.unified_diff(before.splitlines(True),after.splitlines(True),fromfile=name,tofile=name)))
-"""
-        repaired = execute("repair", shlex.quote(python) + " -c " + shlex.quote(repair_program))
+        repaired = execute("repair", shlex.quote(python) + " -c " + shlex.quote(REPAIR_PROGRAM))
         check(repaired.returncode == 0, "historical attempted repair failed; no successful chain claimed")
         validated = execute("validation", shlex.quote(python) + " -B -m unittest -v")
         check(validated.returncode == 0 and "OK" in validated.stdout,

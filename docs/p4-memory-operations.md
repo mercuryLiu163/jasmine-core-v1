@@ -197,13 +197,17 @@ is selected. An interrupted historical directory must be preserved; a fresh run
 is necessary rather than overwriting the attempted execution.
 
 A task-bound `project.notes` Event links the four executed Evidence IDs. The
-worker rechecks their exact result-to-call linkage, command hashes, same Task and
-Step, and chronological order. P3 receives all four Evidence IDs and eight source
+worker rechecks their exact result-to-call linkage, command hashes, output-byte
+hashes, exit/status agreement, same Task and Step, and chronological order. It
+also requires the fixed inspection/repair programs, validates the captured file
+contents, before/after hashes and recomputed diffs, and requires validation to
+rerun the exact failure command with exit zero. A role label or `echo OK` cannot
+establish repair or verification. P3 receives all four Evidence IDs and eight source
 Events, preserving complete attribution before bounded output excerpts. It may
 present attempted repair followed by PASS as **HISTORICAL_NONAUTHORITATIVE**;
 this establishes neither an exclusive historical cause nor the current cause.
 Engine-generated prose cannot supply a missing cause, repair, or validation.
-The optional Memory allocation is 1200 selected-encoding tokens, still bounded
+The optional Memory allocation remains 800 selected-encoding tokens, still bounded
 by the unchanged whole-pack limit; omissions remain explicit.
 
 G01's prompt, seven exploration categories, benefit threshold and controlled

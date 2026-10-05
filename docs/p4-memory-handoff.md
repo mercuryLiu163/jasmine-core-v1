@@ -394,3 +394,31 @@ Implementation verification: `PYTHONDONTWRITEBYTECODE=1 PYTHON=python3.13
 skips, including exact command/source linkage, output digest binding, separate
 FAIL/PASS artifacts and real failure/edit/validation admission/rendering. These
 checks do not certify the skipped native/deployment paths or formal Gates.
+
+
+Independent review of candidate `3321100` returned **FAIL** with two P1 findings:
+missing stdout/digest could admit unbound stderr/output, and task/sequence/status
+checks alone could label `echo` actions as repair and validation. The follow-up
+requires stdout with its matching Evidence artifact hash, renders no other output
+field, and checks integer exit/status consistency. Historical chains now require
+the exact fixed capture programs, captured file content/hash/diff consistency,
+and identical failure/validation commands with exit-zero/PASS validation. Missing
+proof leaves only the original historical observation with repair and validation
+explicitly unestablished. Negative regressions cover both review reproductions
+and incorrect diff/hash, unchanged files, changed rerun commands and wrong exits.
+
+The original 800-token Memory allocation is preserved; abbreviated sourced
+observations retain all source IDs and inline affected filenames and attempted
+formula/test changes. Pinned-tokenizer rendering must still be independently
+verified at the final candidate. The prior 1028-suite results describe earlier
+candidates, not an assertion that the final follow-up was already fully tested.
+
+Follow-up implementation checks: production interpreter
+`.../opencode/venv-p4/bin/python`, pinned cache `.../opencode/tiktoken-cache`,
+`PYTHONPATH=src:tests`, and unittest modules `tests.test_p4_fix_round`,
+`tests.test_p4_second_fix`, `tests.test_context` ran **89 tests, OK, no skips**
+(4.220s). Raw log: `/tmp/p4-history-review-fix-targeted.log`. The actual
+pinned-tokenizer regression confirms the new four-action summary renders with
+all eight source Events and four Evidence IDs under the original 800-token
+allocation. Full suite and formal Gate acceptance remain the independent
+validator's responsibility at the final frozen commit.
