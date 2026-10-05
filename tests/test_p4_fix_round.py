@@ -568,7 +568,9 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
             spec=importlib.util.spec_from_file_location('chain_worker',Path(__file__).resolve().parents[1]/'scripts'/'p4-memory-worker.py')
             worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)
             failure=next(r for r in rows if r['status']=='FAIL')
-            item=SimpleNamespace(memory_type='FAILURE_LESSON',memory_id='mem_'+'M'*26,scope_kind='project',bank_id=f'jasmine-project-{self.project}',project_id=self.project,text='invented engine cause',provenance=SimpleNamespace(evidence_ids=(failure['evidence_id'],)))
+            actual_memory=conn.execute("SELECT memory_id FROM memory_items WHERE source_event_id=? AND memory_type='FAILURE_LESSON'",(failure['change_event_id'],)).fetchone()
+            self.assertIsNotNone(actual_memory)
+            item=SimpleNamespace(memory_type='FAILURE_LESSON',memory_id=actual_memory['memory_id'],scope_kind='project',bank_id=f'jasmine-project-{self.project}',project_id=self.project,text='invented engine cause',provenance=SimpleNamespace(evidence_ids=(failure['evidence_id'],)))
             result=worker._item_for(conn,item)
             from jasmine_core.memory.history import verified_records
             ordered=[conn.execute('SELECT * FROM evidence WHERE evidence_id=?',(eid,)).fetchone() for eid in result['evidence_ids']]
@@ -612,6 +614,22 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
             self.assertEqual(rendered['omissions'],[])
             for source in result['source_event_ids']+result['evidence_ids']:
                 self.assertIn(source,rendered['rendered_content'])
+            # The first identity is an actual stored Core item. Stress every
+            # additional Core-generated random identity, never pick a short one.
+            # All referenced Tasks, Events and Evidence remain the actual capture.
+            from jasmine_core import ids
+            for identity in [actual_memory['memory_id']] + [ids.new_id('mem') for _ in range(16)]:
+                item.memory_id=identity
+                mapped=worker._item_for(conn,item)
+                one=filter_memory(conn,{'items':[mapped],'banks':[{**mapped['bank'],'status':'ok'}],'status':'ok'},projection,schema_version=self.module.SCHEMA_VERSION)
+                budgeted=renderer.render(projection,{'reconciliation_required':False},None,one,tokenizer,source_event_id=mapped['source_event_ids'][0])
+                self.assertEqual(budgeted['omissions'],[],identity)
+                marker='HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n'
+                memory_block=marker+budgeted['rendered_content'].split(marker,1)[1]
+                if tokenizer.identity.get('name') == 'tiktoken':
+                    self.assertLessEqual(tokenizer.count(memory_block),760,identity)
+                for pointer in mapped['source_event_ids']+mapped['evidence_ids']:
+                    self.assertIn(pointer,memory_block)
         finally:
             conn.close()
 

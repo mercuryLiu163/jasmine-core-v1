@@ -422,3 +422,59 @@ pinned-tokenizer regression confirms the new four-action summary renders with
 all eight source Events and four Evidence IDs under the original 800-token
 allocation. Full suite and formal Gate acceptance remain the independent
 validator's responsibility at the final frozen commit.
+
+## Terminal partial-failure replay follow-up
+
+The real independent `cdfa5e7` run in
+`evidence/p4-g01-3f061ba-20261005-112558` failed while the existing Hindsight
+backend could not retain/recover. G01's historical execution completed but
+retention failed; G05's original tracked jobs stayed pending. Its first and
+second resumes then created extra setup projects: G01 hit P3's correctly enforced
+idempotency conflict, and G05 hit the correctly enforced write-once receipt
+refusal. All original failed manifests and Core rows remain evidence; they are
+not replaced, and G01's actual controlled pair was NOT RUN, with benefit
+unassessed. Read-only details and original stable IDs are in that run's
+`RESUME-FINDINGS.md`.
+
+The narrowly scoped fix adopts terminal failure replay for G01/G05 partial
+setups. Phase one seals the original CaseRecord; repeated resume verifies its
+receipt/source identities and returns the same FAIL before setup or engine work.
+It never adds another project, Task, Rule, Evidence, job, historical execution or
+Agent pair. Completed setup still takes its existing exact-pack verifier. Old
+partial failures without a sealed terminal record fail explicitly rather than
+re-seeding. No service was restored or restarted as part of this work.
+
+G01's four action receipts and execution-chain receipt are now registered before
+retention may fail and therefore participate in that attempt's phase seal. This
+repairs coverage for new runs without claiming old omitted receipts were sealed.
+New regressions use actual historical unittest/edit/verification subprocesses
+and actual refused loopback retention, then replay twice: original identifiers,
+SQLite object counts and bytes, receipt bytes and phase seals stay unchanged,
+and each replay remains FAIL. G05 uses actual refused engine-job execution to
+check the same property for its Rule and original jobs. Missing/tampered receipts,
+foreign source scope and an unsealed legacy terminal record are refused.
+This is verification of failed-attempt replay, not recovered Gate acceptance.
+
+An independent budget probe on `cdfa5e7` also found a blocker: with real random
+Core memory IDs, the earlier summary exceeded the unchanged 800-token allocation
+(814–820 tokens) and was omitted. Probe evidence is preserved in
+`evidence/p4-budget-id-probe-cdfa5e7/results.json`. The follow-up removes repeated
+wording and unchanged assertion arguments; it keeps each source/Evidence pointer
+once in the text, the original command/Task/memory identity, the observed short
+assertion, affected filenames, the verified formula/28.5 expectation, the exact
+rerun's OK observation, and the current/exclusive-cause limitation. The outer
+P3 renderer and its 800-token allocation remain unchanged.
+
+Latest implementation checks used the existing production Python and pinned
+cache with `PYTHONPATH=src:tests`: modules `tests.test_p4_partial_failure_resume`,
+`tests.test_p4_fix_round`, `tests.test_p4_second_fix`, `tests.test_context` ran
+**94 tests, OK, no skips** (4.175s), log
+`/tmp/p4-terminal-replay-targeted.log`. The budget regression starts with an
+actual stored Core-generated memory ID plus sixteen additional Core-generated
+random identities, checks every identity without selection, and asserts full
+source/Evidence delivery and a complete pinned-tokenizer Memory block at most
+760 tokens (at least 40 tokens below the unchanged 800 cap). The additional
+identities are component stress inputs; the referenced execution sources and
+Evidence are the actual captured chain. These regressions do not represent
+native Agent samples or a completed G01 pair. Independent final review,
+fullsuite, seven Gates and repeated resume remain outstanding.

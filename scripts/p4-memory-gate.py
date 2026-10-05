@@ -764,7 +764,8 @@ class Gate:
         finally:
             conn.close()
 
-    def retain_g01_history(self, project_id: str, task_id: str) -> tuple[str, str, str]:
+    def retain_g01_history(self, project_id: str, task_id: str,
+                           record: CaseRecord | None = None) -> tuple[str, str, str]:
         """Run the historical task in a private copy, then retain actual observations."""
         import shlex
         import tarfile
@@ -789,8 +790,17 @@ class Gate:
             evidence_id = self.collect_tool_evidence(task_id, command=command,
                         output=completed.stdout, exit_code=completed.returncode)
             actions.append({"role": role, "evidence_id": evidence_id})
-            self.receipt("g01-historical-" + role, {"command": command, "output": completed.stdout,
+            receipt = self.receipt("g01-historical-" + role, {"command": command, "output": completed.stdout,
                          "exit_code": completed.returncode, "evidence_id": evidence_id})
+            if record is not None:
+                record.receipts.append(receipt)
+                record.evidence_ids.append(evidence_id)
+                conn = self.conn()
+                try:
+                    row = conn.execute("SELECT source_event_id,change_event_id FROM evidence WHERE evidence_id=?", (evidence_id,)).fetchone()
+                    record.source_event_ids.extend([row['source_event_id'],row['change_event_id']])
+                finally:
+                    conn.close()
             return completed
         failed = execute("failure", shlex.quote(python) + " -B -m unittest -v")
         check(failed.returncode != 0 and "AssertionError" in failed.stdout,
@@ -808,11 +818,22 @@ class Gate:
         linked = self.event(project_id, "project.notes", json.dumps({
             "schema": "jasmine.historical-execution.v1", "actions": actions,
             "claim": "historical observations and attempted repair; no exclusive or current cause established"}), task_id=task_id)
+        chain_receipt = self.receipt("g01-historical-chain", {"link_event_id": linked,
+                            "actions": actions, "repository": repo, "ref": ref})
+        if record is not None:
+            record.receipts.append(chain_receipt)
+            record.source_event_ids.append(linked)
         conn = self.conn()
         try:
             store = MemoryStore(conn, schema_version=SCHEMA_VERSION)
             jobs = jobs_module.JobStore(conn, store)
             jobs.enqueue_from_sources(eligibility.SourceRegistry())
+            if record is not None:
+                for tracked in jobs.jobs():
+                    if tracked['task_id'] == task_id:
+                        record.job_ids.append(tracked['job_id'])
+                        if tracked['document_id'] not in record.document_ids:
+                            record.document_ids.append(tracked['document_id'])
             self.drain(conn)
             candidates = [item for item in self.all_items(store)
                           if item['task_id'] == task_id and item['engine_state'] == 'RETAINED'
@@ -820,8 +841,6 @@ class Gate:
             check(bool(candidates), "real historical failure did not reach RETAINED")
             item = candidates[0]
             job = next(j for j in jobs.jobs() if j['memory_id'] == item['memory_id'] and j['kind'] == 'retain')
-            self.receipt("g01-historical-chain", {"link_event_id": linked, "actions": actions,
-                         "repository": repo, "ref": ref})
             return job['job_id'], item['document_id'], item['source_event_id']
         finally:
             conn.close()
@@ -2059,11 +2078,15 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
     baseline_pack = gate.build_pack(project_id=project, task_id=baseline_task,
                                      prompt_event_id=baseline_prompt, key=baseline_key)
 
+    record.receipts.append({**baseline_pack['receipt'], 'kind': 'g01-baseline-setup-pack'})
     historical = gate.new_task(project, "device test (historical)")
-    job_id, document_id, source_event_id = gate.retain_g01_history(project, historical)
-    record.job_ids.append(job_id)
-    record.document_ids.append(document_id)
-    record.source_event_ids.append(source_event_id)
+    job_id, document_id, source_event_id = gate.retain_g01_history(project, historical, record)
+    if job_id not in record.job_ids:
+        record.job_ids.append(job_id)
+    if document_id not in record.document_ids:
+        record.document_ids.append(document_id)
+    if source_event_id not in record.source_event_ids:
+        record.source_event_ids.append(source_event_id)
 
     current = gate.new_task(project, G01_TASK_TITLE)
     prompt = gate.event(project, "user.prompt", G01_PROMPT, task_id=current)
@@ -4293,6 +4316,57 @@ def mark_inherited_evidence(gate: Gate, record: CaseRecord,
                 "not re-verified in this phase."}
 
 
+def _replay_terminal_setup_failure(gate: Gate, record: CaseRecord,
+                                   prior_case: dict[str, Any] | None) -> bool:
+    """Partial failed G01/G05 attempts remain failed, with no fresh setup effects."""
+    keys = {'P4-G01': 'g01-with-lesson', 'P4-G05': 'g05-degraded-pack'}
+    key = keys.get(record.case_id)
+    if gate.case_id != record.case_id:
+        raise Failed('terminal failure replay case identity mismatch')
+    if key is None or not prior_case or prior_case.get('verdict') != 'FAIL':
+        return False
+    if gate.existing_pack(key) is not None:
+        return False  # completed setup still takes the existing exact-pack verifier
+    original = prior_case.get('terminal_failure')
+    if not isinstance(original, dict) or original.get('case_id') != record.case_id or original.get('verdict') != 'FAIL' or not isinstance(original.get('reason'), str):
+        raise Failed('partial failed setup has no sealed terminal record; refusing to re-seed or replace its failed attempt')
+    # Re-check local identity/scope and receipt bytes; reproducing a historical
+    # failure does not permit borrowing another project's IDs or edited evidence.
+    projects = set(original.get('project_ids') or [])
+    conn = gate.conn()
+    try:
+        for project_id in projects:
+            check(conn.execute('SELECT 1 FROM projects WHERE project_id=?', (project_id,)).fetchone() is not None,
+                  'terminal failure project is missing from Core')
+        for source_id in original.get('source_event_ids') or []:
+            row = conn.execute('SELECT project_id FROM events WHERE event_id=?', (source_id,)).fetchone()
+            check(row is not None and row['project_id'] in projects, 'terminal failure source has a foreign or missing project')
+        for evidence_id in original.get('evidence_ids') or []:
+            row = conn.execute('SELECT t.project_id FROM evidence e JOIN tasks t ON t.task_id=e.task_id WHERE e.evidence_id=?', (evidence_id,)).fetchone()
+            check(row is not None and row['project_id'] in projects, 'terminal failure Evidence has a foreign or missing project')
+        for job_id in original.get('job_ids') or []:
+            row = conn.execute('SELECT project_id,document_id FROM memory_jobs WHERE job_id=?', (job_id,)).fetchone()
+            check(row is not None and row['project_id'] in projects and row['document_id'] in (original.get('document_ids') or []),
+                  'terminal failure job has a foreign or missing source')
+    finally:
+        conn.close()
+    for receipt in original.get('receipts') or []:
+        path = Path(receipt['path'])
+        check(path.is_file() and hashlib.sha256(path.read_bytes()).hexdigest() == receipt['sha256'],
+              'terminal failure receipt is missing or changed')
+    for name in record.__dict__:
+        if name in original:
+            # Values came from the verified phase-one seal. No new object, job,
+            # receipt or session is created and no current recovery is asserted.
+            import copy
+            setattr(record, name, copy.deepcopy(original[name]))
+    record.inherited_evidence = {'terminal_failure_replay': {
+        'source': 'sealed_phase1_failure', 'verdict': 'FAIL',
+        'reason': record.reason, 'setup_reexecuted': False,
+        'scope': 'replayed terminal failure; no new acceptance or recovery claim'}}
+    return True
+
+
 def _verify_prior_seal(work: Path, phase_name: str) -> dict[str, Any] | None:
     """Check the previous phase's seal before this phase runs a single case.
 
@@ -4409,6 +4483,8 @@ def _write_phase_seal(work: Path, phase_name: str, manifest_path: Path,
             "evidence_keys": sorted(record.engine_evidence),
             "sealed_artifacts": sorted(record.sealed_artifacts),
         }
+        if record.case_id in ('P4-G01', 'P4-G05') and record.verdict == 'FAIL':
+            per_case[record.case_id]['terminal_failure'] = record.as_dict()
     payload = {
         "phase": phase_name,
         "commit": meta["commit"],
@@ -4660,15 +4736,15 @@ def main() -> int:
         prior_case = ((prior or {}).get("cases") or {}).get(case_id)
         try:
             gate = Gate(work, config, case_id)
-            gate.open()
-            namespace_used = scope.bank_namespace()
-            gate.require_engine()
-            CASES_BY_ID[case_id](gate, record)
-            # Only after the case returned: a case that raised has not earned an
-            # inherited-evidence claim, and its verdict is already FAIL or BLOCKED.
-            mark_inherited_evidence(gate, record, prior_case)
-            record.verdict = "PASS"
-            record.mode = "real"
+            if not _replay_terminal_setup_failure(gate, record, prior_case):
+                gate.open()
+                namespace_used = scope.bank_namespace()
+                gate.require_engine()
+                CASES_BY_ID[case_id](gate, record)
+                # Only a returning case can earn inherited acceptance evidence.
+                mark_inherited_evidence(gate, record, prior_case)
+                record.verdict = "PASS"
+                record.mode = "real"
         except Blocked as blocked:
             record.verdict = "BLOCKED"
             # `not-run` is a claim that nothing happened, and it was recorded for

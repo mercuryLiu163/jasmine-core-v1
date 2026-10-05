@@ -213,3 +213,35 @@ by the unchanged whole-pack limit; omissions remain explicit.
 G01's prompt, seven exploration categories, benefit threshold and controlled
 baseline/lesson comparison are unchanged. Real Agent execution and its independent
 receipts remain required; historical subprocess capture alone is not acceptance.
+
+### Terminal partial-failure replay (G01 and G05)
+
+A G01/G05 attempt that ended FAIL before its final Context Pack exists is a
+terminal failed attempt. The phase-one seal records its original failure reason,
+IDs and receipt references. `--resume` validates that seal, rechecks the original
+source/job scope and receipt digests, and reproduces **FAIL** with the same IDs
+before fresh setup or engine work. It does not retry retention/recovery, create
+another project or Rule, execute another historical repair, or start an Agent
+pair. Repeated resume therefore verifies stable replay of a failed attempt; it
+never converts that failed Gate into PASS. A final pack already present continues
+to use the existing exact-pack/session verification path.
+
+Legacy partial failures lacking a sealed terminal record are refused before
+re-seeding. Their old records and coverage limits remain intact. A separately
+registered new run, if authorized, must preserve/report all earlier failures;
+service restoration cannot silently replace an old failure's result. Normal
+completed-case resume and the original G01 benefit contract are unchanged.
+
+Every G01 historical action receipt and the execution-chain receipt is now
+attached to its CaseRecord before retention can fail, so the phase-one seal
+covers the actual outputs already produced. The baseline pack receipt is also
+registered before historical setup begins. Previous runs whose historical
+receipts were omitted from their seals are not retroactively claimed as sealed.
+
+The actionable chain text is compact to fit the original 800-token allocation:
+all referenced Events/Evidence remain individually present, while unchanged
+assertion arguments and repeated labels are omitted. The memory's original
+command/Task/identity, short assertion, filenames and observed repair/rerun
+remain available in the `HISTORICAL_NONAUTHORITATIVE MEMORY DATA` block. Fixed
+program and byte/diff checks still apply before this compact observation is
+rendered. Budget omissions are not a successful Memory delivery.

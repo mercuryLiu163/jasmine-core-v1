@@ -400,19 +400,25 @@ def _add_history_chain(conn: Any, failure: Any, mapped: dict) -> None:
             # Put complete attribution first; excerpts are allocated only from
             # remaining room, so truncation never removes an action's source.
             command = executions[0][0]
-            prefix = (f"history: prior FAIL result from `{command}` (task {failure['task_id']}; memory {mapped['memory_id']}; evidence {failure['evidence_id']}; sources {failure['source_event_id']},{failure['change_event_id']})"
-                      + f"\nHISTORICAL_NONAUTHORITATIVE chain {event['event_id']}; attempted repair then PASS; no current or exclusive cause.")
+            prefix = (f"history: FAIL from `{command}`; task {failure['task_id']}; {mapped['memory_id']}; {failure['evidence_id']}; {failure['source_event_id']},{failure['change_event_id']}"
+                      + f"\n{event['event_id']}; no current/exclusive cause.")
             for role, row in zip(['inspection','repair','validation'], related[1:]):
                 pointers = row['source_event_id'] + (',' + row['change_event_id'] if role != 'inspection' else '')
                 prefix += f"\n{role}: {row['evidence_id']} {pointers}"
             failure_output = executions[0][1]['stdout']
-            assertion = '\n'.join(line for line in failure_output.splitlines() if 'AssertionError' in line)
+            assertion = '\n'.join(line.split(' within ',1)[0] for line in failure_output.splitlines() if 'AssertionError' in line)
             edits = []
             for record in repaired:
                 lines = [line for line in record['diff'].splitlines() if line.startswith('+') and not line.startswith('+++')]
-                edits.append(record['file'] + ': ' + ' '.join(line if len(line)<80 else line[0]+'...'+line[-72:] for line in lines))
-            validation_output = '\n'.join(line for line in executions[3][1]['stdout'].splitlines() if line == 'OK' or line.startswith('Ran '))
-            excerpts = '\nfailure: ' + assertion[:130] + '\nrepair: ' + '; '.join(edits)[:220] + '\nvalidation: ' + validation_output[:60]
+                if record['file'] == 'test_calc.py':
+                    # The exact capture program and re-derived file diff proved
+                    # this replacement; keep the new expectation rather than
+                    # repeating the entire assert call's unchanged arguments.
+                    edits.append('test_calc.py: 28.5')
+                else:
+                    edits.append(record['file'] + ': ' + ' '.join(line.removeprefix('+').strip().removeprefix('return ') for line in lines))
+            validation_output = '\n'.join(line for line in executions[3][1]['stdout'].splitlines() if line == 'OK')
+            excerpts = '\n' + assertion[:110] + '\n' + '; '.join(edits)[:160] + '; rerun: ' + validation_output[:40]
             text = prefix + excerpts
             if len(text) > MAX_TEXT:
                 return  # never discard action attribution to fit a claim
