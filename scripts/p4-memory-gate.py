@@ -2127,7 +2127,7 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
             "interrupted_job": interrupted_job,
             "attempts": len(attempts),
             "memory_unit_count": int(document.get("memory_unit_count") or 0),
-            "bank": bank["bank_id"],
+            "bank": bank.bank_id,
         })
         record.sealed_artifacts["g06-complete"] = sealed
     finally:
