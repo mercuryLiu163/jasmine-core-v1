@@ -867,13 +867,22 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
     check(bool(baseline_actions) and bool(lesson_actions),
           f"one of the two sessions recorded no tool action: baseline={baseline_actions}, "
           f"lesson={lesson_actions}")
-    gained = [c for c in lesson_actions if c not in baseline_actions]
-    check(bool(gained),
-          f"the lesson changed nothing the baseline did not already do: baseline="
-          f"{baseline_actions}, with-lesson={lesson_actions}")
+    # The taskbook asks for the *skipped repeated investigation* or the correct
+    # diagnostic step. The lesson names a mechanism, so what it buys is steps the
+    # baseline had to take to find the same thing: the baseline's commands that the
+    # lesson-bearing run did not need. Asserting the lesson run merely "did something
+    # different" would pass on noise.
+    skipped = [c for c in baseline_actions if c not in lesson_actions]
+    check(bool(skipped),
+          f"the lesson saved no investigation: every command the baseline ran was also "
+          f"run with the lesson. baseline={baseline_actions}, with-lesson={lesson_actions}")
+    check(len(lesson_actions) < len(baseline_actions),
+          f"the lesson-bearing session did not take fewer steps ({len(lesson_actions)}) "
+          f"than the baseline ({len(baseline_actions)}); being handed the cause should "
+          f"cost less work, not the same")
     record.engine_evidence["differential"] = {
         "baseline_actions": baseline_actions, "with_lesson_actions": lesson_actions,
-        "gained": gained}
+        "skipped_investigation": skipped}
     # And the lesson must actually be cited, with the claim kept to what it supports:
     # a historical cause is not this turn's cause.
     answer = session.get("final_answer") or ""
