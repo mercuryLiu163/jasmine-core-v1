@@ -104,10 +104,19 @@ class Failed(Exception):
 #: while forbidding X. An LLM judge would read the sentence properly but would not be
 #: reproducible between runs, and an acceptance gate that changes its mind is worse than
 #: one with a blunt documented rule.
+#: Two kinds of word make a nearby mention not an assertion. Denials ("nothing
+#: verified") say the opposite of the phrase; obligations and conditionals ("should be
+#: verified before treating this as settled", "was confirmed by the gate") are about
+#: what someone ought to do or what would count, not about what happened. Both were found
+#: by a real session saying something correct.
 _NEGATORS = ("not ", "n't", "never", "no ", "nothing", "none", "nobody", "cannot",
              "can't", "is not", "was not", "rather than", "instead of", "does not",
              "did not", "supersed", "earlier", "previously", "instead", "without",
-             "if ", "unless", "zero")
+             "if ", "unless", "zero",
+             # obligations and conditionals -- a recommendation to verify is not a
+             # claim that anything was verified
+             "should", "must ", "ought", "need to", "needs to", "would need",
+             "before ", "until ", "verify ", "confirm ", "check ", "reconcil")
 
 
 def unnegated(text: str, phrase: str, window: int = 70):
