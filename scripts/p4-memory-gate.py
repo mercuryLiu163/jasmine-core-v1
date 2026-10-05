@@ -2066,12 +2066,6 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
     record.job_ids.append(job_id)
     record.document_ids.append(document_id)
     record.source_event_ids.append(source_event_id)
-    task_id = gate.new_task(project, "lifecycle read-back")
-    prompt = gate.event(project, "user.prompt",
-                        "what do you remember about these failures?", task_id=task_id)
-    record.source_event_ids.append(prompt)
-    pack = gate.build_pack(project_id=project, task_id=task_id, prompt_event_id=prompt,
-                           key=key)
     # Which memory this case retired, written beside the pack. The verifier needs it
     # to prove the absence, and `--resume` re-derives nothing -- so it is recorded
     # rather than passed, for the same reason the pack itself is the unit of resumption.
@@ -2079,6 +2073,12 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
                "project_id": project}
     (gate.root / "g07-retired.json").write_text(
         json.dumps(retired, ensure_ascii=False, indent=2), encoding="utf-8")
+    task_id = gate.new_task(project, "lifecycle read-back")
+    prompt = gate.event(project, "user.prompt",
+                        "what do you remember about these failures?", task_id=task_id)
+    record.source_event_ids.append(prompt)
+    pack = gate.build_pack(project_id=project, task_id=task_id, prompt_event_id=prompt,
+                           key=key)
     _verify_g07_pack(gate, record, pack, retired)
 
 
