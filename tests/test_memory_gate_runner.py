@@ -165,10 +165,16 @@ class Preconditions(unittest.TestCase):
                          frozenset({"P4-G01", "P4-G02", "P4-G03", "P4-G04",
                                     "P4-G05", "P4-G07"}))
         self.assertEqual(self.runner.NEEDS_REAL_AGENT, frozenset({"P4-G01"}))
+        # Two ways to satisfy "this case needs P3", and the second is stronger:
+        # either it declares the dependency (`require_p3_pack`), or it builds a real
+        # pack through P3's own `ContextBuilder`, which cannot succeed without P3.
+        # A case that does neither could return a verdict having never consulted the
+        # Context contract, which is the thing this is here to prevent.
         for case_id in sorted(self.runner.NEEDS_P3_PACK):
             names = {instruction.argval
                      for instruction in dis.get_instructions(self.runner.CASES_BY_ID[case_id])}
-            self.assertIn("require_p3_pack", names, case_id)
+            self.assertTrue({"require_p3_pack", "build_pack"} & names,
+                            f"{case_id} neither requires P3 nor builds a pack")
         names = {instruction.argval
                  for instruction in dis.get_instructions(self.runner.CASES_BY_ID["P4-G01"])}
         self.assertIn("require_real_agent", names)
@@ -321,9 +327,19 @@ class NoCaseReturnsWithoutItsEvidence(unittest.TestCase):
                     f"than as a missing precondition")
             else:
                 returning.append(case_id)
-        self.assertEqual(returning, ["P4-G06"],
-                         "P4-G06 returns because it performs its evidence in real "
-                         "processes; every other case must end in Blocked")
+        # A case may return normally only if it can complete on evidence alone:
+        # either it verifies an agent session receipt, or -- for G06 -- its evidence
+        # is produced by real worker processes. Anything else must end in Blocked,
+        # because a case that cannot finish has not passed.
+        evidenced = set()
+        for case_id in CASES:
+            source = __import__("inspect").getsource(self.runner.CASES_BY_ID[case_id])
+            if "verify_session" in source or "spawn_worker" in source:
+                evidenced.add(case_id)
+        self.assertEqual(set(returning), evidenced,
+                         f"these cases return normally: {returning}, but only "
+                         f"{sorted(evidenced)} verify a session or use real processes")
+        self.assertIn("P4-G06", evidenced)
 
     def test_the_crash_window_is_crossed_by_processes(self) -> None:
         for needle, why in (

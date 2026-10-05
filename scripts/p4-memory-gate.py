@@ -150,9 +150,30 @@ class Gate:
         # on the previous run's content.
         self.bank_suffix = config.get("bank_suffix") or self.run_id.replace("/", "-")
         self.db_path = self.root / "core.db"
-        self.host = ids.new_id("hst")
-        self.human = ids.new_id("act")
-        self.system = ids.new_id("act")
+        # Identity is persisted per work directory, so a second invocation re-entering
+        # the same directory is the *same* Gate rather than a fresh one with new ids.
+        # That is what makes the two-phase flow sound: the pack is built and written
+        # by one invocation, an agent reads it, and a later invocation has to
+        # reproduce the same pack bytes to verify the session against Core. New ids
+        # per invocation would make that impossible -- and G06 already relied on
+        # re-entering a work directory another process created.
+        identity_path = self.root / "gate-identity.json"
+        if identity_path.is_file():
+            saved = json.loads(identity_path.read_text(encoding="utf-8"))
+            self.host, self.human = saved["host"], saved["human"]
+            self.system, self.agent = saved["system"], saved["agent"]
+        else:
+            self.host = ids.new_id("hst")
+            self.human = ids.new_id("act")
+            self.system = ids.new_id("act")
+            self.agent = ids.new_id("act")
+            identity_path.write_text(json.dumps(
+                {"host": self.host, "human": self.human,
+                 "system": self.system, "agent": self.agent}), encoding="utf-8")
+            os.chmod(identity_path, 0o600)
+        # The Context Pack is built for an *agent*: P3's builder refuses a pack for
+        # the operator and refuses `check_current` across actors, so the session this
+        # Gate verifies has to belong to a real agent actor.
         self.transport: HindsightTransport | None = None
         self._previous: dict[str, str | None] = {}
 
@@ -179,6 +200,8 @@ class Gate:
             reg.upsert_actor(self.human, kind="human", display_name="p4 gate operator",
                              home_host_id=self.host)
             reg.upsert_actor(self.system, kind="system", display_name="p4 gate worker",
+                             home_host_id=self.host)
+            reg.upsert_actor(self.agent, kind="agent", display_name="p4 gate agent",
                              home_host_id=self.host)
         conn.close()
 
@@ -368,7 +391,20 @@ class Gate:
             raise Failed(f"no Memory item reached RETAINED: {states}")
         return items[0]
 
-    def retain_lesson(self, project_id: str, *, reason: str) -> tuple[str, str, str]:
+    def new_task(self, project_id: str, title: str) -> str:
+        """A real Task. Separate from `retain_lesson` so a lesson can belong to one
+        task while the pack is built for another -- P3 filters `duplicate_current_fact`,
+        so a lesson and the pack sharing a task would test nothing."""
+        conn = self.conn()
+        try:
+            return ObjectStore(conn, schema_version=SCHEMA_VERSION).create(NewObject.task({
+                "project_id": project_id, "title": f"{self.case_id} {title}",
+                "host_id": self.host}), actor_id=self.human)["object"]["task_id"]
+        finally:
+            conn.close()
+
+    def retain_lesson(self, project_id: str, *, reason: str,
+                      task_id: str | None = None) -> tuple[str, str, str]:
         """A real failure -> a real FAIL Evidence -> a real Failure Lesson memory.
 
         Returns `(job_id, document_id, source_event_id)`. The whole chain is
@@ -379,9 +415,8 @@ class Gate:
 
         conn = self.conn()
         try:
-            task_id = ObjectStore(conn, schema_version=SCHEMA_VERSION).create(NewObject.task({
-                "project_id": project_id, "title": f"p4 gate {self.case_id}",
-                "host_id": self.host}), actor_id=self.human)["object"]["task_id"]
+            if task_id is None:
+                task_id = self.new_task(project_id, "device test")
             state = StateStore(conn, schema_version=SCHEMA_VERSION)
             step = state.create_step(task_id, {"title": "device test", "host_id": self.host,
                                                "expected_revision": 1},
@@ -545,6 +580,198 @@ class Gate:
         return g
     """
 
+    # -- real P3 Context Pack, and the agent session that consumed it -------
+    #
+    # The Pack is built by P3's own `ContextBuilder` with Memory served by P3's
+    # own `MemoryProvider` running *this* worker script -- so the bytes an agent
+    # receives are the bytes P3 renders, not a reconstruction. The receipt below is
+    # what binds an agent session to those bytes: it names the pack's rendered
+    # sha256, and `verify_session` re-derives that hash from the pack this Gate
+    # built rather than believing the session's own claim about what it saw.
+
+    def memory_provider(self):
+        """P3's `MemoryProvider` over this repo's worker, with a fixed environment."""
+        from jasmine_core.context.memory_provider import MemoryProvider
+
+        return MemoryProvider(
+            argv=[sys.executable, str(ROOT / "scripts" / "p4-memory-worker.py")],
+            provider_id=f"{self.case_id}-p4",
+            environment={"JASMINE_CORE_DB": str(self.db_path.resolve()),
+                         "JASMINE_MEMORY_ACTOR_ID": self.human,
+                         "JASMINE_MEMORY_DEPLOYMENT_MODE": os.environ.get(
+                             "JASMINE_MEMORY_DEPLOYMENT_MODE", "single_user"),
+                         "JASMINE_HINDSIGHT_URL": str(self.transport.config.base_url),
+                         "JASMINE_HINDSIGHT_TIMEOUT_SECONDS": os.environ.get(
+                             "JASMINE_HINDSIGHT_TIMEOUT_SECONDS", "300")})
+
+    def build_pack(self, *, project_id: str, task_id: str, prompt_event_id: str,
+                   key: str, engine_url: str | None = None):
+        """One real P3 Context Pack, plus the receipt that binds a session to it.
+
+        `engine_url` overrides the engine the worker is told to reach, which is how
+        G05 builds a pack against a deliberately unreachable engine. It is recorded
+        in the receipt, so a pack built against a dead engine can never be presented
+        as one built against a healthy one.
+        """
+        from jasmine_core.context.builder import ContextBuilder
+        from jasmine_core.context.tokens import Tokenizer
+
+        previous = os.environ.get("JASMINE_HINDSIGHT_URL")
+        if engine_url is not None:
+            os.environ["JASMINE_HINDSIGHT_URL"] = engine_url
+        try:
+            provider = self.memory_provider()
+            conn = self.conn()
+            try:
+                builder = ContextBuilder(conn, schema_version=SCHEMA_VERSION,
+                                         tokenizer=Tokenizer(), memory=provider)
+                context = builder.build(
+                    {"task_id": task_id, "host_id": self.host,
+                     "source_event_id": prompt_event_id, "reason": "USER_PROMPT",
+                     "idempotency_key": key}, actor_id=self.agent)["context"]
+                current = builder.check_current(
+                    context["context_pack_id"],
+                    {"host_id": self.host, "source_event_id": prompt_event_id},
+                    actor_id=self.agent)
+            finally:
+                conn.close()
+        finally:
+            if engine_url is not None:
+                if previous is None:
+                    os.environ.pop("JASMINE_HINDSIGHT_URL", None)
+                else:
+                    os.environ["JASMINE_HINDSIGHT_URL"] = previous
+
+        rendered = context["rendered_content"]
+        pack = {
+            "context_pack_id": context["context_pack_id"],
+            "rendered_sha256": hashlib.sha256(rendered.encode("utf-8")).hexdigest(),
+            "rendered_content": rendered,
+            "token_count": context["token_count"],
+            "sections": [m["section"] for m in context["section_metrics"]],
+            "memory_status": context["memory"]["status"],
+            "memory_selected": context["memory"].get("selected") or [],
+            "memory_filtered": context["memory"].get("filtered") or [],
+            "qualified_provenance": context["memory"].get("qualified_provenance") or [],
+            "truth_digest": current["truth_digest"],
+            "engine_url": engine_url or str(self.transport.config.base_url),
+            "project_id": project_id, "task_id": task_id,
+            "prompt_event_id": prompt_event_id,
+            "check_current": current["current"],
+        }
+        path = self.root / f"pack-{context['context_pack_id']}.json"
+        path.write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.chmod(path, 0o600)
+        pack["receipt"] = {"path": str(path),
+                           "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        return pack
+
+    def git_commit(self) -> str:
+        try:
+            return subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"],
+                                  capture_output=True, text=True, timeout=15).stdout.strip()
+        except (subprocess.SubprocessError, OSError):
+            return ""
+
+    def session_path(self, label: str) -> Path:
+        return self.root / f"session-{label}.json"
+
+    def verify_session(self, pack: dict[str, Any], label: str, *,
+                       require_tool_actions: bool = True) -> dict[str, Any]:
+        """Import an agent session receipt and check it against Core, not against itself.
+
+        The session file is an *input from outside this process* -- a real agent ran
+        somewhere and wrote down what it did. So nothing in it is taken on trust:
+
+          * `commit` must be this candidate commit, so a session cannot be reused
+            across a code change;
+          * `pack_sha256` must equal the hash of the bytes *this Gate rendered*,
+            recomputed here, which is what proves the agent read this pack rather
+            than a description of it;
+          * `context_pack_id` must exist in Core and `check_current` must still be
+            true, so the pack is admitted as current Truth for that task;
+          * every id the session claims to have seen must exist in Core, and the
+            source event ids must be the ones P3's `qualified_provenance` recorded;
+          * the tool actions must be non-empty and each must carry the output it
+            actually produced.
+
+        Returns the session dict with a `verified` block the cases assert on.
+        """
+        commit = self.git_commit()
+        path = self.session_path(label)
+        if not path.is_file():
+            raise Blocked(f"no agent session receipt for {label} at {path}; run the agent "
+                          f"session and write it there -- it cannot be synthesised here")
+        session = json.loads(path.read_text(encoding="utf-8"))
+        problems: list[str] = []
+
+        if session.get("commit") != commit:
+            problems.append(f"the session ran against {session.get('commit')!r}, this "
+                            f"candidate is {commit}")
+        if session.get("context_pack_id") != pack["context_pack_id"]:
+            problems.append(f"the session names pack {session.get('context_pack_id')!r}, the "
+                            f"pack built here is {pack['context_pack_id']!r}")
+        recomputed = hashlib.sha256(pack["rendered_content"].encode("utf-8")).hexdigest()
+        if session.get("pack_sha256") != recomputed:
+            problems.append(f"the session saw pack bytes hashing to {session.get('pack_sha256')!r}, "
+                            f"this Gate rendered {recomputed}")
+        if not pack["check_current"]:
+            problems.append("the pack is no longer current for its task, so a session that "
+                            "read it would have been reasoning from stale Truth")
+
+        # The Memory the pack actually carried, re-derived from Core rather than
+        # from either file's own summary of it.
+        conn = self.conn()
+        try:
+            row = conn.execute("SELECT rendered_sha256, truth_digest FROM context_packs"
+                               " WHERE context_pack_id=?",
+                               (pack["context_pack_id"],)).fetchone()
+            if row is None:
+                problems.append(f"Core has no Context Pack {pack['context_pack_id']}")
+            else:
+                if row["rendered_sha256"] != recomputed:
+                    problems.append("the pack stored in Core hashes differently from the one "
+                                    "built here")
+                if row["truth_digest"] != pack["truth_digest"]:
+                    problems.append("the pack's truth digest changed between build and import")
+            carried = {q["memory_id"]: q for q in pack["qualified_provenance"]}
+            for seen in session.get("memory_seen") or []:
+                memory_id = seen.get("memory_id")
+                if memory_id not in carried:
+                    problems.append(f"the session claims memory {memory_id!r}, which this pack "
+                                    f"did not carry: {sorted(carried)}")
+                    continue
+                if sorted(seen.get("evidence_ids") or []) != sorted(carried[memory_id]["evidence_ids"]):
+                    problems.append(f"the session's Evidence for {memory_id} differs from the "
+                                    f"pack's")
+                if sorted(seen.get("source_event_ids") or []) != sorted(carried[memory_id]["source_event_ids"]):
+                    problems.append(f"the session's source Events for {memory_id} differ from "
+                                    f"the pack's")
+                # And the cited Events must be real rows, not ids the session made up.
+                for event_id in carried[memory_id]["source_event_ids"]:
+                    if conn.execute("SELECT 1 FROM events WHERE event_id=?",
+                                    (event_id,)).fetchone() is None:
+                        problems.append(f"the pack cites Event {event_id}, which Core has not got")
+        finally:
+            conn.close()
+
+        actions = session.get("tool_actions") or []
+        if require_tool_actions and not actions:
+            problems.append("the session recorded no tool action, so nothing was actually done")
+        for action in actions:
+            if not isinstance(action, dict) or not action.get("command"):
+                problems.append(f"a tool action has no command: {action!r}")
+                continue
+            if "output" not in action:
+                problems.append(f"the tool action {action.get('command')!r} recorded no output")
+
+        if problems:
+            raise Failed("the agent session receipt does not stand up: " + "; ".join(problems))
+        return {**session, "verified": {
+            "commit": commit, "context_pack_id": pack["context_pack_id"],
+            "pack_sha256": recomputed, "memory_carried": sorted(carried),
+            "tool_actions": len(actions), "pack_receipt": pack["receipt"]["path"]}}
+
     def receipt(self, kind: str, payload: dict[str, Any]) -> dict[str, str]:
         path = self.root / f"{kind}.json"
         path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -558,32 +785,83 @@ class Gate:
 
 def case_g01(gate: Gate, record: CaseRecord) -> None:
     """A historical failure is recalled in a new session and changes what the agent does."""
-    gate.require_p3_pack()
     gate.require_real_agent()
     project = gate.seed_project("g01")
     record.project_ids.append(project)
+
+    # The lesson must belong to a *historical* task. P3 filters
+    # `duplicate_current_fact`, so a lesson derived from Evidence the current turn
+    # already carries is correctly not injected -- the scenario only means anything
+    # when the new task does not already have that Evidence, which is what "a later
+    # session hits the same problem" means.
+    historical = gate.new_task(project, "device test (historical)")
     job_id, document_id, source_event_id = gate.retain_lesson(
-        project, reason="callback task_id did not match the task id in the request")
+        project, reason="callback task_id did not match the task id in the request",
+        task_id=historical)
     record.job_ids.append(job_id)
     record.document_ids.append(document_id)
     record.source_event_ids.append(source_event_id)
-    outcome = gate.recall(project, "callback task_id mismatch", max_tokens=600)
-    check(outcome.status == "ok", f"recall returned {outcome.status}: {outcome.as_dict()}")
-    check(bool(outcome.items), "recall returned no item for a lesson that was just retained")
-    lesson = outcome.items[0]
-    record.memory_result_ids.append(lesson.memory_result_id)
-    check(lesson.provenance.source_event_ids == (source_event_id,),
-          "the recalled lesson does not point at its source Event")
-    check(lesson.historical, "a recalled lesson must be marked historical")
-    record.receipts.append(gate.receipt("g01-recall", outcome.as_dict()))
-    # The remaining half of G01 needs a real session: the agent has to *use* the
-    # lesson. That cannot be asserted here, so this case stops with the recall
-    # evidence and says so rather than claiming the benefit.
-    raise Blocked(
-        "the recall half is recorded; the benefit half needs a real new Agent session, "
-        "a baseline pack without the lesson and a pack with it, and the tool actions "
-        "that differ between them. No real session is declared in the configuration."
-    )
+
+    current = gate.new_task(project, "device test (new session)")
+    prompt = gate.event(project, "user.prompt",
+                        "the device test fails again; where should I look first?")
+    record.source_event_ids.append(prompt)
+
+    pack = gate.build_pack(project_id=project, task_id=current, prompt_event_id=prompt,
+                           key="g01-with-lesson")
+    record.context_pack_ids.append(pack["context_pack_id"])
+    check(pack["memory_status"] == "ok",
+          f"the pack's Memory section is {pack['memory_status']}, not ok: {pack}")
+    check(bool(pack["memory_selected"]),
+          f"the pack carried no Memory for a lesson the project has: {pack['memory_filtered']}")
+    carried = pack["memory_selected"][0]
+    record.memory_result_ids.append(carried["memory_id"])
+    check(carried["memory_type"] == "FAILURE_LESSON", carried)
+    check(bool(pack["qualified_provenance"]),
+          "P3 qualified no provenance, so the pack's Memory cannot be attributed")
+    record.receipts.append(gate.receipt("g01-pack", {k: v for k, v in pack.items()
+                                                     if k != "rendered_content"}))
+
+    # The rendered pack must present the lesson as history, never as current Truth.
+    rendered = pack["rendered_content"]
+    check("NON AUTHORITATIVE" in rendered or "NON-AUTHORITATIVE" in rendered,
+          "the pack does not mark its Memory section non-authoritative")
+    check(source_event_id in rendered,
+          "the pack does not carry the lesson's source Event, so it cannot be traced")
+
+    session = gate.verify_session(pack, "g01")
+    record.receipts.append(gate.receipt("g01-session", session["verified"]))
+    check(bool(session["verified"]["memory_carried"]),
+          "the session was verified against a pack that carried no Memory")
+
+    # VC-16 asks what the lesson *did*, and the taskbook is explicit that the agent's
+    # own account of being helped is not the evidence. So the claim is differential
+    # and checkable here: the same task, the same repository, two real sessions, and
+    # the lesson-bearing one must have taken a diagnostic action the baseline did not.
+    baseline = session.get("baseline")
+    check(isinstance(baseline, dict),
+          "the session receipt carries no `baseline`: without the pack-without-the-lesson "
+          "run there is nothing to compare, and 'the agent said it helped' is not evidence")
+    baseline_actions = [a.get("command") for a in (baseline.get("tool_actions") or [])]
+    lesson_actions = [a.get("command") for a in (session.get("tool_actions") or [])]
+    check(bool(baseline_actions) and bool(lesson_actions),
+          f"one of the two sessions recorded no tool action: baseline={baseline_actions}, "
+          f"lesson={lesson_actions}")
+    gained = [c for c in lesson_actions if c not in baseline_actions]
+    check(bool(gained),
+          f"the lesson changed nothing the baseline did not already do: baseline="
+          f"{baseline_actions}, with-lesson={lesson_actions}")
+    record.engine_evidence["differential"] = {
+        "baseline_actions": baseline_actions, "with_lesson_actions": lesson_actions,
+        "gained": gained}
+    # And the lesson must actually be cited, with the claim kept to what it supports:
+    # a historical cause is not this turn's cause.
+    answer = session.get("final_answer") or ""
+    check("callback task_id" in answer,
+          f"the answer does not mention the recalled cause at all: {answer[:200]!r}")
+    check(any(marker in answer.lower() for marker in
+              ("histor", "previously", "last time", "earlier", "before")),
+          f"the answer states a historical lesson as this turn's cause: {answer[:300]!r}")
 
 
 def case_g02(gate: Gate, record: CaseRecord) -> None:
