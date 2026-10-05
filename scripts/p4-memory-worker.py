@@ -155,11 +155,48 @@ def _evidence_rows(conn: Any, evidence_ids: tuple[str, ...]) -> list[Any]:
     rows = []
     for evidence_id in evidence_ids:
         row = conn.execute(
-            "SELECT evidence_id, task_id, step_id, status, source_event_id, change_event_id"
+            "SELECT evidence_id, task_id, step_id, status, source_event_id, change_event_id,"
+            " turn_id, tool_use_id, tool_name"
             " FROM evidence WHERE evidence_id=?", (evidence_id,)).fetchone()
         if row is not None and row["change_event_id"]:
             rows.append(row)
     return rows
+
+
+def _command_for(conn: Any, row: Any) -> str | None:
+    """The verbatim command behind an Evidence row, read back from Core.
+
+    The row itself keeps only the command's hash; the words live in the
+    `tool.call` Event the trusted producer wrote when the tool actually ran.
+    That is what makes the history this worker renders actionable rather than
+    descriptive: a session can read the failing command and run it again,
+    instead of reading that a failure happened somewhere.
+    """
+    try:
+        events = conn.execute(
+            "SELECT payload_json FROM events WHERE task_id=? AND event_type='tool.call'"
+            " ORDER BY seq", (row["task_id"],)).fetchall()
+    except Exception:
+        return None
+    fallback: str | None = None
+    for event in events:
+        try:
+            payload = json.loads(event["payload_json"])
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(payload, dict):
+            continue
+        tool_input = payload.get("tool_input")
+        command = (tool_input.get("cmd", tool_input.get("command"))
+                   if isinstance(tool_input, dict) else None)
+        if not isinstance(command, str) or not command:
+            continue
+        if (payload.get("turn_id") == row["turn_id"]
+                and payload.get("tool_use_id") == row["tool_use_id"]):
+            return command
+        if fallback is None and payload.get("tool_name") == row["tool_name"]:
+            fallback = command
+    return fallback
 
 
 def _fact_for(conn: Any, row: Any) -> dict[str, Any] | None:
@@ -263,6 +300,21 @@ def _item_for(conn: Any, item: Any) -> dict[str, Any] | None:
         recorded_at = event["occurred_at"]
         scope = "GLOBAL" if item.scope_kind == "global" else "PROJECT"
         bank = {"scope": scope, "bank_id": item.bank_id, "project_id": item.project_id}
+        # Actionable history, still non-authoritative. The fact below is the
+        # Core-derived claim P3 re-verifies; the text around it names the source
+        # and carries the one field a later session can act on -- the failing
+        # command read back from the tool.call Event -- plus the subject (the
+        # step and task that failed) and the source pointers. A lesson that
+        # says only "a FAIL was recorded" gives an honest session nothing to
+        # skip; one that names the command does. The `text` is engine prose
+        # bounded by P3, so the history line goes first: truncation may cut the
+        # prose, never the provenance.
+        command = _command_for(conn, row)
+        history = (f"history: prior {row['status']} result"
+                   + (f" from `{command}`" if command else "")
+                   + f" (task {row['task_id']}, step {row['step_id']};"
+                   + f" memory {item.memory_id}; evidence {row['evidence_id']};"
+                   + f" sources {','.join(source_events)})")
         mapped = {
             "memory_id": item.memory_id,
             "memory_type": item.memory_type,
@@ -275,7 +327,7 @@ def _item_for(conn: Any, item: Any) -> dict[str, Any] | None:
             "origin_rule_ref": None,
             "evidence_ids": [row["evidence_id"]],
             "backend_classification": None,
-            "text": item.text[:MAX_TEXT],
+            "text": (history + "\n" + item.text)[:MAX_TEXT],
             "confidence": 1.0,
             "verified_transition_event_id": transition_event_id,
             "recorded_at": recorded_at,

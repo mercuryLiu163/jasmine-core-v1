@@ -79,9 +79,20 @@ def render(projection,comparison,checkpoint,memory,tokenizer,*,source_event_id,c
     items.sort(key=lambda i:i['recorded_at'],reverse=True)
     items.sort(key=lambda i:i['confidence'],reverse=True)
     for item in items:
-        data={k:item[k] for k in ('memory_id','memory_type','bank','source_event_ids','source_task_id','fact')}
-        optional.append(('MEMORY','memory:'+item['bank']['bank_id']+':'+item['memory_id'],
-            'HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n'+canonical_json(data)+'\n',600,item['source_event_ids']))
+        # The rendered Memory block carries the worker's actionable text -- the
+        # failing command, the subject and the source pointers -- alongside the
+        # fact. The fact is the Core-derived claim; the text is what makes the
+        # lesson usable in a later session. Both stay inside this labelled
+        # non-authoritative block and nowhere else: the label above is what
+        # keeps history from reading as current Truth.
+        data = {k: item[k] for k in ('memory_id', 'memory_type', 'bank',
+                                     'source_event_ids', 'source_task_id', 'fact',
+                                     'text')}
+        # Room for the actionable text: a worker item carries up to 2000
+        # characters, and omitting the lesson for budget while reporting it
+        # selected would be a silent empty. The whole-pack budget still bounds.
+        optional.append(('MEMORY', 'memory:'+item['bank']['bank_id']+':'+item['memory_id'],
+            'HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n'+canonical_json(data)+'\n', 800, item['source_event_ids']))
     omissions=[];used={};selected=[]
     for section,ident,text,cap,source_ids in optional:
         count=tokenizer.count(text)

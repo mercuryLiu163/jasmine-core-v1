@@ -752,7 +752,8 @@ class _ScriptedGate:
     def read_receipt(self, kind):
         return self._gate.read_receipt(kind)
 
-    def verify_session(self, pack, label, *, require_tool_actions=True):
+    def verify_session(self, pack, label, *, require_tool_actions=True,
+                         require_evidence_backed_actions=False):
         session = self.sessions[label]
         if require_tool_actions and not (session.get("tool_actions") or []):
             raise self.module.Failed(f"{label} recorded no tool action")
@@ -825,17 +826,23 @@ class G01IsAControlledExperiment(unittest.TestCase):
                                          "source_event_ids": [self.source_event]}]
         return pack
 
-    def _memory_block(self):
+    def _memory_block(self, *, command="pytest -q"):
+        history = (f"history: prior FAIL result from `{command}` (task "
+                   f"{self.historical_task}, step stp_{'S' * 26}; memory "
+                   f"{self.memory_id}; evidence {self.evidence_id}; sources "
+                   f"{self.source_event})")
         return "HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n" + json.dumps({
             "memory_id": self.memory_id, "memory_type": "FAILURE_LESSON",
             "bank": {"scope": "PROJECT", "bank_id": f"jasmine-project-{self.project}",
                      "project_id": self.project},
             "source_event_ids": [self.source_event], "source_task_id": self.historical_task,
-            "fact": "the callback task id did not match"},
+            "evidence_ids": [self.evidence_id],
+            "fact": "the callback task id did not match",
+            "text": history + "\nthe callback task id did not match the request"},
             separators=(",", ":")) + "\n"
 
     def _session(self, *, performed, completed=True, output=None, answer=None,
-                 memory_seen=True, commands=("pytest -q",)):
+                 memory_seen=True, commands=("pytest -q",), backing=None):
         answer = answer if answer is not None else (
             f"{self.memory_id} was recorded before, from task {self.historical_task}; "
             f"historically the callback task id did not match the request.")
@@ -848,6 +855,8 @@ class G01IsAControlledExperiment(unittest.TestCase):
                                    "output": output if output is not None
                                    else "Ran 1 test in 0.001s\n\nOK\n"},
             "exploration": {name: name in performed for name in self.CATEGORIES},
+            "exploration_actions": (backing if backing is not None
+                                    else {name: list(commands) for name in performed}),
         }
         if memory_seen:
             body["memory_seen"] = [{"memory_id": self.memory_id,
@@ -1103,7 +1112,8 @@ class _PackGate:
     def read_receipt(self, kind):
         return self._gate.read_receipt(kind)
 
-    def verify_session(self, pack, label, *, require_tool_actions=True):
+    def verify_session(self, pack, label, *, require_tool_actions=True,
+                         require_evidence_backed_actions=False):
         session = self.session
         if require_tool_actions and not (session.get("tool_actions") or []):
             raise self.module.Failed(f"{label} recorded no tool action")
@@ -1284,9 +1294,18 @@ class G04ReadsProjectIdentityFromTheWholePack(unittest.TestCase):
         return header + authority + state + memory
 
     def _run(self, pack=None):
+        import hashlib
+
+        answer = "you must stay API compatible"
         gate = _PackGate(self.module, self.root,
-                         session={"final_answer": "you must stay API compatible",
+                         session={"final_answer": answer,
                                   "tool_actions": [],
+                                  "semantic_review": {
+                                      "reviewer": "an independent reviewer",
+                                      "verdict": "consistent",
+                                      "reviewed_answer_sha256": hashlib.sha256(
+                                          answer.encode("utf-8")).hexdigest(),
+                                      "findings": "states B's constraint alone"},
                                   "verified": {"tool_actions": 0, "memory_carried": [],
                                                "session_transcript": {},
                                                "injection": {}, "sealed": []}},
@@ -1413,30 +1432,46 @@ class G02StatesItsSupersessionPremise(unittest.TestCase):
             + "CURRENT STATE\n"
             + "MEMORY — NON AUTHORITATIVE\n")
 
-    def _run(self, filtered):
+    def _run(self, filtered, *, recall_filtered="default"):
+        import hashlib
+
         pack = {"context_pack_id": "ctx_" + "C" * 26, "project_id": self.project,
                 "task_id": "tsk_" + "D" * 26, "prompt_event_id": "evt_" + "E" * 26,
                 "memory_status": "ok", "memory_selected": [], "memory_filtered": filtered,
                 "qualified_provenance": [], "rendered_content": self.rendered}
+        if recall_filtered == "default":
+            recall_filtered = [{"bank_id": f"jasmine-project-{self.project}",
+                                "memory_id": "mem_" + "F" * 26,
+                                "reason": "superseded_decision"}]
+        answer = "V1 uses Hindsight"
         gate = _PackGate(self.module, self.root,
-                         session={"final_answer": "V1 uses Hindsight",
+                         session={"final_answer": answer,
                                   "tool_actions": [],
+                                  "semantic_review": {
+                                      "reviewer": "an independent reviewer",
+                                      "verdict": "consistent",
+                                      "reviewed_answer_sha256": hashlib.sha256(
+                                          answer.encode("utf-8")).hexdigest(),
+                                      "findings": "names the current engine"},
                                   "verified": {"tool_actions": 0, "memory_carried": [],
                                                "session_transcript": {},
-                                               "injection": {}, "sealed": []}})
+                                               "injection": {}, "sealed": []}},
+                         seeded=("g02-recall", {"filtered": recall_filtered}))
         record = self.module.CaseRecord("P4-G02", "PASS")
         self.module._verify_g02_pack(gate, record, pack)
         return record
 
-    def test_an_unobserved_premise_is_stated_in_the_manifest(self) -> None:
-        record = self._run([])
-        self.assertFalse(record.engine_evidence["supersession_observed_in_pack"])
-        premise = record.engine_evidence["supersession_premise"]
-        self.assertIn("not observed at the pack", premise)
-        self.assertIn("g02-recall", premise)
-        # ...and it reaches the manifest, rather than being implied by a check that
-        # could not fire.
-        self.assertIn("supersession_observed_in_pack", record.as_dict()["engine_evidence"])
+    def test_an_unobserved_premise_is_refused_not_recorded(self) -> None:
+        # The empty pack `filtered` list is the expected shape -- the recall
+        # behind the pack filters before rendering -- so the premise lives in
+        # the sealed recall receipt. When even that receipt shows no
+        # superseded filter, the case has no contest for the current Truth to
+        # win and must fail rather than record the absence as a passing note.
+        with self.assertRaises(self.module.Failed) as caught:
+            self._run([], recall_filtered=[])
+        message = str(caught.exception)
+        self.assertIn("premise", message)
+        self.assertIn("g02-recall", message)
 
     def test_an_observed_premise_is_recorded_as_observed(self) -> None:
         record = self._run([{"bank_id": f"jasmine-project-{self.project}",

@@ -146,6 +146,13 @@ _NEGATORS = ("not ", "n't", "never", "no ", "nothing", "none", "nobody", "cannot
 def unnegated(text: str, phrase: str, window: int = 70):
     """Yield each mention of `phrase` in `text` that nothing nearby denies.
 
+    Auxiliary only. This is a heuristic over words, and ordinary English can
+    defeat a word list ("Before you change the API shape, you may freely...",
+    "If you recall, mem0..."). Wherever a case's claim rests on what an answer
+    *means*, the binding judgement is the independent `semantic_review`, bound
+    by digest to the exact answer; this helper only keeps the blunt
+    phrase-level guard beside it.
+
     Every check on what an Agent *said* goes through here. A bare `in` test cannot tell
     "there is no record" from "nothing verified a record", and across G02, G03, G04,
     G05 and G07 that mistake rejected five correct answers before this was noticed --
@@ -220,6 +227,10 @@ _NEGATING_PREFIXES = frozenset({"un", "non", "in", "never", "no"})
 
 def asserted_outcomes(clause: str, *, absence_blind: bool) -> list[tuple[str, str]]:
     """Every outcome phrase in `clause` that nothing nearby denies.
+
+    Auxiliary only, like `unnegated`: a blunt phrase rule that cannot read
+    meaning, kept beside the `semantic_review` binding judgement rather than
+    standing in for it.
 
     The same rule as `unnegated`, with one exception. When the clause is itself an
     absence statement the absence is masked out of the negation window first: the denial
@@ -998,7 +1009,8 @@ class Gate:
                 "kind": f"injected-{label}-pack", "write": "sealed"}
 
     def verify_session(self, pack: dict[str, Any], label: str, *,
-                       require_tool_actions: bool = True) -> dict[str, Any]:
+                       require_tool_actions: bool = True,
+                       require_evidence_backed_actions: bool = False) -> dict[str, Any]:
         """Import an agent session receipt and check it against Core, not against itself.
 
         The session file is an *input from outside this process* -- a real agent ran
@@ -1014,7 +1026,20 @@ class Gate:
           * every id the session claims to have seen must exist in Core, and the
             source event ids must be the ones P3's `qualified_provenance` recorded;
           * the tool actions must be non-empty and each must carry the output it
-            actually produced.
+            actually produced;
+          * when `require_evidence_backed_actions` is true -- or whenever the
+            receipt carries any tool action at all -- each action must also bind
+            to a Core Evidence row produced by the real Evidence store
+            (`verify_tool_action`): the row is looked up by
+            `(task_id, tool_name, command_sha256)` on the pack's own task, and its
+            stored command hash, output artifact hash, exit status and
+            task/session binding must match what the session declared. A session
+            can invent a command and an output; it cannot invent a Core row.
+            The flag exists so cases whose sessions take no tool actions keep
+            working unchanged; the presence of actions is itself the trigger, so
+            a receipt that declares actions on any label is held to the same
+            binding. A session that completed its task (`task_completed: true`)
+            additionally has its `final_verification` command bound the same way.
 
         Returns the session dict with a `verified` block the cases assert on, including
         the sealed transcript digest and the injection record.
@@ -1124,14 +1149,63 @@ class Gate:
             if "output" not in action:
                 problems.append(f"the tool action {action.get('command')!r} recorded no output")
 
+        # The taskbook prohibition on judging by an agent's self-description: a
+        # command string plus an output string, both written by the session
+        # itself, prove nothing was run. Each declared action has to bind to a
+        # Core Evidence row the real Evidence store produced, on the pack's own
+        # task. The flag names the requirement; the presence of actions triggers
+        # it on every label, so a receipt that declares actions cannot evade the
+        # binding by running under a case that did not ask for it.
+        task_binding = pack.get("task_id")
+        if require_evidence_backed_actions or actions:
+            if not isinstance(task_binding, str) or not task_binding:
+                problems.append("the session declares tool actions but the pack names no "
+                                "task they could be bound to, so no action can be "
+                                "Evidence-backed")
+            else:
+                evidence_conn = self.conn()
+                try:
+                    for action in actions:
+                        if not isinstance(action, dict) or not action.get("command"):
+                            continue
+                        try:
+                            self._verify_tool_action_row(evidence_conn, action,
+                                                         task_id=task_binding)
+                        except Failed as failure:
+                            problems.append(str(failure))
+                    # A session that finished has a final verification whose output
+                    # carries the suite markers `_session_completion` already
+                    # checked. Markers in prose are the same self-report as the
+                    # actions, so the command behind them is bound here as well.
+                    if session.get("task_completed") is True:
+                        final = session.get("final_verification")
+                        if isinstance(final, dict) and isinstance(final.get("command"),
+                                                                  str):
+                            candidate = {"command": final["command"],
+                                         "output": final.get("output", ""),
+                                         "tool_name": final.get("tool_name") or "shell",
+                                         "exit_code": final.get("exit_code", 0)}
+                            try:
+                                self._verify_tool_action_row(evidence_conn, candidate,
+                                                             task_id=task_binding)
+                            except Failed as failure:
+                                problems.append(
+                                    "the final verification action is not "
+                                    f"Evidence-backed: {failure}")
+                finally:
+                    evidence_conn.close()
+
         if problems:
             raise Failed("the agent session receipt does not stand up: " + "; ".join(problems))
         # The sealed bytes are receipts too, so they land in the seal with everything
         # else and the FINAL manifest can name them.
         sealed = [sealed_session]
         if pack.get("receipt", {}).get("path"):
-            sealed.append({"path": str(self.root / f"injected-{label}.pack.json"),
+            injected_path = self.root / f"injected-{label}.pack.json"
+            sealed.append({"path": str(injected_path),
                            "sha256": pack["receipt"]["sha256"],
+                           "bytes": (injected_path.stat().st_size
+                                     if injected_path.exists() else None),
                            "kind": f"injected-{label}-pack", "write": "sealed"})
         return {**session, "verified": {
             "commit": commit, "context_pack_id": pack["context_pack_id"],
@@ -1140,6 +1214,171 @@ class Gate:
             "session_transcript": sealed_session,
             "injection": injection,
             "sealed": sealed}}
+
+    def collect_tool_evidence(self, task_id: str, *, command: str, output: str,
+                                exit_code: int = 0, tool_name: str = "shell",
+                                step_id: str | None = None,
+                                session_id: str | None = None) -> str:
+        """Record one executed tool action through the real Evidence path.
+
+        This is the harness side of the binding `verify_session` checks: it is
+        called while the session is running, around a real execution, with the
+        verbatim command, its verbatim output and its exit code -- never
+        reconstructed afterwards from the agent's prose. The row is written by
+        the real `EvidenceStore.record_tool_result` with the system actor
+        (`gate.system`, kind `system`), the output goes to the gate workspace
+        as a `workspace:/...` artifact so Core hashes the bytes themselves, and
+        the identity of the capture is a pure function of its content: the
+        `turn_id`/`tool_use_id` derive from a content hash, an identical repeat
+        reuses the row found by lookup on `(task_id, tool_name,
+        command_sha256)`, and a repeat whose output differs is refused rather
+        than silently merged, because two executions that produced different
+        bytes are not the same capture.
+        """
+        from jasmine_core.evidence import EvidenceStore
+        from jasmine_core.state import StateStore
+
+        if not isinstance(command, str) or not command:
+            raise Failed("collect_tool_evidence needs the command that actually ran")
+        if not isinstance(output, str):
+            raise Failed("collect_tool_evidence needs the verbatim output as a string")
+        tool_name = tool_name or "shell"
+        command_sha256 = hashlib.sha256(command.encode("utf-8")).hexdigest()
+        output_sha256 = hashlib.sha256(output.encode("utf-8")).hexdigest()
+        conn = self.conn()
+        try:
+            state = StateStore(conn, schema_version=SCHEMA_VERSION)
+            if step_id is None:
+                existing = conn.execute(
+                    "SELECT step_id FROM steps WHERE task_id=? ORDER BY created_at,"
+                    "step_id LIMIT 1", (task_id,)).fetchone()
+                if existing is not None:
+                    step_id = existing["step_id"]
+                else:
+                    step_id = state.create_step(
+                        task_id, {"title": "gate tool evidence",
+                                  "host_id": self.host, "expected_revision": 1},
+                        actor_id=self.human, actor_kind="human",
+                        can_accept=False)["step"]["step_id"]
+            artifact_name = f"tool-output-{command_sha256[:12]}.txt"
+            artifact = self.workspace / artifact_name
+            artifact.write_text(output, encoding="utf-8")
+            reused = conn.execute(
+                "SELECT evidence_id, artifact_sha256 FROM evidence WHERE task_id=? AND"
+                " tool_name=? AND command_sha256=? ORDER BY created_at, evidence_id"
+                " LIMIT 1", (task_id, tool_name, command_sha256)).fetchone()
+            if reused is not None:
+                if reused["artifact_sha256"] != output_sha256:
+                    raise Failed(
+                        f"an Evidence row already binds {command!r} on task {task_id} "
+                        f"to different output bytes "
+                        f"({(reused['artifact_sha256'] or '')[:12]} stored, "
+                        f"{output_sha256[:12]} now). Two executions that produced "
+                        f"different bytes are not the same capture; recording this "
+                        f"under the same identity would merge them.")
+                return reused["evidence_id"]
+            seed = f"{self.case_id}|{task_id}|{tool_name}|{command}"
+            turn_id = "t-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8]
+            tool_use_id = hashlib.sha256(f"{seed}|tool".encode("utf-8")).hexdigest()[:8]
+            stored = EvidenceStore(conn, schema_version=SCHEMA_VERSION).record_tool_result(
+                {"task_id": task_id, "step_id": step_id, "host_id": self.host,
+                 "codex_session_id": self.case_id, "turn_id": turn_id,
+                 "tool_use_id": tool_use_id, "tool_name": tool_name,
+                 "tool_input": {"cmd": command},
+                 "tool_response": {"exit_code": exit_code, "stdout": output},
+                 **({"session_id": session_id} if session_id is not None else {}),
+                 "artifact_uri": f"workspace:/{artifact_name}"},
+                actor_id=self.system)
+            evidence = stored.get("evidence") or stored
+            return evidence.get("evidence_id") or evidence["evidence_id"]
+        finally:
+            conn.close()
+
+    def verify_tool_action(self, action: dict[str, Any], *, task_id: str,
+                           step_id: str | None = None) -> str:
+        """Bind one session-declared tool action to its Core Evidence row.
+
+        The row is looked up by `(task_id, tool_name, command_sha256)` -- the
+        same key `collect_tool_evidence` reuses -- and then checked field by
+        field: the stored command hash must equal the declared command's hash,
+        the stored output artifact hash must equal the declared output's bytes,
+        the stored exit status must match the declared one (PASS for exit 0,
+        FAIL otherwise, or an explicitly declared `status`), the recorded
+        `task_id` must be the session's own task, and any `session_id`,
+        `step_id` or `evidence_id` the action declares must match the row.
+        Anything absent or mismatched fails naming the action. Returns the
+        bound `evidence_id`.
+        """
+        conn = self.conn()
+        try:
+            return self._verify_tool_action_row(conn, action, task_id=task_id,
+                                                step_id=step_id)
+        finally:
+            conn.close()
+
+    def _verify_tool_action_row(self, conn: sqlite3.Connection,
+                                action: dict[str, Any], *, task_id: str,
+                                step_id: str | None = None) -> str:
+        """The row-level half of `verify_tool_action`, on the caller's connection."""
+        command = action.get("command") if isinstance(action, dict) else None
+        if not isinstance(command, str) or not command:
+            raise Failed(f"a tool action has no command: {action!r}")
+        if "output" not in action or not isinstance(action.get("output"), str):
+            raise Failed(f"the tool action {command!r} recorded no output to bind")
+        output = action["output"]
+        tool_name = action.get("tool_name") or "shell"
+        command_sha256 = hashlib.sha256(command.encode("utf-8")).hexdigest()
+        output_sha256 = hashlib.sha256(output.encode("utf-8")).hexdigest()
+        if "status" in action and action["status"] is not None:
+            declared_status = action["status"]
+        else:
+            exit_code = action.get("exit_code", 0)
+            declared_status = "PASS" if exit_code == 0 else "FAIL"
+        row = conn.execute(
+            "SELECT evidence_id, command_sha256, artifact_sha256, status, task_id,"
+            " step_id, session_id, tool_name FROM evidence WHERE task_id=? AND"
+            " tool_name=? AND command_sha256=? ORDER BY created_at, evidence_id"
+            " LIMIT 1", (task_id, tool_name, command_sha256)).fetchone()
+        if row is None:
+            raise Failed(
+                f"the tool action {command!r} binds to no Core Evidence: no row "
+                f"for task {task_id} with tool {tool_name!r} and command hash "
+                f"{command_sha256[:12]}. An action only the session describes is "
+                f"not an action that ran.")
+        if row["command_sha256"] != command_sha256:
+            raise Failed(
+                f"the tool action {command!r} names a command whose hash "
+                f"{command_sha256[:12]} differs from the stored row's "
+                f"{(row['command_sha256'] or '')[:12]}")
+        if row["artifact_sha256"] != output_sha256:
+            raise Failed(
+                f"the tool action {command!r} binds to Evidence {row['evidence_id']} "
+                f"whose stored output hash {(row['artifact_sha256'] or '')[:12]} is "
+                f"not the hash {output_sha256[:12]} of the output the session "
+                f"declared: the bytes differ, so this row is not this execution.")
+        if row["status"] != declared_status:
+            raise Failed(
+                f"the tool action {command!r} declares {declared_status} but its "
+                f"Evidence {row['evidence_id']} records {row['status']}")
+        if row["task_id"] != task_id:
+            raise Failed(
+                f"the tool action {command!r} is bound to task {row['task_id']}, not "
+                f"the session's task {task_id}")
+        wanted_step = step_id if step_id is not None else action.get("step_id")
+        if wanted_step is not None and row["step_id"] != wanted_step:
+            raise Failed(
+                f"the tool action {command!r} declares step {wanted_step!r} but its "
+                f"Evidence {row['evidence_id']} is bound to step {row['step_id']!r}")
+        if action.get("session_id") is not None and row["session_id"] != action["session_id"]:
+            raise Failed(
+                f"the tool action {command!r} declares session {action['session_id']!r} "
+                f"but its Evidence {row['evidence_id']} is bound to session "
+                f"{row['session_id']!r}")
+        if action.get("evidence_id") is not None and row["evidence_id"] != action["evidence_id"]:
+            raise Failed(
+                f"the tool action {command!r} declares Evidence {action['evidence_id']!r} "
+                f"but binds to {row['evidence_id']}")
+        return row["evidence_id"]
 
     def seal_session_artifacts(self, record: CaseRecord, session: dict[str, Any]) -> None:
         """Register a verified session's sealed bytes with the record.
@@ -1308,6 +1547,131 @@ def _first_difference(baseline: str, lesson: str) -> str:
             f"lesson-bearing {lesson[start:index + 40]!r}")
 
 
+def _history_data_blocks(rendered: str) -> list[dict[str, Any]]:
+    """The Memory data records the pack rendered, parsed back out of the bytes.
+
+    Each block after the `HISTORICAL_NONAUTHORITATIVE MEMORY DATA` marker is
+    one JSON record. The agent reads these bytes, so these bytes are what the
+    actionable-history checks below are asserted on -- not the pack's summary
+    fields about itself.
+    """
+    marker = "HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n"
+    blocks: list[dict[str, Any]] = []
+    for chunk in rendered.split(marker)[1:]:
+        line, _, _ = chunk.partition("\n")
+        try:
+            record = json.loads(line)
+        except ValueError:
+            raise Failed(f"a rendered Memory data block is not readable JSON: {line[:200]!r}")
+        if not isinstance(record, dict):
+            raise Failed("a rendered Memory data block is not an object")
+        blocks.append(record)
+    return blocks
+
+
+def _evidence_command(gate: Gate, evidence_id: str) -> str | None:
+    """The verbatim command behind an Evidence row, from Core's own Events.
+
+    The row keeps the command's hash; the words are in the `tool.call` Event
+    the trusted producer wrote. Returns `None` when no such Event names one.
+    """
+    conn = gate.conn()
+    try:
+        row = conn.execute("SELECT task_id, turn_id, tool_use_id, tool_name FROM evidence"
+                           " WHERE evidence_id=?", (evidence_id,)).fetchone()
+        if row is None:
+            return None
+        events = conn.execute(
+            "SELECT payload_json FROM events WHERE task_id=? AND event_type='tool.call'"
+            " ORDER BY seq", (row["task_id"],)).fetchall()
+    finally:
+        conn.close()
+    fallback: str | None = None
+    for event in events:
+        try:
+            payload = json.loads(event["payload_json"])
+        except ValueError:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        tool_input = payload.get("tool_input")
+        command = (tool_input.get("cmd", tool_input.get("command"))
+                   if isinstance(tool_input, dict) else None)
+        if not isinstance(command, str) or not command:
+            continue
+        if (payload.get("turn_id") == row["turn_id"]
+                and payload.get("tool_use_id") == row["tool_use_id"]):
+            return command
+        if fallback is None and payload.get("tool_name") == row["tool_name"]:
+            fallback = command
+    return fallback
+
+
+def _verify_g01_actionable_history(pack: dict[str, Any], *,
+                                   resolve_command=None) -> None:
+    """The lesson must arrive as sourced, actionable history -- and only there.
+
+    In addition to the Core-derived fact, each rendered Memory record must name
+    the failing command, the subject (the step and task that failed) and the
+    source pointers (`memory_id`, `evidence_ids`, `source_event_ids`), all of
+    which Core already holds, so rendering them is attribution rather than
+    invention. When `resolve_command` is given -- the live path, where a Core
+    database backs the pack -- the rendered command text must equal the
+    `tool_input.cmd` stored on the underlying Evidence row; a pack whose
+    actionable text disagrees with Core is refused. And no history material may
+    appear anywhere outside the labelled non-authoritative block: the Truth
+    sections above the marker must not carry the command, the memory id or the
+    fact text, or history would read as current Truth.
+    """
+    rendered = pack["rendered_content"]
+    truth, memory = _memory_section_split(rendered)
+    blocks = _history_data_blocks(rendered)
+    carried = {item["memory_id"]: item for item in pack.get("memory_selected") or []}
+    check(bool(blocks),
+          "the lesson-bearing pack rendered no Memory data block, so it carries no "
+          "actionable history a session could use")
+    for record in blocks:
+        memory_id = record.get("memory_id")
+        check(isinstance(memory_id, str) and memory_id in carried,
+              f"a rendered Memory record names {memory_id!r}, which this pack did "
+              f"not select: {sorted(carried)}")
+        text = record.get("text")
+        check(isinstance(text, str) and text.startswith("history:"),
+              f"the rendered Memory record for {memory_id} carries no history line, "
+              f"so a session reading it learns nothing actionable")
+        match = re.search(r"from `([^`]+)`", text)
+        check(match is not None,
+              f"the history for {memory_id} names no failing command, so there is "
+              f"nothing for a later session to run first")
+        command = match.group(1)
+        subject = (pack.get("memory_selected") or [{}])[0].get("source_task_id")
+        check((isinstance(subject, str) and subject and f"task {subject}" in text)
+              or "task tsk_" in text,
+              f"the history for {memory_id} names no subject task that failed")
+        for pointer in [memory_id, *(record.get("evidence_ids") or []),
+                        *(record.get("source_event_ids") or [])]:
+            check(isinstance(pointer, str) and pointer in text,
+                  f"the history for {memory_id} does not cite its source pointer "
+                  f"{pointer!r}")
+        if resolve_command is not None:
+            for evidence_id in record.get("evidence_ids") or []:
+                stored = resolve_command(evidence_id)
+                check(stored is not None,
+                      f"Core holds no command behind Evidence {evidence_id}, so the "
+                      f"history for {memory_id} cannot be re-derived")
+                check(stored == command,
+                      f"the pack renders the failing command as {command!r} but Core "
+                      f"records {stored!r} on Evidence {evidence_id}: the actionable "
+                      f"text and Core disagree")
+        # History outside the labelled block would read as current Truth.
+        check(command not in truth,
+              f"the failing command {command!r} also appears in the pack's Truth "
+              f"sections: history rendered as Truth is an oracle, not a lesson")
+        check(memory_id not in truth,
+              f"the memory {memory_id} also appears in the pack's Truth sections")
+    _ = memory
+
+
 def _require_only_memory_differs(pack: dict[str, Any],
                                  baseline_pack: dict[str, Any]) -> None:
     """Fail unless the two rendered packs differ in exactly one place: the Memory.
@@ -1368,6 +1732,42 @@ def _session_exploration(session: dict[str, Any], label: str) -> list[str]:
     wrong = sorted(name for name, value in declared.items() if not isinstance(value, bool))
     check(not wrong, f"{label} declared non-boolean exploration values for {wrong}")
     return sorted(name for name, value in declared.items() if value is True)
+
+
+def _require_exploration_backing(session: dict[str, Any], label: str) -> dict[str, list[str]]:
+    """Every performed category must name the tool action(s) evidencing it.
+
+    The vocabulary check (`_session_exploration`) says which categories the
+    session claims; this says what it did for each of them. A category declared
+    `true` with no backing action is a claim about work nothing records, and an
+    action named for a category that is not among the session's own recorded
+    `tool_actions` is a reference to work the receipt does not contain. Both
+    fail naming the category. Each named action must additionally pass the
+    Evidence cross-check in `verify_session`, which is what makes the backing
+    more than a second self-report.
+    """
+    declared = session.get("exploration") or {}
+    backing = session.get("exploration_actions")
+    check(isinstance(backing, dict),
+          f"{label} names no exploration_actions mapping, so no performed category "
+          f"is evidenced by a tool action: each category declared true must name "
+          f"the recorded action(s) behind it")
+    unknown = sorted(set(backing) - set(EXPLORATION_CATEGORIES))
+    check(not unknown,
+          f"{label} evidences categories outside the closed set: {unknown}")
+    commands = [action.get("command") for action in (session.get("tool_actions") or [])
+                if isinstance(action, dict)]
+    performed = sorted(name for name, value in declared.items() if value is True)
+    for name in performed:
+        cited = backing.get(name)
+        check(isinstance(cited, list) and bool(cited),
+              f"{label} claims it performed {name!r} but names no tool action "
+              f"evidencing it; a category without a backing action cannot count")
+        for command in cited:
+            check(command in commands,
+                  f"{label} claims {name!r} is evidenced by {command!r}, which is "
+                  f"not one of its recorded tool actions {commands}")
+    return {name: list(backing[name]) for name in performed}
 
 
 def _session_completion(session: dict[str, Any], label: str) -> dict[str, Any]:
@@ -1433,6 +1833,7 @@ def _pack_authority_rules(rendered: str) -> list[dict[str, Any]]:
 def case_g01(gate: Gate, record: CaseRecord) -> None:
     """A historical failure is recalled in a new session and changes what the agent does."""
     gate.require_real_agent()
+    gate.require_bank_namespace()
     key, baseline_key = "g01-with-lesson", "g01-no-lesson"
     resumed = gate.existing_pack(key)
     if resumed is not None:
@@ -1527,8 +1928,11 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     record.receipts.append(gate.receipt("g01-baseline-pack",
                                         {k: v for k, v in baseline_pack.items()
                                          if k != "rendered_content"}))
-    baseline = gate.verify_session(baseline_pack, "g01-baseline")
+    baseline = gate.verify_session(baseline_pack, "g01-baseline",
+                                     require_evidence_backed_actions=True)
     baseline["verified"]["exploration"] = _session_exploration(baseline, "the baseline session")
+    baseline["verified"]["exploration_backing"] = _require_exploration_backing(
+        baseline, "the baseline session")
     baseline["verified"]["completion"] = _session_completion(baseline, "the baseline session")
     gate.seal_session_artifacts(record, baseline)
     record.receipts.append(gate.receipt("g01-baseline-session", baseline["verified"]))
@@ -1566,8 +1970,22 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     # a second explanation for whatever the sessions did.
     _require_only_memory_differs(pack, baseline_pack)
 
-    session = gate.verify_session(pack, "g01-lesson")
+    # ...and the lesson must be usable, not merely traceable. The pack renders
+    # the Core-derived fact together with the failing command, the subject and
+    # the source pointers, inside the labelled non-authoritative block and
+    # nowhere else. On a live Gate the rendered command is re-derived from the
+    # Evidence row behind it; a scripted pack with no Core behind it is held to
+    # everything except that re-derivation. After the controls above, so a
+    # pack that was never a controlled experiment is refused as that first.
+    _verify_g01_actionable_history(
+        pack, resolve_command=((lambda evidence_id: _evidence_command(gate, evidence_id))
+                               if hasattr(gate, "conn") else None))
+
+    session = gate.verify_session(pack, "g01-lesson",
+                                  require_evidence_backed_actions=True)
     session["verified"]["exploration"] = _session_exploration(session, "the lesson-bearing session")
+    session["verified"]["exploration_backing"] = _require_exploration_backing(
+        session, "the lesson-bearing session")
     session["verified"]["completion"] = _session_completion(session, "the lesson-bearing session")
     gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g01-session", session["verified"]))
@@ -1579,9 +1997,11 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     # checkable here: the same question, the same repository, two real sessions that
     # both finished the task, and the lesson-bearing one must have skipped at least one
     # step from a vocabulary fixed in advance. What P3's pack can deliver is recorded,
-    # not imagined: by design it renders the Core-derived *fact* and never provider
+    # not imagined: by design it renders the Core-derived *fact* together with the
+    # failing command, the subject and the source pointers, and never provider
     # prose, so the lesson reaches the agent as "this project recorded a FAIL result for
-    # this suite before, and here are the Events behind it" -- not as a diagnosis. The
+    # this suite before, here is the command that failed, and here are the Events behind
+    # it" -- not as a diagnosis. The
     # count of tool commands is deliberately not the claim: the commands are in the
     # sealed transcripts the manifest names, and a saving is a named category that was
     # not performed, not a shorter list of strings.
@@ -1603,8 +2023,10 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
         "lesson_session": session["verified"]["session_transcript"],
         "baseline_injection": baseline["verified"]["injection"],
         "lesson_injection": session["verified"]["injection"],
-        "note": "P3 renders the Core-derived fact only, never provider prose, so the "
-                "lesson arrives as a traceable prior failure rather than as a diagnosis. "
+        "note": "P3 renders the Core-derived fact together with the failing "
+                "command, the subject and the source pointers, and never provider "
+                "prose, so the lesson arrives as a sourced, actionable prior "
+                "failure rather than as a diagnosis. "
                 "Benefit is a predefined exploration category the baseline performed and "
                 "the lesson side did not, with both sessions having completed the task; "
                 "fewer tool commands is not the claim, and the commands themselves are in "
@@ -1654,6 +2076,7 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
 def case_g02(gate: Gate, record: CaseRecord) -> None:
     """The current Truth wins over an older remembered Decision (VC-14/VC-15)."""
     gate.require_real_agent()
+    gate.require_bank_namespace()
     key = "g02-current-decision"
     resumed = gate.existing_pack(key)
     if resumed is not None:
@@ -1837,6 +2260,21 @@ def _verify_g02_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
         "recall outcome recorded in the sealed g02-recall receipt, which is where the "
         "superseded version actually appears.")
 
+    # 5. The premise, required rather than recorded: the sealed `g02-recall`
+    # receipt must show the superseded Decision filtered for exactly
+    # `superseded_decision`. Recording "observed or not" above is honest about
+    # where the filter appears; but a case whose recall never filtered the old
+    # version has no premise -- "the current Truth wins" would be a claim about
+    # a contest that never happened -- so it fails here with the premise named.
+    recall_sealed = gate.read_receipt("g02-recall")
+    recall_reasons = [row.get("reason")
+                      for row in (recall_sealed["payload"].get("filtered") or [])]
+    check("superseded_decision" in recall_reasons,
+          f"the sealed g02-recall receipt filters {recall_reasons}: the premise of "
+          f"this case is that the superseded Decision was filtered for exactly "
+          f"that reason, and without it there is no supersession for the current "
+          f"Truth to have won")
+
     record.receipts.append(gate.receipt("g02-pack", {k: v for k, v in pack.items()
                                                      if k != "rendered_content"}))
 
@@ -1845,6 +2283,10 @@ def _verify_g02_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     # answer itself, and it is asserted on both counts -- the current engine named,
     # the superseded one not named.
     session = gate.verify_session(pack, "g02", require_tool_actions=False)
+    # The `unnegated` scan below is auxiliary and blunt -- ordinary English can
+    # defeat a word list -- so the binding judgement is the independent review,
+    # bound by digest to this exact answer and sealed with the transcript.
+    session["verified"]["semantic_review"] = gate.semantic_review(session, "the G02 session")
     gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g02-session", session["verified"]))
     answer = (session.get("final_answer") or "").lower()
@@ -1860,6 +2302,7 @@ def _verify_g02_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
 def case_g03(gate: Gate, record: CaseRecord) -> None:
     """Asking about something never recorded yields an honest empty (VC-17)."""
     gate.require_real_agent()
+    gate.require_bank_namespace()
     key = "g03-unknown-protocol"
     resumed = gate.existing_pack(key)
     if resumed is not None:
@@ -1949,6 +2392,59 @@ def _verify_g03_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
           f"does not admit the absence: {answer[:300]!r}")
 
 
+def _verify_g04_recall_leg(gate: Gate, outcome: Any, *, project_id: str,
+                           expected_phrase: str, forbidden_phrase: str,
+                           label: str) -> None:
+    """One isolation leg must return the right project's memory, and only it.
+
+    An empty result used to pass: asserting that the other project's content is
+    absent from nothing proves nothing, and neither does a scan that never asks
+    which banks were queried or what `memory_filtered` holds. So each leg must
+    return a non-empty item list whose text carries this project's distinctive
+    Decision content and not the other's; the queried bank set must equal
+    exactly the deployment's own derivation for this project (`resolve_banks`
+    on the live connection -- B's bank, plus the global bank only where the
+    deployment configures one -- read from the actual query path rather than
+    spelled out here, so a leg that reached into A's bank fails); and every
+    item in both the selected list and the filtered list must carry a bank
+    belonging to the queried project, because a foreign item smuggled into
+    `filtered` is still a foreign item the recall touched.
+    """
+    items = list(outcome.items)
+    check(bool(items),
+          f"{label} returned no items, so isolation held vacuously: a leg that "
+          f"recalls nothing cannot show project memory stays in its project")
+    text = " ".join(item.text for item in items)
+    check(forbidden_phrase not in text,
+          f"project {project_id} recalled the other project's content: {text[:300]!r}")
+    check(expected_phrase in text,
+          f"{label} did not return this project's own content "
+          f"({expected_phrase!r} not in {text[:300]!r}): the leg cannot tell "
+          f"isolation from an empty bank")
+    conn = gate.conn()
+    try:
+        expected_banks = {bank.bank_id for bank in scope.resolve_banks(
+            conn, project_id=project_id, task_id=None, actor_id=gate.human)}
+    finally:
+        conn.close()
+    queried = {bank.bank_id for bank in outcome.banks}
+    check(queried == expected_banks,
+          f"{label} queried banks {sorted(queried)}, but this deployment derives "
+          f"{sorted(expected_banks)} for project {project_id}: a leg that asks "
+          f"another project's bank is not an isolation leg")
+    for item in items:
+        scoped = scope.scope_of(item.bank_id)
+        check(scoped is not None and scoped.project_id == project_id,
+              f"{label} returned item {item.memory_id} from bank {item.bank_id}, "
+              f"which does not belong to project {project_id}")
+    for row in outcome.filtered:
+        scoped = scope.scope_of(row.bank_id)
+        check(scoped is not None and scoped.project_id == project_id,
+              f"{label} filtered row {row.memory_id} carries bank {row.bank_id}, "
+              f"which does not belong to project {project_id}: a foreign item in "
+              f"`filtered` is still a foreign item this recall touched")
+
+
 def _acl_evidence(gate: Gate, record: CaseRecord) -> dict[str, Any]:
     """Run the ACL battery in its own database, namespace and server process."""
     import subprocess
@@ -1994,15 +2490,17 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
                          lease_owner=gate.case_id).tick(scan=False)
         finally:
             conn.close()
-    for query, project, forbidden in (
-        ("may I change the API shape", project_b, "change the API shape"),
-        ("must I stay API compatible", project_a, "stay API compatible"),
+    for query, project, expected, forbidden in (
+        ("may I change the API shape", project_b,
+         "stay API compatible", "change the API shape"),
+        ("must I stay API compatible", project_a,
+         "change the API shape", "stay API compatible"),
     ):
         outcome = gate.recall(project, query, max_tokens=600)
         record.memory_result_ids.extend(i.memory_result_id for i in outcome.items)
-        text = " ".join(item.text for item in outcome.items)
-        check(forbidden not in text,
-              f"project {project} recalled the other project's content: {text!r}")
+        _verify_g04_recall_leg(gate, outcome, project_id=project,
+                               expected_phrase=expected, forbidden_phrase=forbidden,
+                               label=f"the recall for project {project[:12]}")
     # A bank the query never derived cannot be injected by the caller.
     conn = gate.conn()
     try:
@@ -2020,7 +2518,12 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
     finally:
         conn.close()
     record.receipts.append(gate.receipt("g04-recall", {"project_a": project_a,
-                                                       "project_b": project_b}))
+                                                       "project_b": project_b,
+                                                       "legs": "each leg returned a non-empty "
+                                                       "item list carrying its own project's "
+                                                       "Decision content and none of the "
+                                                       "other's, over exactly the banks "
+                                                       "resolve_banks derives"}))
 
     # The ACL leg, in its own database and its own namespace, over the real
     # authenticated API with real keys. It cannot run in this one: `acl` is read from
@@ -2121,14 +2624,26 @@ def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
           "project B's pack carries project A's Decision; isolation did not hold at the "
           "pack, where an agent would actually read it")
     for item in pack["memory_selected"]:
-        check(item.get("bank", {}).get("project_id") in (None, project_b),
+        check(item.get("bank", {}).get("project_id") == project_b,
               f"project B's pack carries an item from another bank: {item.get('bank')}")
+    # ...and the filtered list is held to the same boundary: a foreign item
+    # that was refused is still a foreign item the query touched, and the pack
+    # is where an agent would read it.
+    for row in pack.get("memory_filtered") or []:
+        bank_id = row.get("bank_id")
+        scoped = scope.scope_of(bank_id) if isinstance(bank_id, str) else None
+        check(scoped is not None and scoped.project_id == project_b,
+              f"project B's pack filters a row from another bank: {row!r}")
     record.receipts.append(gate.receipt("g04-pack", {k: v for k, v in pack.items()
                                                      if k != "rendered_content"}))
 
     # The agent must answer from B's constraint alone. Naming A's rule would mean the
     # isolation leaked somewhere the database checks above cannot see.
     session = gate.verify_session(pack, "g04", require_tool_actions=False)
+    # The phrase check below is auxiliary and blunt; the binding judgement on
+    # what the answer says is the independent review, sealed with the
+    # transcript like G03's.
+    session["verified"]["semantic_review"] = gate.semantic_review(session, "the G04 session")
     gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g04-session", session["verified"]))
     answer = (session.get("final_answer") or "").lower()
@@ -2139,6 +2654,129 @@ def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     # substring tests disagreeing about what a denial looks like.
     for quote in unnegated(answer, "change the api shape"):
         raise Failed(f"the agent offered A's freedom to the B session: {quote!r}")
+
+
+def _verify_g05_hard_rule(gate: Gate, record: CaseRecord, project_id: str) -> str:
+    """This project's Truth must include an ACTIVE HARD Rule from Authority.
+
+    A soft rule -- or no rule at all -- would leave "Truth keeps working"
+    without a subject: there would be no enforced content whose reads the
+    outage half could exercise. The Rule comes through the real Authority path
+    (`confirm_decision`: propose plus approve), and what is asserted here is
+    the committed row, not the caller's memory of having proposed one.
+    """
+    conn = gate.conn()
+    try:
+        rows = conn.execute(
+            "SELECT r.rule_id, r.current_version AS version FROM rules r"
+            " JOIN rule_versions v ON v.rule_id=r.rule_id AND v.version=r.current_version"
+            " WHERE r.status='ACTIVE' AND r.scope_kind='project' AND r.project_id=?"
+            " AND v.severity='HARD' ORDER BY r.rule_id", (project_id,)).fetchall()
+    finally:
+        conn.close()
+    check(bool(rows),
+          f"project {project_id} holds no ACTIVE HARD Rule, so the outage half "
+          f"would exercise nothing Authority enforces")
+    record.receipts.append(gate.receipt("g05-hard-rule", {
+        "project_id": project_id,
+        "rules": [{"rule_id": row["rule_id"], "version": row["version"]} for row in rows]}))
+    return rows[0]["rule_id"]
+
+
+def _verify_g05_checkpoint(gate: Gate, record: CaseRecord, checkpoint_id: str) -> dict[str, Any]:
+    """The Checkpoint must read back through the real Continuity path.
+
+    Creating bytes and calling them a checkpoint proves nothing about the
+    State/Checkpoint flow running; the receipt below names a checkpoint Core
+    itself returns, or the case fails naming the id.
+    """
+    from jasmine_core import errors
+    from jasmine_core.continuity import ContinuityStore
+
+    conn = gate.conn()
+    try:
+        try:
+            checkpoint = ContinuityStore(
+                conn, schema_version=SCHEMA_VERSION).get_checkpoint(checkpoint_id)
+        except errors.CoreError as exc:
+            raise Failed(f"the G05 checkpoint {checkpoint_id} does not read back "
+                         f"through Continuity: {exc}")
+    finally:
+        conn.close()
+    record.receipts.append(gate.receipt("g05-checkpoint", {
+        "checkpoint_id": checkpoint["checkpoint_id"],
+        "task_id": checkpoint["task_id"],
+        "reason": checkpoint["reason"]}))
+    return checkpoint
+
+
+def _verify_g05_outage_hold(gate: Gate, record: CaseRecord, *,
+                            expected_job_ids: list[str]) -> None:
+    """While the engine is unreachable, the lesson job must wait, not drain.
+
+    A job that reaches DONE against a dead engine completed nothing -- the
+    remote write never happened -- and a recovery that then "finishes" it
+    would be a claim about work nobody did. Every tracked job has to still be
+    PENDING, which is the state a retryable engine failure leaves.
+    """
+    conn = gate.conn()
+    try:
+        store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
+        for job_id in expected_job_ids:
+            job = store.job(job_id)
+            check(job is not None,
+                  f"outage job {job_id} vanished from Core while the engine was down")
+            check(job["status"] == "PENDING",
+                  f"outage job {job_id} is {job['status']} while the engine was "
+                  f"unreachable: the job drained during the outage instead of "
+                  f"waiting to retry")
+    finally:
+        conn.close()
+    record.engine_evidence["outage_hold"] = {
+        "pending": sorted(expected_job_ids),
+        "note": "every tracked retain job was still PENDING after a drain attempt "
+                "against the unreachable engine"}
+
+
+def _verify_g05_recovery(gate: Gate, record: CaseRecord, *, expected_job_ids: list[str],
+                         memory_ids: list[str]) -> dict[str, list[str]]:
+    """After the engine returns, the *same* jobs finish, and nothing duplicates.
+
+    Three absences in one: a tracked job that is not DONE did not recover; a
+    DONE job for the same memory that is not tracked means recovery finished
+    something else (a re-enqueue, a second attempt chain, a different job id);
+    and two document ids behind one memory id mean the recovery wrote the
+    lesson twice. Each fails naming the job or the memory.
+    """
+    conn = gate.conn()
+    try:
+        store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
+        for job_id in expected_job_ids:
+            job = store.job(job_id)
+            check(job is not None,
+                  f"outage job {job_id} vanished from Core before recovery finished")
+            check(job["status"] == "DONE",
+                  f"outage job {job_id} is {job['status']} after the engine "
+                  f"recovered: recovery must drain the same job, not another one")
+        for memory_id in memory_ids:
+            rows = conn.execute(
+                "SELECT job_id, document_id, status FROM memory_jobs WHERE memory_id=?"
+                " AND kind='retain' ORDER BY job_id", (memory_id,)).fetchall()
+            done = [row for row in rows if row["status"] == "DONE"]
+            extra = sorted(row["job_id"] for row in done if row["job_id"] not in expected_job_ids)
+            check(not extra,
+                  f"memory {memory_id} was recovered by a different job id: "
+                  f"{extra} reached DONE alongside the tracked {sorted(expected_job_ids)}")
+            documents = sorted({row["document_id"] for row in done})
+            check(len(documents) == 1,
+                  f"memory {memory_id} is carried by {len(documents)} documents "
+                  f"{documents}: recovery created a second document for the same "
+                  f"memory")
+    finally:
+        conn.close()
+    record.receipts.append(gate.receipt("g05-recovery", {
+        "drained": sorted(expected_job_ids), "memories": sorted(memory_ids)}))
+    return {"drained": sorted(expected_job_ids)}
 
 
 def case_g05(gate: Gate, record: CaseRecord) -> None:
@@ -2156,20 +2794,117 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
     # BLOCKED and looked exactly like "P3 is not merged". A Gate cannot report a
     # precondition as satisfied by not running.
     probed = gate.require_engine()
+    gate.require_bank_namespace()
     project = gate.seed_project("g05")
     record.project_ids.append(project)
-    task_revision_before = None
+
+    # A HARD Rule through the real Authority path, a State step and a
+    # Checkpoint through the real Continuity/State path: VC-22's "Truth keeps
+    # working" needs subjects whose reads the outage can exercise, and each is
+    # recorded before anything is allowed to fail.
+    rule_id = gate.confirm_decision(
+        project, content="G05 pins the deploy checklist before every release",
+        rule_key="g05.deploy-checklist")
+    _verify_g05_hard_rule(gate, record, project)
+
+    from jasmine_core.authority import AuthorityStore
+    from jasmine_core.continuity import ContinuityStore
+    from jasmine_core.state import StateStore
+
     conn = gate.conn()
     try:
-        job_id, document_id, source_event_id = gate.retain_lesson(
-            project, reason="the device test failed before the callback change")
-        record.job_ids.append(job_id)
-        record.document_ids.append(document_id)
-        record.source_event_ids.append(source_event_id)
-        task_revision_before = conn.execute("SELECT MAX(revision) AS r FROM tasks").fetchone()["r"]
-        record.state_revision_before = task_revision_before
+        record.rule_versions.append(
+            f"{rule_id}:{AuthorityStore(conn, schema_version=SCHEMA_VERSION).get(rule_id)['version']}")
     finally:
         conn.close()
+
+    conn = gate.conn()
+    try:
+        truth_task = ObjectStore(conn, schema_version=SCHEMA_VERSION).create(NewObject.task({
+            "project_id": project, "title": "p4 g05 truth continues",
+            "host_id": gate.host}), actor_id=gate.human)["object"]["task_id"]
+        state = StateStore(conn, schema_version=SCHEMA_VERSION)
+        truth_step = state.create_step(truth_task, {"title": "s", "host_id": gate.host,
+                                                    "expected_revision": 1},
+                                       actor_id=gate.human, actor_kind="human",
+                                       can_accept=False)["step"]["step_id"]
+    finally:
+        conn.close()
+    truth_prompt = gate.event(project, "user.prompt", "g05 truth continues",
+                              task_id=truth_task)
+    record.source_event_ids.append(truth_prompt)
+    conn = gate.conn()
+    try:
+        checkpoint = ContinuityStore(conn, schema_version=SCHEMA_VERSION).create(
+            {"host_id": gate.host, "source_event_id": truth_prompt,
+             "idempotency_key": "g05-truth-checkpoint", "task_id": truth_task,
+             "reason": "MANUAL"}, actor_id=gate.human)["checkpoint"]
+        checkpoint_id = checkpoint["checkpoint_id"]
+    finally:
+        conn.close()
+    _verify_g05_checkpoint(gate, record, checkpoint_id)
+
+    # The lesson, retained but not yet drained: a PENDING job the outage will
+    # hold. This is `retain_lesson`'s chain stopped before the drain -- a real
+    # failure, a real FAIL Evidence, a real enqueue -- so the job below is the
+    # one the recovery has to finish, by id.
+    from jasmine_core.evidence import EvidenceStore
+
+    conn = gate.conn()
+    try:
+        lesson_task = gate.new_task(project, "device test (outage lesson)")
+        lesson_state = StateStore(conn, schema_version=SCHEMA_VERSION)
+        lesson_step = lesson_state.create_step(
+            lesson_task, {"title": "device test", "host_id": gate.host,
+                          "expected_revision": 1},
+            actor_id=gate.human, actor_kind="human", can_accept=False)["step"]["step_id"]
+        lesson_state.transition_step(
+            lesson_step, {"status": "IN_PROGRESS", "expected_revision": 1,
+                          "host_id": gate.host},
+            actor_id=gate.human, actor_kind="human", can_accept=False)
+        lesson_state.transition_step(
+            lesson_step, {"status": "FAILED",
+                          "reason": "the device test failed before the callback change",
+                          "expected_revision": 2, "host_id": gate.host},
+            actor_id=gate.human, actor_kind="human", can_accept=False)
+        EvidenceStore(conn, schema_version=SCHEMA_VERSION).record_tool_result(
+            {"task_id": lesson_task, "step_id": lesson_step, "host_id": gate.host,
+             "codex_session_id": gate.case_id, "turn_id": f"t-{ids.new_id('evt')[-8:]}",
+             "tool_use_id": ids.new_id("evt")[-8:], "tool_name": "pytest",
+             "tool_input": {"cmd": "pytest -q"},
+             "tool_response": {"exit_code": 1},
+             "artifact_uri": "workspace:/source.txt"},
+            actor_id=gate.system)
+        report = jobs_module.JobStore(
+            conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)
+        ).enqueue_from_sources(eligibility.SourceRegistry())
+        check(bool(report["created"]),
+              f"no eligible source was created; the committed failure did not reach the "
+              f"enqueuer: {report['ineligible']}")
+        rows = conn.execute(
+            "SELECT * FROM memory_jobs WHERE task_id=? AND kind='retain' ORDER BY job_id",
+            (lesson_task,)).fetchall()
+        pending = [jobs_module.job_row(row) for row in rows]
+        check(bool(pending),
+              f"the enqueue created no retain job for the lesson task {lesson_task}")
+        check(all(job["status"] == "PENDING" for job in pending),
+              f"a lesson job left PENDING before the outage began: "
+              f"{[(j['job_id'], j['status']) for j in pending]}")
+        outage_job_ids = [job["job_id"] for job in pending]
+        outage_memory_ids = sorted({job["memory_id"] for job in pending})
+        record.job_ids.extend(outage_job_ids)
+        record.document_ids.extend(sorted({job["document_id"] for job in pending}))
+        lesson_evidence = conn.execute(
+            "SELECT change_event_id FROM evidence WHERE task_id=? ORDER BY created_at"
+            " LIMIT 1", (lesson_task,)).fetchone()
+        if lesson_evidence is not None:
+            record.source_event_ids.append(lesson_evidence["change_event_id"])
+    finally:
+        conn.close()
+    record.receipts.append(gate.receipt("g05-pending", {
+        "task_id": lesson_task, "job_ids": sorted(outage_job_ids),
+        "memory_ids": outage_memory_ids,
+        "documents": sorted({job["document_id"] for job in pending})}))
     # Inject unreachability for the *isolated client configuration* only. This
     # points a second transport at a dead port; it does not stop the operator's
     # service, and it does not use a fake exception.
@@ -2186,54 +2921,71 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
     check(bool(outcome.degraded_banks), "the failing bank is not named")
     check(outcome.trace_id is not None, "a degraded recall must still leave a trace")
 
-    # Truth continues: a State write and an Evidence capture with the engine down.
-    from jasmine_core.state import StateStore
-
+    # The outage: a drain is attempted and must change nothing, while Truth
+    # operations -- a Rule read, a State read, a Checkpoint read -- keep
+    # working, each with its receipt.
     gate.transport = dead
-    conn = gate.conn()
     try:
-        task_id = ObjectStore(conn, schema_version=SCHEMA_VERSION).create(NewObject.task({
-            "project_id": project, "title": "p4 g05 continues", "host_id": gate.host}),
-            actor_id=gate.human)["object"]["task_id"]
-        state = StateStore(conn, schema_version=SCHEMA_VERSION)
-        step = state.create_step(task_id, {"title": "s", "host_id": gate.host,
-                                           "expected_revision": 1},
-                                 actor_id=gate.human, actor_kind="human",
-                                 can_accept=False)["step"]["step_id"]
-        before = conn.execute("SELECT revision FROM tasks WHERE task_id=?",
-                              (task_id,)).fetchone()["revision"]
-        moved = state.transition_step(step, {"status": "IN_PROGRESS", "expected_revision": 1,
-                                             "host_id": gate.host},
-                                      actor_id=gate.human, actor_kind="human",
-                                      can_accept=False)
-        record.state_revision_after = moved["task_revision"]
-        record.state_revision_before = before
-        record.engine_evidence["truth_during_outage"] = {
-            "step": moved["step"]["status"], "task_revision": moved["task_revision"]}
+        conn = gate.conn()
+        try:
+            gate.drain(conn)
+        finally:
+            conn.close()
+        _verify_g05_outage_hold(gate, record, expected_job_ids=outage_job_ids)
+        conn = gate.conn()
+        try:
+            held_rule = AuthorityStore(conn, schema_version=SCHEMA_VERSION).get(rule_id)
+            held_step = conn.execute("SELECT step_id, status FROM steps WHERE step_id=?",
+                                     (truth_step,)).fetchone()
+            check(held_step is not None, "the State step vanished during the outage")
+            held_checkpoint = ContinuityStore(
+                conn, schema_version=SCHEMA_VERSION).get_checkpoint(checkpoint_id)
+            record.receipts.append(gate.receipt("g05-truth-during-outage", {
+                "rule": {"rule_id": held_rule["rule_id"],
+                         "version": held_rule["version"],
+                         "status": held_rule["status"]},
+                "step": {"step_id": held_step["step_id"], "status": held_step["status"]},
+                "checkpoint": {"checkpoint_id": held_checkpoint["checkpoint_id"],
+                               "task_id": held_checkpoint["task_id"]}}))
+            record.engine_evidence["truth_during_outage"] = {
+                "rule": held_rule["rule_id"], "step": held_step["status"],
+                "checkpoint": held_checkpoint["checkpoint_id"]}
+        finally:
+            conn.close()
     finally:
         gate.transport = original
-        conn.close()
-    check(record.state_revision_after == (record.state_revision_before or 0) + 1,
-          f"Truth did not advance while Memory was down: "
-          f"{record.state_revision_before} -> {record.state_revision_after}")
-    del task_revision_before
 
-    # Recovery: the same job path completes and there is no duplicate document.
+    # Recovery: the engine answers again, the same jobs drain to DONE with no
+    # second document, and the remote document carries every extracted unit.
     recovered = gate.recall(project, "device test", max_tokens=400)
     check(recovered.status == "ok", f"the engine did not recover: {recovered.as_dict()}")
+    conn = gate.conn()
+    try:
+        gate.drain(conn)
+    finally:
+        conn.close()
+    _verify_g05_recovery(gate, record, expected_job_ids=outage_job_ids,
+                         memory_ids=outage_memory_ids)
     bank = scope.project_bank(project)
-    units = gate.engine_units(bank, document_id)
-    # Not a unit count. Hindsight extracts *several* facts from one document --
-    # two from a single short lesson -- and how many is the engine's business, not
-    # P4's: `document_id` is the idempotency key, so "recovery did not duplicate
-    # anything" is a statement about documents and about Core, both of which are
-    # counted below. Asserting one unit would mean this Gate could only ever pass
-    # against a double that fabricates one unit per document.
-    check(bool(units), "recovery left the document in the engine with no memory unit")
-    check(gate.engine_document(bank, document_id) is not None,
-          "recovery lost the remote document")
+    recovered_units = 0
+    for document_id in sorted(set(record.document_ids)):
+        units = gate.engine_units(bank, document_id)
+        # Not a unit count. Hindsight extracts *several* facts from one document --
+        # two from a single short lesson -- and how many is the engine's business, not
+        # P4's: `document_id` is the idempotency key, so "recovery did not duplicate
+        # anything" is a statement about documents and about Core, both of which are
+        # counted below. Asserting one unit would mean this Gate could only ever pass
+        # against a double that fabricates one unit per document.
+        check(bool(units), "recovery left the document in the engine with no memory unit")
+        document = gate.engine_document(bank, document_id)
+        check(document is not None,
+              "recovery lost the remote document")
+        check(int(document.get("memory_unit_count") or 0) == len(units),
+              f"the engine reports {document.get('memory_unit_count')} units but lists "
+              f"{len(units)}; the Gate would be reading one page as the whole")
+        recovered_units += len(units)
     record.engine_evidence["probe"] = probed
-    record.engine_evidence["recovered_document_units"] = len(units)
+    record.engine_evidence["recovered_document_units"] = recovered_units
     record.receipts.append(gate.receipt("g05-degraded", {
         "degraded": outcome.as_dict(), "recovered": recovered.as_dict()}))
     # The connection, Truth-continues and recovery halves are real. G05 also
@@ -2296,7 +3048,12 @@ def _verify_g05_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
 
     # The agent has to keep working from Truth, and has to say that Memory was not
     # consulted rather than pretending the project has no history.
-    session = gate.verify_session(pack, "g05", require_tool_actions=True)
+    session = gate.verify_session(pack, "g05", require_tool_actions=True,
+                                  require_evidence_backed_actions=True)
+    # The `unnegated` scans below are auxiliary and blunt; the binding judgement
+    # on what the answer says is the independent review, bound by digest to
+    # this exact answer and sealed with the transcript.
+    session["verified"]["semantic_review"] = gate.semantic_review(session, "the G05 session")
     gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g05-session", session["verified"]))
     answer = (session.get("final_answer") or "").lower()
@@ -2470,6 +3227,7 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
 
 
     probed = gate.require_engine()
+    gate.require_bank_namespace()
     project = gate.seed_project("g06")
     record.project_ids.append(project)
 
@@ -2773,6 +3531,7 @@ def _latest_decision_event(conn: sqlite3.Connection, project_id: str) -> str:
 
 def case_g07(gate: Gate, record: CaseRecord) -> None:
     gate.require_real_agent()
+    gate.require_bank_namespace()
     key = "g07-lifecycle-pack"
     resumed = gate.existing_pack(key)
     if resumed is not None:
@@ -3063,12 +3822,33 @@ def _verify_g07_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
                   f"memory source Event {token} also appears in the Truth sections, so "
                   f"the memory is presented as current rather than as history")
 
-    # The obsolete half: neither its id nor its words may appear.
-    check(obsolete_memory_id not in json.dumps(pack, ensure_ascii=False),
-          f"the obsoleted memory {obsolete_memory_id} is still in the pack")
-    check(obsolete_text.lower() not in pack["rendered_content"].lower(),
-          f"the obsoleted memory's own text ({obsolete_text!r}) is in the rendered "
-          f"pack; obsolete means not injected, not injected-with-a-warning")
+    # The obsolete half: exclusion by actual identity and provenance, never by
+    # unrendered prose. The old check searched the rendered pack for the retain
+    # *reason* string, which P3's renderer never emits -- it could not fail. A
+    # retired item is excluded when nothing in the pack references it: not its
+    # id among the selected memories, not its id inside any source_event_ids
+    # list the pack cites, and not its id among the qualified provenance. Each
+    # names what leaked, because "obsolete means not injected" is three
+    # absences and any one of them failing is the leak.
+    selected_ids = [item.get("memory_id") for item in pack["memory_selected"]]
+    check(obsolete_memory_id not in selected_ids,
+          f"the obsoleted memory {obsolete_memory_id} is still selected in the pack")
+    for item in pack["memory_selected"]:
+        check(obsolete_memory_id not in (item.get("source_event_ids") or []),
+              f"the obsoleted memory {obsolete_memory_id} is cited in the source "
+              f"events of selected item {item.get('memory_id')!r}")
+    for row in pack.get("memory_filtered") or []:
+        check(obsolete_memory_id not in (row.get("source_event_ids") or []),
+              f"the obsoleted memory {obsolete_memory_id} is cited in the source "
+              f"events of filtered row {row.get('memory_id')!r}")
+    provenance_ids = [row.get("memory_id") for row in pack["qualified_provenance"]]
+    check(obsolete_memory_id not in provenance_ids,
+          f"the obsoleted memory {obsolete_memory_id} is still in the pack's "
+          f"qualified provenance")
+    for row in pack["qualified_provenance"]:
+        check(obsolete_memory_id not in (row.get("source_event_ids") or []),
+              f"the obsoleted memory {obsolete_memory_id} is cited in the source "
+              f"events of provenance row {row.get('memory_id')!r}")
 
     # The source read-back, at the level the pack claims: every provenance row it
     # carries must name Events that exist, in this project, on this Task's lineage.
@@ -3529,6 +4309,10 @@ def _evidence_scope(work: Path, records: list[CaseRecord],
                                f"({operator_config['sha256'][:12]}): the operator "
                                f"configuration this run used, byte for byte",
             "phase_seal": "the phase seal itself: every receipt it covers, with its digest",
+            "manifest_anchor": "phase*-manifest-*.sha256 beside the work directory: "
+                               "written once after the manifest, holding that "
+                               "manifest's own digest, so a rewritten verdict is "
+                               "visible against it",
         },
         "hashed_not_content_sealed": {
             "databases": databases,
@@ -3544,6 +4328,9 @@ def _evidence_scope(work: Path, records: list[CaseRecord],
             "transcript copy of it are evidence here",
             "workspace files behind an Evidence `artifact_uri`: Core stores their hash, "
             "and this Gate keeps no sealed copy of the bytes",
+            "session tool Evidence rows: they are Core rows like any other, covered "
+            "only by the case database digest, and bound to the session's declared "
+            "actions by command, output, status and task at verification time",
             "the model: nothing in this run claims the engine's extractor was correct, "
             "only that Core verified the provenance it was given",
         ],
