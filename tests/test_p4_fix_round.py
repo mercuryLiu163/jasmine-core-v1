@@ -622,12 +622,15 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
                 item.memory_id=identity
                 mapped=worker._item_for(conn,item)
                 one=filter_memory(conn,{'items':[mapped],'banks':[{**mapped['bank'],'status':'ok'}],'status':'ok'},projection,schema_version=self.module.SCHEMA_VERSION)
+                self.assertEqual(len(mapped['source_event_ids']),8,identity)
+                self.assertEqual(len(mapped['evidence_ids']),4,identity)
+                self.assertEqual([entry['memory_id'] for entry in one['selected']],[identity])
                 budgeted=renderer.render(projection,{'reconciliation_required':False},None,one,tokenizer,source_event_id=mapped['source_event_ids'][0])
                 self.assertEqual(budgeted['omissions'],[],identity)
                 marker='HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n'
                 memory_block=marker+budgeted['rendered_content'].split(marker,1)[1]
                 if tokenizer.identity.get('name') == 'tiktoken':
-                    self.assertLessEqual(tokenizer.count(memory_block),760,identity)
+                    self.assertLessEqual(tokenizer.count(memory_block),800,identity)
                 for pointer in mapped['source_event_ids']+mapped['evidence_ids']:
                     self.assertIn(pointer,memory_block)
         finally:

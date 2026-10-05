@@ -472,9 +472,35 @@ cache with `PYTHONPATH=src:tests`: modules `tests.test_p4_partial_failure_resume
 `/tmp/p4-terminal-replay-targeted.log`. The budget regression starts with an
 actual stored Core-generated memory ID plus sixteen additional Core-generated
 random identities, checks every identity without selection, and asserts full
-source/Evidence delivery and a complete pinned-tokenizer Memory block at most
-760 tokens (at least 40 tokens below the unchanged 800 cap). The additional
+source/Evidence delivery and a complete pinned-tokenizer Memory block within
+the unchanged 800-token cap. The additional
 identities are component stress inputs; the referenced execution sources and
 Evidence are the actual captured chain. These regressions do not represent
 native Agent samples or a completed G01 pair. Independent final review,
 fullsuite, seven Gates and repeated resume remain outstanding.
+
+
+## Budget-regression correction after bc53aa8
+
+Independent review of `bc53aa8` passed, and its independent full suite ran 1035
+tests, PASS with zero skips. A subsequent fresh-source budget probe exercised all
+17 random identities and measured 755–765 tokens per complete Memory block, with
+all eight source Events/four Evidence IDs rendered and no omissions. The measured
+minimum headroom was 35 tokens for that probe; headroom varies with source bytes
+and random identifiers and is not guaranteed for future inputs. The probe correctly
+failed the newly added implementation-test assertion of at most 760 tokens, not
+the original 800-token Gate contract. That failed probe and its logs remain
+preserved, and no sample is excluded to make the result pass.
+
+The minimal correction changes only that implementation-test bound to the
+original 800-token allocation, adds explicit checks that every sampled identity
+is selected and all eight source/four Evidence references render, and corrects
+the documentation. Runtime, Gate allocation, prompt, exploration categories and
+benefit threshold are unchanged. Native G01 pair/benefit claims still require
+independent execution; these component budget observations do not supply them.
+
+Correction verification: the same four production unittest modules ran **94
+tests, OK, zero skips** (4.297s), using the existing `venv-p4` Python and pinned
+`tiktoken-cache`. Log: `/tmp/p4-budget-contract-correction-targeted.log`.
+This is the targeted test/doc follow-up result; independent validation will bind
+final fullsuite and real probes/Gates/resume to the new clean candidate.
