@@ -1224,6 +1224,11 @@ def _acl_evidence(gate: Gate, record: CaseRecord) -> dict[str, Any]:
 
 def case_g04(gate: Gate, record: CaseRecord) -> None:
     """Project A's memory never appears in project B (VC-18/VC-19)."""
+    gate.require_real_agent()
+    key = "g04-project-b-pack"
+    resumed = gate.existing_pack(key)
+    if resumed is not None:
+        return _verify_g04_pack(gate, record, resumed)
     from jasmine_core import errors
 
     gate.require_p3_pack()
@@ -1272,6 +1277,17 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
     record.receipts.append(gate.receipt("g04-recall", {"project_a": project_a,
                                                        "project_b": project_b}))
 
+    # Project B's own pack: the question A was never allowed to see, asked in B.
+    # A pack is where cross-project isolation has to hold, because a pack is what
+    # an agent actually reads.
+    task_id = gate.new_task(project_b, "API compatibility")
+    prompt = gate.event(project_b, "user.prompt",
+                        "may I change the API shape?", task_id=task_id)
+    record.source_event_ids.append(prompt)
+    pack = gate.build_pack(project_id=project_b, task_id=task_id,
+                           prompt_event_id=prompt, key=key)
+    _verify_g04_pack(gate, record, pack, project_a, project_b)
+
     # The ACL leg, in its own database and its own namespace, over the real
     # authenticated API with real keys. It cannot run in this one: `acl` is read from
     # the environment on every `ProjectAccess` construction, so proving it would mean
@@ -1294,12 +1310,6 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
             acl["agent_manage_key_refused_at_issuance"],
     }
 
-    raise Blocked(
-        "cross-project isolation, bank-injection refusal and a real multiuser ACL run over "
-        "the authenticated API are recorded; the ACL half ran in its own database under "
-        f"`acl`, while this case's own reads ran under `{scope.deployment_mode()}`. "
-        "Remaining: the actual P3 pack for B."
-    )
 
 
 def case_g05(gate: Gate, record: CaseRecord) -> None:
@@ -2050,3 +2060,36 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+
+def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
+                     project_a: str, project_b: str) -> None:
+    """Project B's pack must carry B's constraint and nothing of A's."""
+    record.context_pack_ids.append(pack["context_pack_id"])
+    check(pack["project_id"] == project_b,
+          f"the pack was built for {pack['project_id']}, not project B")
+
+    rendered = pack["rendered_content"]
+    check("must stay API compatible" in rendered.lower(),
+          "project B's pack does not carry B's own Decision")
+    check("change the api shape freely" not in rendered.lower(),
+          "project B's pack carries project A's Decision; isolation did not hold at the "
+          "pack, where an agent would actually read it")
+    check(project_a not in rendered,
+          f"project B's pack names project A's id ({project_a})")
+    for item in pack["memory_selected"]:
+        check(item.get("bank", {}).get("project_id") in (None, project_b),
+              f"project B's pack carries an item from another bank: {item.get('bank')}")
+    record.receipts.append(gate.receipt("g04-pack", {k: v for k, v in pack.items()
+                                                     if k != "rendered_content"}))
+
+    # The agent must answer from B's constraint alone. Naming A's rule would mean the
+    # isolation leaked somewhere the database checks above cannot see.
+    session = gate.verify_session(pack, "g04", require_tool_actions=False)
+    record.receipts.append(gate.receipt("g04-session", session["verified"]))
+    answer = (session.get("final_answer") or "").lower()
+    check("api compatible" in answer,
+          f"the agent did not state B's constraint: {answer[:300]!r}")
+    check("change the api shape" not in answer,
+          f"the agent offered A's freedom to the B session: {answer[:300]!r}")
