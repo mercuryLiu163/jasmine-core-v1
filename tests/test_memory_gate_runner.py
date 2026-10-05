@@ -339,6 +339,7 @@ class NoCaseReturnsWithoutItsEvidence(unittest.TestCase):
         evidenced = set()
         for case_id in CASES:
             module = self.runner
+            final = self._final_statement(module.CASES_BY_ID[case_id].__name__)
             source = inspect.getsource(module.CASES_BY_ID[case_id])
             # A case may hand its last statement to a module-level verifier, and the
             # evidence is then performed there -- so follow the delegation rather than
