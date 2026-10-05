@@ -1387,8 +1387,11 @@ def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     answer = (session.get("final_answer") or "").lower()
     check("api compatible" in answer,
           f"the agent did not state B's constraint: {answer[:300]!r}")
-    check("change the api shape" not in answer,
-          f"the agent offered A's freedom to the B session: {answer[:300]!r}")
+    # "must not change the API shape" is the correct answer and contains the phrase.
+    # Third case to need this: the shared helper says so once instead of three bare
+    # substring tests disagreeing about what a denial looks like.
+    for quote in unnegated(answer, "change the api shape"):
+        raise Failed(f"the agent offered A's freedom to the B session: {quote!r}")
 
 
 def case_g05(gate: Gate, record: CaseRecord) -> None:
@@ -1663,6 +1666,20 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
     record.project_ids.append(project)
 
     # -- Window 1: Truth committed, process gone before the enqueue. --------
+    # Snapshot before window 1, compare after. The property is that window 1's commit
+    # enqueued nothing -- not that the job table happens to be empty. Those differ the
+    # moment this case is verified twice in one work directory, which is what --resume
+    # does: phase 1's window 2 legitimately left a job behind, so the absolute check
+    # failed on a correct run. Taking the snapshot *after* window 1 would be no better --
+    # it would fold window 1's own effect into the baseline and check nothing.
+    conn = gate.conn()
+    try:
+        jobs_before = {j["job_id"] for j in jobs_module.JobStore(
+            conn, MemoryStore(conn, schema_version=SCHEMA_VERSION)).jobs()}
+    finally:
+        conn.close()
+
+
     gate.spawn_worker(
         """
         g = boot()
@@ -1679,8 +1696,9 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
     conn = gate.conn()
     try:
         job_store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
-        check(job_store.jobs() == [],
-              "a dead process still left a job: the enqueue is not where it should be")
+        jobs_after = {j["job_id"] for j in job_store.jobs()}
+        check(jobs_after == jobs_before,
+              f"the committed process enqueued work: {sorted(jobs_after - jobs_before)}")
         check(job_store.cursor() == 0,
               "a dead process still moved the recovery cursor")
         record.source_event_ids.append(_latest_decision_event(conn, project))
