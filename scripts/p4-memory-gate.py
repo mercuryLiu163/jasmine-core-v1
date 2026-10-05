@@ -1725,7 +1725,9 @@ def main() -> int:
         return 2
     config = json.loads(Path(args.config).read_text(encoding="utf-8"))
     out.mkdir(parents=True, mode=0o700)
-    work.mkdir(parents=True, mode=0o700)
+    # exist_ok only under --resume, which already proved the directory belongs to this
+    # run; a fresh run must still create its own.
+    work.mkdir(parents=True, mode=0o700, exist_ok=args.resume)
     selected = args.case or list(CASES)
 
     records: list[CaseRecord] = []
