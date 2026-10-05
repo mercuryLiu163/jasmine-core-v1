@@ -344,7 +344,7 @@ class NoCaseReturnsWithoutItsEvidence(unittest.TestCase):
             # it, or by calling it as its last statement -- and the evidence is then
             # performed there. So follow every module-level function the case names,
             # rather than looking only inside the case body.
-            for node in ast.walk(ast.parse(inspect.cleandoc(source))):
+            for node in ast.walk(ast.parse(source)):
                 names = []
                 if isinstance(node, ast.Name):
                     names.append(node.id)
