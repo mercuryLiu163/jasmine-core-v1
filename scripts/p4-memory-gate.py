@@ -613,8 +613,16 @@ class Gate:
     # sha256, and `verify_session` re-derives that hash from the pack this Gate
     # built rather than believing the session's own claim about what it saw.
 
-    def memory_provider(self):
-        """P3's `MemoryProvider` over this repo's worker, with a fixed environment."""
+    def memory_provider(self, *, engine_url: str | None = None):
+        """P3's `MemoryProvider` over this repo's worker, with a fixed environment.
+
+        `engine_url` overrides the engine the worker is told to reach. It has to be a
+        parameter: the worker reads its URL from this environment, so pointing the
+        process at another engine by setting `os.environ` did nothing here -- the
+        provider was still handing the worker *this* Gate's transport URL. G05 asked
+        for a pack built against an unreachable engine and got one built against the
+        live one, with the receipt naming the unreachable URL.
+        """
         from jasmine_core.context.memory_provider import MemoryProvider
 
         return MemoryProvider(
@@ -630,7 +638,8 @@ class Gate:
                          # back `empty` against an engine that held the lesson -- the same
                          # isolation the namespace exists for, applied to the Gate itself.
                          "JASMINE_MEMORY_BANK_NAMESPACE": self.bank_suffix,
-                         "JASMINE_HINDSIGHT_URL": str(self.transport.config.base_url),
+                         "JASMINE_HINDSIGHT_URL": (engine_url
+                                                   or str(self.transport.config.base_url)),
                          "JASMINE_HINDSIGHT_TIMEOUT_SECONDS": os.environ.get(
                              "JASMINE_HINDSIGHT_TIMEOUT_SECONDS", "300")})
 
@@ -646,31 +655,21 @@ class Gate:
         from jasmine_core.context.builder import ContextBuilder
         from jasmine_core.context.tokens import Tokenizer
 
-        previous = os.environ.get("JASMINE_HINDSIGHT_URL")
-        if engine_url is not None:
-            os.environ["JASMINE_HINDSIGHT_URL"] = engine_url
+        provider = self.memory_provider(engine_url=engine_url)
+        conn = self.conn()
         try:
-            provider = self.memory_provider()
-            conn = self.conn()
-            try:
-                builder = ContextBuilder(conn, schema_version=SCHEMA_VERSION,
-                                         tokenizer=Tokenizer(), memory=provider)
-                context = builder.build(
-                    {"task_id": task_id, "host_id": self.host,
-                     "source_event_id": prompt_event_id, "reason": "USER_PROMPT",
-                     "idempotency_key": key}, actor_id=self.agent)["context"]
-                current = builder.check_current(
-                    context["context_pack_id"],
-                    {"host_id": self.host, "source_event_id": prompt_event_id},
-                    actor_id=self.agent)
-            finally:
-                conn.close()
+            builder = ContextBuilder(conn, schema_version=SCHEMA_VERSION,
+                                     tokenizer=Tokenizer(), memory=provider)
+            context = builder.build(
+                {"task_id": task_id, "host_id": self.host,
+                 "source_event_id": prompt_event_id, "reason": "USER_PROMPT",
+                 "idempotency_key": key}, actor_id=self.agent)["context"]
+            current = builder.check_current(
+                context["context_pack_id"],
+                {"host_id": self.host, "source_event_id": prompt_event_id},
+                actor_id=self.agent)
         finally:
-            if engine_url is not None:
-                if previous is None:
-                    os.environ.pop("JASMINE_HINDSIGHT_URL", None)
-                else:
-                    os.environ["JASMINE_HINDSIGHT_URL"] = previous
+            conn.close()
 
         rendered = context["rendered_content"]
         pack = {
