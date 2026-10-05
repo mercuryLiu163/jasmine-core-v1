@@ -1567,18 +1567,21 @@ def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str
              "tool_input": {"cmd": command}, "tool_response": {"stdout": output},
              "artifact_uri": "workspace:/session-tool-output"},
             actor_id=gate.system)
-        evidence_id = stored["evidence"]["evidence_id"]
+        evidence_id = stored.get("evidence_id") or stored["evidence"]["evidence_id"]
         record.evidence_ids.append(evidence_id)
 
         # Read it back through the public getter rather than trusting the write: the
-        # claim is that the bytes the command produced are now in Core.
+        # claim is that the bytes the command produced are now in Core. What the row
+        # keeps is `command_sha256` and the parsed result, so the command is compared
+        # by hash and the output by looking for it in what was stored -- an Evidence
+        # record that quietly dropped the output would fail here.
         read = EvidenceStore(conn, schema_version=SCHEMA_VERSION).get(evidence_id)
         check(read is not None, f"tool Evidence {evidence_id} does not read back")
-        check(read["tool_input"]["cmd"] == command,
-              f"the stored command is {read['tool_input']['cmd']!r}, not the one the "
-              f"session ran")
-        check(read["tool_response"].get("stdout") == output,
-              "the stored tool output is not the output the session reported")
+        check(read["command_sha256"] == hashlib.sha256(command.encode("utf-8")).hexdigest(),
+              f"the stored command hash is {read['command_sha256']!r}, not the hash of "
+              f"the command the session ran")
+        check(output in json.dumps(read, ensure_ascii=False),
+              "the stored tool Evidence does not contain the output the session reported")
         check(read["task_id"] == pack["task_id"],
               f"tool Evidence is bound to {read['task_id']}, not the pack's task")
         record.receipts.append(gate.receipt("g05-tool-evidence",
