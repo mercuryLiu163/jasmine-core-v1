@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pathlib
+
 import sys
 import tempfile
 import unittest
@@ -48,3 +50,26 @@ class DbTestCase(unittest.TestCase):
         if self.migrate_db:
             migrate(self.conn)
         self.clock = FrozenClock()
+
+
+def import_gate_module():
+    """Load `scripts/p4-memory-gate.py` as a module, once per process.
+
+    It has to be in `sys.modules` under its own name while it executes: `@dataclass`
+    looks the defining module up there, so an anonymous load fails inside the standard
+    library rather than in the runner. Shared so the runner tests and the sealing tests
+    exercise the same module object rather than two copies of it.
+    """
+    import importlib.util
+    import sys
+
+    name = "p4_memory_gate"
+    if name in sys.modules:
+        return sys.modules[name]
+    gate = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "p4-memory-gate.py"
+    spec = importlib.util.spec_from_file_location(name, gate)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module

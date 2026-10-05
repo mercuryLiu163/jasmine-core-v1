@@ -24,7 +24,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from support import SRC  # noqa: F401  (path setup)
+from support import SRC, import_gate_module  # noqa: F401  (path setup)
 
 from jasmine_core import errors  # noqa: E402
 from jasmine_core.memory import scope  # noqa: E402
@@ -34,22 +34,19 @@ CASES = ("P4-G01", "P4-G02", "P4-G03", "P4-G04", "P4-G05", "P4-G06", "P4-G07")
 
 
 def load_runner():
-    """Import the runner as a module, registered in `sys.modules`.
+    """The runner module, loaded once per process and shared with the sealing tests.
 
-    The registration matters: the runner defines dataclasses, and `@dataclass`
-    looks its own module up in `sys.modules` while decorating. Loading it
-    anonymously would fail inside the standard library rather than in the runner.
+    The registration matters: the runner defines dataclasses, and `@dataclass` looks
+    its own module up in `sys.modules` while decorating, so an anonymous load fails
+    inside the standard library rather than in the runner.
+
+    It used to load the file itself, unconditionally. That produced a *second* module
+    object with its own `Failed` and `Blocked` classes, so a sealing test asserting the
+    runner raises `Failed` caught nothing when both files ran in one suite -- the classes
+    were different objects. The suite order decided whether the tests passed. One loader,
+    one module.
     """
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("p4_memory_gate", GATE)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    sys.modules[spec.name] = module
-    self_addCleanup = getattr(module, "__spec__", None)
-    del self_addCleanup
-    spec.loader.exec_module(module)
-    return module
+    return import_gate_module()
 
 
 class RunnerSource(unittest.TestCase):

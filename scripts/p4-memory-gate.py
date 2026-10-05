@@ -166,6 +166,7 @@ class CaseRecord:
     memory_result_ids: list[str] = field(default_factory=list)
     context_pack_ids: list[str] = field(default_factory=list)
     tool_uses: list[dict] = field(default_factory=list)
+    sealed_artifacts: dict[str, Any] = field(default_factory=dict)
     rule_versions: list[str] = field(default_factory=list)
     state_revision_before: int | None = None
     state_revision_after: int | None = None
@@ -770,8 +771,74 @@ class Gate:
                 return pack
         return None
 
+    def read_receipt(self, kind: str) -> dict[str, Any]:
+        """Read a receipt written by an earlier phase and re-check its digest.
+
+        The digest is recomputed from the bytes on disk rather than copied from the
+        manifest that cited it, so a file edited between phases is caught here instead
+        of being reported as verified.
+        """
+        path = self.root / f"{kind}.json"
+        if not path.exists():
+            raise Failed(f"receipt {kind!r} is missing at {path}; the phase that was "
+                         f"supposed to write it did not run, or its output was removed")
+        raw = path.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except ValueError as exc:
+            raise Failed(f"receipt {kind!r} at {path} is not readable JSON: {exc}")
+        return {"path": str(path), "sha256": digest, "kind": kind, "write": "read-back",
+                "payload": payload}
+
     def session_path(self, label: str) -> Path:
         return self.root / f"session-{label}.json"
+
+    def _injection_record(self, label: str, pack: dict[str, Any]) -> dict[str, Any]:
+        """Exactly which bytes were injected into this session, hashed and measured.
+
+        A pack id is not enough. The same id can be rendered twice with different
+        content, and nothing in the id says which rendering the agent read -- so the
+        record names the digest of the bytes themselves, which is what makes "this agent
+        saw this pack" checkable rather than plausible.
+        """
+        body = pack["rendered_content"].encode("utf-8")
+        return {"label": label,
+                "pack_path": pack.get("receipt", {}).get("path"),
+                "pack_file_sha256": pack.get("receipt", {}).get("sha256"),
+                "injected_bytes": len(body),
+                "injected_sha256": hashlib.sha256(body).hexdigest(),
+                "context_pack_id": pack["context_pack_id"],
+                "sections": pack["sections"],
+                "token_count": pack["token_count"]}
+
+    def _seal_injected_pack(self, label: str, pack: dict[str, Any]) -> dict[str, Any]:
+        """Copy the pack file that was injected, byte for byte, once.
+
+        If a copy already exists and differs, the pack was re-rendered between phases.
+        That is refused rather than overwritten: the sealed copy is the record of what
+        this session was shown, and quietly replacing it would destroy the only evidence
+        that the two phases agree.
+        """
+        receipt = pack.get("receipt") or {}
+        source = receipt.get("path")
+        if not source:
+            return {"kind": f"injected-{label}-pack", "write": "no-file"}
+        sealed = self.root / f"injected-{label}.pack.json"
+        if sealed.exists():
+            on_disk = hashlib.sha256(sealed.read_bytes()).hexdigest()
+            if on_disk != receipt["sha256"]:
+                raise Failed(
+                    f"the pack sealed for {label} hashes to {on_disk[:12]}, not the "
+                    f"{receipt['sha256'][:12]} this phase rendered. The pack changed "
+                    f"between phases; a session cannot be verified against a pack that "
+                    f"has been re-rendered.")
+            return {"path": str(sealed), "sha256": on_disk,
+                    "kind": f"injected-{label}-pack", "write": "unchanged"}
+        sealed.write_bytes(Path(source).read_bytes())
+        os.chmod(sealed, 0o600)
+        return {"path": str(sealed), "sha256": receipt["sha256"],
+                "kind": f"injected-{label}-pack", "write": "sealed"}
 
     def verify_session(self, pack: dict[str, Any], label: str, *,
                        require_tool_actions: bool = True) -> dict[str, Any]:
@@ -792,15 +859,48 @@ class Gate:
           * the tool actions must be non-empty and each must carry the output it
             actually produced.
 
-        Returns the session dict with a `verified` block the cases assert on.
+        Returns the session dict with a `verified` block the cases assert on, including
+        the sealed transcript digest and the injection record.
         """
         commit = self.git_commit()
         path = self.session_path(label)
         if not path.is_file():
             raise Blocked(f"no agent session receipt for {label} at {path}; run the agent "
                           f"session and write it there -- it cannot be synthesised here")
-        session = json.loads(path.read_text(encoding="utf-8"))
+        raw = path.read_bytes()
+        session = json.loads(raw.decode("utf-8"))
         problems: list[str] = []
+
+        # Seal the bytes as received, before interpreting them. The session file is an
+        # external input; without a sealed copy of the exact bytes, "the session said X"
+        # is unfalsifiable once the input file is edited. The transcript is a
+        # byte-for-byte copy, so the claim can be re-checked against it later.
+        transcript = self.root / f"session-{label}.transcript.json"
+        transcript_sha = hashlib.sha256(raw).hexdigest()
+        if transcript.exists():
+            on_disk = hashlib.sha256(transcript.read_bytes()).hexdigest()
+            if on_disk != transcript_sha:
+                problems.append(
+                    f"the sealed transcript of {label} hashes to {on_disk[:12]} but the "
+                    f"session file now hashes to {transcript_sha[:12]}; the input was "
+                    f"edited after it was sealed")
+        else:
+            transcript.write_bytes(raw)
+            os.chmod(transcript, 0o600)
+        sealed_session = {"path": str(transcript), "sha256": transcript_sha,
+                          "kind": f"session-{label}-transcript",
+                          "bytes": len(raw), "write": "sealed"}
+
+        # The injection record: exactly which bytes were injected, hashed and measured,
+        # independent of anything the session says about them. A pack id is not enough --
+        # the same id could have been rendered twice with different content.
+        from jasmine_core import errors
+
+        injection = self._injection_record(label, pack)
+        try:
+            self._seal_injected_pack(label, pack)
+        except errors.Failed as failure:
+            problems.append(str(failure))
 
         if session.get("commit") != commit:
             problems.append(f"the session ran against {session.get('commit')!r}, this "
@@ -864,17 +964,65 @@ class Gate:
 
         if problems:
             raise Failed("the agent session receipt does not stand up: " + "; ".join(problems))
+        # The sealed bytes are receipts too, so they land in the seal with everything
+        # else and the FINAL manifest can name them.
+        sealed = [sealed_session]
+        if pack.get("receipt", {}).get("path"):
+            sealed.append({"path": str(self.root / f"injected-{label}.pack.json"),
+                           "sha256": pack["receipt"]["sha256"],
+                           "kind": f"injected-{label}-pack", "write": "sealed"})
         return {**session, "verified": {
             "commit": commit, "context_pack_id": pack["context_pack_id"],
             "pack_sha256": recomputed, "memory_carried": sorted(carried),
-            "tool_actions": len(actions), "pack_receipt": pack["receipt"]["path"]}}
+            "tool_actions": len(actions), "pack_receipt": pack["receipt"]["path"],
+            "session_transcript": sealed_session,
+            "injection": injection,
+            "sealed": sealed}}
+
+    def seal_session_artifacts(self, record: CaseRecord, session: dict[str, Any]) -> None:
+        """Register a verified session's sealed bytes with the record.
+
+        The transcript and the injected pack are the two artefacts a reviewer cannot
+        re-derive from the manifest: the first is the external input as received, the
+        second is what the agent was actually shown. Both are write-once files, and both
+        have to reach the phase seal or the seal does not cover them.
+        """
+        verified = session.get("verified") or {}
+        for artifact in verified.get("sealed") or []:
+            record.sealed_artifacts[artifact["kind"]] = artifact
 
     def receipt(self, kind: str, payload: dict[str, Any]) -> dict[str, str]:
+        """Write a receipt once. A receipt that changes is a broken evidence chain.
+
+        This used to be an unconditional `write_text`, and that is how G06 lost its
+        phase 1 evidence: the final phase re-ran the case's document read-back, wrote
+        `g06-document.json` over the phase 1 bytes, and the phase 1 manifest went on
+        citing a sha256 that no longer described any file on disk. Nothing failed. The
+        manifest still said PASS.
+
+        So a receipt is write-once. Re-writing identical bytes is allowed and returns
+        the same digest, because a resumed case legitimately re-asserts what it already
+        proved. Re-writing *different* bytes is refused: either the case is not
+        idempotent, or something outside this process edited sealed evidence, and both
+        are reasons to stop rather than to overwrite.
+        """
         path = self.root / f"{kind}.json"
-        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        body = json.dumps(payload, ensure_ascii=False, indent=2)
+        digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        if path.exists():
+            existing = path.read_text(encoding="utf-8")
+            if hashlib.sha256(existing.encode("utf-8")).hexdigest() == digest:
+                return {"path": str(path), "sha256": digest, "kind": kind,
+                        "write": "unchanged"}
+            raise Failed(
+                f"receipt {kind!r} already exists with different content "
+                f"({hashlib.sha256(existing.encode('utf-8')).hexdigest()[:12]} on disk, "
+                f"{digest[:12]} now). A receipt is written once: this case is not "
+                f"idempotent, or sealed evidence was edited outside this process. "
+                f"Refusing rather than overwriting.")
+        path.write_text(body, encoding="utf-8")
         os.chmod(path, 0o600)
-        return {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                "kind": kind}
+        return {"path": str(path), "sha256": digest, "kind": kind, "write": "created"}
 
 
 # -- the cases ----------------------------------------------------------------
@@ -883,10 +1031,10 @@ class Gate:
 def case_g01(gate: Gate, record: CaseRecord) -> None:
     """A historical failure is recalled in a new session and changes what the agent does."""
     gate.require_real_agent()
-    key = "g01-with-lesson"
+    key, baseline_key = "g01-with-lesson", "g01-no-lesson"
     resumed = gate.existing_pack(key)
     if resumed is not None:
-        return _verify_g01_pack(gate, record, resumed, key)
+        return _verify_g01_packs(gate, record, resumed, gate.existing_pack(baseline_key))
     project = gate.seed_project("g01")
     record.project_ids.append(project)
 
@@ -895,6 +1043,19 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
     # already carries is correctly not injected -- the scenario only means anything
     # when the new task does not already have that Evidence, which is what "a later
     # session hits the same problem" means.
+    # The baseline's pack is built FIRST, while the project has no lesson yet. It is a
+    # real P3 Context Pack like any other, and its Memory section comes back empty --
+    # which is the point: the two sessions must differ because of what was injected, not
+    # because one of them was handed a description of a pack. Previously the baseline ran
+    # with no pack at all, so "the lesson changed what it did" had a free variable in it.
+    baseline_task = gate.new_task(project, "device test (baseline session)")
+    baseline_prompt = gate.event(project, "user.prompt",
+                                 "the device test fails; where should I look first?",
+                                 task_id=baseline_task)
+    record.source_event_ids.append(baseline_prompt)
+    baseline_pack = gate.build_pack(project_id=project, task_id=baseline_task,
+                                     prompt_event_id=baseline_prompt, key=baseline_key)
+
     historical = gate.new_task(project, "device test (historical)")
     job_id, document_id, source_event_id = gate.retain_lesson(
         project, reason="callback task_id did not match the task id in the request",
@@ -911,12 +1072,41 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
 
     pack = gate.build_pack(project_id=project, task_id=current, prompt_event_id=prompt,
                            key=key)
-    _verify_g01_pack(gate, record, pack, key)
+    _verify_g01_packs(gate, record, pack, baseline_pack)
 
 
-def _verify_g01_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
-                     key: str) -> None:
-    """Everything G01 asserts about the pack and the session that consumed it."""
+def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
+                      baseline_pack: dict[str, Any] | None) -> None:
+    """Everything G01 asserts about the two packs and the two sessions that read them.
+
+    The baseline is a first-class session against a real, honestly empty pack -- not a
+    nested summary inside the lesson's receipt. Each has its own sealed transcript and
+    its own injection record, so "the lesson changed what the agent did" rests on two
+    comparable, independently checkable runs rather than on one run's self-description.
+    """
+    check(baseline_pack is not None,
+          "this run has the lesson-bearing pack but not the no-lesson baseline pack "
+          "built beside it; the differential cannot be established from one side")
+    record.context_pack_ids.append(baseline_pack["context_pack_id"])
+    check(baseline_pack["memory_status"] == "empty",
+          f"the baseline pack's Memory is {baseline_pack['memory_status']!r}, not empty: "
+          f"it is supposed to be the same project before the lesson existed, so a "
+          f"non-empty Memory means the comparison is not the one it claims to be")
+    check(baseline_pack["memory_selected"] == [] and baseline_pack["memory_filtered"] == [],
+          f"the baseline pack carried memory: {baseline_pack['memory_selected']}")
+    check(baseline_pack["task_id"] != pack["task_id"],
+          "the baseline and lesson-bearing sessions were given the same task, so the "
+          "only thing that could differ is the pack")
+    record.receipts.append(gate.receipt("g01-baseline-pack",
+                                        {k: v for k, v in baseline_pack.items()
+                                         if k != "rendered_content"}))
+    baseline = gate.verify_session(baseline_pack, "g01-baseline")
+    gate.seal_session_artifacts(record, baseline)
+    record.receipts.append(gate.receipt("g01-baseline-session", baseline["verified"]))
+    check(baseline["verified"]["memory_carried"] == [],
+          f"the baseline session was handed memory {baseline['verified']['memory_carried']!r} "
+          f"despite the pack being empty")
+
     record.context_pack_ids.append(pack["context_pack_id"])
     check(pack["memory_status"] == "ok",
           f"the pack's Memory section is {pack['memory_status']}, not ok: {pack}")
@@ -942,7 +1132,8 @@ def _verify_g01_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
               f"the pack does not carry {source_id}, so the injected fact cannot be "
               f"traced to the Events behind it")
 
-    session = gate.verify_session(pack, "g01")
+    session = gate.verify_session(pack, "g01-lesson")
+    gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g01-session", session["verified"]))
     check(bool(session["verified"]["memory_carried"]),
           "the session was verified against a pack that carried no Memory")
@@ -951,10 +1142,9 @@ def _verify_g01_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     # own account of being helped is not the evidence. So the claim is differential
     # and checkable here: the same task, the same repository, two real sessions, and
     # the lesson-bearing one must have taken a diagnostic action the baseline did not.
-    baseline = session.get("baseline")
-    check(isinstance(baseline, dict),
-          "the session receipt carries no `baseline`: without the pack-without-the-lesson "
-          "run there is nothing to compare, and 'the agent said it helped' is not evidence")
+    # Both sides of the comparison are verified sessions over sealed packs, so neither
+    # is taken on its own account. The nested `baseline` the receipt used to carry is
+    # gone: it was a summary inside the very claim it was supposed to check.
     baseline_actions = [a.get("command") for a in (baseline.get("tool_actions") or [])]
     lesson_actions = [a.get("command") for a in (session.get("tool_actions") or [])]
     check(bool(baseline_actions) and bool(lesson_actions),
@@ -970,8 +1160,15 @@ def _verify_g01_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     record.engine_evidence["differential"] = {
         "baseline_actions": baseline_actions, "with_lesson_actions": lesson_actions,
         "skipped_investigation": [c for c in baseline_actions if c not in lesson_actions],
+        "baseline_session": baseline["verified"]["session_transcript"],
+        "lesson_session": session["verified"]["session_transcript"],
+        "baseline_injection": baseline["verified"]["injection"],
+        "lesson_injection": session["verified"]["injection"],
         "note": "P3 renders the Core-derived fact only, never provider prose, so the "
                 "lesson arrives as a traceable prior failure rather than as a diagnosis"}
+    check(baseline.get("memory_seen") in (None, []),
+          f"the baseline session claims to have seen memory {baseline.get('memory_seen')!r} "
+          f"while its pack carried none")
     cited = session.get("memory_seen") or []
     check(bool(cited), "the session recorded no memory as seen, so it cannot have used it")
     check(cited[0].get("memory_id") == carried["memory_id"],
@@ -1180,6 +1377,7 @@ def _verify_g02_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     # answer itself, and it is asserted on both counts -- the current engine named,
     # the superseded one not named.
     session = gate.verify_session(pack, "g02", require_tool_actions=False)
+    gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g02-session", session["verified"]))
     answer = (session.get("final_answer") or "").lower()
     check("hindsight" in answer,
@@ -1245,6 +1443,7 @@ def _verify_g03_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     # of work. What is asserted instead is that the answer admits the absence and
     # asserts nothing about a result.
     session = gate.verify_session(pack, "g03", require_tool_actions=False)
+    gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g03-session", session["verified"]))
     check(session["verified"]["tool_actions"] == 0,
           f"the session took {session['verified']['tool_actions']} actions for a protocol "
@@ -1405,6 +1604,7 @@ def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     # The agent must answer from B's constraint alone. Naming A's rule would mean the
     # isolation leaked somewhere the database checks above cannot see.
     session = gate.verify_session(pack, "g04", require_tool_actions=False)
+    gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g04-session", session["verified"]))
     answer = (session.get("final_answer") or "").lower()
     check("api compatible" in answer,
@@ -1572,6 +1772,7 @@ def _verify_g05_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     # The agent has to keep working from Truth, and has to say that Memory was not
     # consulted rather than pretending the project has no history.
     session = gate.verify_session(pack, "g05", require_tool_actions=True)
+    gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g05-session", session["verified"]))
     answer = (session.get("final_answer") or "").lower()
     check(any(word in answer for word in ("degraded", "unreachable", "could not be reached",
@@ -1919,14 +2120,16 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
             "window2_crash_exit": 7, "window2": restarted}
         record.receipts.append(gate.receipt("g06-attempts", attempts))
         record.receipts.append(gate.receipt("g06-document", document or {}))
-        (gate.root / "g06-complete.json").write_text(json.dumps({
+        sealed = gate.receipt("g06-complete", {
             "commit": gate.git_commit(),
             "project_id": project,
             "document_id": document_id,
             "interrupted_job": interrupted_job,
             "attempts": len(attempts),
             "memory_unit_count": int(document.get("memory_unit_count") or 0),
-        }, ensure_ascii=False, indent=2), encoding="utf-8")
+            "bank": bank["bank_id"],
+        })
+        record.sealed_artifacts["g06-complete"] = sealed
     finally:
         conn.close()
     record.engine_evidence["probe"] = probed
@@ -1977,7 +2180,15 @@ def _verify_g06_completed(gate: Gate, record: CaseRecord, done: dict[str, Any]) 
         "memory_unit_count": int(document.get("memory_unit_count") or 0)}
     record.engine_evidence["attempt_count"] = done["attempts"]
     record.engine_evidence["resumed_from_marker"] = done["commit"]
-    record.receipts.append(gate.receipt("g06-document", document or {}))
+    # The document receipt belongs to the run that created the document. Re-minting it
+    # here is what overwrote phase 1's bytes; instead the sealed file is read back and
+    # its digest re-checked, and the FINAL manifest cites *that* digest.
+    sealed = gate.read_receipt("g06-document")
+    record.receipts.append(sealed)
+    check(sealed["payload"].get("id") == (document or {}).get("id"),
+          f"the sealed g06-document receipt describes "
+          f"{sealed['payload'].get('id')!r}, not the live document "
+          f"{(document or {}).get('id')!r}")
 
 
 
@@ -2304,6 +2515,7 @@ def _verify_g07_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     # The session must treat what it was given as history, and must not resurrect the
     # retired lesson.
     session = gate.verify_session(pack, "g07", require_tool_actions=False)
+    gate.seal_session_artifacts(record, session)
     record.receipts.append(gate.receipt("g07-session", session["verified"]))
     answer = (session.get("final_answer") or "").lower()
     for quote in unnegated(answer, obsolete_text):
@@ -2337,6 +2549,138 @@ def run_provenance() -> dict[str, Any]:
         "python": sys.version.split()[0],
         "host": socket.gethostname(),
     }
+
+
+def _verify_prior_seal(work: Path, phase_name: str) -> dict[str, Any] | None:
+    """Check the previous phase's seal before this phase runs a single case.
+
+    A resumed run re-verifies packs and sessions. It does not re-run the engine halves,
+    so the evidence for those lives in the earlier manifest -- and if the earlier
+    manifest's receipts have been altered since, "PASS" here would be a claim about
+    bytes nobody can still produce. Every sealed receipt is therefore re-hashed from
+    disk and the earlier manifest's own digest is recorded, so this manifest names the
+    phase it continues rather than standing alone.
+    """
+    if phase_name == "phase1":
+        return None
+    seal_path = work / "phase1-seal.json"
+    if not seal_path.exists():
+        raise Failed(
+            f"resuming without a phase 1 seal at {seal_path}. The two phases are one "
+            f"evidence chain: the final phase re-verifies what phase 1 built, so it "
+            f"cannot be shown to continue anything unless phase 1 sealed its receipts. "
+            f"Start a fresh work directory.")
+    raw = seal_path.read_bytes()
+    seal = json.loads(raw.decode("utf-8"))
+    checked, mismatched, missing = 0, [], []
+    for entry in seal.get("receipts") or []:
+        path = Path(entry["path"])
+        if not path.exists():
+            missing.append(entry["path"])
+            continue
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        checked += 1
+        if digest != entry["sha256"]:
+            mismatched.append({"path": entry["path"], "sealed": entry["sha256"][:12],
+                               "on_disk": digest[:12]})
+    if missing or mismatched:
+        raise Failed(
+            f"phase 1 sealed evidence no longer matches the disk: "
+            f"{len(mismatched)} altered, {len(missing)} missing"
+            + (f"; altered: {mismatched[:4]}" if mismatched else "")
+            + (f"; missing: {missing[:4]}" if missing else "")
+            + ". Sealed receipts are write-once, so this means something outside the "
+              "Gate edited them, or the run was tampered with. Re-run the affected "
+              "phase in a fresh work directory rather than re-hashing anything.")
+    manifest = Path(seal["manifest_path"])
+    if not manifest.exists():
+        raise Failed(f"the phase 1 manifest named by the seal is gone: {manifest}")
+    manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    if manifest_digest != seal["manifest_sha256"]:
+        raise Failed(
+            f"the phase 1 manifest does not match its seal: sealed "
+            f"{seal['manifest_sha256'][:12]}, on disk {manifest_digest[:12]}")
+    if seal.get("commit") != seal.get("candidate_commit"):
+        raise Failed(f"the phase 1 seal disagrees with itself about the commit: "
+                     f"{seal.get('commit')} vs {seal.get('candidate_commit')}")
+    return {"seal_path": str(seal_path),
+            "seal_sha256": hashlib.sha256(raw).hexdigest(),
+            "manifest_path": str(manifest),
+            "manifest_sha256": manifest_digest,
+            "commit": seal["commit"],
+            "receipts_verified": checked,
+            "cases": seal.get("cases") or []}
+
+
+def _write_phase_seal(work: Path, phase_name: str, manifest_path: Path,
+                      records: list[CaseRecord], meta: dict[str, Any]) -> dict[str, Any]:
+    """Seal this phase: its manifest's digest, and every receipt it produced.
+
+    Write-once, like a receipt. A second seal under the same name would mean one work
+    directory produced two phases, which is the situation the prior-seal check exists
+    to catch, so it is refused rather than merged.
+    """
+    entries, per_case = [], {}
+    for record in records:
+        for receipt in record.receipts:
+            path = Path(receipt["path"])
+            if not path.exists():
+                raise Failed(f"{record.case_id} cites receipt {receipt['path']}, which "
+                             f"is not on disk; a manifest must not cite evidence it "
+                             f"cannot produce")
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest != receipt["sha256"]:
+                raise Failed(f"{record.case_id} cites receipt {receipt['path']} as "
+                             f"{receipt['sha256'][:12]} but the file hashes to "
+                             f"{digest[:12]}")
+            entries.append({"case_id": record.case_id, "kind": receipt.get("kind"),
+                            "path": str(path), "sha256": digest})
+        for kind, artifact in sorted(record.sealed_artifacts.items()):
+            path = Path(artifact["path"])
+            if not path.exists():
+                raise Failed(f"{record.case_id} sealed {kind!r} at {path}, which is not "
+                             f"on disk; a seal must cover only artefacts that exist")
+            digest = hashlib.sha256(path.read_bytes()).hexdigest()
+            if digest != artifact["sha256"]:
+                raise Failed(f"{record.case_id} sealed {kind!r} as "
+                             f"{artifact['sha256'][:12]} but the file hashes to "
+                             f"{digest[:12]}")
+            entries.append({"case_id": record.case_id, "kind": kind, "path": str(path),
+                            "sha256": digest, "bytes": artifact.get("bytes")})
+        per_case[record.case_id] = {
+            "verdict": record.verdict,
+            "packs": list(record.context_pack_ids),
+            "receipts": [e["path"] for e in entries if e["case_id"] == record.case_id],
+            "evidence_keys": sorted(record.engine_evidence),
+            "sealed_artifacts": sorted(record.sealed_artifacts),
+        }
+    payload = {
+        "phase": phase_name,
+        "commit": meta["commit"],
+        "candidate_commit": meta["commit"],
+        "dirty": meta["dirty"],
+        "manifest_path": str(manifest_path),
+        "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        "receipts": entries,
+        "cases": per_case,
+    }
+    body = json.dumps(payload, ensure_ascii=False, indent=2)
+    seal_path = work / f"{phase_name}-seal.json"
+    if seal_path.exists():
+        existing = json.loads(seal_path.read_text(encoding="utf-8"))
+        if existing.get("manifest_sha256") != payload["manifest_sha256"]:
+            raise Failed(
+                f"{phase_name} was already sealed in this work directory, against "
+                f"manifest {str(existing.get('manifest_sha256'))[:12]}; this run produced "
+                f"{payload['manifest_sha256'][:12]}. One work directory is one phase.")
+        return {"path": str(seal_path),
+                "sha256": hashlib.sha256(seal_path.read_bytes()).hexdigest(),
+                "receipts_sealed": len(entries)}
+    seal_path.write_text(body, encoding="utf-8")
+    os.chmod(seal_path, 0o600)
+    return {"path": str(seal_path),
+            "sha256": hashlib.sha256(seal_path.read_bytes()).hexdigest(),
+            "receipts_sealed": len(entries)}
 
 
 def main() -> int:
@@ -2378,6 +2722,16 @@ def main() -> int:
     # run; a fresh run must still create its own.
     work.mkdir(parents=True, mode=0o700, exist_ok=args.resume)
     selected = args.case or list(CASES)
+    # A resumed run continues the same run's phase 1. Its seal is checked here, before
+    # any case executes, so a run whose earlier evidence was altered stops before it can
+    # report anything rather than after.
+    phase_name = "phase2" if args.resume else "phase1"
+    try:
+        prior = _verify_prior_seal(work, phase_name)
+    except Failed as failure:
+        print(json.dumps({"result": None, "verdict": "FAIL",
+                          "prior_phase": "unverifiable", "reason": str(failure)}))
+        return 1
 
     records: list[CaseRecord] = []
     # Captured from the first `open()`: each case's `finally` closes its Gate and
@@ -2495,9 +2849,24 @@ def main() -> int:
     result_path = out / f"p4-gate-{int(time.time())}.json"
     result_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     os.chmod(result_path, 0o600)
+
+    seal = _write_phase_seal(work, phase_name, result_path, records, meta)
+    payload["seal"] = {"path": seal["path"], "sha256": seal["sha256"],
+                       "phase": phase_name,
+                       "receipts_sealed": seal["receipts_sealed"]}
+    if prior is not None:
+        payload["prior_phase"] = prior
+    # The manifest is rewritten to carry the seal, so its own digest changes: the seal
+    # is written *after* the manifest and hashes the manifest as first written, and the
+    # manifest records the seal's digest. Each names the other; neither is self-hashed,
+    # which is the only ordering that does not require a fixed point.
+    result_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.chmod(result_path, 0o600)
     print(json.dumps({"result": str(result_path), "verdict": payload["verdict"],
                       "commit": meta["commit"], "dirty": meta["dirty"],
-                      "engine_reachable": payload["engine"]["reachable"]}))
+                      "engine_reachable": payload["engine"]["reachable"],
+                      "seal": seal["sha256"][:12],
+                      "prior_phase_verified": (prior or {}).get("receipts_verified")}))
     # 0 PASS, 2 nothing could run, 1 something failed.
     return {"PASS": 0, "BLOCKED": 2, "FAIL": 1}[payload["verdict"]]
 
