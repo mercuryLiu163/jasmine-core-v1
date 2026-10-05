@@ -315,7 +315,11 @@ class NoCaseReturnsWithoutItsEvidence(unittest.TestCase):
         returning = []
         for case_id in CASES:
             final = self._final_statement(self.runner.CASES_BY_ID[case_id].__name__)
-            if isinstance(final, ast.Raise):
+            if isinstance(final, ast.Return):
+                # A case whose last statement delegates to a verifier returns through
+                # it; that is the "may complete" shape, like falling off the end.
+                returning.append(case_id)
+            elif isinstance(final, ast.Raise):
                 # `raise Blocked(...)` is an ast.Call whose func names the class;
                 # a bare `raise Blocked` is an ast.Name directly.
                 callee = final.exc.func if isinstance(final.exc, ast.Call) else final.exc
