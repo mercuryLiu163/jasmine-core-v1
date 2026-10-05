@@ -118,6 +118,7 @@ class CaseRecord:
     document_ids: list[str] = field(default_factory=list)
     memory_result_ids: list[str] = field(default_factory=list)
     context_pack_ids: list[str] = field(default_factory=list)
+    tool_uses: list[dict] = field(default_factory=list)
     rule_versions: list[str] = field(default_factory=list)
     state_revision_before: int | None = None
     state_revision_after: int | None = None
@@ -1355,6 +1356,11 @@ def _verify_g04_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
 
 
 def case_g05(gate: Gate, record: CaseRecord) -> None:
+    gate.require_real_agent()
+    key = "g05-degraded-pack"
+    resumed = gate.existing_pack(key)
+    if resumed is not None:
+        return _verify_g05_pack(gate, record, resumed)
     """Truth keeps working while the engine is unreachable, and recovers (VC-22)."""
     # G05 is not only about the connection: it also requires the Context to be marked
     # degraded with an exact pack containing no Memory. That is required at the *end*,
@@ -1451,14 +1457,127 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
     # real session. Without them this case must not return, because a returning
     # case is recorded as PASS. Required here, after the real half has run.
     gate.require_p3_pack()
-    raise Blocked(
-        "the unreachable engine, the Truth-continues checks and the recovery with no "
-        "duplicate document are recorded against a real engine. Still missing for G05: "
-        "a Context marked degraded with an exact pack containing no Memory, a real Tool "
-        "Evidence capture, and a legal State/Checkpoint flow. Those need a P3 Context "
-        "Pack built in a real Agent session; until one is supplied this case is "
-        "BLOCKED, not PASS. Everything above it ran against the real engine."
-    )
+    # The degraded pack: built against an engine that is not there. Truth still has
+    # to render -- that is the whole of VC-22 -- but the Memory section must say
+    # degraded and carry nothing, rather than quietly rendering an empty Memory that
+    # reads like "nothing was ever remembered".
+    task_id = gate.new_task(project, "engine unreachable")
+    prompt = gate.event(project, "user.prompt",
+                        "carry on while the engine is down", task_id=task_id)
+    record.source_event_ids.append(prompt)
+    pack = gate.build_pack(project_id=project, task_id=task_id, prompt_event_id=prompt,
+                           key=key, engine_url="http://127.0.0.1:1")
+    _verify_g05_pack(gate, record, pack, task_id, prompt)
+
+
+def _verify_g05_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> None:
+    """A degraded Memory must be *labelled*, and Truth must still be there.
+
+    The distinction this case turns on: `empty` means nothing was ever remembered,
+    `degraded` means the engine could not be asked. Both render a Memory section with
+    no items, so only the status tells them apart -- and an agent that reads `empty`
+    concludes the project has no history, which is a false statement about the world
+    rather than a gap in its context.
+    """
+    record.context_pack_ids.append(pack["context_pack_id"])
+    check(pack["memory_status"] == "degraded",
+          f"a pack built against an unreachable engine reports {pack['memory_status']!r}; "
+          f"an unreachable engine is not the same as an empty one")
+    check(pack["memory_selected"] == [] and pack["memory_filtered"] == [],
+          f"a degraded pack carried memory: {pack['memory_selected']} "
+          f"{pack['memory_filtered']}")
+    check("HISTORICAL_NONAUTHORITATIVE MEMORY DATA" not in pack["rendered_content"],
+          "a degraded pack rendered a Memory data block")
+
+    rendered = pack["rendered_content"]
+    check('"status":"degraded"' in rendered.replace(" ", ""),
+          "the pack does not state that its Memory is degraded, so a reader cannot "
+          "tell an unreachable engine from an empty one")
+    check(pack["engine_url"] == "http://127.0.0.1:1",
+          f"the pack claims engine {pack['engine_url']}, not the unreachable one it was "
+          f"built against")
+
+    # Truth is the point of VC-22: the engine being down must not cost the agent its
+    # current state. Without this a pack could be entirely omissions and still be
+    # 'degraded' in the right way.
+    check("CURRENT STATE" in rendered and pack["task_id"] in rendered,
+          "a degraded pack lost CURRENT STATE; the engine going down must not cost the "
+          "agent its Truth")
+    check(pack["token_count"] > 0, "a degraded pack rendered nothing at all")
+    check(pack["check_current"] is True,
+          "check_current did not hold for a pack built against a dead engine")
+    record.receipts.append(gate.receipt("g05-degraded-pack", pack["context_pack_id"]))
+
+    # The agent has to keep working from Truth, and has to say that Memory was not
+    # consulted rather than pretending the project has no history.
+    session = gate.verify_session(pack, "g05", require_tool_actions=True)
+    record.receipts.append(gate.receipt("g05-session", session["verified"]))
+    answer = (session.get("final_answer") or "").lower()
+    check(any(word in answer for word in ("degraded", "unreachable", "could not be reached",
+                                          "not available", "unavailable", "down",
+                                          "could not reach", "cannot reach")),
+          f"the agent did not notice its Memory was unavailable: {answer[:300]!r}")
+    for invention in ("no memory", "no history", "nothing remembered", "never recorded",
+                      "no records"):
+        check(invention not in answer,
+              f"the agent reported {invention!r} from a degraded Memory, which is a "
+              f"false claim about the project rather than a gap in its context: "
+              f"{answer[:300]!r}")
+
+    # And the tool result it reported is recorded as real Tool Evidence, output and
+    # all -- the capture is only worth having if the bytes are the ones the command
+    # produced.
+    _record_session_tool_evidence(gate, record, pack, session)
+
+
+def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str, Any],
+                                  session: dict[str, Any]) -> None:
+    """Record what the session actually ran, through the real Evidence path."""
+    from jasmine_core.evidence import EvidenceStore
+    from jasmine_core.state import StateStore
+
+    actions = session.get("tool_actions") or []
+    command, output = actions[0]["command"], actions[0]["output"]
+    record.tool_uses.append({"command": command, "output_sha256": hashlib.sha256(
+        output.encode("utf-8")).hexdigest(), "output_characters": len(output)})
+
+    conn = gate.conn()
+    try:
+        state = StateStore(conn, schema_version=SCHEMA_VERSION)
+        step = state.create_step(pack["task_id"],
+                                 {"title": "engine unreachable", "host_id": gate.host,
+                                  "expected_revision": 1},
+                                 actor_id=gate.human, actor_kind="human",
+                                 can_accept=False)["step"]["step_id"]
+        stored = EvidenceStore(conn, schema_version=SCHEMA_VERSION).record_tool_result(
+            {"task_id": pack["task_id"], "step_id": step, "host_id": gate.host,
+             "codex_session_id": gate.case_id, "turn_id": f"t-{ids.new_id('evt')[-8:]}",
+             "tool_use_id": ids.new_id("evt")[-8:], "tool_name": "shell",
+             "tool_input": {"cmd": command}, "tool_response": {"stdout": output},
+             "artifact_uri": "workspace:/session-tool-output"},
+            actor_id=gate.system)
+        evidence_id = stored["evidence"]["evidence_id"]
+        record.evidence_ids.append(evidence_id)
+
+        # Read it back through the public getter rather than trusting the write: the
+        # claim is that the bytes the command produced are now in Core.
+        read = EvidenceStore(conn, schema_version=SCHEMA_VERSION).get(evidence_id)
+        check(read is not None, f"tool Evidence {evidence_id} does not read back")
+        check(read["tool_input"]["cmd"] == command,
+              f"the stored command is {read['tool_input']['cmd']!r}, not the one the "
+              f"session ran")
+        check(read["tool_response"].get("stdout") == output,
+              "the stored tool output is not the output the session reported")
+        check(read["task_id"] == pack["task_id"],
+              f"tool Evidence is bound to {read['task_id']}, not the pack's task")
+        record.receipts.append(gate.receipt("g05-tool-evidence",
+                                            {"evidence_id": evidence_id,
+                                             "command": command,
+                                             "output_sha256": hashlib.sha256(
+                                                 output.encode("utf-8")).hexdigest()}))
+    finally:
+        conn.close()
+
 
 
 def case_g06(gate: Gate, record: CaseRecord) -> None:
