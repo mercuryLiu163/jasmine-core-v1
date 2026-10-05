@@ -1072,32 +1072,50 @@ def case_g02(gate: Gate, record: CaseRecord) -> None:
                            key=key)
     _verify_g02_pack(gate, record, pack)
 
-
 def _verify_g02_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> None:
-    """Version 2 must be what arrives; version 1 must not appear anywhere."""
-    record.context_pack_ids.append(pack["context_pack_id"])
-    check(pack["memory_status"] == "ok",
-          f"the current Decision was not recalled: {pack['memory_status']} "
-          f"{pack['memory_filtered']}")
-    versions = [item.get("origin_rule_version") for item in pack["memory_selected"]]
-    check(versions and all(v == 2 for v in versions),
-          f"the pack carries Decision versions {versions}; only the current one may "
-          f"reach it")
-    check(any(item["memory_type"] == "CONFIRMED_DECISION"
-              for item in pack["memory_selected"]),
-          f"no Decision reached the pack: {pack['memory_selected']}")
-    check(all(item["historical"] for item in pack["memory_selected"]),
-          "a Decision must reach the pack as history, never as current Truth")
+    """The current Decision must arrive as Truth, and the superseded one nowhere.
 
-    # The rendered text is the stronger assertion. 'mem0' was the superseded engine,
-    # so if it appears anywhere in the pack the superseded version leaked -- filtered
-    # items are dropped, not rendered with a warning.
+    The first form of this asserted the pack's Memory section carried version 2. That
+    was wrong about what Memory is for, and it failed for the right reason: a Decision
+    has no Evidence behind it, so the worker never bridges one -- `_P3_ELIGIBLE` is
+    `FAILURE_LESSON`/`VERIFIED_OUTCOME` only, because sending a Decision would be a
+    claim P3's `filter_memory` cannot verify. The current Decision does not need
+    Memory at all: it is Authority, and the pack's AUTHORITY section carries it as
+    CURRENT TRUTH. So the invariant is about which version is in the pack, not about
+    which section it is in.
+    """
+    record.context_pack_ids.append(pack["context_pack_id"])
     rendered = pack["rendered_content"]
-    check("hindsight" in rendered.lower(),
-          "the pack does not state the current engine (Hindsight)")
+
+    # 1. The current Decision is present, as Truth, naming the current engine.
+    authority = rendered.split("AUTHORITY\n", 1)[-1].split("\nCURRENT STATE", 1)[0]
+    check("hindsight" in authority.lower(),
+          f"the pack's AUTHORITY section does not carry the current Decision: {authority!r}")
+    check('"version":2' in authority.replace(" ", ""),
+          f"the pack's AUTHORITY section is not at version 2: {authority!r}")
+    check('"kind":"DECISION"' in authority.replace(" ", ""),
+          f"the pack's AUTHORITY section does not carry a Decision: {authority!r}")
+
+    # 2. No Decision reaches the pack as memory at all -- current or superseded.
+    decisions = [item for item in pack["memory_selected"] + pack["memory_filtered"]
+                 if item.get("memory_type") == "CONFIRMED_DECISION"]
+    check(not decisions,
+          f"a Decision reached the pack as memory: {decisions}; Authority is not Memory")
+
+    # 3. 'mem0' was the superseded engine. If it appears anywhere in the rendered pack
+    # the superseded version leaked -- filtered items are dropped, not rendered with a
+    # warning beside them, so a pack carrying both would look complete while being
+    # wrong. This is the assertion that fails if the supersession filter regresses.
     check("mem0" not in rendered.lower(),
           "the superseded engine (mem0) is still in the rendered pack, so the current "
           "Truth did not win")
+
+    # 4. And the engine agreed one level below: the recall behind this pack reported
+    # the old version as filtered-for-supersession rather than dropping both silently.
+    filtered = pack["memory_filtered"]
+    check(not filtered or any(row.get("reason") == "superseded_decision" for row in filtered),
+          f"the pack filtered something for a reason other than supersession: {filtered}")
+
     record.receipts.append(gate.receipt("g02-pack", {k: v for k, v in pack.items()
                                                      if k != "rendered_content"}))
 
