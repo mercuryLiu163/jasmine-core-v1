@@ -2596,10 +2596,16 @@ def _verify_prior_seal(work: Path, phase_name: str) -> dict[str, Any] | None:
     if not manifest.exists():
         raise Failed(f"the phase 1 manifest named by the seal is gone: {manifest}")
     manifest_digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
-    if manifest_digest != seal["manifest_sha256"]:
+    # The manifest named the seal, so the two must agree in that direction. A manifest
+    # that does not name this seal belongs to some other run's phase.
+    body = json.loads(manifest.read_text(encoding="utf-8"))
+    named = (body.get("seal") or {}).get("sha256")
+    seal_digest = hashlib.sha256(raw).hexdigest()
+    if named != seal_digest:
         raise Failed(
-            f"the phase 1 manifest does not match its seal: sealed "
-            f"{seal['manifest_sha256'][:12]}, on disk {manifest_digest[:12]}")
+            f"the phase 1 manifest names seal {str(named)[:12]}, but the seal on disk is "
+            f"{seal_digest[:12]}. One work directory is one phase; this manifest and this "
+            f"seal are not from the same run.")
     if seal.get("commit") != seal.get("candidate_commit"):
         raise Failed(f"the phase 1 seal disagrees with itself about the commit: "
                      f"{seal.get('commit')} vs {seal.get('candidate_commit')}")
@@ -2659,8 +2665,11 @@ def _write_phase_seal(work: Path, phase_name: str, manifest_path: Path,
         "commit": meta["commit"],
         "candidate_commit": meta["commit"],
         "dirty": meta["dirty"],
+        # The manifest path, deliberately without its digest. The manifest names the
+        # seal, so it is written a second time after the seal exists -- which means a
+        # digest taken here could never match the bytes left on disk. The chain runs
+        # receipts -> seal -> manifest, and each link is verified from the one below it.
         "manifest_path": str(manifest_path),
-        "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
         "receipts": entries,
         "cases": per_case,
     }
@@ -2668,11 +2677,16 @@ def _write_phase_seal(work: Path, phase_name: str, manifest_path: Path,
     seal_path = work / f"{phase_name}-seal.json"
     if seal_path.exists():
         existing = json.loads(seal_path.read_text(encoding="utf-8"))
-        if existing.get("manifest_sha256") != payload["manifest_sha256"]:
+        sealed = {e["path"]: e["sha256"] for e in existing.get("receipts") or []}
+        fresh = {e["path"]: e["sha256"] for e in entries}
+        if sealed != fresh:
+            changed = sorted(set(sealed) ^ set(fresh)) or [
+                p for p in sealed if sealed[p] != fresh.get(p)]
             raise Failed(
-                f"{phase_name} was already sealed in this work directory, against "
-                f"manifest {str(existing.get('manifest_sha256'))[:12]}; this run produced "
-                f"{payload['manifest_sha256'][:12]}. One work directory is one phase.")
+                f"{phase_name} was already sealed in this work directory covering "
+                f"{len(sealed)} receipts; this run covers {len(fresh)} and they differ at "
+                f"{changed[:3]}. One work directory is one phase, and a phase's receipts "
+                f"do not change after it is sealed.")
         return {"path": str(seal_path),
                 "sha256": hashlib.sha256(seal_path.read_bytes()).hexdigest(),
                 "receipts_sealed": len(entries)}

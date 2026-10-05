@@ -114,17 +114,26 @@ class AResumedRunVerifiesTheSealItContinues(unittest.TestCase):
         seal = self.module._write_phase_seal(
             self.work, "phase1", manifest, [record],
             {"commit": "abc1234", "dirty": False, "schema_version": 11})
+        # The real runner writes the manifest a second time to name the seal; the seal
+        # must therefore accept the pair, and the resumed run must find them consistent.
+        body = json.loads(manifest.read_text(encoding="utf-8"))
+        body["seal"] = {"sha256": seal["sha256"], "phase": "phase1",
+                        "receipts_sealed": seal["receipts_sealed"]}
+        manifest.write_text(json.dumps(body), encoding="utf-8")
         return manifest, self.work / "phase1-seal.json", seal
 
-    def test_phase_one_seals_its_manifest_and_receipts(self) -> None:
+    def test_phase_one_seals_its_receipts_and_names_its_manifest(self) -> None:
         manifest, seal_path, seal = self._phase1()
         body = json.loads(seal_path.read_text(encoding="utf-8"))
         self.assertEqual(body["manifest_path"], str(manifest))
-        self.assertEqual(body["manifest_sha256"],
-                         hashlib.sha256(manifest.read_bytes()).hexdigest())
         self.assertEqual([r["kind"] for r in body["receipts"]], ["g06-document"])
         self.assertEqual(seal["receipts_sealed"], 1)
         self.assertEqual(seal_path.stat().st_mode & 0o777, 0o600)
+        # The seal deliberately carries no digest of the manifest: the manifest is
+        # rewritten after the seal so it can name the seal, so a digest taken at seal
+        # time could never match the bytes left behind. The chain is
+        # receipts -> seal -> manifest.
+        self.assertNotIn("manifest_sha256", body)
 
     def test_a_resumed_run_passes_when_nothing_moved(self) -> None:
         self._phase1()
@@ -152,12 +161,23 @@ class AResumedRunVerifiesTheSealItContinues(unittest.TestCase):
             self.module._verify_prior_seal(self.work, "phase2")
         self.assertIn("missing", str(caught.exception))
 
-    def test_a_resumed_run_refuses_when_the_manifest_was_rewritten(self) -> None:
+    def test_a_resumed_run_refuses_when_the_manifest_names_another_seal(self) -> None:
+        # A manifest that does not name this seal came from some other run's phase, so
+        # the two files existing side by side does not make them one evidence chain.
         manifest, _, _ = self._phase1()
-        manifest.write_text('{"verdict": "PASS", "phase": "P4", "extra": 1}', encoding="utf-8")
+        body = json.loads(manifest.read_text(encoding="utf-8"))
+        body["seal"] = {"sha256": "a" * 64}
+        manifest.write_text(json.dumps(body), encoding="utf-8")
         with self.assertRaises(_FAILED) as caught:
             self.module._verify_prior_seal(self.work, "phase2")
-        self.assertIn("does not match its seal", str(caught.exception))
+        self.assertIn("names seal", str(caught.exception))
+
+    def test_a_resumed_run_refuses_when_the_manifest_is_gone(self) -> None:
+        manifest, _, _ = self._phase1()
+        manifest.unlink()
+        with self.assertRaises(_FAILED) as caught:
+            self.module._verify_prior_seal(self.work, "phase2")
+        self.assertIn("manifest named by the seal is gone", str(caught.exception))
 
     def test_resuming_without_a_seal_is_refused(self) -> None:
         # Otherwise the final phase can be produced by pointing it at a work directory
@@ -168,6 +188,26 @@ class AResumedRunVerifiesTheSealItContinues(unittest.TestCase):
 
     def test_phase_one_needs_no_prior_seal(self) -> None:
         self.assertIsNone(self.module._verify_prior_seal(self.work, "phase1"))
+
+    def test_a_re_seal_against_different_receipts_is_refused(self) -> None:
+        self._phase1()
+        (self.work / "P4-G06" / "g06-document.json").write_text('{"id": "doc-2"}',
+                                                                encoding="utf-8")
+        record = self.module.CaseRecord("P4-G06", "PASS", mode="real")
+        record.receipts.append({
+            "path": str(self.work / "P4-G06" / "g06-document.json"),
+            "kind": "g06-document",
+            "sha256": hashlib.sha256(
+                (self.work / "P4-G06" / "g06-document.json").read_bytes()).hexdigest()})
+        out = self.work / "out3"
+        out.mkdir()
+        manifest = out / "p4-gate-9.json"
+        manifest.write_text("{}", encoding="utf-8")
+        with self.assertRaises(_FAILED) as caught:
+            self.module._write_phase_seal(self.work, "phase1", manifest, [record],
+                                         {"commit": "abc1234", "dirty": False,
+                                          "schema_version": 11})
+        self.assertIn("already sealed", str(caught.exception))
 
     def test_one_work_directory_is_one_phase(self) -> None:
         # Sealing twice against different manifests means one directory produced two
