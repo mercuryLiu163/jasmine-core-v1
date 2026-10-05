@@ -502,6 +502,33 @@ class ResumePathsReestablishPreconditions(unittest.TestCase):
                     f"{case_id} returns before establishing the bank namespace")
 
 
+class RecoveryDrainsBeforeItRecalls(unittest.TestCase):
+    def test_g05_recovery_drain_precedes_recall(self):
+        # Found by the first live run under the new G05 flow, not by any unit
+        # test: the recovery recall ran before the post-recovery drain, at which
+        # point the outage had held every job PENDING and the engine genuinely
+        # held no documents -- so the recall correctly returned `empty` and the
+        # `status == "ok"` check failed on correct engine behaviour. The comment
+        # above the block always described drain-then-recall; the code said the
+        # opposite. This pins the order.
+        import inspect
+
+        module = _module()
+        source = inspect.getsource(module.case_g05)
+        lines = source.splitlines()
+        recovery_at = next(i for i, line in enumerate(lines)
+                           if "Recovery: the engine answers again" in line)
+        tail = lines[recovery_at:]
+        drain_at = next(i for i, line in enumerate(tail)
+                        if "gate.drain(conn)" in line)
+        recall_at = next(i for i, line in enumerate(tail)
+                         if 'gate.recall(project, "device test"' in line)
+        self.assertLess(
+            drain_at, recall_at,
+            "G05 recovery recalls before draining: with every job still PENDING "
+            "the engine holds nothing and the recall can only return empty")
+
+
 # -- Item G ---------------------------------------------------------------
 
 class CompletedComparesLiveAttempts(unittest.TestCase):

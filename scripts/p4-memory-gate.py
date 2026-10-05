@@ -3097,8 +3097,10 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
 
     # Recovery: the engine answers again, the same jobs drain to DONE with no
     # second document, and the remote document carries every extracted unit.
-    recovered = gate.recall(project, "device test", max_tokens=400)
-    check(recovered.status == "ok", f"the engine did not recover: {recovered.as_dict()}")
+    # The drain comes first because nothing has ever reached the engine yet: the
+    # outage held every job PENDING, so a recall before the drain can only ever
+    # return `empty` -- and did, on the first live run. The comment always said
+    # drain-then-recall; the code said the opposite.
     conn = gate.conn()
     try:
         gate.drain(conn)
@@ -3106,6 +3108,10 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
         conn.close()
     _verify_g05_recovery(gate, record, expected_job_ids=outage_job_ids,
                          memory_ids=outage_memory_ids)
+    recovered = gate.recall(project, "device test", max_tokens=400)
+    check(recovered.status == "ok", f"the engine did not recover: {recovered.as_dict()}")
+    check(bool(recovered.items),
+          f"recovery drained but the lesson is still unrecallable: {recovered.as_dict()}")
     bank = scope.project_bank(project)
     recovered_units = 0
     for document_id in sorted(set(record.document_ids)):
