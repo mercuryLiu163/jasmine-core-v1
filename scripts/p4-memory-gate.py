@@ -1570,12 +1570,21 @@ def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str
                                       "expected_revision": 1},
                                      actor_id=gate.human, actor_kind="human",
                                      can_accept=False)["step"]["step_id"]
+        # The output goes in as a workspace artifact, not into the result. That is
+        # where Core keeps a tool's bytes: `_tool_result` reads only exit_code and
+        # is_error out of `tool_response` -- deliberately, since an Agent's prose
+        # about what happened is not a process result -- and the artifact is hashed
+        # into `artifact_sha256`. Putting the output in `tool_response` would have
+        # been silently discarded, which is what the first version did.
+        artifact = gate.workspace / "session-tool-output.txt"
+        artifact.write_text(output, encoding="utf-8")
         stored = EvidenceStore(conn, schema_version=SCHEMA_VERSION).record_tool_result(
             {"task_id": pack["task_id"], "step_id": step, "host_id": gate.host,
              "codex_session_id": gate.case_id, "turn_id": f"t-{ids.new_id('evt')[-8:]}",
              "tool_use_id": ids.new_id("evt")[-8:], "tool_name": "shell",
-             "tool_input": {"cmd": command}, "tool_response": {"stdout": output},
-             "artifact_uri": "workspace:/session-tool-output"},
+             "tool_input": {"cmd": command},
+             "tool_response": {"exit_code": 0, "stdout": output},
+             "artifact_uri": "workspace:/session-tool-output.txt"},
             actor_id=gate.system)
         evidence_id = stored.get("evidence_id") or stored["evidence"]["evidence_id"]
         record.evidence_ids.append(evidence_id)
@@ -1590,8 +1599,13 @@ def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str
         check(read["command_sha256"] == hashlib.sha256(command.encode("utf-8")).hexdigest(),
               f"the stored command hash is {read['command_sha256']!r}, not the hash of "
               f"the command the session ran")
-        check(output in json.dumps(read, ensure_ascii=False),
-              "the stored tool Evidence does not contain the output the session reported")
+        check(read["artifact_uri"] == "workspace:/session-tool-output.txt",
+              f"the Evidence points at {read['artifact_uri']!r}, not the captured output")
+        check(read["artifact_sha256"] == hashlib.sha256(
+            output.encode("utf-8")).hexdigest(),
+              f"the stored artifact hash is {read['artifact_sha256']!r}, not the hash of "
+              f"the output the session reported; Core accepted the capture without the "
+              f"bytes")
         check(read["task_id"] == pack["task_id"],
               f"tool Evidence is bound to {read['task_id']}, not the pack's task")
         record.receipts.append(gate.receipt("g05-tool-evidence",
