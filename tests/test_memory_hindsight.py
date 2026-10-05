@@ -503,6 +503,34 @@ class EndToEndOverTheWire(MemoryTestCase):
                              fact_types=(), tags=()),
             [], "a bank the engine has never heard of has no results, not an error")
 
+    def test_reflect_on_a_bank_the_engine_never_had_is_empty_not_a_failure(self) -> None:
+        """Reflect has the same 404 asymmetry recall had, and the same resolution.
+
+        A deployment with no global bank answers 404 here too. Read as an outage
+        that made the whole ReflectOutcome `degraded` -- the answer that means
+        "Memory is unavailable" -- for a deployment that simply has nothing to
+        reflect on. Verified against the real engine once a tool-calling model was
+        available: before that the endpoint answered 500 first, so the asymmetry was
+        certain in the code and unobservable on the wire.
+        """
+        from jasmine_core.memory.scope import BankRef
+
+        absent = BankRef(bank_id="jasmine-global", scope_kind="global", project_id=None)
+        answer = self.wire.reflect(bank=absent, query="anything", max_tokens=100)
+        self.assertEqual(answer["text"], "")
+        self.assertEqual(answer["based_on_ids"], [])
+
+    def test_a_wrong_route_is_still_an_error_for_reflect(self) -> None:
+        """The proof is what makes it `empty`; without it the 404 stays an error."""
+        from jasmine_core.memory.scope import BankRef
+
+        absent = BankRef(bank_id="jasmine-global", scope_kind="global", project_id=None)
+        self.server.httpd.banks_collection_404 = True
+        with self.assertRaises(TransportError) as raised:
+            self.wire.reflect(bank=absent, query="anything", max_tokens=100)
+        self.assertEqual(raised.exception.code, "engine_not_found")
+        self.server.httpd.banks_collection_404 = False
+
     def test_a_bank_that_does_exist_still_answers(self) -> None:
         """The proof reads the banks collection; it must not shadow a real bank."""
         from jasmine_core.memory.scope import BankRef

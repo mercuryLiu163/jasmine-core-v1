@@ -575,12 +575,28 @@ class HindsightTransport:
         return results
 
     def reflect(self, *, bank: BankRef, query: str, max_tokens: int) -> dict[str, Any]:
-        """`POST /v1/default/banks/{bank_id}/reflect`."""
-        payload = self._request(
-            "POST", self._bank_path(bank, "/reflect"),
-            body={"query": query, "max_tokens": min(max(1, int(max_tokens)),
-                                                  MAX_REQUEST_TOKENS)},
-        )
+        """`POST /v1/default/banks/{bank_id}/reflect`.
+
+        The same 404 asymmetry `recall` had, and for the same reason: Hindsight
+        creates a bank on its first retain, so a deployment with no global bank
+        answers 404 here too. Read as an outage it made the whole ReflectOutcome
+        `degraded`, which is the answer that means "Memory is unavailable" -- for a
+        deployment that simply has nothing to reflect on. `degraded_banks` is meant
+        to name banks that *failed*, not banks this deployment has never heard of.
+
+        So it resolves the 404 by proving the bank absent, exactly as recall does,
+        and reports an empty synthesis rather than a failure.
+        """
+        try:
+            payload = self._request(
+                "POST", self._bank_path(bank, "/reflect"),
+                body={"query": query, "max_tokens": min(max(1, int(max_tokens)),
+                                                      MAX_REQUEST_TOKENS)},
+            )
+        except TransportError as exc:
+            if exc.http_status == 404 and self._bank_is_absent(bank):
+                return {"text": "", "based_on_ids": []}
+            raise
         if not isinstance(payload, dict):
             raise TransportError("engine_protocol_error",
                                  "the reflect response was not a JSON object", retryable=False)
