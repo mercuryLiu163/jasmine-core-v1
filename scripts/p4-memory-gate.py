@@ -104,9 +104,10 @@ class Failed(Exception):
 #: while forbidding X. An LLM judge would read the sentence properly but would not be
 #: reproducible between runs, and an acceptance gate that changes its mind is worse than
 #: one with a blunt documented rule.
-_NEGATORS = ("not ", "n't", "never", "no ", "cannot", "can't", "is not", "was not",
-             "rather than", "instead of", "does not", "did not", "supersed", "earlier",
-             "previously", "instead")
+_NEGATORS = ("not ", "n't", "never", "no ", "nothing", "none", "nobody", "cannot",
+             "can't", "is not", "was not", "rather than", "instead of", "does not",
+             "did not", "supersed", "earlier", "previously", "instead", "without",
+             "if ", "unless", "zero")
 
 
 def unnegated(text: str, phrase: str, window: int = 70):
@@ -116,6 +117,12 @@ def unnegated(text: str, phrase: str, window: int = 70):
     "there is no record" from "nothing verified a record", and across G02, G03, G04,
     G05 and G07 that mistake rejected five correct answers before this was noticed --
     every one of them a session that had understood the case perfectly.
+
+    The phrase itself may contain a negation: G05 looks for "no memory", which is an
+    assertion of absence, and the sentence is excused when something *else* denies it
+    ("degraded does not mean no memory"). What matters is the outer denial, not the
+    words inside the phrase. A phrase whose mention is never the problem -- G03's "no
+    record", which is the answer it is asking for -- must simply not be searched for.
 
     "no memory" and "degraded does not mean no memory" both contain the phrase; only
     the second is honest, and a substring test cannot tell them apart. Each occurrence
