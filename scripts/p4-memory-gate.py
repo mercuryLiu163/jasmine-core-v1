@@ -2072,21 +2072,34 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
     record.source_event_ids.append(prompt)
     pack = gate.build_pack(project_id=project, task_id=task_id, prompt_event_id=prompt,
                            key=key)
-    _verify_g07_pack(gate, record, pack, project, memory_id,
-                     "a lesson the operator is about to retire")
+    # Which memory this case retired, written beside the pack. The verifier needs it
+    # to prove the absence, and `--resume` re-derives nothing -- so it is recorded
+    # rather than passed, for the same reason the pack itself is the unit of resumption.
+    retired = {"memory_id": memory_id, "text": "a lesson the operator is about to retire",
+               "project_id": project}
+    (gate.root / "g07-retired.json").write_text(
+        json.dumps(retired, ensure_ascii=False, indent=2), encoding="utf-8")
+    _verify_g07_pack(gate, record, pack, retired)
 
 
 
 def _verify_g07_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
-                     project: str, obsolete_memory_id: str,
-                     obsolete_text: str) -> None:
+                     retired: dict[str, Any] | None = None) -> None:
     """A live memory arrives as history; the obsoleted one does not arrive at all.
 
-    `obsolete_text` is the reason the retired lesson was retained under, so the check
-    is against the words that would actually have leaked rather than against the
-    memory's id, which the pack never carries.
+    `retired` names what this case obsoleted: its memory id, and the reason the lesson
+    was retained under. The check is against the words that would actually have
+    leaked rather than against the id, which the pack never carries. It is read from
+    the case directory when the resumed path does not supply it.
     """
     record.context_pack_ids.append(pack["context_pack_id"])
+    if retired is None:
+        retired = json.loads((gate.root / "g07-retired.json").read_text(encoding="utf-8"))
+    project = retired["project_id"]
+    obsolete_memory_id, obsolete_text = retired["memory_id"], retired["text"]
+    check(project == pack["project_id"],
+          f"the pack is for {pack['project_id']} but the retired memory belongs to "
+          f"{project}")
     check(pack["memory_status"] == "ok",
           f"the live memory was not recalled: {pack['memory_status']} "
           f"{pack['memory_filtered']}")
