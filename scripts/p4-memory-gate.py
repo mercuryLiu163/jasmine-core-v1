@@ -1846,6 +1846,11 @@ def _latest_decision_event(conn: sqlite3.Connection, project_id: str) -> str:
 
 
 def case_g07(gate: Gate, record: CaseRecord) -> None:
+    gate.require_real_agent()
+    key = "g07-lifecycle-pack"
+    resumed = gate.existing_pack(key)
+    if resumed is not None:
+        return _verify_g07_pack(gate, record, resumed)
     """obsolete / delete / pin against a real engine, with real receipts."""
     from jasmine_core import errors
 
@@ -2052,21 +2057,96 @@ def case_g07(gate: Gate, record: CaseRecord) -> None:
         "delete_fault": {"status": failed_delete["status"],
                          "error_code": failed_delete["last_error_code"],
                          "recovered": final_job["status"]}}))
-    # The lifecycle and engine halves above are real and recorded. The Context
-    # half is not, and G07's taskbook entry requires it: an actual Context Pack
-    # proving a recalled memory is not authoritative and an obsolete one is not
-    # injected, plus the source read-back *from the pack*. That needs a merged P3
-    # and a real session, neither of which exists here, so this case refuses to
-    # return — a returning case is recorded as PASS.
-    raise Blocked(
-        "the pin/obsolete/delete lifecycle, the remote-delete fault and recovery, the "
-        "stale-revision refusal and the actor refusal are recorded against a real engine. "
-        "Still missing for G07: an actual Context Pack showing a recalled memory marked "
-        "non-authoritative and an obsolete one not injected, the pack-level source "
-        "read-back, and the management audit Event for these lifecycle commands. Those "
-        "need a P3 Context Pack built in a real Agent session; until one is supplied "
-        "this case is BLOCKED, not PASS. Everything above it ran against the real engine."
-    )
+    # The Context half. One pack carries both sides of the claim: the memory that is
+    # still live arrives as non-authoritative history, and the one this case just
+    # obsoleted does not arrive at all. Two packs would prove less -- each would only
+    # show what its own query happened to return.
+    job_id, document_id, source_event_id = gate.retain_lesson(
+        project, reason="the retry budget was exhausted before the callback landed")
+    record.job_ids.append(job_id)
+    record.document_ids.append(document_id)
+    record.source_event_ids.append(source_event_id)
+    task_id = gate.new_task(project, "lifecycle read-back")
+    prompt = gate.event(project, "user.prompt",
+                        "what do you remember about these failures?", task_id=task_id)
+    record.source_event_ids.append(prompt)
+    pack = gate.build_pack(project_id=project, task_id=task_id, prompt_event_id=prompt,
+                           key=key)
+    _verify_g07_pack(gate, record, pack, project, memory_id,
+                     "a lesson the operator is about to retire")
+
+
+
+def _verify_g07_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
+                     project: str, obsolete_memory_id: str,
+                     obsolete_text: str) -> None:
+    """A live memory arrives as history; the obsoleted one does not arrive at all.
+
+    `obsolete_text` is the reason the retired lesson was retained under, so the check
+    is against the words that would actually have leaked rather than against the
+    memory's id, which the pack never carries.
+    """
+    record.context_pack_ids.append(pack["context_pack_id"])
+    check(pack["memory_status"] == "ok",
+          f"the live memory was not recalled: {pack['memory_status']} "
+          f"{pack['memory_filtered']}")
+    check(bool(pack["memory_selected"]),
+          f"the pack selected no memory at all: {pack['memory_filtered']}")
+
+    # Every item is historical: Context never presents Memory as Truth. If one
+    # arrived as current, the precedence header would be a lie.
+    check(all(item.get("historical") for item in pack["memory_selected"]),
+          "a Memory item reached the pack as current Truth rather than history")
+    check("HISTORICAL_NONAUTHORITATIVE MEMORY DATA" in pack["rendered_content"],
+          "the pack did not mark its memory as non-authoritative history")
+
+    # The obsolete half: neither its id nor its words may appear.
+    check(obsolete_memory_id not in json.dumps(pack, ensure_ascii=False),
+          f"the obsoleted memory {obsolete_memory_id} is still in the pack")
+    check(obsolete_text.lower() not in pack["rendered_content"].lower(),
+          f"the obsoleted memory's own text ({obsolete_text!r}) is in the rendered "
+          f"pack; obsolete means not injected, not injected-with-a-warning")
+
+    # The source read-back, at the level the pack claims: every provenance row it
+    # carries must name Events that exist, in this project, on this Task's lineage.
+    conn = gate.conn()
+    try:
+        for row in pack["qualified_provenance"]:
+            for event_id in row["source_event_ids"]:
+                stored = conn.execute(
+                    "SELECT project_id FROM events WHERE event_id=?", (event_id,)).fetchone()
+                check(stored is not None,
+                      f"the pack cites source Event {event_id}, which does not exist")
+                check(stored["project_id"] == project,
+                      f"the pack cites {event_id}, which belongs to "
+                      f"{stored['project_id']}, not {project}")
+            check(row["evidence_ids"],
+                  f"provenance {row['memory_id']} cites no Evidence; a memory with no "
+                  f"Evidence behind it could not have been verified")
+        # And the audit trail for the lifecycle this case drove.
+        audited = [r["event_type"] for r in conn.execute(
+            "SELECT event_type FROM events WHERE project_id=? AND event_type LIKE 'memory.%'"
+            " ORDER BY seq", (project,))]
+        check(bool(audited),
+              "no management audit Event was written for the pin/obsolete/delete this "
+              "case performed")
+        record.engine_evidence["lifecycle_audit_events"] = audited
+    finally:
+        conn.close()
+    record.receipts.append(gate.receipt("g07-lifecycle-pack", {
+        k: v for k, v in pack.items() if k != "rendered_content"}))
+
+    # The session must treat what it was given as history, and must not resurrect the
+    # retired lesson.
+    session = gate.verify_session(pack, "g07", require_tool_actions=False)
+    record.receipts.append(gate.receipt("g07-session", session["verified"]))
+    answer = (session.get("final_answer") or "").lower()
+    check(obsolete_text.lower() not in answer,
+          f"the session repeated the obsoleted memory: {answer[:300]!r}")
+    check(any(word in answer for word in ("remember", "history", "previously", "past",
+                                          "non-authoritative", "not authoritative")),
+          f"the session did not treat the memory as history: {answer[:300]!r}")
+
 
 
 CASES_BY_ID = {
