@@ -948,9 +948,17 @@ def _verify_g01_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     check(any(marker in answer.lower() for marker in
               ("histor", "previously", "last time", "earlier", "before", "prior")),
           f"the answer does not mark the recalled lesson as historical: {answer[:300]!r}")
-    check("task_id" in answer,
-          f"the answer reaches no cause at all, so it cannot have arranged a useful "
-          f"diagnosis from the pack: {answer[:300]!r}")
+    # It must reach *a* cause, and it must attribute the lesson to the task the lesson
+    # came from. The first version required the literal string "task_id", which is a
+    # field name and not an id: a session that correctly wrote the recalled task's id
+    # -- tsk_... -- failed the check, while one that wrote "task_id" in passing would
+    # have passed without citing anything. The id from the pack is the thing that has
+    # to appear.
+    lesson_task = (pack["memory_selected"][0].get("source_task_id") or "") if \
+        pack["memory_selected"] else ""
+    check(bool(lesson_task) and lesson_task in answer,
+          f"the answer does not name the task the lesson came from ({lesson_task!r}), so "
+          f"the recalled lesson was not tied to its own provenance: {answer[:300]!r}")
 
 
 def case_g02(gate: Gate, record: CaseRecord) -> None:
