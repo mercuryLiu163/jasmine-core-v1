@@ -294,8 +294,16 @@ class Gate:
     def conn(self) -> sqlite3.Connection:
         return db.connect(self.db_path)
 
-    def event(self, project_id: str, event_type: str, text: str) -> str:
-        """Append one Raw Event. Returns its id."""
+    def event(self, project_id: str, event_type: str, text: str, *,
+              task_id: str | None = None) -> str:
+        """Append one Raw Event. Returns its id.
+
+        `task_id` matters for anything P3 will admit as a Context source: a pack is
+        built for a Task, and P3 refuses a source Event that belongs to a different
+        Task (or to none) unless it carries a trusted derived binding
+        (`SourceScopeMismatch: source has no trusted derived Task binding`). A prompt
+        the pack is built for belongs to that prompt's own Task, so it says so.
+        """
         from jasmine_core.events import EventStore
 
         conn = self.conn()
@@ -304,7 +312,7 @@ class Gate:
                 event_type=event_type, source_system=f"p4-gate-{self.case_id}",
                 source_event_id=None, occurred_at=clock.now(), actor_id=self.human,
                 actor_kind="human", host_id=self.host, project_id=project_id,
-                payload={"text": text}))
+                task_id=task_id, payload={"text": text}))
             return stored["event_id"]
         finally:
             conn.close()
@@ -804,7 +812,8 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
 
     current = gate.new_task(project, "device test (new session)")
     prompt = gate.event(project, "user.prompt",
-                        "the device test fails again; where should I look first?")
+                        "the device test fails again; where should I look first?",
+                        task_id=current)
     record.source_event_ids.append(prompt)
 
     pack = gate.build_pack(project_id=project, task_id=current, prompt_event_id=prompt,
