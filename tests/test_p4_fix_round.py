@@ -198,15 +198,16 @@ class ToolActionsBindToCoreEvidence(unittest.TestCase):
         self.assertIn("binds to no Core Evidence", message)
         self.assertIn("rm -rf /tmp/elsewhere", message)
 
-    def test_a_row_with_a_different_output_hash_is_refused(self) -> None:
+    def test_an_action_whose_output_has_no_row_is_refused(self) -> None:
+        # The lookup is keyed on the full content tuple, so an action declaring
+        # output no collected row holds simply misses -- it fails as "no Core
+        # Evidence", not as a hash comparison against somebody else's row.
         self.gate.collect_tool_evidence(self.task, command="pytest -q",
                                        output="Ran 1 test\n\nOK\n", exit_code=0)
         with self.assertRaises(self.module.Failed) as caught:
             self._verify({"tool_actions": [
                 {"command": "pytest -q", "output": "Ran 9 tests\n\nOK\n"}]})
-        message = str(caught.exception)
-        self.assertIn("not the hash", message)
-        self.assertIn("the bytes differ", message)
+        self.assertIn("binds to no Core Evidence", str(caught.exception))
 
     def test_a_row_bound_to_a_different_task_is_refused(self) -> None:
         other = self.gate.new_task(self.project, "another task")
@@ -226,14 +227,25 @@ class ToolActionsBindToCoreEvidence(unittest.TestCase):
                  "exit_code": 1}]})
         self.assertIn("declares FAIL but its Evidence", str(caught.exception))
 
-    def test_a_repeat_with_different_bytes_is_not_the_same_capture(self) -> None:
-        self.gate.collect_tool_evidence(self.task, command="pytest -q",
-                                       output="Ran 1 test\n\nOK\n", exit_code=0)
-        with self.assertRaises(self.module.Failed) as caught:
-            self.gate.collect_tool_evidence(self.task, command="pytest -q",
-                                           output="something else entirely",
-                                           exit_code=0)
-        self.assertIn("not the same capture", str(caught.exception))
+    def test_a_repeat_with_different_bytes_is_a_different_capture(self) -> None:
+        # Same command run twice with different outputs -- the normal shape of
+        # debugging (FAIL, then OK). The two executions get distinct rows rather
+        # than the second being refused or merged into the first; an earlier
+        # revision refused here, which made any session that re-ran a command
+        # unverifiable.
+        first = self.gate.collect_tool_evidence(
+            self.task, command="pytest -q", output="Ran 1 test\n\nOK\n", exit_code=0)
+        second = self.gate.collect_tool_evidence(
+            self.task, command="pytest -q", output="something else entirely",
+            exit_code=0)
+        self.assertNotEqual(first, second)
+        conn = self.gate.conn()
+        try:
+            rows = conn.execute("SELECT evidence_id FROM evidence WHERE task_id=?",
+                                (self.task,)).fetchall()
+        finally:
+            conn.close()
+        self.assertEqual([r["evidence_id"] for r in rows], [first, second])
 
     def test_an_unbacked_final_verification_is_refused(self) -> None:
         self.gate.collect_tool_evidence(self.task, command="git log --oneline",

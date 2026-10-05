@@ -436,20 +436,21 @@ class EveryActionCapturedWithTaskAndOutputSeed(unittest.TestCase):
         self.assertIn("rm -rf /tmp/elsewhere", str(caught.exception))
 
     def test_same_command_different_output_yields_different_ids(self):
+        # Distinct executions get distinct rows; nothing is merged and nothing
+        # is refused. Identical repeats still reuse (see
+        # test_unified_derivation_same_inputs_same_id).
         first = self.gate.collect_tool_evidence(self.task, command="pytest -q",
                                                 output="Ran 1 test\n\nOK\n")
-        with self.assertRaises(self.module.Failed) as caught:
-            self.gate.collect_tool_evidence(self.task, command="pytest -q",
-                                            output="something else entirely")
-        self.assertIn("not the same capture", str(caught.exception))
-        # Not the same id: the second capture was refused rather than reused.
+        second = self.gate.collect_tool_evidence(self.task, command="pytest -q",
+                                                  output="something else entirely")
+        self.assertNotEqual(first, second)
         conn = self.gate.conn()
         try:
             rows = conn.execute("SELECT evidence_id FROM evidence WHERE task_id=?",
                                 (self.task,)).fetchall()
         finally:
             conn.close()
-        self.assertEqual([r["evidence_id"] for r in rows], [first])
+        self.assertEqual([r["evidence_id"] for r in rows], [first, second])
 
     def test_unified_derivation_same_inputs_same_id(self):
         first = self.gate.collect_tool_evidence(self.task, command="ls",

@@ -1302,10 +1302,14 @@ class Gate:
         as a `workspace:/...` artifact so Core hashes the bytes themselves, and
         the identity of the capture is a pure function of its content: the
         `turn_id`/`tool_use_id` derive from a content hash (`case_id|task_id|
-        command|output_sha256`), an identical repeat reuses the row found by
-        lookup on `(task_id, tool_name, command_sha256)`, and a repeat whose
-        output differs is refused rather than silently merged, because two
-        executions that produced different bytes are not the same capture.
+        command|output_sha256`), and the row is keyed on the full tuple
+        `(task_id, tool_name, command_sha256, artifact_sha256)`. An identical
+        repeat reuses the row found by that key; a repeat whose output differs
+        is a different execution and gets its own row -- which is the normal
+        shape of debugging (FAIL, then OK), and which an earlier revision
+        refused, making any session that re-ran a command unverifiable. Two
+        executions that produced different bytes are still never merged under
+        one identity; they are simply never given one.
         """
         from jasmine_core.evidence import EvidenceStore
         from jasmine_core.state import StateStore
@@ -1337,17 +1341,10 @@ class Gate:
             artifact.write_text(output, encoding="utf-8")
             reused = conn.execute(
                 "SELECT evidence_id, artifact_sha256 FROM evidence WHERE task_id=? AND"
-                " tool_name=? AND command_sha256=? ORDER BY created_at, evidence_id"
-                " LIMIT 1", (task_id, tool_name, command_sha256)).fetchone()
+                " tool_name=? AND command_sha256=? AND artifact_sha256=?"
+                " ORDER BY created_at, evidence_id LIMIT 1",
+                (task_id, tool_name, command_sha256, output_sha256)).fetchone()
             if reused is not None:
-                if reused["artifact_sha256"] != output_sha256:
-                    raise Failed(
-                        f"an Evidence row already binds {command!r} on task {task_id} "
-                        f"to different output bytes "
-                        f"({(reused['artifact_sha256'] or '')[:12]} stored, "
-                        f"{output_sha256[:12]} now). Two executions that produced "
-                        f"different bytes are not the same capture; recording this "
-                        f"under the same identity would merge them.")
                 return reused["evidence_id"]
             seed = f"{self.case_id}|{task_id}|{command}|{output_sha256}"
             turn_id = "t-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8]
@@ -1370,8 +1367,8 @@ class Gate:
                            step_id: str | None = None) -> str:
         """Bind one session-declared tool action to its Core Evidence row.
 
-        The row is looked up by `(task_id, tool_name, command_sha256)` -- the
-        same key `collect_tool_evidence` reuses -- and then checked field by
+        The row is looked up by the full content tuple `(task_id, tool_name,
+        command_sha256, artifact_sha256)` -- the same key `collect_tool_evidence`
         field: the stored command hash must equal the declared command's hash,
         the stored output artifact hash must equal the declared output's bytes,
         the stored exit status must match the declared one (PASS for exit 0,
@@ -1409,14 +1406,15 @@ class Gate:
         row = conn.execute(
             "SELECT evidence_id, command_sha256, artifact_sha256, status, task_id,"
             " step_id, session_id, tool_name FROM evidence WHERE task_id=? AND"
-            " tool_name=? AND command_sha256=? ORDER BY created_at, evidence_id"
-            " LIMIT 1", (task_id, tool_name, command_sha256)).fetchone()
+            " tool_name=? AND command_sha256=? AND artifact_sha256=?"
+            " ORDER BY created_at, evidence_id LIMIT 1",
+            (task_id, tool_name, command_sha256, output_sha256)).fetchone()
         if row is None:
             raise Failed(
                 f"the tool action {command!r} binds to no Core Evidence: no row "
-                f"for task {task_id} with tool {tool_name!r} and command hash "
-                f"{command_sha256[:12]}. An action only the session describes is "
-                f"not an action that ran.")
+                f"for task {task_id} with tool {tool_name!r}, command hash "
+                f"{command_sha256[:12]} and output hash {output_sha256[:12]}. An "
+                f"action only the session describes is not an action that ran.")
         if row["command_sha256"] != command_sha256:
             raise Failed(
                 f"the tool action {command!r} names a command whose hash "
@@ -3301,8 +3299,10 @@ def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str
         try:
             existed = probe.execute(
                 "SELECT evidence_id FROM evidence WHERE task_id=? AND tool_name=? AND"
-                " command_sha256=? ORDER BY created_at, evidence_id LIMIT 1",
-                (pack["task_id"], tool_name, command_sha)).fetchone() is not None
+                " command_sha256=? AND artifact_sha256=? ORDER BY created_at,"
+                " evidence_id LIMIT 1",
+                (pack["task_id"], tool_name, command_sha,
+                 hashlib.sha256(output.encode("utf-8")).hexdigest())).fetchone() is not None
         finally:
             probe.close()
         evidence_id = gate.collect_tool_evidence(
