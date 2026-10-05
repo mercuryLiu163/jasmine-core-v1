@@ -1661,6 +1661,19 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
     the work — and the assertions are made here, on what a restarted worker
     actually finds.
     """
+    # G06 cannot be verified by running it again. Its scenario commits a Decision in
+    # window 1, then drains it in window 2 -- so a second execution commits a *second*
+    # Decision and the case's own "exactly the missing job" assertion becomes false on
+    # correct state. Three assertions here had already been rewritten to be relative for
+    # the same underlying reason; this is the structural fix rather than the fourth
+    # symptom. A completed run leaves a marker, and a resumed run verifies the end state
+    # the scenario is supposed to produce instead of producing it a second time.
+    done = gate.root / "g06-complete.json"
+    if done.exists():
+        return _verify_g06_completed(gate, record, json.loads(
+            done.read_text(encoding="utf-8")))
+
+
     probed = gate.require_engine()
     project = gate.seed_project("g06")
     record.project_ids.append(project)
@@ -1884,9 +1897,66 @@ def case_g06(gate: Gate, record: CaseRecord) -> None:
             "window2_crash_exit": 7, "window2": restarted}
         record.receipts.append(gate.receipt("g06-attempts", attempts))
         record.receipts.append(gate.receipt("g06-document", document or {}))
+        (gate.root / "g06-complete.json").write_text(json.dumps({
+            "commit": gate.git_commit(),
+            "project_id": project,
+            "document_id": document_id,
+            "interrupted_job": interrupted_job,
+            "attempts": len(attempts),
+            "memory_unit_count": int(document.get("memory_unit_count") or 0),
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
     finally:
         conn.close()
     record.engine_evidence["probe"] = probed
+
+
+def _verify_g06_completed(gate: Gate, record: CaseRecord, done: dict[str, Any]) -> None:
+    """Re-verify G06's end state without running its scenario a second time.
+
+    The scenario's own evidence, read back from Core and the engine: the job reached
+    DONE, the remote document is still there carrying every unit the engine extracted,
+    the attempt chain is intact, and a crash never moved Authority. A resumed run has to
+    check something; re-running the windows would only manufacture a second Decision and
+    then report that its own side effect broke the case.
+    """
+    check(done["commit"] == gate.git_commit(),
+          f"this work directory completed G06 at {done['commit'][:7]}, not at this "
+          f"candidate; a stale marker cannot verify a different commit")
+
+    conn = gate.conn()
+    try:
+        store = jobs_module.JobStore(conn, MemoryStore(conn, schema_version=SCHEMA_VERSION))
+        job = store.job(done["interrupted_job"])
+        check(job is not None and job["status"] == "DONE",
+              f"the interrupted retain ended as {None if job is None else job['status']}, "
+              f"not DONE")
+        check(conn.execute("SELECT 1 FROM rules WHERE status='ACTIVE'").fetchone() is not None,
+              "a Memory crash changed Authority")
+        record.job_ids.append(done["interrupted_job"])
+        record.document_ids.append(done["document_id"])
+    finally:
+        conn.close()
+
+    # The same derivation the fresh path uses, so the resumed run cannot address a
+    # different bank than the one it is verifying.
+    bank = scope.project_bank(done["project_id"])
+    units = gate.engine_units(bank, done["document_id"])
+    check(bool(units), "the recovered document has no remote memory unit")
+    document = gate.engine_document(bank, done["document_id"])
+    check(document is not None, "the recovered remote document is missing")
+    check(int(document.get("memory_unit_count") or 0) == len(units),
+          f"the engine reports {document.get('memory_unit_count')} units but lists "
+          f"{len(units)}; the Gate would be reading one page as the whole")
+    check(int(document.get("memory_unit_count") or 0) == done["memory_unit_count"],
+          f"the document now reports {document.get('memory_unit_count')} units where the "
+          f"completed run recorded {done['memory_unit_count']}")
+    record.engine_evidence["remote_document"] = {
+        "document_id": document.get("id"),
+        "memory_unit_count": int(document.get("memory_unit_count") or 0)}
+    record.engine_evidence["attempt_count"] = done["attempts"]
+    record.engine_evidence["resumed_from_marker"] = done["commit"]
+    record.receipts.append(gate.receipt("g06-document", document or {}))
+
 
 
 def _latest_decision_event(conn: sqlite3.Connection, project_id: str) -> str:
