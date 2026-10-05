@@ -1174,8 +1174,9 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
 
     raise Blocked(
         "cross-project isolation, bank-injection refusal and a real multiuser ACL run over "
-        "the authenticated API are recorded. Remaining: the actual P3 pack for B. The "
-        f"deployment mode is {scope.deployment_mode()}, so no user-level ACL claim is made."
+        "the authenticated API are recorded; the ACL half ran in its own database under "
+        f"`acl`, while this case's own reads ran under `{scope.deployment_mode()}`. "
+        "Remaining: the actual P3 pack for B."
     )
 
 
