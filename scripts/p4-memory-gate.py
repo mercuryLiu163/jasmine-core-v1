@@ -3101,11 +3101,43 @@ def case_g05(gate: Gate, record: CaseRecord) -> None:
     # outage held every job PENDING, so a recall before the drain can only ever
     # return `empty` -- and did, on the first live run. The comment always said
     # drain-then-recall; the code said the opposite.
-    conn = gate.conn()
-    try:
-        gate.drain(conn)
-    finally:
-        conn.close()
+    #
+    # The drain is a wait, not a single call. The outage's failures armed each
+    # job's retry backoff, so immediately after the engine recovers the jobs are
+    # PENDING but not yet due -- and a worker that drained not-due jobs would be
+    # broken, not helpful. The second live run failed exactly here: it drained
+    # once, found the jobs untouched, and reported a recovery failure against a
+    # worker behaving correctly. So this polls the worker's own schedule until
+    # the tracked jobs reach DONE or the deadline passes. Resetting
+    # `next_attempt_at` by hand (as the delete-fault recovery does elsewhere)
+    # would also work, but the wait is the honest shape: recovery takes effect
+    # when the worker says the job is due, not when the harness rewrites the
+    # clock. How long it took is recorded, because a recovery with no duration
+    # is a claim without a measurement.
+    import time as _time
+
+    deadline = _time.monotonic() + 300
+    waited = 0.0
+    while True:
+        conn = gate.conn()
+        try:
+            gate.drain(conn)
+            states = {row["job_id"]: row["status"] for row in conn.execute(
+                "SELECT job_id, status FROM memory_jobs WHERE job_id IN (%s)" % ",".join(
+                    "?" * len(outage_job_ids)), outage_job_ids).fetchall()}
+        finally:
+            conn.close()
+        if all(states.get(job_id) == "DONE" for job_id in outage_job_ids):
+            break
+        if _time.monotonic() >= deadline:
+            raise Failed(
+                f"the tracked jobs did not reach DONE within 300 s of the engine "
+                f"recovering: {states}. The engine is reachable (the recall below "
+                f"would fail first otherwise); the jobs are either still backing "
+                f"off or the worker is not picking them up.")
+        _time.sleep(5)
+        waited += 5
+    record.engine_evidence["recovery_wait_seconds"] = waited
     _verify_g05_recovery(gate, record, expected_job_ids=outage_job_ids,
                          memory_ids=outage_memory_ids)
     recovered = gate.recall(project, "device test", max_tokens=400)
