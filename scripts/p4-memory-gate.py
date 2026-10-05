@@ -2093,12 +2093,21 @@ def _verify_g07_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any],
     check(bool(pack["memory_selected"]),
           f"the pack selected no memory at all: {pack['memory_filtered']}")
 
-    # Every item is historical: Context never presents Memory as Truth. If one
-    # arrived as current, the precedence header would be a lie.
-    check(all(item.get("historical") for item in pack["memory_selected"]),
-          "a Memory item reached the pack as current Truth rather than history")
-    check("HISTORICAL_NONAUTHORITATIVE MEMORY DATA" in pack["rendered_content"],
-          "the pack did not mark its memory as non-authoritative history")
+    # The guarantee is where the item is rendered, not a flag on it. A wire item
+    # carries no `historical` field -- the first version of this check read one and
+    # would have failed on every correctly rendered pack. What Context actually
+    # promises is that Memory appears inside a block labelled non-authoritative and
+    # nowhere else, so that is what is asserted: the label is present, and none of the
+    # memory's own identifiers appear in the Truth sections above it.
+    marker = "HISTORICAL_NONAUTHORITATIVE MEMORY DATA"
+    truth, label, _ = pack["rendered_content"].partition(marker)
+    check(bool(label),
+          f"the pack did not mark its memory as non-authoritative history: no {marker!r}")
+    for item in pack["memory_selected"]:
+        for token in item["source_event_ids"]:
+            check(token not in truth,
+                  f"memory source Event {token} also appears in the Truth sections, so "
+                  f"the memory is presented as current rather than as history")
 
     # The obsolete half: neither its id nor its words may appear.
     check(obsolete_memory_id not in json.dumps(pack, ensure_ascii=False),
