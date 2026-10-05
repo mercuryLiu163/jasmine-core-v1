@@ -1082,6 +1082,24 @@ def case_g03(gate: Gate, record: CaseRecord) -> None:
     )
 
 
+def _acl_evidence(gate: Gate, record: CaseRecord) -> dict[str, Any]:
+    """Run the ACL battery in its own database, namespace and server process."""
+    import subprocess
+    import tempfile
+
+    acl_root = Path(tempfile.mkdtemp(prefix=f"p4-acl-{gate.case_id}-", dir=str(gate.root)))
+    completed = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "p4-memory-acl.py"),
+         "--db", str(acl_root / "core.db"), "--namespace", f"{gate.bank_suffix}-acl"],
+        capture_output=True, text=True, timeout=300,
+        env={**os.environ, "JASMINE_MEMORY_DEPLOYMENT_MODE": "acl"})
+    try:
+        return json.loads(completed.stdout)
+    except ValueError:
+        raise Failed("the ACL battery produced no JSON: "
+                     f"{(completed.stderr or completed.stdout)[-600:]}")
+
+
 def case_g04(gate: Gate, record: CaseRecord) -> None:
     """Project A's memory never appears in project B (VC-18/VC-19)."""
     from jasmine_core import errors
@@ -1131,9 +1149,32 @@ def case_g04(gate: Gate, record: CaseRecord) -> None:
         conn.close()
     record.receipts.append(gate.receipt("g04-recall", {"project_a": project_a,
                                                        "project_b": project_b}))
+
+    # The ACL leg, in its own database and its own namespace, over the real
+    # authenticated API with real keys. It cannot run in this one: `acl` is read from
+    # the environment on every `ProjectAccess` construction, so proving it would mean
+    # changing the mode the rest of the run is asserting under.
+    acl = _acl_evidence(gate, record)
+    check(acl["all_passed"],
+          f"the multiuser ACL evidence did not hold: "
+          f"{[(c['check'], c['status'], c['error_code']) for c in acl['checks'] if not c['passed']]}")
+    check(acl["deployment_mode"] == "acl" and acl["server_saw_mode"] == "acl",
+          f"the ACL run declared {acl['deployment_mode']!r} and the server reported "
+          f"{acl['server_saw_mode']!r}; under `single_user` no refusal is expected at all")
+    record.engine_evidence["acl"] = {
+        "deployment_mode": acl["deployment_mode"],
+        "server_saw_mode": acl["server_saw_mode"],
+        "grants": acl["grants"],
+        "checks": [{k: c[k] for k in ("check", "actor", "method", "path", "granted",
+                                       "status", "error_code", "passed")}
+                   for c in acl["checks"]],
+        "agent_manage_key_refused_at_issuance":
+            acl["agent_manage_key_refused_at_issuance"],
+    }
+
     raise Blocked(
-        "cross-project isolation and bank-injection refusal are recorded against a real "
-        "engine. Remaining: the actual P3 pack for B, and a real multiuser ACL run. The "
+        "cross-project isolation, bank-injection refusal and a real multiuser ACL run over "
+        "the authenticated API are recorded. Remaining: the actual P3 pack for B. The "
         f"deployment mode is {scope.deployment_mode()}, so no user-level ACL claim is made."
     )
 
