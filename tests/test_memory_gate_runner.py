@@ -339,16 +339,21 @@ class NoCaseReturnsWithoutItsEvidence(unittest.TestCase):
         evidenced = set()
         for case_id in CASES:
             module = self.runner
-            final = self._final_statement(module.CASES_BY_ID[case_id].__name__)
             source = inspect.getsource(module.CASES_BY_ID[case_id])
-            # A case may hand its last statement to a module-level verifier, and the
-            # evidence is then performed there -- so follow the delegation rather than
-            # looking only inside the case body.
-            if isinstance(final, ast.Return) and isinstance(final.value, ast.Call):
-                callee = getattr(final.value.func, "id", None)
-                helper = getattr(module, callee, None) if callee else None
-                if helper is not None:
-                    source += inspect.getsource(helper)
+            # A case may hand its assertions to a module-level verifier -- by returning
+            # it, or by calling it as its last statement -- and the evidence is then
+            # performed there. So follow every module-level function the case names,
+            # rather than looking only inside the case body.
+            for node in ast.walk(ast.parse(inspect.cleandoc(source))):
+                names = []
+                if isinstance(node, ast.Name):
+                    names.append(node.id)
+                elif isinstance(node, ast.Attribute):
+                    names.append(node.attr)
+                for name in names:
+                    helper = getattr(module, name, None)
+                    if inspect.isfunction(helper):
+                        source += inspect.getsource(helper)
             if "verify_session" in source or "spawn_worker" in source:
                 evidenced.add(case_id)
         self.assertEqual(set(returning), evidenced,
