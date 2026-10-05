@@ -1555,11 +1555,21 @@ def _record_session_tool_evidence(gate: Gate, record: CaseRecord, pack: dict[str
     conn = gate.conn()
     try:
         state = StateStore(conn, schema_version=SCHEMA_VERSION)
-        step = state.create_step(pack["task_id"],
-                                 {"title": "engine unreachable", "host_id": gate.host,
-                                  "expected_revision": 1},
-                                 actor_id=gate.human, actor_kind="human",
-                                 can_accept=False)["step"]["step_id"]
+        # Look before creating: this runs again on every `--resume`, and a second
+        # create_step at expected_revision 1 is a RevisionConflict rather than a
+        # replay. The tool capture itself is fingerprint-idempotent; the step was the
+        # part that was not.
+        existing = conn.execute(
+            "SELECT step_id FROM steps WHERE task_id=? ORDER BY created_at,step_id LIMIT 1",
+            (pack["task_id"],)).fetchone()
+        if existing is not None:
+            step = existing["step_id"]
+        else:
+            step = state.create_step(pack["task_id"],
+                                     {"title": "engine unreachable", "host_id": gate.host,
+                                      "expected_revision": 1},
+                                     actor_id=gate.human, actor_kind="human",
+                                     can_accept=False)["step"]["step_id"]
         stored = EvidenceStore(conn, schema_version=SCHEMA_VERSION).record_tool_result(
             {"task_id": pack["task_id"], "step_id": step, "host_id": gate.host,
              "codex_session_id": gate.case_id, "turn_id": f"t-{ids.new_id('evt')[-8:]}",
