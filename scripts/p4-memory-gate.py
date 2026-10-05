@@ -98,6 +98,32 @@ class Failed(Exception):
     """A precondition held and the assertion did not. A real FAIL."""
 
 
+#: Words that make a nearby mention a denial rather than an assertion. Shared by the
+#: two cases that check an agent did not claim something from its context: both were
+#: written as bare substring tests and both rejected a correct answer that said "not X"
+#: while forbidding X. An LLM judge would read the sentence properly but would not be
+#: reproducible between runs, and an acceptance gate that changes its mind is worse than
+#: one with a blunt documented rule.
+_NEGATORS = ("not ", "n't", "never", "no ", "cannot", "can't", "is not", "was not",
+             "rather than", "instead of", "does not", "did not", "supersed", "earlier",
+             "previously", "instead")
+
+
+def unnegated(text: str, phrase: str, window: int = 70):
+    """Yield each mention of `phrase` in `text` that nothing nearby denies.
+
+    "no memory" and "degraded does not mean no memory" both contain the phrase; only
+    the second is honest, and a substring test cannot tell them apart. Each occurrence
+    is therefore counted only when no negator precedes it inside the window.
+    """
+    lowered = text.lower()
+    needle = phrase.lower()
+    for match in re.finditer(re.escape(needle), lowered):
+        before = lowered[max(0, match.start() - window):match.start()]
+        if not any(word in before for word in _NEGATORS):
+            yield text[max(0, match.start() - window):match.end() + 40]
+
+
 def check(condition: bool, message: str) -> None:
     if not condition:
         raise Failed(message)
@@ -1137,8 +1163,11 @@ def _verify_g02_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
     answer = (session.get("final_answer") or "").lower()
     check("hindsight" in answer,
           f"the agent did not name the current engine: {answer[:300]!r}")
-    check("mem0" not in answer,
-          f"the agent named the superseded engine: {answer[:300]!r}")
+    # Naming the superseded engine is only wrong if it is offered as the answer. "The
+    # current Decision supersedes the earlier mem0 engine" is correct and says so; the
+    # bare substring test rejected it, which is why this shares G05's helper.
+    for quote in unnegated(answer, "mem0"):
+        raise Failed(f"the agent offered the superseded engine as current: {quote!r}")
 
 
 def case_g03(gate: Gate, record: CaseRecord) -> None:
@@ -1524,24 +1553,15 @@ def _verify_g05_pack(gate: Gate, record: CaseRecord, pack: dict[str, Any]) -> No
                                           "not available", "unavailable", "down",
                                           "could not reach", "cannot reach")),
           f"the agent did not notice its Memory was unavailable: {answer[:300]!r}")
-    # These phrases are only false when *asserted*. "degraded does not mean the project
-    # has no history" says the opposite of "there is no history", and a substring test
-    # cannot tell them apart -- it rejected a correct answer on exactly that
-    # distinction. So each occurrence is only counted when nothing negates it nearby.
-    # This is a heuristic and it is documented as one: an LLM judge would read the
-    # sentence properly but would not be reproducible run to run, and an acceptance
-    # gate that changes its mind is worse than one with a blunt rule.
-    negated = ("not ", "n't", "never", "no ", "cannot", "can't", "is not", "was not",
-               "rather than", "instead of", "does not", "did not")
+    # These phrases are only false when *asserted*, so each is checked through the
+    # shared `unnegated` helper rather than as a bare substring.
     for invention in ("no memory", "no history", "nothing remembered", "never recorded",
                       "no records"):
-        for match in re.finditer(re.escape(invention), answer):
-            window = answer[max(0, match.start() - 60):match.start()]
-            if not any(neg in window for neg in negated):
-                raise Failed(
-                    f"the agent asserted {invention!r} from a degraded Memory, which is "
-                    f"a false claim about the project rather than a gap in its context: "
-                    f"{answer[max(0, match.start() - 60):match.end() + 40]!r}")
+        for quote in unnegated(answer, invention):
+            raise Failed(
+                f"the agent asserted {invention!r} from a degraded Memory, which is a "
+                f"false claim about the project rather than a gap in its context: "
+                f"{quote!r}")
 
     # And the tool result it reported is recorded as real Tool Evidence, output and
     # all -- the capture is only worth having if the bytes are the ones the command
