@@ -841,8 +841,13 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
     rendered = pack["rendered_content"]
     check("NON AUTHORITATIVE" in rendered or "NON-AUTHORITATIVE" in rendered,
           "the pack does not mark its Memory section non-authoritative")
-    check(source_event_id in rendered,
-          "the pack does not carry the lesson's source Event, so it cannot be traced")
+    # Traced means the pack names the Events P3 qualified -- not merely that a lesson
+    # was retained. The id the scan happened to record on the Memory item is not the
+    # set the pack has to carry; the qualified provenance is.
+    for source_id in carried["source_event_ids"]:
+        check(source_id in rendered,
+              f"the pack does not carry {source_id}, so the injected fact cannot be "
+              f"traced to the Events behind it")
 
     session = gate.verify_session(pack, "g01")
     record.receipts.append(gate.receipt("g01-session", session["verified"]))
