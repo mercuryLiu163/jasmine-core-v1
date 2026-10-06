@@ -512,6 +512,17 @@ class StagingTheInjectionCli(unittest.TestCase):
         rendered_file = self.repo / injection["rendered_path"]
         self.assertEqual(rendered_file.read_bytes(), self.rendered.encode("utf-8"))
 
+    def test_the_cli_refuses_a_missing_native_session_repo_as_an_input_error(self):
+        # "the staging inputs cannot be used" includes a repository that does not
+        # resolve to a directory: that is the operator's configuration, not a
+        # missing pack, and the exit codes have to say which.
+        missing = self.base / "no-such-repo"
+        completed = self._run("--native-session-repo", str(missing))
+        self.assertEqual(completed.returncode, 2, completed.stdout + completed.stderr)
+        self.assertIn("repository", completed.stdout)
+        self.assertFalse((self.repo / ".codex" / "jasmine"
+                          / "injection.json").exists())
+
     def test_the_cli_refuses_a_pack_whose_bytes_do_not_match_its_digest(self):
         body = json.loads(self.pack_path.read_text(encoding="utf-8"))
         body["rendered_content"] = body["rendered_content"] + "tampered\n"
@@ -681,6 +692,17 @@ class NativeSessionStartVerification(unittest.TestCase):
         self._write_receipt(receipt)
         return self.gate.verify_session(self._pack(), label,
                                         require_tool_actions=False)
+
+    def test_a_symlinked_receipt_directory_is_refused(self):
+        # Staging refuses a symlinked .codex/jasmine; verification accepting one
+        # would make "inside the repository" a claim about a name rather than about
+        # where the bytes live.
+        real = self.repo / ".codex" / "jasmine-real"
+        self.directory.rename(real)
+        self.directory.symlink_to(real, target_is_directory=True)
+        with self.assertRaises(self.module.Failed) as caught:
+            self._verify()
+        self.assertIn("symlinked", str(caught.exception))
 
     def test_a_matching_native_receipt_binds_the_session(self):
         verified = self._verify()

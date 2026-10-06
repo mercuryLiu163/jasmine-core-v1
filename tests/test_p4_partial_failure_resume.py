@@ -151,6 +151,59 @@ class PartialFailureReplay(unittest.TestCase):
         self.assertEqual(terminal['reason'], record.reason)
         self.assertEqual(terminal['project_ids'], record.project_ids)
 
+    def test_a_down_engine_still_replays_the_sealed_failure(self):
+        # N1: the functional preflight ran before the case loop, so a resume of a
+        # sealed terminal FAIL against a down engine recorded BLOCKED instead of
+        # replaying the FAIL -- the reproduction depended on the very thing it is
+        # meant to be independent of. This drives `main()` end to end with a dead
+        # engine URL and the real predicate (no mock), and requires the sealed
+        # failure to come back unchanged.
+        import contextlib
+        import io
+        import os
+        from unittest import mock
+
+        module = _module()
+        gate = _real_gate(self, case_id='P4-G01')
+        project = gate.seed_project('partial-g01-down')
+        task = gate.new_task(project, 'history')
+        self._fixture(gate)
+        self._dead_engine(gate)
+        record = module.CaseRecord('P4-G01', 'BLOCKED', mode='real',
+                                   project_ids=[project])
+        with self.assertRaises(module.Failed) as caught:
+            gate.retain_g01_history(project, task, record)
+        record.verdict = 'FAIL'
+        record.reason = str(caught.exception)
+        record.failure_class = 'AssertionFailure'
+        self._seal(module, gate, record, 'phase1', 'original-failure')
+
+        work = gate.root.parent
+        root = work.parent
+        out = root / 'out-down-engine'
+        config = root / 'op.json'
+        config.write_text(json.dumps({
+            'run_id': 'p4-down-engine', 'bank_suffix': 'p4-down-engine',
+            'dependency_commits': {'P2': '0' * 40, 'P3': '0' * 40}}), encoding='utf-8')
+        argv = [str(Path(module.__file__)), '--out', str(out), '--work', str(work),
+                '--config', str(config), '--resume', '--case', 'P4-G01',
+                '--allow-dirty']
+        with mock.patch.dict(os.environ,
+                             {'JASMINE_HINDSIGHT_URL': 'http://127.0.0.1:1'},
+                             clear=False), \
+                mock.patch.object(sys, 'argv', argv), \
+                contextlib.redirect_stdout(io.StringIO()):
+            code = module.main()
+        # The runner maps PASS->0, BLOCKED->2, FAIL->1; a replayed failure is a
+        # FAIL run, so it must exit 1, not be softened into BLOCKED's 2.
+        self.assertEqual(code, 1, 'a replayed FAIL exits 1 (FAIL), not BLOCKED')
+        manifest = json.loads(sorted(out.glob('p4-gate-*.json'))[-1].read_text())
+        case = [c for c in manifest['cases'] if c['case_id'] == 'P4-G01'][0]
+        self.assertEqual(case['verdict'], 'FAIL')
+        self.assertEqual(case['reason'], record.reason)
+        self.assertEqual(manifest['engine']['functional_preflight']['verdict'],
+                         'SKIPPED')
+
     def test_terminal_replay_map_covers_every_case(self):
         # The map is the single source of truth for two call sites (the seal and
         # the replay). If it drifts from the cases it cannot protect, the growth it

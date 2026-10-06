@@ -656,7 +656,7 @@ class AnAllReplayResumeStillRecordsItsNamespace(unittest.TestCase):
                                                           {"verdict": "FAIL"}}}), \
                 mock.patch.object(runner, "_run_functional_preflight",
                                   return_value={"verdict": "PASS", "checks": {},
-                                                "failed_check": None}), \
+                                                "failed_check": None}) as preflight, \
                 mock.patch.object(runner, "_replay_terminal_setup_failure",
                                   return_value=True), \
                 contextlib.redirect_stdout(io.StringIO()):
@@ -665,8 +665,14 @@ class AnAllReplayResumeStillRecordsItsNamespace(unittest.TestCase):
         manifest_path = next(out.glob("p4-gate-*.json"))
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(manifest["bank_namespace"], "p4-replay-ns")
-        self.assertEqual(
-            manifest["engine"]["functional_preflight"]["verdict"], "PASS")
+        # A resume whose only case replays a sealed failure must not consult the
+        # engine at all: the preflight is skipped, not passed, and the skip is
+        # recorded with its reason. Running it anyway would let a down engine turn
+        # a reproducible FAIL into an environment BLOCKED.
+        self.assertEqual(preflight.call_count, 0)
+        functional = manifest["engine"]["functional_preflight"]
+        self.assertEqual(functional["verdict"], "SKIPPED")
+        self.assertIn("replays a sealed terminal failure", functional["skipped"])
 
 
 class TheBankNamespaceShapesAddresses(unittest.TestCase):

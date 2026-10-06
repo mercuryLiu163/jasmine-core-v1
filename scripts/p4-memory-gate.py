@@ -1351,6 +1351,13 @@ class Gate:
         except OSError as exc:
             raise Failed(f"the native session repository {repo} is not usable: {exc}")
         directory = repo / ".codex" / "jasmine"
+        # Staging refuses a symlinked directory, so verification must too: accepting
+        # receipts from a path a symlink can repoint would make "inside the
+        # repository" a claim about a name rather than about the bytes' location.
+        if directory.is_symlink():
+            raise Failed(
+                f"the native session repository {repo} has a symlinked "
+                f".codex/jasmine directory; receipts must live in the repository")
         if not directory.is_dir():
             raise Failed(
                 f"the native session repository {repo} has no .codex/jasmine directory, "
@@ -4625,6 +4632,38 @@ def mark_inherited_evidence(gate: Gate, record: CaseRecord,
                 "not re-verified in this phase."}
 
 
+def _replays_without_engine(work: Path, case_id: str,
+                            prior_case: dict[str, Any] | None) -> bool:
+    """Whether this case will take the replay branch rather than run.
+
+    Replay re-checks sealed receipts and Core rows; it needs no engine. Used to
+    decide whether a failed functional preflight should stop the run: a resume
+    whose every selected case replays a sealed terminal failure exists precisely
+    to reproduce that failure without touching the engine, and replacing the
+    sealed FAIL with an environment BLOCKED would make the reproduction depend
+    on the thing it is meant to be independent of.
+
+    Non-mutating on purpose: it reads the work directory and the prior seal and
+    must be safe to call before any Gate is constructed.
+    """
+    if case_id not in TERMINAL_SETUP_PACK_KEYS:
+        return False
+    if not prior_case or prior_case.get("verdict") != "FAIL":
+        return False
+    root = work / case_id
+    key = TERMINAL_SETUP_PACK_KEYS[case_id]
+    if key is None:
+        return not (root / "g06-complete.json").exists()
+    for path in sorted(root.glob("pack-*.json")):
+        try:
+            body = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(body, dict) and body.get("idempotency_key") == key:
+            return False
+    return True
+
+
 def _replay_terminal_setup_failure(gate: Gate, record: CaseRecord,
                                    prior_case: dict[str, Any] | None) -> bool:
     """A terminally failed setup stays failed, with no fresh setup effects.
@@ -5191,6 +5230,21 @@ def _stage_injection_cli(args) -> int:
     case_id = cases[0]
     try:
         gate = Gate(work, config, case_id)
+        # "the staging inputs themselves cannot be used" includes a native session
+        # repository that does not resolve to a directory: that is the operator's
+        # configuration, not a missing pack, and the exit codes have to say which.
+        repo = gate.native_session_repo()
+        if repo is None:
+            print(json.dumps({
+                "result": "refused",
+                "reason": "no native_session_repo (or g01_historical_fixture.repository) "
+                          "is configured; there is nowhere to stage the injection"}))
+            return 2
+        if not repo.is_dir():
+            print(json.dumps({
+                "result": "refused", "native_session_repo": str(repo),
+                "reason": "the native session repository is not a directory"}))
+            return 2
         pack = _pack_for_staging(gate, args.pack_key)
         staged = gate.stage_native_injection(pack)
     except Blocked as blocked:
@@ -5290,20 +5344,39 @@ def main() -> int:
     if suffix:
         os.environ[NAMESPACE_ENV_VAR] = str(suffix)
     # The functional preflight runs once, before any case, on the run's engine URL
-    # and bank namespace, in a throwaway project bank: it must not touch a case
-    # database. A blocked environment stops the run before it can produce a full
-    # case dataset whose failures are the environment's, and the report -- with the
-    # failed check by name -- is recorded in the manifest.
+    # and bank namespace, in a throwaway project bank: it must not touch a
+    # P4-G* case database. A blocked environment stops the run before it can
+    # produce a full case dataset whose failures are the environment's, and the
+    # report -- with the failed check by name -- is recorded in the manifest.
+    #
+    # ...unless every selected case replays a sealed terminal failure, which needs
+    # no engine at all. Running the preflight then would replace a sealed FAIL
+    # with an environment BLOCKED whenever the engine happens to be down, so a
+    # resume could no longer reproduce the failure it exists to reproduce. Only a
+    # BLOCKED preflight stops the run; PASS and SKIPPED do not.
+    namespace_used = ""
     try:
         namespace_used = scope.bank_namespace()
-        functional_preflight = _run_functional_preflight()
     except InvalidRequest as invalid_namespace:
         namespace_used = str(config.get("bank_suffix") or "")
         functional_preflight = {
             "engine": None, "bank_namespace": namespace_used, "checks": {},
             "verdict": "BLOCKED", "failed_check": "configuration",
             "error": str(invalid_namespace)}
-    preflight_failed = functional_preflight.get("verdict") != "PASS"
+    else:
+        replay_reasons = {
+            case_id: _replays_without_engine(
+                work, case_id, ((prior or {}).get("cases") or {}).get(case_id))
+            for case_id in selected}
+        if selected and all(replay_reasons.values()):
+            functional_preflight = {
+                "engine": None, "bank_namespace": namespace_used, "checks": {},
+                "verdict": "SKIPPED",
+                "skipped": "every selected case replays a sealed terminal failure; "
+                           "replay needs no engine"}
+        else:
+            functional_preflight = _run_functional_preflight()
+    preflight_failed = functional_preflight.get("verdict") == "BLOCKED"
 
     records: list[CaseRecord] = []
     for case_id in selected:
@@ -5367,16 +5440,28 @@ def main() -> int:
               + (f" — {record.reason}" if record.reason else ""))
 
     engine_probe: dict[str, Any] = {}
-    probe_gate = Gate(work, config, "P4-probe")
+    if preflight_failed:
+        # The run is already stopped by the functional preflight; opening the probe
+        # database here would create a database for a run that will do nothing, and
+        # repeat the preflight's finding less precisely.
+        engine_probe = {
+            "reachable": False,
+            "error": f"functional engine preflight failed at "
+                     f"{functional_preflight.get('failed_check') or 'preflight'}"}
+        probe_gate = None
+    else:
+        probe_gate = Gate(work, config, "P4-probe")
     try:
-        probe_gate.open()
-        engine_probe = probe_gate.transport.version() if probe_gate.transport else {}
-        if probe_gate.transport is not None:
-            engine_probe["supported"] = check_supported(engine_probe)
+        if probe_gate is not None:
+            probe_gate.open()
+            engine_probe = probe_gate.transport.version() if probe_gate.transport else {}
+            if probe_gate.transport is not None:
+                engine_probe["supported"] = check_supported(engine_probe)
     except BaseException as exc:  # a missing engine is reported, not raised
         engine_probe = {"reachable": False, "error": f"{type(exc).__name__}: {exc}"}
     finally:
-        probe_gate.close()
+        if probe_gate is not None:
+            probe_gate.close()
 
     # A run that did not evaluate every case, or that was taken on a dirty
     # checkout, is evidence about *something* but it is not the stage
