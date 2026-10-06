@@ -207,12 +207,17 @@ Events, preserving complete attribution before bounded output excerpts. It may
 present attempted repair followed by PASS as **HISTORICAL_NONAUTHORITATIVE**;
 this establishes neither an exclusive historical cause nor the current cause.
 Engine-generated prose cannot supply a missing cause, repair, or validation.
-The optional Memory allocation remains 800 selected-encoding tokens, still bounded
-by the unchanged whole-pack limit; omissions remain explicit.
+The optional Memory allocation is 1000 selected-encoding tokens (see the
+mechanism-change record below), still bounded by the unchanged whole-pack limit;
+omissions remain explicit.
 
-G01's prompt, seven exploration categories, benefit threshold and controlled
-baseline/lesson comparison are unchanged. Real Agent execution and its independent
-receipts remain required; historical subprocess capture alone is not acceptance.
+G01's prompt, seven exploration categories, controlled baseline/lesson
+comparison, real Agent execution and independent receipts remain required;
+historical subprocess capture alone is not acceptance. The v1 benefit threshold
+(omit at least one exploration category) produced only negative results and is
+superseded by the versioned exploration-cost specification in
+`docs/p4-g01-v2-spec.md`, which is frozen before its run and confirmed by an
+independent reviewer; the v1 negatives are retained as FAIL records.
 
 ### Terminal partial-failure replay (every case)
 
@@ -289,10 +294,35 @@ covers the actual outputs already produced. The baseline pack receipt is also
 registered before historical setup begins. Previous runs whose historical
 receipts were omitted from their seals are not retroactively claimed as sealed.
 
-The actionable chain text is compact to fit the original 800-token allocation:
-all referenced Events/Evidence remain individually present, while unchanged
-assertion arguments and repeated labels are omitted. The memory's original
-command/Task/identity, short assertion, filenames and observed repair/rerun
-remain available in the `HISTORICAL_NONAUTHORITATIVE MEMORY DATA` block. Fixed
-program and byte/diff checks still apply before this compact observation is
-rendered. Budget omissions are not a successful Memory delivery.
+The actionable chain text now renders three labelled, capture-bound sections --
+`diagnosis`, `repair`, `post-hoc` -- with every referenced Event and Evidence
+pointer present in the text, as the Gate's actionable-history check requires
+(attribution must survive truncation; the structured `source_event_ids` field
+alone is not enough). Values come only from the verified capture: the
+pre-repair line is the diff's removed line, byte-bound to the inspection record,
+and the post-hoc line reports the rerun output without asserting causation.
+
+## Mechanism change: MEMORY section budget 800 -> 1000
+
+This is a mechanism change, separate from the G01 lesson treatment (commit
+5670c15); it is not part of any benefit experiment's treatment.
+
+- **Change**: the renderer's per-section MEMORY cap is 1000 selected-encoding
+  tokens (was 800). The whole-pack `MAX_TOKENS` of 2500 is unchanged, as are all
+  other section budgets and the omission reporting.
+- **Why**: the labelled diagnosis/repair/post-hoc text with complete attribution
+  measures ~400 tokens. At the 800 cap the item was admitted with 10-40 tokens of
+  headroom or omitted whole (`optional_budget`), depending on ULID tokenisation
+  jitter -- a Memory that exists only when the random IDs tokenise luckily is
+  not delivered evidence.
+- **Source completeness**: all 13 pointers of the verified G01 lesson (memory id,
+  4 Evidence ids, 8 source Events) appear in the text. The Gate's
+  actionable-history check passes end-to-end: the valid experiment at commit
+  28ae83c reached the benefit comparison, so every pointer check had passed.
+- **Budget regression**: on that run's lesson pack, the whole rendered pack is
+  1086 tokens (limit 2500) and the `HISTORICAL_NONAUTHORITATIVE MEMORY DATA`
+  block is 804 tokens (cap 1000). Both measured with the pinned o200k tokenizer.
+- **Tests**: the pinned regression test now asserts the block is <= 1000 and
+  that every `source_event_ids`/`evidence_ids` pointer is present in the text
+  (`tests/test_p4_fix_round.py`, `TheWorkerRendersWhatCoreRecorded`); the full
+  suite is green at commit 28ae83c (1116 tests).
