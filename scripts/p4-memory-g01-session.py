@@ -224,7 +224,14 @@ def main() -> int:
             continue
         for change in action["changes"]:
             path = str(change.get("path") or "")
-            change["relative_path"] = relative_to_repo(args.repo, path)
+            try:
+                relative = relative_to_repo(args.repo, path)
+            except ValueError:
+                # A transcript path outside the worktree is not attributable to
+                # this session; record it as such instead of crashing.
+                action["_unattributable"] = f"path outside the worktree: {path}"
+                break
+            change["relative_path"] = relative
             before, after, diff = changes_for(args.repo, args.ref, path)
             if before == after:
                 change["no_effect"] = True

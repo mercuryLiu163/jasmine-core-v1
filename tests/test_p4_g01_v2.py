@@ -701,6 +701,45 @@ class V2EndToEnd(unittest.TestCase):
         self.assertFalse(metrics["o_star_complete"])
         self.assertIsNone(metrics["o_star"]["reproduced_failure"])
 
+    def test_a_wrapper_inside_the_repo_is_not_a_suite_run(self) -> None:
+        import tempfile
+        tmp = tempfile.TemporaryDirectory(prefix="p4-v2-fake-")
+        self.addCleanup(tmp.cleanup)
+        repo = Path(tmp.name).resolve()
+        session = {"g01_v2": {"fixture_repo": str(repo)},
+                   "snapshot": {}, "tool_events": [
+                       _shell_event(
+                           "./.codex/python -m unittest -v # cat calc.py cat NOTES.md",
+                           self.buggy + "# notes\nThe discount is in percent, not "
+                           "currency.\nAssertionError: 25.0 != 27.5", exit_code=1)]}
+        metrics = self.module._g01_v2_classify(session, "the lesson")
+        self.assertFalse(metrics["o_star_complete"])
+        self.assertIsNone(metrics["o_star"]["reproduced_failure"])
+
+    def test_a_semicolon_python_read_and_a_stdin_program_are_exploration(self) -> None:
+        semicolon = _shell_event(
+            "python -c \"import pathlib; print(pathlib.Path('calc.py').read_text())\"",
+            "content")
+        stdin = _shell_event("python - <<PY\nprint(open('calc.py').read())\nPY",
+                             "content")
+        metrics = self.module._g01_v2_classify(
+            {"g01_v2": {}, "tool_events": [semicolon, stdin], "snapshot": {}},
+            "the lesson")
+        self.assertEqual(metrics["classes"], ["E", "E"])
+        self.assertEqual(metrics["primary"], 2)
+
+    def test_python_m_pytest_and_absolute_outside_interpreters_run_suites(self) -> None:
+        repo = Path("/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/opencode")
+        good = self.module._g01_v2_suite_run("python -m pytest -q", repo)
+        outside = self.module._g01_v2_suite_run("/usr/bin/python3 -m unittest -v", repo)
+        inside = self.module._g01_v2_suite_run("./.codex/python -m unittest -v", repo)
+        newline = self.module._g01_v2_suite_run(
+            'python -B -m unittest -v\necho "AssertionError: 25.0 != 27.5"', repo)
+        self.assertTrue(good)
+        self.assertTrue(outside)
+        self.assertFalse(inside)
+        self.assertFalse(newline)
+
     def test_a_compound_suite_run_cannot_supply_the_failing_anchor(self) -> None:
         events = [
             _shell_event('python -B -m unittest -v; echo "AssertionError: 25.0 != 27.5"; '

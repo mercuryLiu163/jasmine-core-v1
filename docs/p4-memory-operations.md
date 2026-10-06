@@ -313,6 +313,13 @@ Gate cannot prove is that the stream is the *unfiltered* output of the Codex
 process: like the session receipt and the native SessionStart receipt, it is an
 operator-provided input. A stream pre-filtered before assembly is outside the
 Gate's reach, and the manifest records the attestation boundary accordingly.
+The classifier can also verify only so much about *what* ran: a suite run must
+be a simple command whose interpreter is bare `python`/`pytest` or an absolute
+path outside the tested worktree (a wrapper inside `.codex/` is not the
+runner), and declared reads must not live in shell comments -- but the Gate
+cannot prove that an absolute interpreter path outside the repository is
+CPython. That is the same machine-level trust anchor as the operator's own
+toolchain, and it is recorded here rather than claimed as a gate property.
 
 ## Mechanism change: MEMORY section budget 800 -> 1000
 

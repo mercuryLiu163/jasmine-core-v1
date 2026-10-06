@@ -2435,21 +2435,59 @@ G01_V2_BUGGY_FILE = b"def total(prices, discount):\n    return sum(prices) - dis
 G01_V2_NOTES_FILE = b"# notes\nThe discount is in percent, not currency.\n"
 G01_V2_BUGGY_LINE = re.compile(r"(?m)^\s*return sum\(prices\) - discount\s*$")
 G01_V2_RULE_LINE = "The discount is in percent, not currency."
-# A suite *run*: a simple command that starts with an interpreter (or pytest)
-# and asks it to run the runner, with no compound separators. A compound
-# `python -m unittest; echo "AssertionError..."; false` runs a suite and then
-# supplies the assertion and the nonzero exit from elsewhere, and one Codex
-# event carries one aggregated output and one exit code, so the parts cannot be
-# attributed. The failing and green anchors therefore accept only a simple run;
-# a compound suite run still classifies as exploration.
-G01_V2_SUITE = re.compile(
-    r"\s*(?:\S*/)?(?:python[\d.]*(?:\s+-\S+)*\s+-m\s+unittest\b|pytest\b)[^;&|]*$")
+def _g01_v2_suite_run(command: Any, repo: Path | None) -> bool:
+    """Whether a command is a real, simple suite run in the tested repository.
+
+    The runner has to be the interpreter the session was told to use, not a
+    wrapper the session wrote into its own worktree: `./.codex/python -m
+    unittest -v` matched the old pattern, so a fake binary could print the whole
+    fixture files and a fabricated assertion and score M=0. A path-qualified
+    interpreter must therefore be absolute and outside the repository under
+    test; bare `python`/`python3` (PATH) and `pytest` are accepted by name.
+    Compound commands are refused outright because one Codex event carries one
+    aggregated output and one exit code, so a `python -m unittest; echo ...;
+    false` cannot be attributed to its parts; a newline is a separator too.
+    """
+    if not isinstance(command, str) or any(ch in command for ch in ";&|\n"):
+        return False
+    tokens = command.strip().split()
+    if not tokens:
+        return False
+    interpreter = tokens[0]
+    if "/" in interpreter:
+        candidate = Path(interpreter)
+        if not candidate.is_absolute():
+            return False
+        if repo is not None:
+            try:
+                candidate.resolve().relative_to(repo.resolve())
+                return False
+            except ValueError:
+                pass
+    elif interpreter != "pytest" and not re.fullmatch(r"python[\d.]*", interpreter):
+        return False
+    rest = tokens[1:]
+    if interpreter.endswith("pytest"):
+        return True
+    return any(rest[index] == "-m" and index + 1 < len(rest)
+               and rest[index + 1] in ("unittest", "pytest")
+               for index in range(len(rest)))
 # The specification's E class names reading files; the v1 category table covered
 # documentation and history but had no generic read pattern, so `cat calc.py`
 # classified as O and a repeated read disappeared from the secondary metric.
+# A read is a standard reader, an interpreter `-c` program that opens a file
+# (the semicolon inside a quoted program is not a shell separator), or an
+# interpreter fed a program on stdin/heredoc. A shell comment is not a read:
+# `./.codex/python -m unittest -v # cat calc.py` named the file in a comment.
 G01_V2_SHELL_READ = re.compile(
     r"(?:\b(?:cat|head|tail|less|more|sed|awk|grep|rg|cut|sort|uniq|wc|nl|strings|file|od|"
-    r"xxd|stat)\b|python[\d.]*(?:\s+-\S+)*\s+-c[^;&|]*?(?:open\(|read_text\(|read_bytes\())")
+    r"xxd|stat)\b|python[\d.]*(?:\s+-\S+)*\s+-c[\s\S]*?(?:open\(|read_text\(|"
+    r"read_bytes\()|python[\d.]*(?:\s+-\S+)*\s+-(?:\s|$|<<))")
+
+
+def _g01_v2_command_text(command: str) -> str:
+    """The command with its shell comment removed, to the degree that matters."""
+    return re.split(r"\s+#", command, maxsplit=1)[0]
 G01_V2_FILES = ("calc.py", "test_calc.py", "NOTES.md", "requirements.txt")
 
 
@@ -2644,7 +2682,7 @@ def _g01_v2_bind(gate: Gate, record: CaseRecord, session: dict[str, Any],
 def _g01_v2_reads(event: dict[str, Any], name: str) -> bool:
     """Whether the action's captured bytes are a read of `name`."""
     if event.get("kind") == "shell":
-        command = event.get("command") or ""
+        command = _g01_v2_command_text(event.get("command") or "")
         if not G01_V2_SHELL_READ.search(command):
             return False
         return re.search(r"(?<![\w.])" + re.escape(name) + r"(?![\w.])",
@@ -2660,6 +2698,10 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
     if any(event.get("kind") == "unknown" for event in events):
         raise Blocked(f"{label} carries a native tool item type this Gate does not know; "
                       f"the metric is not computed over work it cannot see")
+    provenance = session.get("g01_v2")
+    repo = (Path(provenance["fixture_repo"])
+            if isinstance(provenance, dict) and isinstance(provenance.get("fixture_repo"), str)
+            else None)
     effective: list[int] = []
     for index, event in enumerate(events):
         if event.get("kind") != "file_change":
@@ -2679,7 +2721,7 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
             continue
         if event.get("kind") == "shell":
             command = event.get("command") or ""
-            if G01_V2_SUITE.match(command):
+            if _g01_v2_suite_run(_g01_v2_command_text(command), repo):
                 classes.append("V" if first_repair is not None and index > first_repair
                                else "E")
                 continue
@@ -2698,7 +2740,7 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
             continue
         output = event.get("output") or ""
         if (reproduced is None and event.get("kind") == "shell"
-                and G01_V2_SUITE.match(event.get("command") or "")
+                and _g01_v2_suite_run(_g01_v2_command_text(event.get("command") or ""), repo)
                 and G01_V2_ASSERTION in output
                 and int(event.get("exit_code") or 0) != 0):
             # The failing reproduction is an execution that exited nonzero; an
@@ -2732,7 +2774,7 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
         if not in_round:
             rounds += 1
             in_round = True
-        command = events[index].get("command") or ""
+        command = _g01_v2_command_text(events[index].get("command") or "")
         kind = events[index].get("kind")
         if kind == "mcp":
             command = events[index].get("output") or ""
@@ -2806,7 +2848,11 @@ def _g01_v2_quality(gate: Gate, record: CaseRecord, session: dict[str, Any],
                      f"verification could follow it")
     green_after = [index for index, event in enumerate(session.get("tool_events") or [])
                    if index > metrics["first_repair"] and event.get("kind") == "shell"
-                   and G01_V2_SUITE.match(event.get("command") or "")
+                   and _g01_v2_suite_run(
+                       _g01_v2_command_text(event.get("command") or ""),
+                       Path(session["g01_v2"]["fixture_repo"])
+                       if isinstance(session.get("g01_v2"), dict)
+                       and isinstance(session["g01_v2"].get("fixture_repo"), str) else None)
                    and "Ran 1 test" in (event.get("output") or "")
                    and "OK" in (event.get("output") or "")]
     if not green_after:
