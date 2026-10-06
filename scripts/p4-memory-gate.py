@@ -43,6 +43,7 @@ import socket
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import textwrap
 import time
 import traceback
@@ -1183,6 +1184,201 @@ class Gate:
                 "bytes": sealed.stat().st_size,
                 "kind": f"injected-{label}-pack", "write": "sealed"}
 
+    # -- native SessionStart receipts --------------------------------------
+
+    def native_session_repo(self) -> Path | None:
+        """The repository whose `.codex/jasmine` holds the SessionStart receipts.
+
+        `native_session_repo` is the authoritative configuration field. The
+        documented fallback is `g01_historical_fixture.repository`, because G01's
+        controlled sessions run in that repository; a deployment that runs them
+        somewhere else must say so with `native_session_repo`. `None` means the
+        configuration names neither, which `require_native_session_start` refuses.
+        """
+        fixture = self.config.get("g01_historical_fixture") or {}
+        for candidate in (self.config.get("native_session_repo"),
+                          fixture.get("repository")):
+            if isinstance(candidate, str) and candidate.strip():
+                return Path(candidate)
+        return None
+
+    def stage_native_injection(self, pack: dict[str, Any]) -> dict[str, Any]:
+        """Write the exact pack bytes and the pointer the native hook reads.
+
+        The hook resolves `rendered_path` against the session's `cwd`, so the
+        pointer must be relative to the repository, and the bytes it names are
+        what `injected_sha256` in the receipt will be computed from. The rendered
+        file's name carries the Context Pack id and is write-once: re-staging a
+        pack whose bytes changed is refused rather than silently re-pointed,
+        because a receipt already written against the old bytes would then be
+        verifying a file nobody can produce any more.
+
+        `injection.json` itself is a mutable pointer by design -- one repository
+        runs one session at a time -- and moving it cannot erase evidence: the
+        receipt for the session that already ran names the pack it saw and its
+        hash, and a receipt hash that does not match the pack under verification
+        is a failure, not an ambiguity.
+        """
+        repo = self.native_session_repo()
+        if repo is None:
+            raise Blocked(
+                "no native_session_repo (or g01_historical_fixture.repository) names "
+                "the repository whose .codex/jasmine should receive the injection")
+        try:
+            repo = repo.resolve(strict=True)
+        except OSError as exc:
+            raise Failed(f"the native session repository {repo} is not usable: {exc}")
+        directory = repo / ".codex" / "jasmine"
+        if directory.is_symlink():
+            raise Failed(f"{directory} is a symlink; a regular project-local jasmine "
+                         f"directory is required")
+        body = pack["rendered_content"].encode("utf-8")
+        digest = hashlib.sha256(body).hexdigest()
+        if digest != pack.get("rendered_sha256"):
+            raise Failed(
+                f"the pack's declared rendered_sha256 ({pack.get('rendered_sha256')}) "
+                f"does not describe its rendered bytes ({digest}); refusing to stage a "
+                f"pack that cannot bind a receipt")
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        name = f"rendered-{pack['context_pack_id']}.txt"
+        rendered_file = directory / name
+        if rendered_file.exists():
+            if rendered_file.is_symlink() or rendered_file.read_bytes() != body:
+                raise Failed(
+                    f"the staged bytes for {pack['context_pack_id']} at {rendered_file} "
+                    f"are not the pack's bytes; a staged pack is write-once, so this "
+                    f"pack was re-rendered after its bytes were already shown to an agent")
+        else:
+            fd, temporary = tempfile.mkstemp(prefix=".rendered-", dir=directory)
+            try:
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(body)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                os.chmod(temporary, 0o600)
+                os.replace(temporary, rendered_file)
+            finally:
+                if os.path.exists(temporary):
+                    os.unlink(temporary)
+        injection = {
+            "context_pack_id": pack["context_pack_id"],
+            "task_id": pack["task_id"],
+            "rendered_path": (Path(".codex") / "jasmine" / name).as_posix(),
+            "rendered_sha256": digest,
+        }
+        injection_file = directory / "injection.json"
+        fd, temporary = tempfile.mkstemp(prefix=".injection-", dir=directory)
+        try:
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(json.dumps(injection, ensure_ascii=False,
+                                        indent=2).encode("utf-8"))
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.chmod(temporary, 0o600)
+            os.replace(temporary, injection_file)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+        return {"injection_path": str(injection_file),
+                "rendered_path": str(rendered_file),
+                "rendered_sha256": digest, "bytes": len(body),
+                "context_pack_id": pack["context_pack_id"]}
+
+    def _verify_native_session_start(self, pack: dict[str, Any], label: str,
+                                     session: dict[str, Any],
+                                     rendered_sha256: str) -> dict[str, Any]:
+        """Bind a session to the receipt Codex itself wrote when the hook fired.
+
+        The session JSON is written by an orchestrator, so by itself it only says
+        that somebody asked an agent to read a pack. The native receipt is the
+        artifact the *real* Codex process produced: it exists only if Codex fired
+        the installed SessionStart hook, and it names the digest of the exact
+        `additionalContext` bytes that hook printed. This binds the two: exactly
+        one receipt under the session repository must hash to the pack this Gate
+        rendered, come from a fresh session (`startup`/`resume`, never
+        `clear`/`compact`), name the session's `native_session_id`, and carry the
+        installed hook script's digest and the rendered byte count. The receipt is
+        then copied into the case directory write-once, so the phase seal and the
+        prior-seal check cover it exactly like every other receipt.
+        """
+        repo = self.native_session_repo()
+        if repo is None:
+            raise Failed(
+                f"require_native_session_start is set for {label}, but neither "
+                f"native_session_repo nor g01_historical_fixture.repository names the "
+                f"repository whose .codex/jasmine holds the native SessionStart receipt")
+        directory = repo / ".codex" / "jasmine"
+        if not directory.is_dir():
+            raise Failed(
+                f"the native session repository {repo} has no .codex/jasmine directory, "
+                f"so no native SessionStart receipt can exist for {label}")
+        native_id = session.get("native_session_id")
+        if not isinstance(native_id, str) or not native_id:
+            raise Failed(
+                f"the {label} session JSON carries no native_session_id string; without "
+                f"it the native SessionStart receipt cannot be bound to this session")
+        candidates: list[tuple[Path, dict[str, Any]]] = []
+        for path in sorted(directory.glob("session-start-*.json")):
+            try:
+                body = json.loads(path.read_bytes().decode("utf-8"))
+            except (OSError, ValueError) as exc:
+                raise Failed(f"native SessionStart receipt {path} is not readable JSON: "
+                             f"{exc}")
+            if not isinstance(body, dict):
+                raise Failed(f"native SessionStart receipt {path} is not a JSON object")
+            if (body.get("injected_sha256") == rendered_sha256
+                    and body.get("source") in ("startup", "resume")):
+                candidates.append((path, body))
+        if len(candidates) != 1:
+            seen = sorted({str(body.get("source")) for _, body in candidates})
+            raise Failed(
+                f"expected exactly one native SessionStart receipt under {directory} that "
+                f"injected pack {pack['context_pack_id']} (sha {rendered_sha256[:12]}) "
+                f"from a startup/resume source; found {len(candidates)}"
+                + (f" with sources {seen}" if candidates else "")
+                + ". A clear/compact receipt is not a fresh acceptance session, and a "
+                  "receipt for another pack is not this session's.")
+        path, receipt = candidates[0]
+        problems: list[str] = []
+        if receipt.get("session_id") != native_id:
+            problems.append(
+                f"the native SessionStart receipt names session "
+                f"{receipt.get('session_id')!r}, the session JSON declares "
+                f"{native_id!r}")
+        if receipt.get("context_pack_id") != pack["context_pack_id"]:
+            problems.append(
+                f"the native receipt names pack {receipt.get('context_pack_id')!r}, the "
+                f"pack built here is {pack['context_pack_id']!r}")
+        injected_bytes = len(pack["rendered_content"].encode("utf-8"))
+        if receipt.get("injected_bytes") != injected_bytes:
+            problems.append(
+                f"the native receipt injected {receipt.get('injected_bytes')!r} bytes, "
+                f"the rendered pack is {injected_bytes} bytes")
+        script = directory / "jasmine-p4-session-start.py"
+        if not script.is_file() or script.is_symlink():
+            problems.append(
+                f"the installed hook script {script} is missing, so the receipt's "
+                f"hook_script_sha256 cannot be recomputed against it")
+        else:
+            installed = hashlib.sha256(script.read_bytes()).hexdigest()
+            if receipt.get("hook_script_sha256") != installed:
+                problems.append(
+                    f"the native receipt was written by hook script "
+                    f"{str(receipt.get('hook_script_sha256'))[:12]}, the installed script "
+                    f"hashes to {installed[:12]}")
+        if problems:
+            raise Failed(f"the native SessionStart receipt does not bind {label}: "
+                         + "; ".join(problems))
+        sealed = self.receipt(f"native-session-start-{label}", {
+            "label": label,
+            "native_receipt_path": str(path),
+            "native_receipt_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "receipt": receipt,
+        })
+        return {"path": sealed["path"], "sha256": sealed["sha256"],
+                "kind": f"native-session-start-{label}", "write": sealed["write"],
+                "bytes": Path(sealed["path"]).stat().st_size}
+
     def verify_session(self, pack: dict[str, Any], label: str, *,
                        require_tool_actions: bool = True,
                        require_evidence_backed_actions: bool = False) -> dict[str, Any]:
@@ -1372,6 +1568,10 @@ class Gate:
 
         if problems:
             raise Failed("the agent session receipt does not stand up: " + "; ".join(problems))
+        native_receipt = None
+        if self.config.get("require_native_session_start"):
+            native_receipt = self._verify_native_session_start(pack, label, session,
+                                                               recomputed)
         # The sealed bytes are receipts too, so they land in the seal with everything
         # else and the FINAL manifest can name them.
         sealed = [sealed_session]
@@ -1382,12 +1582,15 @@ class Gate:
                            "bytes": (injected_path.stat().st_size
                                      if injected_path.exists() else None),
                            "kind": f"injected-{label}-pack", "write": "sealed"})
+        if native_receipt is not None:
+            sealed.append(native_receipt)
         return {**session, "verified": {
             "commit": commit, "context_pack_id": pack["context_pack_id"],
             "pack_sha256": recomputed, "memory_carried": sorted(carried),
             "tool_actions": len(actions), "pack_receipt": pack["receipt"]["path"],
             "session_transcript": sealed_session,
             "injection": injection,
+            "native_session_start": native_receipt,
             "sealed": sealed}}
 
     def collect_tool_evidence(self, task_id: str, *, command: str, output: str,
@@ -4659,6 +4862,10 @@ def _evidence_scope(work: Path, records: list[CaseRecord],
                                    "each agent session receipt as it was received",
             "injected_packs": "injected-*.pack.json: the exact pack bytes an agent was "
                               "shown, copied once and refused if the pack is re-rendered",
+            "native_session_start_receipts": "native-session-start-*.json: a copy of "
+                                             "each native Codex SessionStart receipt "
+                                             "bound to the pack it injected, with the "
+                                             "source receipt's own digest, written once",
             "operator_config": f"{operator_config['path']} "
                                f"({operator_config['sha256'][:12]}): the operator "
                                f"configuration this run used, byte for byte",
