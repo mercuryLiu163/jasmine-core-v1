@@ -160,14 +160,14 @@ Lifecycle Gate P4-G07：真实新Memory执行pin/unpin、obsolete及delete，act
 
 | Gate | 对应原 VC | 操作与判据 |
 | --- | --- | --- |
-| P4-G01 历史故障真实收益 | VC-16 | 在真实小任务产生可验证失败/修复教训，commit source→job→真实 retain 完成/readback；新 Session 问类似问题；Core Recall 命中，exact injected pack 含来源；Agent 引用历史教训安排有用的诊断/真实工具动作并改善当前任务，不把历史原因断言为当前原因 |
+| P4-G01 历史故障真实收益 | VC-16 | 在真实小任务产生可验证失败/修复教训，commit source→job→真实 retain 完成/readback；新 Session 问类似问题；Core Recall 命中，exact injected pack 含来源；Agent 引用历史教训安排有用的诊断/真实工具动作并改善当前任务，不把历史原因断言为当前原因；v2 以“诊断前探索工具调用次数”为主要判据，动作分类/诊断观察集合/最小改善幅度/实验数量在运行前冻结并经独立 reviewer 确认（详见 `docs/p4-g01-v2-spec.md`） |
 | P4-G02 当前 Truth 优先 | VC-14/15 | 创建历史候选与后续经合法 Authority 确认的新 Decision；Recall 返回旧记忆亦须过滤/标历史；实际新 Session 回答当前 Decision，未部署候选不能说已部署；Rule/Task revision 未被 Recall 改写 |
 | P4-G03 未知诚实 | VC-17 | 提问不存在记录的协议测试；保存真实 query/empty evidence trace；Agent 回答未找到，不能编造 PASS/历史验证 |
 | P4-G04 scope 隔离 | VC-18/19 | A/B 各有可区分事实/规则，global 合法偏好；B 新 Session 的 bank 查询及 pack 仅 B+global，遵守 B HARD Authority；单用户mode做跨task/project不一致与bank注入拒绝；启用真实multiuser ACL时另验证无权actor直接访问A后端拒绝，并明确mode；不是只检查前端显示 |
 | P4-G05 Truth 降级独立 | VC-22 | 在仅影响已授权测试服务的故障注入下真实连接不可用，Context 标 degraded且精确 pack 无 Memory；仍读取 HARD Rule/State、捕获真实 Tool Evidence、做合法 State/Checkpoint 流程，未回滚/悬挂；服务恢复后同 job 恢复 DONE，无重复 document |
 | P4-G06 durable 恢复 | 模块 §12 + 本文建议 | 实际 worker 进程在 source commit/enqueue 缝隙及 retain 成功/DONE 缝隙退出并重启，补扫和幂等产生一条可追溯结果；保存真实远端 document readback与本地 attempt链 |
 
-G01 的“帮助”需预先写具体任务、预期可观察动作及完成 Evidence，不以 Agent 自述“有帮助”判 PASS。建议保留不含 lesson 的基线 Context 与含 lesson 的测试 pack/diff，指出省去的重复调查或正确诊断步骤；不声称一次示范建立统计收益。P4 阶段不冒充 §9 综合长任务或 P7 全量发布通过。
+G01 的“帮助”需预先写具体任务、预期可观察动作及完成 Evidence，不以 Agent 自述“有帮助”判 PASS。v2 以“达到正确诊断前的探索工具调用次数”为预先冻结的主要指标：动作分类、诊断成立的观察集合、最小改善幅度与固定实验数量在运行前冻结并经独立 reviewer 确认，运行后不得调整阈值；辅助指标为重复读取、无效尝试、探索轮次，耗时仅记录。质量门槛不变：双方完成同一任务、修复正确、必要验证完整、不把历史原因断言为当前原因；不得以省略必要验证或重复重跑取得 PASS。保留基线 Context 与含 lesson 的测试 pack/diff，以及此前全部阴性记录；不声称一次示范建立统计收益。P4 阶段不冒充 §9 综合长任务或 P7 全量发布通过。
 
 G05 优先对隔离客户端配置注入不可达 endpoint/timeout，真实调用真实服务的恢复前后路径保留；若要求实际停服，仅在操作员明确允许的隔离服务进行。未经授权不能停止现有服务；只能做 fake exception 的故障测试不得满足真实 Gate。
 
