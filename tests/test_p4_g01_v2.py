@@ -138,6 +138,20 @@ class FileChangeAttribution(unittest.TestCase):
                        check=True)
         return repo
 
+    def test_absolute_paths_are_normalized_and_a_no_op_is_not_a_change(self) -> None:
+        module = _assembler()
+        repo = self._fixture()
+        ref_before = subprocess.run(["git", "-C", str(repo), "show", "HEAD:calc.py"],
+                                    capture_output=True).stdout
+        (repo / "calc.py").write_bytes(
+            b"def total(prices, discount):\n    return sum(prices) * (1 - discount / 100)\n")
+        before, after, diff = module.changes_for(repo, "HEAD", str(repo / "calc.py"))
+        self.assertEqual(before, hashlib.sha256(ref_before).hexdigest())
+        self.assertIsNotNone(diff)
+        self.assertIn("discount / 100", diff)
+        untouched = module.changes_for(repo, "HEAD", str(repo / "NOTES.md"))
+        self.assertEqual(untouched[0], untouched[1])  # no-op: before == after
+
     def test_a_single_touch_produces_before_after_and_diff(self) -> None:
         module = _assembler()
         repo = self._fixture()
@@ -675,6 +689,49 @@ class V2EndToEnd(unittest.TestCase):
         self.assertFalse(metrics["o_star_complete"])
         self.assertIsNotNone(metrics["first_repair"])
 
+    def test_an_exit_zero_echo_of_the_assertion_is_not_the_reproduction(self) -> None:
+        events = [
+            _shell_event("cat calc.py test_calc.py NOTES.md",
+                         self.buggy + "# notes\nThe discount is in percent, not currency.\n"),
+            _shell_event("echo -m unittest 'AssertionError: 25.0 != 27.5'",
+                         "AssertionError: 25.0 != 27.5", exit_code=0),
+        ]
+        metrics = self.module._g01_v2_classify(
+            {"tool_events": events, "snapshot": {}}, "the lesson")
+        self.assertFalse(metrics["o_star_complete"])
+        self.assertIsNone(metrics["o_star"]["reproduced_failure"])
+
+    def test_a_compound_suite_run_cannot_supply_the_failing_anchor(self) -> None:
+        events = [
+            _shell_event('python -B -m unittest -v; echo "AssertionError: 25.0 != 27.5"; '
+                         'false', "Ran 1 test\nOK\nAssertionError: 25.0 != 27.5",
+                         exit_code=1),
+        ]
+        metrics = self.module._g01_v2_classify(
+            {"tool_events": events, "snapshot": {}}, "the lesson")
+        self.assertFalse(metrics["o_star_complete"])
+        self.assertIsNone(metrics["o_star"]["reproduced_failure"])
+
+    def test_one_line_reads_do_not_supply_the_files(self) -> None:
+        events = [
+            _shell_event("cat calc.py", "    return sum(prices) - discount\n"),
+            _shell_event("cat NOTES.md", "The discount is in percent, not currency.\n"),
+            _shell_event("python -B -m unittest -v", "AssertionError: 25.0 != 27.5",
+                         exit_code=1),
+        ]
+        metrics = self.module._g01_v2_classify(
+            {"tool_events": events, "snapshot": {}}, "the lesson")
+        self.assertFalse(metrics["o_star_complete"])
+        self.assertIsNone(metrics["o_star"]["buggy_line"])
+        self.assertIsNone(metrics["o_star"]["rule_line"])
+
+    def test_a_python_c_file_read_is_exploration(self) -> None:
+        event = _shell_event("python -c \"print(open('calc.py').read())\"", "content")
+        metrics = self.module._g01_v2_classify(
+            {"tool_events": [event], "snapshot": {}}, "the lesson")
+        self.assertEqual(metrics["classes"], ["E"])
+        self.assertEqual(metrics["primary"], 1)
+
     def test_a_no_op_file_change_is_an_invalid_attempt(self) -> None:
         noop = _file_change_event([("/r/calc.py", "a" * 64, "a" * 64)])
         metrics = self.module._g01_v2_classify(
@@ -687,6 +744,15 @@ class V2EndToEnd(unittest.TestCase):
                        output="{}", exit_code=0)
         with self.assertRaises(self.module.Blocked):
             self.module._g01_v2_classify({"tool_events": [event]}, "the lesson")
+
+    def test_a_prompt_file_that_changed_after_freezing_is_refused(self) -> None:
+        baseline = self._session("g01-baseline", self._repo("b"),
+                                 self.baseline_pack["task_id"], "fixed",
+                                 self._run_events("g01-baseline", self._repo("b2")))
+        self.prompt_path.write_text("a doctored question\n", encoding="utf-8")
+        with self.assertRaises(self.module.Failed) as caught:
+            self.module._g01_v2_require_frozen(self.gate, baseline, "g01-baseline")
+        self.assertIn("prompt", str(caught.exception))
 
     def test_the_two_sessions_must_name_distinct_worktrees(self) -> None:
         shared = self._repo("shared")
@@ -807,8 +873,13 @@ class AssemblerEndToEnd(unittest.TestCase):
         self.assertEqual(session["tool_events"][1]["exit_code"], 1)
         change = session["tool_events"][2]
         self.assertIn("file_change:", change["command"])
-        self.assertNotEqual(json.loads(change["output"])[0]["before_sha256"],
-                            json.loads(change["output"])[0]["after_sha256"])
+        recorded = json.loads(change["output"])
+        ref_calc = subprocess.run(["git", "-C", str(repo), "show", "HEAD:calc.py"],
+                                  capture_output=True).stdout
+        self.assertEqual(recorded[0]["before_sha256"],
+                         hashlib.sha256(ref_calc).hexdigest())
+        self.assertNotEqual(recorded[0]["before_sha256"], recorded[0]["after_sha256"])
+        self.assertIn("discount / 100", recorded[0]["diff"])
         self.assertTrue(all(event["evidence_id"] for event in session["tool_events"]))
         self.assertTrue(session["tool_actions"])
         self.assertEqual(session["snapshot"]["calc.py"],

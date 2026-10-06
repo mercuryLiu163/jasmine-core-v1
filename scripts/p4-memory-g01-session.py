@@ -41,7 +41,9 @@ HARNESS_PATHS = (".codex/", "__pycache__/", ".pytest_cache/")
 
 
 def _harness_path(entry: str) -> bool:
-    return entry.startswith(HARNESS_PATHS) or entry.endswith(".pyc")
+    parts = pathlib.PurePosixPath(entry).parts
+    return (any(part in (".codex", "__pycache__", ".pytest_cache") for part in parts)
+            or entry.endswith(".pyc"))
 
 
 def git(repo: pathlib.Path, *args: str) -> bytes:
@@ -87,10 +89,25 @@ def thread_id(text: str) -> str:
     raise SystemExit("the transcript records no thread.started id")
 
 
+def relative_to_repo(repo: pathlib.Path, path: str) -> str:
+    """The worktree-relative form of a transcript path, absolute or relative.
+
+    Codex names `file_change` paths absolutely; synthetic transcripts may name
+    them relative to the repository. Comparing a relative path against `git
+    show` while resolving the workspace side against the process cwd is how a
+    no-op patch became an effective repair.
+    """
+    candidate = pathlib.Path(path)
+    if candidate.is_absolute():
+        return str(candidate.resolve().relative_to(repo.resolve()))
+    return str(candidate)
+
+
 def changes_for(repo: pathlib.Path, ref: str, path: str) -> tuple[str | None, str | None, str | None]:
     """(before_sha256, after_sha256, unified diff) for one path."""
-    before = ref_bytes(repo, ref, path)
-    target = repo / path
+    relative = relative_to_repo(repo, path)
+    before = ref_bytes(repo, ref, relative)
+    target = repo / relative
     after = target.read_bytes() if target.is_file() else None
     if before is None and after is None:
         return None, None, None
@@ -99,7 +116,7 @@ def changes_for(repo: pathlib.Path, ref: str, path: str) -> tuple[str | None, st
         diff = "".join(difflib.unified_diff(
             before.decode("utf-8", "replace").splitlines(True),
             after.decode("utf-8", "replace").splitlines(True),
-            fromfile=path, tofile=path))
+            fromfile=relative, tofile=relative))
     return (sha256(before) if before is not None else None,
             sha256(after) if after is not None else None,
             diff)
@@ -192,8 +209,9 @@ def main() -> int:
     touch_resolved: dict[str, list[int]] = {}
     for path, indexes in touch.items():
         try:
-            resolved = str(pathlib.Path(path).resolve())
-        except OSError:
+            resolved = str((args.repo.resolve() /
+                            relative_to_repo(args.repo, path)).resolve())
+        except (OSError, ValueError):
             resolved = path
         touch_resolved[resolved] = indexes
     unattributed = sorted(p for p in changed_paths if p not in touch_resolved)
@@ -206,6 +224,7 @@ def main() -> int:
             continue
         for change in action["changes"]:
             path = str(change.get("path") or "")
+            change["relative_path"] = relative_to_repo(args.repo, path)
             before, after, diff = changes_for(args.repo, args.ref, path)
             if before == after:
                 change["no_effect"] = True

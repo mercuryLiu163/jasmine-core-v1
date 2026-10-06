@@ -2435,14 +2435,21 @@ G01_V2_BUGGY_FILE = b"def total(prices, discount):\n    return sum(prices) - dis
 G01_V2_NOTES_FILE = b"# notes\nThe discount is in percent, not currency.\n"
 G01_V2_BUGGY_LINE = re.compile(r"(?m)^\s*return sum\(prices\) - discount\s*$")
 G01_V2_RULE_LINE = "The discount is in percent, not currency."
-# A suite *run*, not the word "unittest" inside an echo: the interpreter is
-# asked to run the runner, or pytest is invoked directly.
-G01_V2_SUITE = re.compile(r"(?:-m\s+(?:unittest)\b|\bpytest\b)")
+# A suite *run*: a simple command that starts with an interpreter (or pytest)
+# and asks it to run the runner, with no compound separators. A compound
+# `python -m unittest; echo "AssertionError..."; false` runs a suite and then
+# supplies the assertion and the nonzero exit from elsewhere, and one Codex
+# event carries one aggregated output and one exit code, so the parts cannot be
+# attributed. The failing and green anchors therefore accept only a simple run;
+# a compound suite run still classifies as exploration.
+G01_V2_SUITE = re.compile(
+    r"\s*(?:\S*/)?(?:python[\d.]*(?:\s+-\S+)*\s+-m\s+unittest\b|pytest\b)[^;&|]*$")
 # The specification's E class names reading files; the v1 category table covered
 # documentation and history but had no generic read pattern, so `cat calc.py`
 # classified as O and a repeated read disappeared from the secondary metric.
 G01_V2_SHELL_READ = re.compile(
-    r"\b(cat|head|tail|less|more|sed|awk|grep|rg|cut|sort|uniq|wc|nl|strings|file)\b")
+    r"(?:\b(?:cat|head|tail|less|more|sed|awk|grep|rg|cut|sort|uniq|wc|nl|strings|file|od|"
+    r"xxd|stat)\b|python[\d.]*(?:\s+-\S+)*\s+-c[^;&|]*?(?:open\(|read_text\(|read_bytes\())")
 G01_V2_FILES = ("calc.py", "test_calc.py", "NOTES.md", "requirements.txt")
 
 
@@ -2672,7 +2679,7 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
             continue
         if event.get("kind") == "shell":
             command = event.get("command") or ""
-            if G01_V2_SUITE.search(command):
+            if G01_V2_SUITE.match(command):
                 classes.append("V" if first_repair is not None and index > first_repair
                                else "E")
                 continue
@@ -2691,7 +2698,7 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
             continue
         output = event.get("output") or ""
         if (reproduced is None and event.get("kind") == "shell"
-                and G01_V2_SUITE.search(event.get("command") or "")
+                and G01_V2_SUITE.match(event.get("command") or "")
                 and G01_V2_ASSERTION in output
                 and int(event.get("exit_code") or 0) != 0):
             # The failing reproduction is an execution that exited nonzero; an
@@ -2799,7 +2806,7 @@ def _g01_v2_quality(gate: Gate, record: CaseRecord, session: dict[str, Any],
                      f"verification could follow it")
     green_after = [index for index, event in enumerate(session.get("tool_events") or [])
                    if index > metrics["first_repair"] and event.get("kind") == "shell"
-                   and G01_V2_SUITE.search(event.get("command") or "")
+                   and G01_V2_SUITE.match(event.get("command") or "")
                    and "Ran 1 test" in (event.get("output") or "")
                    and "OK" in (event.get("output") or "")]
     if not green_after:
