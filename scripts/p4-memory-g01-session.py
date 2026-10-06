@@ -34,6 +34,15 @@ from jasmine_core.memory.g01_stream import action_payload, extract_actions  # no
 
 TRACKED = ("calc.py", "test_calc.py", "NOTES.md", "requirements.txt")
 
+#: Paths the operator's harness owns, not the session: the hook installation and
+#: interpreter caches are untracked in the frozen fixture and would otherwise be
+#: reported as workspace changes no action claims.
+HARNESS_PATHS = (".codex/", "__pycache__/", ".pytest_cache/")
+
+
+def _harness_path(entry: str) -> bool:
+    return entry.startswith(HARNESS_PATHS) or entry.endswith(".pyc")
+
 
 def git(repo: pathlib.Path, *args: str) -> bytes:
     return subprocess.run(["git", "-C", str(repo), *args],
@@ -166,15 +175,28 @@ def main() -> int:
     status = subprocess.run(["git", "-C", str(args.repo), "status", "--porcelain"],
                             capture_output=True, text=True).stdout
     changed_paths = set()
+    harness_excluded = []
     for line in status.splitlines():
         entry = line[3:].strip()
         if " -> " in entry:
             entry = entry.split(" -> ", 1)[1]
         if entry.startswith('"') and entry.endswith('"'):
             entry = entry[1:-1]
-        changed_paths.add(entry)
-    unattributed = sorted(p for p in changed_paths
-                          if not any(p.endswith(path) for path in touch))
+        if _harness_path(entry):
+            harness_excluded.append(entry)
+            continue
+        # `git status` speaks repository-relative paths; the transcript names
+        # absolute ones. Compare the resolved path or every real patch reads as
+        # unattributed.
+        changed_paths.add(str((args.repo / entry).resolve()))
+    touch_resolved: dict[str, list[int]] = {}
+    for path, indexes in touch.items():
+        try:
+            resolved = str(pathlib.Path(path).resolve())
+        except OSError:
+            resolved = path
+        touch_resolved[resolved] = indexes
+    unattributed = sorted(p for p in changed_paths if p not in touch_resolved)
     for index, action in enumerate(actions):
         if action["kind"] != "file_change":
             continue
@@ -247,11 +269,14 @@ def main() -> int:
     # The generic session verifier consumes `tool_actions`; the v2 contract
     # consumes `tool_events`. Both are written from the same bound stream, so a
     # v2 session cannot pass one and fail the other on a schema difference.
+    # The generic verifier binds every action it is given; an action this run
+    # could not bind belongs to `tool_events`, where `_g01_v2_bind` raises
+    # BLOCKED, not to `tool_actions`, where a missing row would surface as FAIL.
     tool_actions = [{
         "command": event["command"], "output": event["output"],
         "exit_code": event.get("exit_code", 0), "tool_name": event["tool_name"],
         "evidence_id": event["evidence_id"],
-    } for event in tool_events]
+    } for event in tool_events if event["evidence_id"]]
     # Deliberately NOT `session-<label>.transcript.json`: that name is the Gate's
     # sealed copy of the session file itself. The raw Codex stream gets its own
     # name and its own digest field, and the Gate re-extracts it.
@@ -278,6 +303,7 @@ def main() -> int:
         "tool_actions": tool_actions,
         "tool_events": tool_events,
         "unattributed_changes": unattributed,
+        "harness_excluded": sorted(set(harness_excluded)),
         "snapshot": snapshot,
         "stream_sha256": sha256(transcript_text.encode("utf-8")),
         "final_answer": declared.get("final_answer"),

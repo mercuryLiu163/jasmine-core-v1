@@ -2431,9 +2431,13 @@ G01_V2_FIXED_FILES = {
         b"        self.assertAlmostEqual(total([10.0, 20.0], 5.0), 28.5)\n"),
 }
 G01_V2_ASSERTION = "AssertionError: 25.0 != 27.5"
+G01_V2_BUGGY_FILE = b"def total(prices, discount):\n    return sum(prices) - discount\n"
+G01_V2_NOTES_FILE = b"# notes\nThe discount is in percent, not currency.\n"
 G01_V2_BUGGY_LINE = re.compile(r"(?m)^\s*return sum\(prices\) - discount\s*$")
 G01_V2_RULE_LINE = "The discount is in percent, not currency."
-G01_V2_SUITE = re.compile(r"\b(unittest|pytest)\b")
+# A suite *run*, not the word "unittest" inside an echo: the interpreter is
+# asked to run the runner, or pytest is invoked directly.
+G01_V2_SUITE = re.compile(r"(?:-m\s+(?:unittest)\b|\bpytest\b)")
 # The specification's E class names reading files; the v1 category table covered
 # documentation and history but had no generic read pattern, so `cat calc.py`
 # classified as O and a repeated read disappeared from the secondary metric.
@@ -2480,6 +2484,7 @@ def _g01_v2_require_frozen(gate: Gate, session: dict[str, Any], label: str) -> N
         raise Failed(f"{label} was run against a prompt hashing to "
                      f"{str(provenance.get('prompt_sha256'))[:12]}, the frozen "
                      f"prompt hashes to {prompt_sha[:12]}")
+    _g01_v2_prompt_text(gate)  # the file itself must still hash to the frozen value
     fixture_ref = config.get("g01_v2_fixture_ref")
     if not isinstance(fixture_ref, str) or not fixture_ref:
         raise Blocked("the config carries no g01_v2_fixture_ref")
@@ -2605,10 +2610,23 @@ def _g01_v2_bind(gate: Gate, record: CaseRecord, session: dict[str, Any],
                            "tool_name": "file_change", "exit_code": 0},
                     task_id=task_id)
             else:
+                tool_name = event.get("tool_name") or "shell"
+                command_sha = hashlib.sha256(
+                    (event.get("command") or "").encode("utf-8")).hexdigest()
+                output_sha = hashlib.sha256(
+                    (event.get("output") or "").encode("utf-8")).hexdigest()
+                row = conn.execute(
+                    "SELECT evidence_id FROM evidence WHERE task_id=? AND tool_name=?"
+                    " AND command_sha256=? AND artifact_sha256=?",
+                    (task_id, tool_name, command_sha, output_sha)).fetchone()
+                if row is None:
+                    raise Blocked(
+                        f"{label} action {index} ({tool_name!r}) binds to no Core "
+                        f"Evidence: an action that cannot be bound blocks the metric")
                 gate._verify_tool_action_row(
                     conn, {"command": event.get("command", ""),
                            "output": event.get("output", ""),
-                           "tool_name": event.get("tool_name") or "shell",
+                           "tool_name": tool_name,
                            "exit_code": event.get("exit_code", 0)},
                     task_id=task_id)
             record.evidence_ids.append(evidence_id)
@@ -2674,16 +2692,22 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
         output = event.get("output") or ""
         if (reproduced is None and event.get("kind") == "shell"
                 and G01_V2_SUITE.search(event.get("command") or "")
-                and G01_V2_ASSERTION in output):
+                and G01_V2_ASSERTION in output
+                and int(event.get("exit_code") or 0) != 0):
+            # The failing reproduction is an execution that exited nonzero; an
+            # `echo` of the assertion exits zero and cannot count as running it.
             reproduced = index
         # The anchors are reads of the actual files: an `echo` of the buggy line
         # is not the observation of calc.py's pre-repair bytes, and a repair
         # payload can never satisfy them because repair actions are excluded.
         if (buggy is None and _g01_v2_reads(event, "calc.py")
-                and G01_V2_BUGGY_LINE.search(output)):
+                and G01_V2_BUGGY_FILE.decode() in output):
+            # The whole pre-repair file, not just its failing line: the captured
+            # bytes have to be the file, so a heredoc echoing one line is not a
+            # read of calc.py.
             buggy = index
         if (rule is None and _g01_v2_reads(event, "NOTES.md")
-                and G01_V2_RULE_LINE in output):
+                and G01_V2_NOTES_FILE.decode() in output):
             rule = index
     complete = reproduced is not None and buggy is not None and rule is not None
     epoch = max(reproduced, buggy, rule) if complete else len(events)
@@ -2702,8 +2726,13 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
             rounds += 1
             in_round = True
         command = events[index].get("command") or ""
-        if events[index].get("kind") == "mcp":
+        kind = events[index].get("kind")
+        if kind == "mcp":
             command = events[index].get("output") or ""
+        elif not G01_V2_SHELL_READ.search(command):
+            # A suite command that happens to name test_calc.py is not a read of
+            # the file: only read actions feed the repeated-read metric.
+            command = ""
         for candidate in G01_V2_FILES:
             # Exact file tokens: "calc.py" must not match inside "test_calc.py".
             if re.search(r"(?<![\w.])" + re.escape(candidate) + r"(?![\w.])", command):
@@ -2712,12 +2741,15 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
                 else:
                     seen.add(candidate)
     invalid = 0
-    for index in effective:
-        changes = json.loads(events[index].get("output") or "[]")
+    for event in events:
+        if event.get("kind") != "file_change":
+            continue
+        changes = json.loads(event.get("output") or "[]")
         for change in changes:
-            # A change that changed nothing is an edit that did not enter the
-            # diff at all; a change whose end state is not the final snapshot is
-            # an edit that was superseded. Either is an invalid attempt.
+            # A change that changed nothing is an attempted edit that did not
+            # enter the diff at all; a change whose end state is not the final
+            # snapshot is an edit that was superseded. Either is an invalid
+            # attempt, and both are readable from the bound transitions.
             if change.get("before_sha256") == change.get("after_sha256"):
                 invalid += 1
                 break
@@ -2737,6 +2769,8 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
         "invalid_attempts": invalid,
         "exploration_rounds": rounds,
         "tool_events": len(events),
+        "invalid_attempts_basis": "file-change actions with a no-op change or an "
+                                  "end state that is not the final snapshot",
         "elapsed_seconds": None,
         "elapsed_basis": "the Codex stream carries no per-action timestamps; recorded "
                          "only, never judged",
@@ -2851,6 +2885,24 @@ def _verify_g01_v2(gate: Gate, record: CaseRecord, baseline: dict[str, Any],
     if baseline.get("memory_seen") not in (None, []):
         raise Failed(f"the baseline session claims to have seen memory "
                      f"{baseline.get('memory_seen')!r} while its pack carried none")
+    # The snapshot is the gate's own measurement of the end-of-session worktree:
+    # both the snapshot and the transitions are session-side inputs until the
+    # Gate reads the files it names. The worktrees must survive the run.
+    for side, label in ((baseline, "g01-baseline"), (session, "g01-lesson")):
+        repo = Path(side["g01_v2"]["fixture_repo"])
+        if not repo.is_dir():
+            raise Blocked(f"{label}'s worktree {repo} is gone, so its snapshot cannot "
+                          f"be independently recomputed")
+        recorded = side.get("snapshot") or {}
+        recomputed = {}
+        for name in ("calc.py", "test_calc.py", "NOTES.md", "requirements.txt"):
+            target = repo / name
+            recomputed[name] = (hashlib.sha256(target.read_bytes()).hexdigest()
+                                if target.is_file() else None)
+        if recomputed != recorded:
+            raise Failed(f"{label}'s recorded snapshot does not match the worktree the "
+                         f"Gate read: recorded {recorded}, read {recomputed}")
+        side["snapshot"] = recomputed
     baseline_metrics = _g01_v2_classify(baseline, "g01-baseline")
     lesson_metrics = _g01_v2_classify(session, "g01-lesson")
     baseline_metrics["effective"] = [index for index, name in
@@ -2926,8 +2978,9 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
     # second explanation for any difference, and nothing in this Gate could rule it out.
     # The ids cannot match (P3 refuses an idempotency key replayed with a different
     # body); the prompt text and the title have to, and are checked in the verifier.
+    prompt_text = _g01_v2_prompt_text(gate) if _g01_v2_enabled(gate) else G01_PROMPT
     baseline_task = gate.new_task(project, G01_TASK_TITLE)
-    baseline_prompt = gate.event(project, "user.prompt", G01_PROMPT, task_id=baseline_task)
+    baseline_prompt = gate.event(project, "user.prompt", prompt_text, task_id=baseline_task)
     record.source_event_ids.append(baseline_prompt)
     baseline_pack = gate.build_pack(project_id=project, task_id=baseline_task,
                                      prompt_event_id=baseline_prompt, key=baseline_key)
@@ -2943,7 +2996,7 @@ def case_g01(gate: Gate, record: CaseRecord) -> None:
         record.source_event_ids.append(source_event_id)
 
     current = gate.new_task(project, G01_TASK_TITLE)
-    prompt = gate.event(project, "user.prompt", G01_PROMPT, task_id=current)
+    prompt = gate.event(project, "user.prompt", prompt_text, task_id=current)
     record.source_event_ids.append(prompt)
 
     pack = gate.build_pack(project_id=project, task_id=current, prompt_event_id=prompt,
@@ -3006,6 +3059,7 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
                                         {k: v for k, v in baseline_pack.items()
                                          if k != "rendered_content"}))
     baseline = gate.verify_session(baseline_pack, "g01-baseline",
+                                     require_tool_actions=not _g01_v2_enabled(gate),
                                      require_evidence_backed_actions=True)
     if not _g01_v2_enabled(gate):
         baseline["verified"]["exploration"] = _session_exploration(baseline, "the baseline session")
@@ -3064,6 +3118,7 @@ def _verify_g01_packs(gate: Gate, record: CaseRecord, pack: dict[str, Any],
             gate, evidence_id)) if hasattr(gate, "conn") else None))
 
     session = gate.verify_session(pack, "g01-lesson",
+                                  require_tool_actions=not _g01_v2_enabled(gate),
                                   require_evidence_backed_actions=True)
     if not _g01_v2_enabled(gate):
         session["verified"]["exploration"] = _session_exploration(session, "the lesson-bearing session")

@@ -159,7 +159,7 @@ class MetricComputation(unittest.TestCase):
         self.fixed = "def total(prices, discount):\n    return sum(prices) * (1 - discount / 100)\n"
         self.read = _shell_event(
             "cat calc.py test_calc.py NOTES.md requirements.txt",
-            self.buggy + "The discount is in percent, not currency.\n")
+            self.buggy + "# notes\nThe discount is in percent, not currency.\n")
         self.reproduce = _shell_event(
             "python -B -m unittest -v", "Ran 1 test\nAssertionError: 25.0 != 27.5", exit_code=1)
         self.repair = _file_change_event(
@@ -498,13 +498,20 @@ class V2EndToEnd(unittest.TestCase):
 
     def setUp(self) -> None:
         self.module = import_gate_module()
+        import tempfile
         self.gate = _real_gate(self, case_id="P4-V2E")
+        prompt_tmp = tempfile.TemporaryDirectory(prefix="p4-v2-prompt-")
+        self.addCleanup(prompt_tmp.cleanup)
+        self.prompt_path = Path(prompt_tmp.name) / "prompt.txt"
+        self.prompt_path.write_text("Fix the device test and verify it green.\n",
+                                    encoding="utf-8")
+        self.prompt_sha = hashlib.sha256(self.prompt_path.read_bytes()).hexdigest()
         self.gate.config = {
             "g01_version": "v2",
             "g01_v2_spec_sha256": hashlib.sha256(
                 (REPO_ROOT / "docs" / "p4-g01-v2-spec.md").read_bytes()).hexdigest(),
-            "g01_v2_prompt_sha256": "P" * 64,
-            "g01_v2_prompt_path": "/tmp/g01-session-prompt.txt",
+            "g01_v2_prompt_sha256": self.prompt_sha,
+            "g01_v2_prompt_path": str(self.prompt_path),
             "g01_v2_fixture_ref": "R" * 40,
             "g01_v2_codex_version": "codex 0.159.3",
             "g01_v2_codex_model": "deepseek",
@@ -536,7 +543,12 @@ class V2EndToEnd(unittest.TestCase):
         import tempfile
         tmp = tempfile.TemporaryDirectory(prefix=f"p4-v2e-{label}-")
         self.addCleanup(tmp.cleanup)
-        return Path(tmp.name).resolve()
+        repo = Path(tmp.name).resolve()
+        (repo / "calc.py").write_bytes(self.fixed_calc)
+        (repo / "test_calc.py").write_bytes(self.fixed_tests)
+        (repo / "NOTES.md").write_bytes(b"# notes\nThe discount is in percent, not currency.\n")
+        (repo / "requirements.txt").write_bytes(b"\n")
+        return repo
 
     def _bind(self, task_id, events):
         for event in events:
@@ -571,7 +583,7 @@ class V2EndToEnd(unittest.TestCase):
         return [
             _shell_event("ls -la", "calc.py\n"),
             _shell_event("cat calc.py test_calc.py NOTES.md",
-                         self.buggy + "The discount is in percent, not currency.\n"),
+                         self.buggy + "# notes\nThe discount is in percent, not currency.\n"),
             _shell_event('rg "total" .', "calc.py:1\n"),
             _shell_event("cat requirements.txt", "\n"),
             _shell_event("python -B -m unittest -v", "AssertionError: 25.0 != 27.5",
@@ -586,15 +598,15 @@ class V2EndToEnd(unittest.TestCase):
         text = self._stream(label, events)
         session = {
             "g01_v2": {"spec_sha256": self.gate.config["g01_v2_spec_sha256"],
-                       "prompt_sha256": self.gate.config["g01_v2_prompt_sha256"],
+                       "prompt_sha256": self.prompt_sha,
                        "fixture_ref": self.gate.config["g01_v2_fixture_ref"],
                        "codex_version": "codex 0.159.3", "codex_model": "deepseek",
                        "fixture_repo": str(repo)},
             "stream_sha256": hashlib.sha256(text.encode()).hexdigest(),
             "tool_events": events,
-            "snapshot": {"calc.py": hashlib.sha256(self.fixed_calc).hexdigest(),
-                         "test_calc.py": hashlib.sha256(self.fixed_tests).hexdigest(),
-                         "NOTES.md": "e" * 64, "requirements.txt": "f" * 64},
+            "snapshot": {name: hashlib.sha256((repo / name).read_bytes()).hexdigest()
+                         for name in ("calc.py", "test_calc.py", "NOTES.md",
+                                      "requirements.txt")},
             "task_completed": True,
             "final_verification": {"command": "python -B -m unittest -v",
                                    "output": "Ran 1 test\nOK"},
@@ -616,7 +628,7 @@ class V2EndToEnd(unittest.TestCase):
                                                                           baseline_repo))
         lesson_events = [
             _shell_event("cat calc.py NOTES.md",
-                         self.buggy + "The discount is in percent, not currency.\n"),
+                         self.buggy + "# notes\nThe discount is in percent, not currency.\n"),
             _shell_event("python -B -m unittest -v", "AssertionError: 25.0 != 27.5",
                          exit_code=1),
             _file_change_event(
@@ -642,10 +654,16 @@ class V2EndToEnd(unittest.TestCase):
                             for receipt in self.record.receipts))
 
     def test_an_echo_of_the_anchors_does_not_complete_the_observation_set(self) -> None:
+        # A genuine spoof: the command says the right words and the output
+        # carries the right strings, but nothing was executed or read.
         events = [
-            _shell_event("echo 'python -B -m unittest' 'AssertionError: 25.0 != 27.5'", ""),
-            _shell_event("echo 'return sum(prices) - discount'", ""),
-            _shell_event("echo 'The discount is in percent, not currency.'", ""),
+            _shell_event("echo 'python -B -m unittest -v' "
+                         "'AssertionError: 25.0 != 27.5'",
+                         "AssertionError: 25.0 != 27.5", exit_code=0),
+            _shell_event("sed -n p calc.py <<< spoofed-content",
+                         "def total(prices, discount):\n    return sum(prices) - discount\n"),
+            _shell_event("echo '# notes\nThe discount is in percent, not currency.'",
+                         "# notes\nThe discount is in percent, not currency.\n"),
             _file_change_event(
                 [("/r/calc.py", "a" * 64, hashlib.sha256(self.fixed_calc).hexdigest())]),
             _shell_event("python -B -m unittest -v", "Ran 1 test\nOK"),
@@ -656,6 +674,12 @@ class V2EndToEnd(unittest.TestCase):
             "the lesson")
         self.assertFalse(metrics["o_star_complete"])
         self.assertIsNotNone(metrics["first_repair"])
+
+    def test_a_no_op_file_change_is_an_invalid_attempt(self) -> None:
+        noop = _file_change_event([("/r/calc.py", "a" * 64, "a" * 64)])
+        metrics = self.module._g01_v2_classify(
+            {"tool_events": [noop], "snapshot": {"calc.py": "a" * 64}}, "the lesson")
+        self.assertEqual(metrics["invalid_attempts"], 1)
 
     def test_an_unknown_native_item_blocks(self) -> None:
         event = _event("unknown", tool_name="unknown:web_search",
@@ -789,6 +813,11 @@ class AssemblerEndToEnd(unittest.TestCase):
         self.assertTrue(session["tool_actions"])
         self.assertEqual(session["snapshot"]["calc.py"],
                          hashlib.sha256((repo / "calc.py").read_bytes()).hexdigest())
+        # The operator's .codex layer is untracked in the fixture; it must be
+        # excluded as harness-owned, not reported as an unattributed change.
+        self.assertEqual(session["unattributed_changes"], [])
+        self.assertIn(".codex/", session["harness_excluded"])
+        self.assertTrue(session["tool_actions"])
 
 
 

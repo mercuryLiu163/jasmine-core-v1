@@ -303,6 +303,17 @@ alone is not enough). Values come only from the verified capture: the
 pre-repair line is the diff's removed line, byte-bound to the inspection record,
 and the post-hoc line reports the rerun output without asserting causation.
 
+### G01 v2 native stream: what the Gate can and cannot prove
+
+The v2 metric is computed from the raw `codex exec --json` stream, which the
+assembler copies beside the session (`session-<label>.codex.jsonl`). The Gate
+seals those bytes and re-extracts them with the same parser the assembler used,
+and refuses any session whose recorded events do not match the stream. What the
+Gate cannot prove is that the stream is the *unfiltered* output of the Codex
+process: like the session receipt and the native SessionStart receipt, it is an
+operator-provided input. A stream pre-filtered before assembly is outside the
+Gate's reach, and the manifest records the attestation boundary accordingly.
+
 ## Mechanism change: MEMORY section budget 800 -> 1000
 
 This is a mechanism change, separate from the G01 lesson treatment (commit
