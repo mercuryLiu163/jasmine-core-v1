@@ -214,23 +214,74 @@ G01's prompt, seven exploration categories, benefit threshold and controlled
 baseline/lesson comparison are unchanged. Real Agent execution and its independent
 receipts remain required; historical subprocess capture alone is not acceptance.
 
-### Terminal partial-failure replay (G01 and G05)
+### Terminal partial-failure replay (every case)
 
-A G01/G05 attempt that ended FAIL before its final Context Pack exists is a
-terminal failed attempt. The phase-one seal records its original failure reason,
-IDs and receipt references. `--resume` validates that seal, rechecks the original
-source/job scope and receipt digests, and reproduces **FAIL** with the same IDs
-before fresh setup or engine work. It does not retry retention/recovery, create
-another project or Rule, execute another historical repair, or start an Agent
-pair. Repeated resume therefore verifies stable replay of a failed attempt; it
-never converts that failed Gate into PASS. A final pack already present continues
-to use the existing exact-pack/session verification path.
+Any attempt that ended FAIL before its durable setup unit exists is a terminal
+failed attempt. The durable unit is the case's exact pack for G01-G05 and G07,
+and `g06-complete.json` for G06. The phase-one seal records the original failure
+reason, IDs and receipt references. `--resume` validates that seal and the
+phase-one manifest anchor, rechecks every ID the record carries -- projects,
+source Events, Evidence, jobs, Tasks, sessions, Context Packs and Authority rule
+versions -- and receipt digests, and reproduces **FAIL** with the same IDs before
+fresh setup or engine work. The fields that were re-checked and the fields that
+were empty in the sealed record are both listed in `inherited_evidence`, so an
+empty re-check is visible rather than passing silently. It does not retry
+retention/recovery, create another project or Rule, execute another historical
+repair, or start an Agent pair. Repeated resume therefore verifies stable replay
+of a failed attempt; it never converts that failed Gate into PASS. A durable unit
+already present continues to use the existing exact-pack/session (or completion
+marker) verification path.
 
 Legacy partial failures lacking a sealed terminal record are refused before
 re-seeding. Their old records and coverage limits remain intact. A separately
 registered new run, if authorized, must preserve/report all earlier failures;
 service restoration cannot silently replace an old failure's result. Normal
 completed-case resume and the original G01 benefit contract are unchanged.
+
+### The functional engine preflight
+
+Before any case runs, a Gate run executes `scripts/p4-memory-preflight.py`
+in-process once, against the run's `JASMINE_HINDSIGHT_URL` and bank namespace,
+in a throwaway project bank that touches no case database. The preflight asserts
+the stored artifact and not the receipt: the database reports connected, a real
+document is retained, extraction reaches at least one unit, the document and its
+unit listing agree, and the stored content is recallable. Its report is recorded
+in the manifest under `engine.functional_preflight`, including whether its own
+document was cleaned up. A failed check stops the run with `verdict: BLOCKED`,
+every selected case recorded against the failed check by name, and no case
+database opened; fix the environment before re-running. The same checks can be
+run by hand:
+
+```bash
+scripts/p4-memory-preflight.py --engine-url "$JASMINE_HINDSIGHT_URL" \
+    --bank-namespace "$JASMINE_MEMORY_BANK_NAMESPACE"
+```
+
+Exit 0 is every check passed, 2 is `environment BLOCKED`, and 1 means the
+preflight script itself failed (a defect, not the environment). The report names
+only `HindsightConfig.origin_host`: userinfo in the URL never reaches stdout or
+the report.
+
+### Staging the native SessionStart injection
+
+The native SessionStart hook reads `<repo>/.codex/jasmine/injection.json` and the
+rendered pack file it points at. The producer of that pointer is the Gate itself:
+
+```bash
+scripts/p4-memory-gate.py --stage-injection --work <work-dir> \
+    --case P4-G01 --pack-key g01-with-lesson \
+    --config <operator-environment.json> \
+    [--native-session-repo <repo>]
+```
+
+It loads the existing pack with that idempotency key, refuses it when its
+rendered bytes do not hash to its recorded `rendered_sha256`, and writes the
+pointer plus the exact bytes. Exit 0 staged, 1 refused (no such pack, or digest
+mismatch), 2 the staging inputs cannot be used. Whether Codex or a human ran the
+installed hook afterwards is an operator attestation recorded under
+`native_session_start` in the manifest; the Gate verifies the installed script's
+digest, the injected bytes, the session id, the source, the `cwd` and the
+injection channel, but not the producer.
 
 Every G01 historical action receipt and the execution-chain receipt is now
 attached to its CaseRecord before retention can fail, so the phase-one seal

@@ -151,20 +151,111 @@ class PartialFailureReplay(unittest.TestCase):
         self.assertEqual(terminal['reason'], record.reason)
         self.assertEqual(terminal['project_ids'], record.project_ids)
 
-    def test_terminal_replay_map_covers_every_pack_case(self):
+    def test_terminal_replay_map_covers_every_case(self):
         # The map is the single source of truth for two call sites (the seal and
         # the replay). If it drifts from the cases it cannot protect, the growth it
-        # exists to prevent comes back silently -- one line at a time.
+        # exists to prevent comes back silently -- one line at a time. G06's durable
+        # unit is its completion marker, not a pack, and its map value is None.
         import inspect
 
         module = _module()
-        self.assertEqual(set(module.TERMINAL_SETUP_PACK_KEYS), set(module.NEEDS_P3_PACK))
-        for case_id, key in module.TERMINAL_SETUP_PACK_KEYS.items():
+        pack_cases = {case_id: key
+                      for case_id, key in module.TERMINAL_SETUP_PACK_KEYS.items()
+                      if key is not None}
+        self.assertEqual(set(pack_cases), set(module.NEEDS_P3_PACK))
+        for case_id, key in pack_cases.items():
             with self.subTest(case=case_id):
                 source = inspect.getsource(module.CASES_BY_ID[case_id])
                 self.assertIn(f'"{key}"', source,
                               f"{case_id} no longer builds {key}; the terminal-setup "
                               f"replay map names a pack that case does not use")
+        self.assertIsNone(module.TERMINAL_SETUP_PACK_KEYS["P4-G06"])
+        self.assertIn("g06-complete.json",
+                      inspect.getsource(module.CASES_BY_ID["P4-G06"]))
+
+    def test_terminal_replay_records_which_ids_it_rechecked(self):
+        # Every recorded id field is rechecked against Core, and the fields that
+        # were empty in the sealed record are named, so an empty recheck is visible
+        # rather than silently passing for coverage.
+        module = _module()
+        gate = _real_gate(self, case_id='P4-G01')
+        project = gate.seed_project('replay-rechecked')
+        record = module.CaseRecord('P4-G01', 'FAIL', mode='real', reason='failure',
+                                   project_ids=[project])
+        replayed = module.CaseRecord('P4-G01', 'BLOCKED')
+        self.assertTrue(module._replay_terminal_setup_failure(
+            gate, replayed, {'verdict': 'FAIL', 'terminal_failure': record.as_dict()}))
+        evidence = replayed.inherited_evidence['terminal_failure_replay']
+        self.assertEqual(evidence['rechecked_core_ids'],
+                         {'task_ids': 0, 'session_ids': 0, 'context_pack_ids': 0,
+                          'rule_versions': 0})
+        self.assertEqual(evidence['empty_rechecked_fields'],
+                         ['context_pack_ids', 'rule_versions', 'session_ids', 'task_ids'])
+
+    def test_terminal_replay_refuses_a_recorded_id_core_does_not_hold(self):
+        # A sealed failure that names a Task/Context Pack/Session/rule version Core
+        # no longer holds is not the same failure any more; the replay has to refuse
+        # rather than reproduce a reason about objects that are gone.
+        module = _module()
+        cases = (
+            ('task_ids', 'Task is missing', 'tsk_' + 'Q' * 26),
+            ('context_pack_ids', 'Context Pack is missing', 'ctx_' + 'Q' * 26),
+            ('session_ids', 'Session is missing', 'native-' + 'Q' * 10),
+            ('rule_versions', 'rule version', 'rule_' + 'Q' * 26 + ':1'),
+        )
+        for field, marker, value in cases:
+            with self.subTest(field=field):
+                gate = _real_gate(self, case_id='P4-G01')
+                project = gate.seed_project('replay-' + field)
+                record = module.CaseRecord('P4-G01', 'FAIL', mode='real',
+                                           reason='failure', project_ids=[project])
+                if hasattr(record, field):
+                    getattr(record, field).append(value)
+                else:
+                    setattr(record, field, [value])
+                before = self._counts(gate)
+                with self.assertRaises(module.Failed) as caught:
+                    module._replay_terminal_setup_failure(
+                        gate, module.CaseRecord('P4-G01', 'BLOCKED'),
+                        {'verdict': 'FAIL',
+                         'terminal_failure': record.as_dict()})
+                self.assertIn(marker, str(caught.exception))
+                self.assertEqual(self._counts(gate), before)
+
+    def test_g06_terminal_failure_before_marker_two_resume_keep_counts(self):
+        # G06's pre-marker FAIL had the same growth shape as G04: its completion
+        # marker did not exist, `case_g06` re-ran, and every resume seeded another
+        # project and committed another Decision. The map's None entry makes the
+        # replay check the marker instead of a pack; this drives a real terminal
+        # FAIL before the marker and proves two resumes add nothing.
+        import os
+        from unittest import mock
+
+        module = _module()
+        gate = _real_gate(self, case_id='P4-G06')
+        self._dead_engine(gate)
+        # The case's preconditions are made to pass so the run reaches its setup
+        # and dies on the dead engine's retain, after the project and Decision
+        # exist and long before `g06-complete.json` would be written.
+        gate.require_engine = lambda: {'reachable': True}
+        gate.require_bank_namespace = lambda: 'p4-partial-g06'
+        record = module.CaseRecord('P4-G06', 'BLOCKED', mode='real')
+        with mock.patch.dict(os.environ, {
+                'JASMINE_MEMORY_BANK_NAMESPACE': 'p4-partial-g06',
+                'JASMINE_HINDSIGHT_URL': 'http://127.0.0.1:1',
+                'JASMINE_HINDSIGHT_TIMEOUT_SECONDS': '0.2'}):
+            with self.assertRaises(module.Failed) as caught:
+                module.case_g06(gate, record)
+        record.verdict = 'FAIL'
+        record.reason = str(caught.exception)
+        record.failure_class = 'AssertionFailure'
+        self.assertEqual(list(gate.root.glob('g06-complete.json')), [])
+        self.assertTrue(record.project_ids)
+        phase1 = self._two_resumes(module, gate, record)
+        sealed = json.loads(Path(phase1['path']).read_text())
+        terminal = sealed['cases']['P4-G06']['terminal_failure']
+        self.assertEqual(terminal['reason'], record.reason)
+        self.assertEqual(terminal['project_ids'], record.project_ids)
 
     def test_unsealed_legacy_partial_failure_refuses_reseed(self):
         module=_module();gate=_real_gate(self,case_id='P4-G01')

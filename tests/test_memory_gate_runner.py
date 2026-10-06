@@ -24,6 +24,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from support import SRC, import_gate_module  # noqa: F401  (path setup)
 
@@ -271,12 +272,27 @@ class Preconditions(unittest.TestCase):
         for case in manifest["cases"]:
             self.assertEqual(case["verdict"], "BLOCKED", case["case_id"])
             self.assertEqual(case["mode"], "not-run")
-            self.assertTrue(case["blocked_on"], case["case_id"])
-            self.assertIn("did not answer", case["reason"])
+            # The functional preflight now stops the run before any case: every
+            # case is recorded against the failed check, and no case database was
+            # created, so "not-run" is exactly true.
+            self.assertEqual(case["blocked_on"], ["database_connected"], case["case_id"])
+            self.assertIn("database_connected", case["reason"])
+        self.assertEqual(list((self.work / "run").glob("P4-G*/core.db")), [],
+                         "a failed preflight must block before any case opens its Core")
         self.assertFalse(manifest["engine"]["reachable"])
+        preflight = manifest["engine"]["functional_preflight"]
+        self.assertEqual(preflight["verdict"], "BLOCKED")
+        self.assertEqual(preflight["failed_check"], "database_connected")
+        self.assertEqual(manifest["bank_namespace"], "p4-test-dryrun")
         self.assertEqual(manifest["phase"], "P4")
         self.assertIsNone(manifest["final_commit"])
         self.assertIn("not Gate evidence", " ".join(manifest["notes"]))
+        # The native receipt's producer cannot be proved by the gate; the manifest
+        # states that boundary instead of implying Codex's own process was seen.
+        native = manifest["native_session_start"]
+        self.assertFalse(native["required"])
+        self.assertIn("operator asserts", native["attestation"])
+        self.assertIn("cannot prove which process", native["attestation"])
 
 
 class AWholeRunAnchorsAndScopesItsEvidence(unittest.TestCase):
@@ -602,6 +618,55 @@ class TheVerdictIsNotASubsetRun(unittest.TestCase):
     def test_the_manifest_records_the_namespace_it_wrote_to(self) -> None:
         manifest = self._run()
         self.assertEqual(manifest["bank_namespace"], "p4-scope-test")
+
+
+class AnAllReplayResumeStillRecordsItsNamespace(unittest.TestCase):
+    """A resume whose every case replays must not record an empty namespace.
+
+    `namespace_used` used to be assigned only when a case called `open()`, and a
+    replayed terminal failure never opens one -- so a resume over sealed failures
+    wrote `bank_namespace: ""` into the manifest even though the run was configured
+    with, and its engine address derived under, a real namespace. The namespace is
+    now taken from the configuration before the loop.
+    """
+
+    def test_every_case_replaying_still_names_the_configured_namespace(self) -> None:
+        runner = load_runner()
+        tmp = tempfile.TemporaryDirectory(prefix="p4-gate-replay-ns-")
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        work = root / "work"
+        work.mkdir()
+        out = root / "out"
+        config = root / "op.json"
+        config.write_text(json.dumps({
+            "run_id": "p4-replay-ns", "bank_suffix": "p4-replay-ns",
+            "dependency_commits": {"P2": "0" * 40, "P3": "0" * 40}}),
+            encoding="utf-8")
+        argv = [str(GATE), "--out", str(out), "--work", str(work),
+                "--config", str(config), "--resume", "--case", "P4-G01",
+                "--allow-dirty"]
+        import contextlib
+        import io
+
+        with mock.patch.dict(os.environ, {}, clear=False), \
+                mock.patch.object(sys, "argv", argv), \
+                mock.patch.object(runner, "_verify_prior_seal",
+                                  return_value={"cases": {"P4-G01":
+                                                          {"verdict": "FAIL"}}}), \
+                mock.patch.object(runner, "_run_functional_preflight",
+                                  return_value={"verdict": "PASS", "checks": {},
+                                                "failed_check": None}), \
+                mock.patch.object(runner, "_replay_terminal_setup_failure",
+                                  return_value=True), \
+                contextlib.redirect_stdout(io.StringIO()):
+            code = runner.main()
+        self.assertEqual(code, 2, "a replayed failure is BLOCKED")
+        manifest_path = next(out.glob("p4-gate-*.json"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["bank_namespace"], "p4-replay-ns")
+        self.assertEqual(
+            manifest["engine"]["functional_preflight"]["verdict"], "PASS")
 
 
 class TheBankNamespaceShapesAddresses(unittest.TestCase):

@@ -30,6 +30,25 @@ Usage:
 The operator configuration names the real deployment: the engine, the bank
 namespace this run may write to, the test projects, and the P2/P3 commits it
 depends on. Secrets are referenced by environment variable name, never by value.
+
+Before any case runs, the run executes the functional engine preflight
+(`scripts/p4-memory-preflight.py`) once, against the run's engine URL and bank
+namespace; its report is recorded in the manifest's `engine` block. A failed
+preflight stops the run with `verdict: BLOCKED` and every selected case recorded
+against the failed check; no case database is opened.
+
+The pointer the native SessionStart hook reads is produced by:
+
+    scripts/p4-memory-gate.py --stage-injection --work <work-dir> \
+        --case P4-G01 --pack-key g01-with-lesson \
+        --config <operator-environment.json> \
+        [--native-session-repo <repo>]
+
+which loads the existing pack with that idempotency key, refuses it if its
+rendered bytes do not hash to its recorded `rendered_sha256`, and writes
+`<repo>/.codex/jasmine/injection.json` plus the exact rendered bytes. It exits 0
+when staged, 1 when refused (no such pack, or digest mismatch), 2 when the
+arguments or the work directory cannot support staging.
 """
 
 from __future__ import annotations
@@ -55,6 +74,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from jasmine_core import SCHEMA_VERSION, clock, db, ids, registry  # noqa: E402
+from jasmine_core.errors import InvalidRequest  # noqa: E402
 from jasmine_core.models import NewEvent, NewObject  # noqa: E402
 from jasmine_core.objects import ObjectStore  # noqa: E402
 from jasmine_core.migrations import migrate  # noqa: E402
@@ -86,27 +106,35 @@ NEEDS_P3_PACK = frozenset({"P4-G01", "P4-G02", "P4-G03", "P4-G04",
                            "P4-G05", "P4-G07"})
 NEEDS_REAL_AGENT = frozenset({"P4-G01"})
 
-#: Case -> the exact-pack idempotency key whose presence means the case's setup
-#: phase finished. A terminal setup FAIL (verdict FAIL, no pack built) of any of
-#: these cases is *replayed* on resume from the sealed phase-one record instead of
-#: being re-executed, because re-executing the setup is what duplicated Core
-#: objects on every failed resume. Measured on G04 before this map covered it: each
-#: resume added two projects, two rules, two rule versions, eight Events, two
-#: memory items, two jobs, four attempts and a recall trace, doubling the case's
-#: counts every time. The replay is the only branch that turns "resume after a
-#: failure" into no new objects; where it does not apply, the case is not re-seeded
-#: either -- it refuses.
+#: Case -> the idempotency key of the exact pack whose presence means the case's
+#: setup phase finished, or `None` when the durable marker is the case's own
+#: completion file (`P4-G06`'s `g06-complete.json`). A terminal setup FAIL
+#: (verdict FAIL, durable unit absent) of any of these cases is *replayed* on
+#: resume from the sealed phase-one record instead of being re-executed, because
+#: re-executing the setup is what duplicated Core objects on every failed resume.
+#: Measured on G04 before this map covered it: each resume added two projects, two
+#: rules, two rule versions, eight Events, two memory items, two jobs, four
+#: attempts and a recall trace, doubling the case's counts every time. Measured on
+#: G06: a FAIL before `g06-complete.json` existed re-ran `case_g06`, seeding a
+#: second project and a second Decision on every resume. The replay is the only
+#: branch that turns "resume after a failure" into no new objects; where it does
+#: not apply, the case is not re-seeded either -- it refuses.
 #:
-#: G06 is deliberately absent: its durable unit is its own completion marker, not a
-#: pack, and a pre-marker crash is handled by its own restart-under-crash design.
-TERMINAL_SETUP_PACK_KEYS = {
+#: The map covers every case: G01-G05 and G07 by their pack, G06 by its marker.
+TERMINAL_SETUP_PACK_KEYS: dict[str, str | None] = {
     "P4-G01": "g01-with-lesson",
     "P4-G02": "g02-current-decision",
     "P4-G03": "g03-unknown-protocol",
     "P4-G04": "g04-project-b-pack",
     "P4-G05": "g05-degraded-pack",
+    "P4-G06": None,
     "P4-G07": "g07-lifecycle-pack",
 }
+
+#: The only channel a native receipt may claim. The hook emits its pack as
+#: `hookSpecificOutput.additionalContext`; a receipt that says anything else is
+#: not describing this injection path.
+NATIVE_INJECTED_VIA = "hookSpecificOutput.additionalContext"
 
 #: G01 asks one question, in both sessions, byte for byte. It used to ask two:
 #: "the device test fails; where should I look first?" on one side and "the device
@@ -1287,19 +1315,30 @@ class Gate:
     def _verify_native_session_start(self, pack: dict[str, Any], label: str,
                                      session: dict[str, Any],
                                      rendered_sha256: str) -> dict[str, Any]:
-        """Bind a session to the receipt Codex itself wrote when the hook fired.
+        """Bind a session to the native receipt found for it, by content.
 
         The session JSON is written by an orchestrator, so by itself it only says
-        that somebody asked an agent to read a pack. The native receipt is the
-        artifact the *real* Codex process produced: it exists only if Codex fired
-        the installed SessionStart hook, and it names the digest of the exact
-        `additionalContext` bytes that hook printed. This binds the two: exactly
-        one receipt under the session repository must hash to the pack this Gate
-        rendered, come from a fresh session (`startup`/`resume`, never
-        `clear`/`compact`), name the session's `native_session_id`, and carry the
-        installed hook script's digest and the rendered byte count. The receipt is
-        then copied into the case directory write-once, so the phase seal and the
-        prior-seal check cover it exactly like every other receipt.
+        that somebody asked an agent to read a pack. The native receipt is a
+        stronger artifact, but it is not proof of its producer: the installed hook
+        is an ordinary script, so a hand-written receipt carrying the same fields
+        is indistinguishable from one Codex wrote. What this method binds is the
+        artifact's content. Selection is by the session's `native_session_id`
+        first -- one repository can hold receipts for many sessions over one pack,
+        and each session's verification must find its own -- and then exactly one
+        receipt must name the digest of the exact `additionalContext` bytes this
+        pack renders, come from a fresh session (`startup`/`resume`, never
+        `clear`/`compact`), name the documented injection channel, carry a `cwd`
+        that canonicalises to the session repository, name the staged pack's own
+        digest (`pack_sha256`) and the installed hook script's digest, and measure
+        the rendered byte count. When the hook recorded `parent_process_name`, it
+        is required to be a non-empty string as supporting evidence; its absence
+        is not a failure, and its value is not treated as proof of the producer.
+
+        Whether Codex or a human ran the script is an operator attestation
+        recorded in the manifest (`native_session_start.attestation`), not a
+        property this method can verify. The chosen receipt is then copied into
+        the case directory write-once, so the phase seal and the prior-seal check
+        cover it exactly like every other receipt.
         """
         repo = self.native_session_repo()
         if repo is None:
@@ -1307,6 +1346,10 @@ class Gate:
                 f"require_native_session_start is set for {label}, but neither "
                 f"native_session_repo nor g01_historical_fixture.repository names the "
                 f"repository whose .codex/jasmine holds the native SessionStart receipt")
+        try:
+            repo = repo.resolve(strict=True)
+        except OSError as exc:
+            raise Failed(f"the native session repository {repo} is not usable: {exc}")
         directory = repo / ".codex" / "jasmine"
         if not directory.is_dir():
             raise Failed(
@@ -1326,25 +1369,60 @@ class Gate:
                              f"{exc}")
             if not isinstance(body, dict):
                 raise Failed(f"native SessionStart receipt {path} is not a JSON object")
-            if (body.get("injected_sha256") == rendered_sha256
-                    and body.get("source") in ("startup", "resume")):
+            if body.get("session_id") == native_id:
                 candidates.append((path, body))
         if len(candidates) != 1:
-            seen = sorted({str(body.get("source")) for _, body in candidates})
+            names = sorted(path.name for path, _ in candidates)
             raise Failed(
-                f"expected exactly one native SessionStart receipt under {directory} that "
-                f"injected pack {pack['context_pack_id']} (sha {rendered_sha256[:12]}) "
-                f"from a startup/resume source; found {len(candidates)}"
-                + (f" with sources {seen}" if candidates else "")
-                + ". A clear/compact receipt is not a fresh acceptance session, and a "
-                  "receipt for another pack is not this session's.")
+                f"expected exactly one native SessionStart receipt under {directory} for "
+                f"session {native_id!r}; found {len(candidates)}"
+                + (f" ({', '.join(names)})" if names else "")
+                + ". A receipt for another session is not this session's; a session "
+                  "with two receipts cannot prove which injection it read.")
         path, receipt = candidates[0]
         problems: list[str] = []
-        if receipt.get("session_id") != native_id:
+        if not path.resolve().is_relative_to(directory.resolve()):
             problems.append(
-                f"the native SessionStart receipt names session "
-                f"{receipt.get('session_id')!r}, the session JSON declares "
-                f"{native_id!r}")
+                f"the native receipt path {path} resolves to {path.resolve()}, outside "
+                f"the session repository {directory.resolve()}")
+        if receipt.get("hook_event_name") != "SessionStart":
+            problems.append(
+                f"the native receipt names hook event "
+                f"{receipt.get('hook_event_name')!r}, not 'SessionStart'")
+        if receipt.get("source") not in ("startup", "resume"):
+            problems.append(
+                f"the native receipt names source {receipt.get('source')!r}, not a fresh "
+                f"startup/resume session; a clear/compact receipt is not a fresh "
+                f"acceptance session")
+        if receipt.get("injected_via") != NATIVE_INJECTED_VIA:
+            problems.append(
+                f"the native receipt injected via {receipt.get('injected_via')!r}, not "
+                f"the documented channel {NATIVE_INJECTED_VIA!r}")
+        cwd = receipt.get("cwd")
+        if not isinstance(cwd, str) or not cwd:
+            problems.append(
+                "the native receipt carries no cwd string, so it cannot be tied to the "
+                "session repository")
+        else:
+            try:
+                cwd_resolved = Path(cwd).resolve(strict=True)
+            except OSError as exc:
+                problems.append(f"the native receipt's cwd {cwd!r} is not usable: {exc}")
+            else:
+                if cwd_resolved != repo:
+                    problems.append(
+                        f"the native receipt's cwd resolves to {cwd_resolved}, not the "
+                        f"session repository {repo}")
+        if receipt.get("injected_sha256") != rendered_sha256:
+            problems.append(
+                f"the native receipt injected bytes hashing to "
+                f"{str(receipt.get('injected_sha256'))[:12]}, the pack built here "
+                f"renders {rendered_sha256[:12]}")
+        if receipt.get("pack_sha256") != pack.get("rendered_sha256"):
+            problems.append(
+                f"the native receipt names pack_sha256 "
+                f"{str(receipt.get('pack_sha256'))[:12]}, the staged pack records "
+                f"{str(pack.get('rendered_sha256'))[:12]}")
         if receipt.get("context_pack_id") != pack["context_pack_id"]:
             problems.append(
                 f"the native receipt names pack {receipt.get('context_pack_id')!r}, the "
@@ -1354,6 +1432,12 @@ class Gate:
             problems.append(
                 f"the native receipt injected {receipt.get('injected_bytes')!r} bytes, "
                 f"the rendered pack is {injected_bytes} bytes")
+        parent = receipt.get("parent_process_name")
+        if parent is not None and (not isinstance(parent, str) or not parent.strip()):
+            problems.append(
+                f"the native receipt's parent_process_name is present but not a "
+                f"non-empty string ({parent!r}); it is supporting evidence and an "
+                f"unreadable value is reported, not ignored")
         script = directory / "jasmine-p4-session-start.py"
         if not script.is_file() or script.is_symlink():
             problems.append(
@@ -4545,20 +4629,40 @@ def _replay_terminal_setup_failure(gate: Gate, record: CaseRecord,
                                    prior_case: dict[str, Any] | None) -> bool:
     """A terminally failed setup stays failed, with no fresh setup effects.
 
-    Covers every case whose durable setup unit is its exact pack
-    (`TERMINAL_SETUP_PACK_KEYS`). It used to name G01 and G05 only, so a terminal
-    G04 setup failure -- which happens before its pack exists -- was re-executed by
-    the next resume: `case_g04` seeded two more projects, two more rules and their
-    Events, then failed at the same assertion again. Every resume grew the case's
-    object counts, and the counts never came back down.
+    Covers every case in `TERMINAL_SETUP_PACK_KEYS`: G01-G05 and G07 by their
+    exact pack, G06 by its `g06-complete.json` marker. It used to name G01 and G05
+    only, so a terminal G04 setup failure -- which happens before its pack exists
+    -- was re-executed by the next resume: `case_g04` seeded two more projects,
+    two more rules and their Events, then failed at the same assertion again, and
+    the counts never came back down. G06's pre-marker FAIL had the same shape:
+    `case_g06` re-seeded its project and committed a second Decision on every
+    resume.
+
+    The replay re-checks the sealed phase-one record against Core: every id the
+    record carries -- projects, source Events, Evidence, jobs, Tasks, sessions,
+    Context Packs and Authority rule versions -- must still exist and still agree
+    with the record, and every receipt must still hash the way it was sealed.
+    `task_ids` is not a `CaseRecord` field, so it is checked only when a record
+    happens to carry it; the set of fields that *were* checked and the set that
+    were empty are both recorded in `inherited_evidence`, so an empty re-check is
+    visible rather than silently passing for coverage.
     """
-    key = TERMINAL_SETUP_PACK_KEYS.get(record.case_id)
+    if record.case_id not in TERMINAL_SETUP_PACK_KEYS:
+        return False
     if gate.case_id != record.case_id:
         raise Failed('terminal failure replay case identity mismatch')
-    if key is None or not prior_case or prior_case.get('verdict') != 'FAIL':
+    if not prior_case or prior_case.get('verdict') != 'FAIL':
         return False
-    if gate.existing_pack(key) is not None:
-        return False  # completed setup still takes the existing exact-pack verifier
+    key = TERMINAL_SETUP_PACK_KEYS[record.case_id]
+    # The durable unit of the case's setup: its exact pack, or -- for G06, whose
+    # map value is None -- its completion marker. When that exists, setup
+    # finished and the normal existing-artifact path verifies it; the replay is
+    # only for a failure that left no durable unit.
+    if key is None:
+        if (gate.root / "g06-complete.json").exists():
+            return False
+    elif gate.existing_pack(key) is not None:
+        return False
     original = prior_case.get('terminal_failure')
     if not isinstance(original, dict) or original.get('case_id') != record.case_id or original.get('verdict') != 'FAIL' or not isinstance(original.get('reason'), str):
         raise Failed('partial failed setup has no sealed terminal record; refusing to re-seed or replace its failed attempt')
@@ -4566,6 +4670,7 @@ def _replay_terminal_setup_failure(gate: Gate, record: CaseRecord,
     # failure does not permit borrowing another project's IDs or edited evidence.
     projects = set(original.get('project_ids') or [])
     conn = gate.conn()
+    rechecked: dict[str, int] = {}
     try:
         for project_id in projects:
             check(conn.execute('SELECT 1 FROM projects WHERE project_id=?', (project_id,)).fetchone() is not None,
@@ -4580,6 +4685,33 @@ def _replay_terminal_setup_failure(gate: Gate, record: CaseRecord,
             row = conn.execute('SELECT project_id,document_id FROM memory_jobs WHERE job_id=?', (job_id,)).fetchone()
             check(row is not None and row['project_id'] in projects and row['document_id'] in (original.get('document_ids') or []),
                   'terminal failure job has a foreign or missing source')
+        # The identity fields the record carries. A record with none of them is
+        # reported as re-checked zero, not as re-checked and silently passed.
+        id_checks = (
+            ('task_ids', 'SELECT 1 FROM tasks WHERE task_id=?',
+             'terminal failure Task is missing from Core'),
+            ('session_ids', 'SELECT 1 FROM sessions WHERE session_id=?',
+             'terminal failure Session is missing from Core'),
+            ('context_pack_ids', 'SELECT 1 FROM context_packs WHERE context_pack_id=?',
+             'terminal failure Context Pack is missing from Core'),
+        )
+        for field_name, query, refusal in id_checks:
+            values = original.get(field_name) or []
+            rechecked[field_name] = len(values)
+            for value in values:
+                check(conn.execute(query, (value,)).fetchone() is not None, refusal)
+        # Rule versions are recorded as `rule_id:version`; both halves have to
+        # still exist, or the replay would assert a historical failure about
+        # Authority state that Core no longer holds.
+        rule_versions = original.get('rule_versions') or []
+        rechecked['rule_versions'] = len(rule_versions)
+        for recorded in rule_versions:
+            rule_id, _, version = str(recorded).partition(':')
+            check(bool(rule_id) and version.isdigit(),
+                  f'terminal failure rule version {recorded!r} is not rule_id:version')
+            check(conn.execute('SELECT 1 FROM rule_versions WHERE rule_id=? AND version=?',
+                               (rule_id, int(version))).fetchone() is not None,
+                  f'terminal failure rule version {recorded!r} is missing from Core')
     finally:
         conn.close()
     for receipt in original.get('receipts') or []:
@@ -4592,10 +4724,16 @@ def _replay_terminal_setup_failure(gate: Gate, record: CaseRecord,
             # receipt or session is created and no current recovery is asserted.
             import copy
             setattr(record, name, copy.deepcopy(original[name]))
+    empty_checks = sorted(field for field, count in rechecked.items() if count == 0)
     record.inherited_evidence = {'terminal_failure_replay': {
         'source': 'sealed_phase1_failure', 'verdict': 'FAIL',
         'reason': record.reason, 'setup_reexecuted': False,
-        'scope': 'replayed terminal failure; no new acceptance or recovery claim'}}
+        'scope': 'replayed terminal failure; no new acceptance or recovery claim',
+        'rechecked_core_ids': rechecked,
+        'empty_rechecked_fields': empty_checks,
+        'note': 'every recorded id this record carried was re-checked against Core; a '
+                'field in `empty_rechecked_fields` was empty in the sealed record and '
+                'therefore proves nothing in this replay'}}
     return True
 
 
@@ -4657,10 +4795,49 @@ def _verify_prior_seal(work: Path, phase_name: str) -> dict[str, Any] | None:
     if seal.get("commit") != seal.get("candidate_commit"):
         raise Failed(f"the phase 1 seal disagrees with itself about the commit: "
                      f"{seal.get('commit')} vs {seal.get('candidate_commit')}")
+    # The seal names the manifest but deliberately carries no digest of it (the
+    # manifest is rewritten after the seal to name the seal). The manifest anchor
+    # is the one artifact that holds the manifest's final bytes; without checking
+    # it here, a resumed run would re-verify receipts and then trust whatever the
+    # manifest now says. The anchor is write-once, so an edited manifest -- or a
+    # removed anchor -- is refused before a single case runs.
+    anchors = sorted(work.glob("phase1-manifest-*.sha256"))
+    matches = []
+    for anchor_path in anchors:
+        try:
+            anchor = json.loads(anchor_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise Failed(f"the phase 1 manifest anchor {anchor_path} is not readable "
+                         f"JSON: {exc}")
+        if not isinstance(anchor, dict):
+            raise Failed(f"the phase 1 manifest anchor {anchor_path} is not a JSON object")
+        if anchor.get("manifest_path") == str(manifest):
+            matches.append((anchor_path, anchor))
+    if not matches:
+        raise Failed(
+            f"the phase 1 manifest {manifest} has no anchor under {work} "
+            f"(`phase1-manifest-*.sha256`). The seal names the manifest but nothing on "
+            f"disk holds the manifest's own bytes; a rewritten verdict would be "
+            f"invisible. Resume from a work directory whose manifest was anchored.")
+    if len(matches) != 1:
+        raise Failed(
+            f"the phase 1 manifest {manifest} is named by {len(matches)} anchors "
+            f"({[str(path) for path, _ in matches]}); exactly one is required, because "
+            f"two anchors for one manifest means one of them was written against other "
+            f"bytes.")
+    anchor_path, anchor = matches[0]
+    if anchor.get("manifest_sha256") != manifest_digest:
+        raise Failed(
+            f"the phase 1 manifest {manifest} hashes to {manifest_digest[:12]}, but its "
+            f"anchor {anchor_path} names {str(anchor.get('manifest_sha256'))[:12]}. The "
+            f"manifest was edited after it was anchored; the seal and this resume cannot "
+            f"continue a manifest whose bytes changed.")
     return {"seal_path": str(seal_path),
             "seal_sha256": hashlib.sha256(raw).hexdigest(),
             "manifest_path": str(manifest),
             "manifest_sha256": manifest_digest,
+            "manifest_anchor_path": str(anchor_path),
+            "manifest_anchor_sha256": anchor.get("manifest_sha256"),
             "commit": seal["commit"],
             "receipts_verified": checked,
             "cases": seal.get("cases") or []}
@@ -4863,9 +5040,16 @@ def _evidence_scope(work: Path, records: list[CaseRecord],
             "injected_packs": "injected-*.pack.json: the exact pack bytes an agent was "
                               "shown, copied once and refused if the pack is re-rendered",
             "native_session_start_receipts": "native-session-start-*.json: a copy of "
-                                             "each native Codex SessionStart receipt "
-                                             "bound to the pack it injected, with the "
-                                             "source receipt's own digest, written once",
+                                             "each native SessionStart receipt selected "
+                                             "for its session id and bound by content to "
+                                             "the pack bytes it names, the installed "
+                                             "hook's digest and the injection channel, "
+                                             "with the source receipt's own digest, "
+                                             "written once. The producer (Codex or a "
+                                             "human running the same script) is an "
+                                             "operator attestation recorded under "
+                                             "`native_session_start`, not something "
+                                             "these bytes prove",
             "operator_config": f"{operator_config['path']} "
                                f"({operator_config['sha256'][:12]}): the operator "
                                f"configuration this run used, byte for byte",
@@ -4898,15 +5082,141 @@ def _evidence_scope(work: Path, records: list[CaseRecord],
     }
 
 
+def _preflight_module():
+    """Load `scripts/p4-memory-preflight.py` as a module, once per process.
+
+    The functional preflight is a standalone script for operators, and the Gate
+    calls the same code in-process; a subprocess would be a second implementation
+    of one contract. Loading it by path keeps the script runnable on its own.
+    """
+    import importlib.util
+
+    name = "p4_memory_preflight"
+    if name in sys.modules:
+        return sys.modules[name]
+    path = ROOT / "scripts" / "p4-memory-preflight.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _run_functional_preflight() -> dict[str, Any]:
+    """Run the functional engine preflight once, before any case.
+
+    It uses the run's engine URL (the environment the Gate itself opens against)
+    and the run's bank namespace, writes to a throwaway project bank under that
+    namespace, and never touches a case database. The returned report is what the
+    manifest records; a BLOCKED report is what stops the run.
+    """
+    namespace = scope.bank_namespace()
+    url = (os.environ.get("JASMINE_HINDSIGHT_URL") or "").strip()
+    try:
+        timeout = float(os.environ.get("JASMINE_HINDSIGHT_TIMEOUT_SECONDS") or 300)
+    except ValueError:
+        timeout = 300.0
+    if not url:
+        return {"engine": None, "bank_namespace": namespace, "checks": {},
+                "verdict": "BLOCKED", "failed_check": "configuration",
+                "error": "JASMINE_HINDSIGHT_URL is not set for this process"}
+    return _preflight_module().run_preflight(url, namespace, timeout, keep=False)
+
+
+def _pack_for_staging(gate: Gate, key: str) -> dict[str, Any]:
+    """The existing pack with `key`, refused unless its bytes match its digest.
+
+    Staging re-emits what a previous invocation already built; it must not
+    re-render or repair a pack. A pack whose recorded `rendered_sha256` does not
+    describe its own `rendered_content` is refused, because the hook would then
+    receipt bytes the pack's record does not name.
+    """
+    for path in sorted(gate.root.glob("pack-*.json")):
+        try:
+            pack = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            continue
+        if pack.get("idempotency_key") != key:
+            continue
+        rendered = pack.get("rendered_content")
+        declared = pack.get("rendered_sha256")
+        if not isinstance(rendered, str) or not isinstance(declared, str):
+            raise Failed(f"the pack at {path} does not carry rendered_content and "
+                         f"rendered_sha256 as strings, so it cannot be staged")
+        actual = hashlib.sha256(rendered.encode("utf-8")).hexdigest()
+        if actual != declared:
+            raise Failed(
+                f"the pack at {path} records rendered_sha256 {declared}, but its rendered "
+                f"bytes hash to {actual}; refusing to stage a pack whose recorded digest "
+                f"does not describe its bytes")
+        pack["receipt"] = {"path": str(path),
+                           "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        return pack
+    raise Failed(f"no pack under {gate.root} has idempotency key {key!r}; stage from the "
+                 f"work directory of the run that built it")
+
+
+def _stage_injection_cli(args) -> int:
+    """The runnable producer for the native hook's staged pointer.
+
+    Exit 0 staged, 1 refused (no such pack, or the pack's bytes do not match its
+    recorded digest), 2 the staging inputs themselves cannot be used.
+    """
+    if args.out is not None:
+        print(json.dumps({"result": "refused", "stage_injection": "failed",
+                          "reason": "--out is not used with --stage-injection"}))
+        return 2
+    cases = args.case or []
+    if len(cases) != 1 or not args.pack_key:
+        print(json.dumps({
+            "result": "refused",
+            "reason": "--stage-injection needs exactly one --case and a --pack-key"}))
+        return 2
+    work = Path(args.work).resolve()
+    if not work.is_dir():
+        print(json.dumps({
+            "result": "refused", "work": str(work),
+            "reason": "the work directory does not exist; staging reads a pack built by "
+                      "an earlier invocation of this run"}))
+        return 2
+    try:
+        config = json.loads(Path(args.config).resolve().read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        print(json.dumps({"result": "refused",
+                          "reason": f"cannot read the operator config: {exc}"}))
+        return 2
+    if args.native_session_repo is not None:
+        config = {**config, "native_session_repo": str(args.native_session_repo.resolve())}
+    case_id = cases[0]
+    try:
+        gate = Gate(work, config, case_id)
+        pack = _pack_for_staging(gate, args.pack_key)
+        staged = gate.stage_native_injection(pack)
+    except Blocked as blocked:
+        print(json.dumps({"result": "refused", "reason": "; ".join(blocked.items)}))
+        return 2
+    except Failed as failure:
+        print(json.dumps({"result": "refused", "case": case_id,
+                          "pack_key": args.pack_key, "reason": str(failure)}))
+        return 1
+    print(json.dumps({"result": "staged", "case": case_id, **staged},
+                     ensure_ascii=False))
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--out", required=True, help="new directory for the manifest")
+    parser.add_argument("--out", help="new directory for the manifest (not used with "
+                                      "--stage-injection)")
     parser.add_argument("--work", required=True, help="new scratch directory")
     parser.add_argument("--config", required=True,
                         help="operator JSON describing the real deployment")
     parser.add_argument("--case", action="append", choices=list(CASES),
-                        help="run only these cases (default: all)")
+                        help="run only these cases (default: all); with "
+                             "--stage-injection, exactly one, naming the case whose pack "
+                             "is staged")
     parser.add_argument("--allow-dirty", action="store_true",
                         help="development only; cannot count as a Gate")
     parser.add_argument("--resume", action="store_true",
@@ -4917,7 +5227,21 @@ def main() -> int:
                              "against the same Core. Isolation is unchanged -- the bank "
                              "namespace is derived from run_id, so a *new* run still cannot "
                              "see a previous run's documents")
+    parser.add_argument("--stage-injection", action="store_true",
+                        help="write the native hook's injection.json and rendered bytes "
+                             "from the existing pack with --pack-key, then exit; no case "
+                             "runs and no manifest is written")
+    parser.add_argument("--pack-key",
+                        help="with --stage-injection: the idempotency key of the pack to "
+                             "stage")
+    parser.add_argument("--native-session-repo", type=Path,
+                        help="with --stage-injection: override the operator config's "
+                             "native_session_repo")
     args = parser.parse_args()
+    if args.stage_injection:
+        return _stage_injection_cli(args)
+    if args.out is None:
+        parser.error("--out is required unless --stage-injection is used")
     out, work = Path(args.out).resolve(), Path(args.work).resolve()
     if out.exists() or out == work or out in work.parents or work in out.parents:
         parser.error("--out must be a new directory, distinct from --work")
@@ -4958,14 +5282,44 @@ def main() -> int:
                           "operator_config": "unsealed", "reason": str(failure)}))
         return 1
 
+    # Apply the configured namespace before anything derives a bank, so the
+    # namespace the manifest records is the one this run is under even when every
+    # case replays a sealed failure and no Gate is opened (which used to leave the
+    # recorded namespace as an empty string the run never actually used).
+    suffix = config.get("bank_suffix")
+    if suffix:
+        os.environ[NAMESPACE_ENV_VAR] = str(suffix)
+    # The functional preflight runs once, before any case, on the run's engine URL
+    # and bank namespace, in a throwaway project bank: it must not touch a case
+    # database. A blocked environment stops the run before it can produce a full
+    # case dataset whose failures are the environment's, and the report -- with the
+    # failed check by name -- is recorded in the manifest.
+    try:
+        namespace_used = scope.bank_namespace()
+        functional_preflight = _run_functional_preflight()
+    except InvalidRequest as invalid_namespace:
+        namespace_used = str(config.get("bank_suffix") or "")
+        functional_preflight = {
+            "engine": None, "bank_namespace": namespace_used, "checks": {},
+            "verdict": "BLOCKED", "failed_check": "configuration",
+            "error": str(invalid_namespace)}
+    preflight_failed = functional_preflight.get("verdict") != "PASS"
+
     records: list[CaseRecord] = []
-    # Captured from the first `open()`: each case's `finally` closes its Gate and
-    # `close()` restores whatever `_set_env` saw, so reading the namespace after
-    # the loop — or after the probe below — reports "" even though every case ran
-    # with it in effect.
-    namespace_used = ""
     for case_id in selected:
         record = CaseRecord(case_id, "BLOCKED", mode="not-run")
+        if preflight_failed:
+            failed = str(functional_preflight.get("failed_check") or "preflight")
+            checks = functional_preflight.get("checks") or {}
+            detail = (functional_preflight.get("error")
+                      or (checks.get(failed) or {}).get("detail")
+                      or (checks.get(failed) or {}).get("error"))
+            record.blocked_on = [failed]
+            record.reason = (f"functional engine preflight failed at {failed}"
+                             + (f": {detail}" if detail else ""))
+            records.append(record)
+            print(f"{case_id} {record.verdict} — {record.reason}")
+            continue
         gate = None
         # What the earlier phase recorded for this case, so the engine half it ran can
         # be named as inherited and re-asserted rather than silently absent.
@@ -4974,7 +5328,6 @@ def main() -> int:
             gate = Gate(work, config, case_id)
             if not _replay_terminal_setup_failure(gate, record, prior_case):
                 gate.open()
-                namespace_used = scope.bank_namespace()
                 gate.require_engine()
                 CASES_BY_ID[case_id](gate, record)
                 # Only a returning case can earn inherited acceptance evidence.
@@ -5056,6 +5409,17 @@ def main() -> int:
             "reachable": engine_probe.get("reachable", False),
             "supported": engine_probe.get("supported"),
             "features": engine_probe.get("features") or {},
+            "functional_preflight": functional_preflight,
+        },
+        "native_session_start": {
+            "required": bool(config.get("require_native_session_start")),
+            "attestation":
+                "operator asserts the native SessionStart receipts were produced by "
+                "Codex firing the installed hook. The Gate verifies the installed "
+                "script's digest, the exact injected pack bytes, the session id, the "
+                "source, the cwd and the injection channel; it cannot prove which "
+                "process ran the script, so the producer is an operator attestation, "
+                "not a gate property.",
         },
         "deployment_mode": scope.deployment_mode(),
         "bank_namespace": namespace_used,

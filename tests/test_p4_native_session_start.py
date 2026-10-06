@@ -1,16 +1,18 @@
 """Native SessionStart receipts: the hook, the installer and the Gate binding.
 
 The P4 taskbook asks for an actual SessionStart *injection receipt* per agent
-session: proof that a real Codex process fired its own SessionStart hook and that
-the exact Context Pack was injected through it. The session JSON is written by an
-orchestrator and cannot prove either, so this adds the native artifact and the
-Gate checks that consume it.
+session. The session JSON is written by an orchestrator and shows nothing about a
+native hook; the native receipt binds the exact injected pack bytes, the session
+id, the source and the installed script by content. It cannot prove *which
+process* ran the hook -- the hook is an ordinary script -- so whether Codex or a
+human ran it is an operator attestation recorded in the Gate manifest under
+`native_session_start`, not a property the Gate verifies.
 
 What is inside this file, and what is not:
 
   * `ComponentHook` pipes synthetic, real-shaped payloads into the hook script
     through a subprocess. These are **component tests, not SessionStart events**:
-    the only producer of a SessionStart is Codex itself, and no test here claims
+    tests/ code cannot fire a real Codex SessionStart, and no test here claims
     otherwise.
   * `InstallerPlanAndApply` drives the installer's `--plan`/`--apply` contract and
     proves it never writes trust state.
@@ -39,6 +41,7 @@ from support import import_gate_module
 
 REPO = Path(__file__).resolve().parents[1]
 HOOK = REPO / "scripts" / "jasmine-p4-session-start.py"
+GATE = REPO / "scripts" / "p4-memory-gate.py"
 INSTALLER = REPO / "scripts" / "p4-codex-hook-install.py"
 PYTHON = sys.executable
 RENDERED = "JASMINE CONTEXT v1\n{}\nMEMORY — NON AUTHORITATIVE\n内存\n"
@@ -88,15 +91,21 @@ class ComponentHook(unittest.TestCase):
         self.digest = _sha256(self.rendered.encode("utf-8"))
         self._write_injection()
 
-    def _write_injection(self, *, digest=None, rendered=None) -> None:
+    def _write_injection(self, *, digest=None, rendered=None, rendered_path=None,
+                         rendered_sha256=None) -> None:
         rendered = self.rendered if rendered is None else rendered
         name = f"rendered-{self.pack_id}.txt"
         (self.repo / ".codex" / "jasmine" / name).write_bytes(rendered.encode("utf-8"))
-        (self.repo / ".codex" / "jasmine" / "injection.json").write_text(json.dumps({
+        body = {
             "context_pack_id": self.pack_id, "task_id": self.task_id,
-            "rendered_path": f".codex/jasmine/{name}",
-            "rendered_sha256": self.digest if digest is None else digest,
-        }), encoding="utf-8")
+            "rendered_path": (f".codex/jasmine/{name}" if rendered_path is None
+                              else rendered_path),
+            "rendered_sha256": (self.digest if digest is None else digest),
+        }
+        if rendered_sha256 is not None:
+            body["rendered_sha256"] = rendered_sha256
+        (self.repo / ".codex" / "jasmine" / "injection.json").write_text(
+            json.dumps(body), encoding="utf-8")
 
     def _payload(self, **overrides) -> dict:
         payload = {"hook_event_name": "SessionStart", "source": "startup",
@@ -143,6 +152,11 @@ class ComponentHook(unittest.TestCase):
                          "hookSpecificOutput.additionalContext")
         self.assertEqual(receipt["hook_script_sha256"], _sha256(HOOK.read_bytes()))
         self.assertIsInstance(receipt["written_at"], str)
+        # Supporting evidence, never a proof: the parent's name is recorded when
+        # `ps` can answer, and may be absent.
+        self.assertIn("parent_process_name", receipt)
+        self.assertTrue(receipt["parent_process_name"] is None
+                        or isinstance(receipt["parent_process_name"], str))
 
     def test_a_resume_receipt_records_its_source(self):
         completed = self._hook(self._payload(source="resume"))
@@ -176,22 +190,91 @@ class ComponentHook(unittest.TestCase):
         self.assertIn("mismatched pack", completed.stderr)
         self.assertFalse(self._receipt_path().exists())
 
-    def test_a_receipt_is_never_overwritten(self):
+    def test_a_second_trigger_with_the_same_pack_reinjects_without_rewriting(self):
+        # Codex fires SessionStart again when a session resumes. The pack must be
+        # injected again -- the resumed session needs it -- and the write-once
+        # receipt must not be rewritten, because it is the record of what the
+        # first trigger actually injected.
+        first = self._hook(self._payload(source="startup"))
+        self.assertEqual(first.returncode, 0, first.stderr)
+        path = self._receipt_path()
+        before = path.read_bytes()
+        second = self._hook(self._payload(source="resume"))
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(
+            json.loads(second.stdout)["hookSpecificOutput"]["additionalContext"],
+            self.rendered)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(len(list(path.parent.glob("session-start-*.json"))), 1)
+
+    def test_a_second_trigger_with_a_different_pack_is_refused(self):
         first = self._hook(self._payload())
         self.assertEqual(first.returncode, 0, first.stderr)
         path = self._receipt_path()
         before = path.read_bytes()
-        body = json.loads(before)
-        body["written_at"] = "2020-01-01T00:00:00Z"
+        # The staging changes to another render under the same session: the
+        # session already read the first pack, and its receipt is write-once.
+        changed = self.rendered + "a different pack\n"
+        self._write_injection(rendered=changed, digest=_sha256(changed.encode("utf-8")))
+        second = self._hook(self._payload())
+        self.assertEqual(second.returncode, 2)
+        self.assertEqual(second.stdout, "")
+        self.assertIn("another injection", second.stderr)
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_a_receipt_edited_to_another_injection_refuses_the_retrigger(self):
+        first = self._hook(self._payload())
+        self.assertEqual(first.returncode, 0, first.stderr)
+        path = self._receipt_path()
+        body = json.loads(path.read_bytes())
+        body["injected_sha256"] = "0" * 64
         path.write_text(json.dumps(body, ensure_ascii=False, indent=2),
                         encoding="utf-8")
         edited = path.read_bytes()
         second = self._hook(self._payload())
         self.assertEqual(second.returncode, 2)
         self.assertEqual(second.stdout, "")
-        self.assertIn("written once", second.stderr)
+        self.assertIn("another injection", second.stderr)
         self.assertEqual(path.read_bytes(), edited)
-        self.assertNotEqual(path.read_bytes(), before)
+
+    def test_an_absolute_rendered_path_is_refused(self):
+        # A staged `injection.json` that names `/etc/hosts` would inject a file
+        # the repository does not contain and receipt it as this repo's pack.
+        self._write_injection(rendered_path="/etc/hosts",
+                              rendered_sha256=_sha256(b"whatever"))
+        completed = self._hook(self._payload())
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("not a relative path", completed.stderr)
+        self.assertFalse(self._receipt_path().exists())
+
+    def test_a_traversal_rendered_path_is_refused(self):
+        outside = Path(self.temp.name) / "outside.txt"
+        outside.write_bytes(self.rendered.encode("utf-8"))
+        self._write_injection(
+            rendered_path=f"../../{outside.name}",
+            rendered_sha256=_sha256(self.rendered.encode("utf-8")))
+        completed = self._hook(self._payload())
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("not a relative path", completed.stderr)
+        self.assertFalse(self._receipt_path().exists())
+
+    def test_a_symlink_escape_is_refused(self):
+        # `rendered_path` itself is relative and has no `..`, but the file it
+        # names is a symlink to content outside the repository: the resolved
+        # path is what has to stay inside.
+        outside = Path(self.temp.name) / "outside.txt"
+        outside.write_bytes(self.rendered.encode("utf-8"))
+        link = self.repo / ".codex" / "jasmine" / "escape.txt"
+        link.symlink_to(outside)
+        self._write_injection(rendered_path=".codex/jasmine/escape.txt",
+                              rendered_sha256=_sha256(self.rendered.encode("utf-8")))
+        completed = self._hook(self._payload())
+        self.assertEqual(completed.returncode, 2)
+        self.assertEqual(completed.stdout, "")
+        self.assertIn("outside the repository", completed.stderr)
+        self.assertFalse(self._receipt_path().exists())
 
 
 # -- the installer --------------------------------------------------------------
@@ -375,6 +458,71 @@ class StagingTheInjection(unittest.TestCase):
         self.assertIn("native_session_repo", str(caught.exception))
 
 
+class StagingTheInjectionCli(unittest.TestCase):
+    """`--stage-injection` is the runnable producer of the hook's pointer.
+
+    Before this, `stage_native_injection` was called only by tests: nothing on a
+    real path wrote the `injection.json` the hook reads, so the native flow could
+    not run end to end. This drives the real CLI against a real work directory
+    holding a real pack file.
+    """
+
+    def setUp(self) -> None:
+        self.temp = tempfile.TemporaryDirectory(prefix="p4-native-stage-cli-")
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.work = self.base / "work"
+        self.case = "P4-G01"
+        self.case_dir = self.work / self.case
+        self.case_dir.mkdir(parents=True)
+        self.pack_key = "g01-with-lesson"
+        self.rendered = RENDERED
+        self.pack = {
+            "idempotency_key": self.pack_key,
+            "context_pack_id": "ctx_" + "C" * 26,
+            "task_id": "tsk_" + "D" * 26,
+            "rendered_content": self.rendered,
+            "rendered_sha256": _sha256(self.rendered.encode("utf-8")),
+        }
+        self.pack_path = self.case_dir / f"pack-{self.pack['context_pack_id']}.json"
+        self.pack_path.write_text(json.dumps(self.pack, ensure_ascii=False),
+                                  encoding="utf-8")
+        self.repo = self.base / "session-repo"
+        (self.repo / ".codex" / "jasmine").mkdir(parents=True)
+        self.config = self.base / "op.json"
+        self.config.write_text(json.dumps({"run_id": "p4-stage-cli",
+                                           "bank_suffix": "p4-stage-cli"}),
+                               encoding="utf-8")
+
+    def _run(self, *extra):
+        return _run([PYTHON, str(GATE), "--stage-injection", "--work", str(self.work),
+                     "--case", self.case, "--pack-key", self.pack_key,
+                     "--config", str(self.config),
+                     "--native-session-repo", str(self.repo), *extra])
+
+    def test_the_cli_writes_the_pointer_and_the_exact_bytes(self):
+        completed = self._run()
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        result = json.loads(completed.stdout)
+        self.assertEqual(result["result"], "staged")
+        injection = json.loads((self.repo / ".codex" / "jasmine"
+                                / "injection.json").read_text(encoding="utf-8"))
+        self.assertEqual(injection["context_pack_id"], self.pack["context_pack_id"])
+        self.assertEqual(injection["rendered_sha256"], self.pack["rendered_sha256"])
+        rendered_file = self.repo / injection["rendered_path"]
+        self.assertEqual(rendered_file.read_bytes(), self.rendered.encode("utf-8"))
+
+    def test_the_cli_refuses_a_pack_whose_bytes_do_not_match_its_digest(self):
+        body = json.loads(self.pack_path.read_text(encoding="utf-8"))
+        body["rendered_content"] = body["rendered_content"] + "tampered\n"
+        self.pack_path.write_text(json.dumps(body), encoding="utf-8")
+        completed = self._run()
+        self.assertEqual(completed.returncode, 1, completed.stdout + completed.stderr)
+        self.assertIn("recorded digest", completed.stdout)
+        self.assertFalse((self.repo / ".codex" / "jasmine"
+                          / "injection.json").exists())
+
+
 # -- a real Gate over a throwaway Core, as in test_p4_fix_round.py -------------
 
 def _real_gate(testcase, *, case_id="P4-TST"):
@@ -509,8 +657,10 @@ class NativeSessionStartVerification(unittest.TestCase):
         receipt.update(overrides)
         return receipt
 
-    def _write_receipt(self, receipt=None, session_id="native-session-1") -> Path:
+    def _write_receipt(self, receipt=None, session_id=None) -> Path:
         body = receipt if receipt is not None else self._component_receipt()
+        if session_id is None:
+            session_id = body.get("session_id") or "native-session-1"
         path = self.directory / f"session-start-{session_id}.json"
         path.write_text(json.dumps(body, ensure_ascii=False, indent=2), encoding="utf-8")
         return path
@@ -567,12 +717,95 @@ class NativeSessionStartVerification(unittest.TestCase):
         self.assertIn("found 0", message)
 
     def test_a_receipt_for_another_pack_fails_by_name(self):
+        # Selected by session id, so it is found -- and then refused because the
+        # bytes it injected are not the bytes this Gate rendered.
         with self.assertRaises(self.module.Failed) as caught:
             self._verify(receipt=self._component_receipt(
                 injected_sha256="f" * 64, pack_sha256="f" * 64))
         message = str(caught.exception)
-        self.assertIn("exactly one native SessionStart receipt", message)
-        self.assertIn("found 0", message)
+        self.assertIn("does not bind", message)
+        self.assertIn("injected bytes hashing to", message)
+
+    def test_two_sessions_over_one_pack_each_bind_their_own_receipt(self):
+        # Two controlled sessions can read the same pack; each must find its own
+        # receipt by session id rather than fail because two candidates exist.
+        first = self._verify(session=self._session(native_session_id="native-a"),
+                             receipt=self._component_receipt(session_id="native-a"),
+                             label="a")
+        second = self._verify(session=self._session(native_session_id="native-b"),
+                              receipt=self._component_receipt(session_id="native-b"),
+                              label="b")
+        self.assertEqual(
+            first["verified"]["native_session_start"]["kind"], "native-session-start-a")
+        self.assertEqual(
+            second["verified"]["native_session_start"]["kind"], "native-session-start-b")
+
+    def test_two_receipts_for_one_session_are_refused(self):
+        self.gate.session_path("t1").write_text(
+            json.dumps(self._session(), ensure_ascii=False), encoding="utf-8")
+        self._write_receipt()
+        self._write_receipt(self._component_receipt(), session_id="duplicate-file")
+        with self.assertRaises(self.module.Failed) as caught:
+            self.gate.verify_session(self._pack(), "t1", require_tool_actions=False)
+        self.assertIn("found 2", str(caught.exception))
+
+    def test_a_receipt_without_hook_event_name_is_refused(self):
+        receipt = self._component_receipt()
+        del receipt["hook_event_name"]
+        with self.assertRaises(self.module.Failed) as caught:
+            self._verify(receipt=receipt)
+        self.assertIn("hook event", str(caught.exception))
+
+    def test_a_receipt_without_injected_via_is_refused(self):
+        receipt = self._component_receipt()
+        del receipt["injected_via"]
+        with self.assertRaises(self.module.Failed) as caught:
+            self._verify(receipt=receipt)
+        self.assertIn("documented channel", str(caught.exception))
+
+    def test_a_receipt_without_cwd_is_refused(self):
+        receipt = self._component_receipt()
+        del receipt["cwd"]
+        with self.assertRaises(self.module.Failed) as caught:
+            self._verify(receipt=receipt)
+        self.assertIn("no cwd string", str(caught.exception))
+
+    def test_a_receipt_with_a_foreign_cwd_is_refused(self):
+        receipt = self._component_receipt(cwd=str(self.directory))
+        with self.assertRaises(self.module.Failed) as caught:
+            self._verify(receipt=receipt)
+        self.assertIn("cwd resolves to", str(caught.exception))
+
+    def test_a_receipt_with_a_mismatched_pack_sha256_is_refused(self):
+        receipt = self._component_receipt(pack_sha256="f" * 64)
+        with self.assertRaises(self.module.Failed) as caught:
+            self._verify(receipt=receipt)
+        self.assertIn("pack_sha256", str(caught.exception))
+
+    def test_a_receipt_with_an_invalid_parent_process_name_is_refused(self):
+        receipt = self._component_receipt(parent_process_name=123)
+        with self.assertRaises(self.module.Failed) as caught:
+            self._verify(receipt=receipt)
+        self.assertIn("parent_process_name", str(caught.exception))
+
+    def test_a_receipt_without_parent_process_name_still_binds(self):
+        # `parent_process_name` is supporting evidence. Its absence, when `ps`
+        # could not answer, is allowed; it is not a hard gate.
+        receipt = self._component_receipt()
+        receipt.pop("parent_process_name", None)
+        verified = self._verify(receipt=receipt)
+        self.assertIsNotNone(verified["verified"]["native_session_start"])
+
+    def test_a_receipt_path_that_resolves_outside_the_repo_is_refused(self):
+        outside = Path(self.gate.root.parent.parent) / "outside-receipt.json"
+        outside.write_text(json.dumps(self._component_receipt()), encoding="utf-8")
+        link = self.directory / "session-start-native-session-1.json"
+        link.symlink_to(outside)
+        self.gate.session_path("t1").write_text(
+            json.dumps(self._session(), ensure_ascii=False), encoding="utf-8")
+        with self.assertRaises(self.module.Failed) as caught:
+            self.gate.verify_session(self._pack(), "t1", require_tool_actions=False)
+        self.assertIn("outside the session repository", str(caught.exception))
 
     def test_a_missing_native_session_id_fails_by_name(self):
         with self.assertRaises(self.module.Failed) as caught:
@@ -580,11 +813,13 @@ class NativeSessionStartVerification(unittest.TestCase):
         self.assertIn("no native_session_id", str(caught.exception))
 
     def test_a_session_id_mismatch_fails_by_name(self):
+        # Selection is by session id: a receipt for another session is not a
+        # candidate at all, and the failure says which session was looked for.
         with self.assertRaises(self.module.Failed) as caught:
             self._verify(session=self._session(native_session_id="somewhere-else"))
         message = str(caught.exception)
-        self.assertIn("native SessionStart receipt names session", message)
-        self.assertIn("somewhere-else", message)
+        self.assertIn("for session 'somewhere-else'", message)
+        self.assertIn("found 0", message)
 
     def test_a_clear_or_compact_receipt_does_not_bind_a_fresh_session(self):
         for source in ("clear", "compact"):
@@ -689,11 +924,38 @@ class InstalledHooksShapeMatchesTheOfficialContract(unittest.TestCase):
                          / "jasmine-p4-session-start.py")
 
     def test_the_installed_script_is_this_repositorys_hook_source(self):
-        self.assertEqual(HOOK.read_bytes(),
-                         (REPO / "scripts" / "jasmine-p4-session-start.py").read_bytes())
+        # The real property is about the installer's copy step, not a file compared
+        # to itself: apply to a throwaway repo and the installed bytes must be the
+        # repository source's bytes, computed now.
+        repo = (Path(self.temp.name) / "repo-copy").resolve()
+        repo.mkdir()
+        _, _, _, script = self.installer.plan(repo, self.python)
+        write = self.installer.install_script(script)
+        self.assertEqual(write, "created")
+        self.assertEqual(script.read_bytes(), HOOK.read_bytes())
+        self.assertEqual(_sha256(script.read_bytes()), _sha256(HOOK.read_bytes()))
+        self.assertEqual(self.installer.install_script(script), "unchanged")
         source = HOOK.read_text(encoding="utf-8")
         self.assertIn('"hookEventName": "SessionStart"', source)
         self.assertIn("additionalContext", source)
+
+    def test_changing_the_source_and_reapplying_updates_the_installed_copy(self):
+        # An update must move the installed copy, because the installed digest is
+        # what the Gate recomputes against the receipt: a stale copy that still
+        # passed would bind receipts to a script that no longer runs.
+        repo = (Path(self.temp.name) / "repo-update").resolve()
+        repo.mkdir()
+        _, _, _, script = self.installer.plan(repo, self.python)
+        self.installer.install_script(script)
+        original_source = self.installer.HOOK_SOURCE
+        replacement = Path(self.temp.name) / "hook-v2.py"
+        replacement.write_text(HOOK.read_text(encoding="utf-8") + "\n# v2\n",
+                               encoding="utf-8")
+        self.installer.HOOK_SOURCE = replacement
+        self.addCleanup(setattr, self.installer, "HOOK_SOURCE", original_source)
+        self.assertEqual(self.installer.install_script(script), "updated")
+        self.assertEqual(script.read_bytes(), replacement.read_bytes())
+        self.assertNotEqual(script.read_bytes(), HOOK.read_bytes())
 
 
 if __name__ == "__main__":

@@ -117,6 +117,11 @@ class AResumedRunVerifiesTheSealItContinues(unittest.TestCase):
         body["seal"] = {"sha256": seal["sha256"], "phase": "phase1",
                         "receipts_sealed": seal["receipts_sealed"]}
         manifest.write_text(json.dumps(body), encoding="utf-8")
+        # The real runner anchors the manifest's final bytes after the manifest is
+        # rewritten to name the seal, and `_verify_prior_seal` now requires that
+        # anchor: without it, nothing on disk holds the manifest's own digest.
+        self.module._write_manifest_anchor(
+            self.work, "phase1", manifest, {"commit": "abc1234", "dirty": False})
         return manifest, self.work / "phase1-seal.json", seal
 
     def test_phase_one_seals_its_receipts_and_names_its_manifest(self) -> None:
@@ -182,6 +187,31 @@ class AResumedRunVerifiesTheSealItContinues(unittest.TestCase):
         with self.assertRaises(_FAILED) as caught:
             self.module._verify_prior_seal(self.work, "phase2")
         self.assertIn("without a phase 1 seal", str(caught.exception))
+
+    def test_a_resumed_run_refuses_when_the_manifest_anchor_is_missing(self) -> None:
+        # The seal names the manifest, but only the anchor holds the manifest's own
+        # bytes. Without it a resumed run would re-verify every receipt and then
+        # trust whatever verdict the manifest happened to say.
+        self._phase1()
+        anchor = next(self.work.glob("phase1-manifest-*.sha256"))
+        anchor.unlink()
+        with self.assertRaises(_FAILED) as caught:
+            self.module._verify_prior_seal(self.work, "phase2")
+        self.assertIn("no anchor", str(caught.exception))
+
+    def test_a_resumed_run_refuses_when_the_manifest_was_edited_after_anchoring(
+            self) -> None:
+        # The reverse test for the anchor check: the seal and every receipt still
+        # match, and the manifest's bytes do not match the anchor that was written
+        # for them. A verdict edited after the run has to stop the resume.
+        manifest, _, _ = self._phase1()
+        body = json.loads(manifest.read_text(encoding="utf-8"))
+        body["verdict"] = "PASS"
+        body["note"] = "rewritten after the run finished"
+        manifest.write_text(json.dumps(body), encoding="utf-8")
+        with self.assertRaises(_FAILED) as caught:
+            self.module._verify_prior_seal(self.work, "phase2")
+        self.assertIn("edited after it was anchored", str(caught.exception))
 
     def test_phase_one_needs_no_prior_seal(self) -> None:
         self.assertIsNone(self.module._verify_prior_seal(self.work, "phase1"))
