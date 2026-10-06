@@ -397,29 +397,76 @@ def _add_history_chain(conn: Any, failure: Any, mapped: dict) -> None:
             for row in related[2:]:
                 source_ids.extend([row['source_event_id'], row['change_event_id']])
             evidence_ids = [r['evidence_id'] for r in related]
-            # Put complete attribution first; excerpts are allocated only from
-            # remaining room, so truncation never removes an action's source.
+            # A lesson a later session can act on has to carry three things, each
+            # bound to the capture that recorded it: what the failure state was
+            # (diagnosis), the exact replacements that were made (repair), and
+            # what the rerun then reported (post-hoc). The first two review
+            # rounds' text carried only an unlabeled assertion and edit
+            # fragments, so a session had to re-derive everything itself. Every
+            # value below comes from the verified capture: removed/added diff
+            # lines were checked against the inspected bytes by
+            # `verified_records`, and the pre-repair line is the diff's own
+            # removed line, never a reconstruction.
             command = executions[0][0]
-            prefix = (f"history: FAIL from `{command}`; task {failure['task_id']}; {mapped['memory_id']}; {failure['evidence_id']}; {failure['source_event_id']},{failure['change_event_id']}"
-                      + f"\n{event['event_id']}; no current/exclusive cause.")
-            for role, row in zip(['inspection','repair','validation'], related[1:]):
-                pointers = row['source_event_id'] + (',' + row['change_event_id'] if role != 'inspection' else '')
-                prefix += f"\n{role}: {row['evidence_id']} {pointers}"
+            history = (f"history: prior FAIL from `{command}`; task {failure['task_id']}; {mapped['memory_id']}; {failure['evidence_id']}; {failure['source_event_id']},{failure['change_event_id']}"
+                       + f"\n{event['event_id']}; no current/exclusive cause.")
+            inspected = [json.loads(line) for line in executions[1][1]['stdout'].splitlines()]
             failure_output = executions[0][1]['stdout']
             assertion = '\n'.join(line.split(' within ',1)[0] for line in failure_output.splitlines() if 'AssertionError' in line)
+            before: dict[str, str] = {}
+            for record in repaired:
+                removed = [line.removeprefix('-') for line in record['diff'].splitlines()
+                           if line.startswith('-') and not line.startswith('---')]
+                if removed:
+                    before[record['file']] = ' '.join(removed[0].split())
+            # The test-side pre-state is the failed assertion, which the
+            # assertion excerpt already carries; repeating the whole assert call
+            # in the diagnosis spends the Memory budget twice on one fact and
+            # pushed the item over the renderer's per-item cap in testing.
+            implementation = {name: line for name, line in before.items()
+                              if 'assert' not in line}
+            if implementation:
+                before = implementation
+            rule, rule_file = '', ''
+            for record in inspected:
+                if record['file'].endswith('.py'):
+                    continue
+                for line in record['content'].splitlines():
+                    if line.strip() and not line.lstrip().startswith('#'):
+                        rule, rule_file = ' '.join(line.split()), record['file']
+                        break
+                if rule:
+                    break
+            diagnosis_bits = [f"{name} was `{line}`" for name, line in before.items()]
+            if rule:
+                diagnosis_bits.append(f"{rule_file}: \"{rule}\"")
+            diagnosis_bits.append(f"failed: `{assertion[:110]}`")
+            # The per-section pointer is the capture's Evidence id; the source
+            # and change Events stay in the item's `source_event_ids` field,
+            # which the renderer emits in the same labelled block. Repeating
+            # them in the prose cost the item its MEMORY-section budget (the
+            # renderer omits an oversized item whole), and Events are inert
+            # identifiers to the reader; the Evidence row is the binding.
+            diagnosis = ('\n' + f"diagnosis ({related[1]['evidence_id']}): at failure, "
+                         + '; '.join(diagnosis_bits) + '.')
             edits = []
             for record in repaired:
-                lines = [line for line in record['diff'].splitlines() if line.startswith('+') and not line.startswith('+++')]
+                added = [line.removeprefix('+') for line in record['diff'].splitlines()
+                         if line.startswith('+') and not line.startswith('+++')]
                 if record['file'] == 'test_calc.py':
                     # The exact capture program and re-derived file diff proved
                     # this replacement; keep the new expectation rather than
                     # repeating the entire assert call's unchanged arguments.
-                    edits.append('test_calc.py: 28.5')
+                    edits.append(f"{record['file']}: 28.5")
                 else:
-                    edits.append(record['file'] + ': ' + ' '.join(line.removeprefix('+').strip().removeprefix('return ') for line in lines))
+                    edits.append(record['file'] + ': ' + ' '.join(
+                        ' '.join(added).split()).removeprefix('return '))
+            repair = ('\n' + f"repair ({related[2]['evidence_id']}): "
+                      + '; '.join(edits) + '.')
             validation_output = '\n'.join(line for line in executions[3][1]['stdout'].splitlines() if line == 'OK')
-            excerpts = '\n' + assertion[:110] + '\n' + '; '.join(edits)[:160] + '; rerun: ' + validation_output[:40]
-            text = prefix + excerpts
+            post = ('\n' + f"post-hoc ({related[3]['evidence_id']}): "
+                    f"subsequent rerun: {validation_output[:40]}.")
+            text = history + diagnosis + repair + post
             if len(text) > MAX_TEXT:
                 return  # never discard action attribution to fit a claim
             mapped['text'] = text

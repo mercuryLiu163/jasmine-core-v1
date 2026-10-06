@@ -591,14 +591,26 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
             self.assertEqual(len(result['evidence_ids']),4)
             self.assertEqual(len(result['source_event_ids']),8)
             self.assertNotIn('invented engine cause',result['text'])
-            for source in result['source_event_ids']+result['evidence_ids']:
+            for evidence in result['evidence_ids']:
+                self.assertIn(evidence,result['text'])
+            # The history line names the failure and the linking observation;
+            # the remaining Events live in the item's source_event_ids field,
+            # checked against the rendered block below.
+            for source in result['source_event_ids'][:3]:
                 self.assertIn(source,result['text'])
             self.assertIn('AssertionError',result['text'])
-            self.assertIn('repair',result['text'])
-            self.assertIn('validation',result['text'])
+            # The lesson labels its three kinds of captured observation, so a
+            # later session does not have to guess which fragment is which. The
+            # values are the capture's: the pre-repair line is read from the
+            # diff's removed line, bound to the inspected bytes.
+            self.assertIn('diagnosis (',result['text'])
+            self.assertIn('repair (',result['text'])
+            self.assertIn('post-hoc (',result['text'])
+            self.assertIn('at failure, calc.py was `return sum(prices) - discount`',result['text'])
+            self.assertIn('NOTES.md: "discount is a percentage of subtotal"',result['text'])
             self.assertIn('discount / 100',result['text'])
             self.assertIn('28.5',result['text'])
-            self.assertIn('OK',result['text'])
+            self.assertIn('subsequent rerun: OK',result['text'])
             self.assertLessEqual(len(result['text']),2000)
             from jasmine_core.context.memory_provider import filter_memory
             from jasmine_core.context import renderer
