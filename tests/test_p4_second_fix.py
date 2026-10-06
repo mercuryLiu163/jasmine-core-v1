@@ -639,3 +639,44 @@ class CompletedComparesLiveAttempts(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProbeArithmeticMeansArithmetic(unittest.TestCase):
+    """The matcher must recognise an interpreter evaluating an expression.
+
+    Found by the first native-session run: the lesson agent ran `python -B -c
+    '... subtotal * discount / 100 ...'` -- real arithmetic -- and the matcher,
+    which required `python -c` contiguous, derived no probe_arithmetic; the
+    baseline's `python -c "print(sys.version)"` matched only because a hyphen
+    somewhere in the command satisfied the operator check. Both directions were
+    wrong in the check whose job is to compare declaration with transcript.
+    """
+
+    def _matches(self, command):
+        return _module()._exploration_matches("probe_arithmetic", command)
+
+    def test_an_interpreter_evaluating_an_expression_matches(self):
+        for command in (
+                "/usr/bin/python3 -B -c 'print(30 * (1 - 5 / 100))'",
+                "python -c 'print(1+2)'",
+                "python - <<'PY'\nprint(30 * 0.95)\nPY",
+                "python3.13 -B -c 'print(1/2)'",
+                "node -e 'console.log(1+2)'",
+                "expr 1 + 2"):
+            with self.subTest(command=command):
+                self.assertTrue(self._matches(command), command)
+
+    def test_printing_a_version_is_not_arithmetic(self):
+        # The old operator check scanned the whole command, so any hyphen -- a path,
+        # a `--version`, a `-B` -- satisfied it.
+        for command in (
+                "/private/var/folders/x-y/python -c 'import sys; print(sys.version)'",
+                "python --version",
+                "python -B --version",
+                "python -m unittest -v"):
+            with self.subTest(command=command):
+                self.assertFalse(self._matches(command), command)
+
+    def test_a_hyphenated_path_is_not_arithmetic(self):
+        self.assertFalse(self._matches("ls -la /var/folders/x-y/z"))
+

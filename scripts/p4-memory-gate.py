@@ -178,12 +178,26 @@ def _exploration_matches(category: str, command: str) -> bool:
         return any(marker in lowered for marker in
                    ("__pycache__", ".pyc", "git stash", "git fsck"))
     if category == "probe_arithmetic":
+        # "Evaluated an arithmetic expression in a shell", not "typed python -c".
+        # The old form required `python -c` contiguous, so the natural `python -B -c`
+        # and `python - <<PY` (heredoc) both failed to match a session that really
+        # did compute; and it scanned the whole command for an operator, so a hyphen
+        # in a path or a `--version` flag made `python -c "print(sys.version)"` count
+        # as arithmetic. Both directions were wrong, in a check whose entire job is
+        # to compare what was declared with what was done.
         if re.search(r"\b(bc|expr)\b", lowered) is not None:
             return True
-        if re.search(r"python\d*\s+-c\b", lowered) is not None:
-            return any(op in command for op in ("+", "-", "*", "/", "%"))
-        if re.search(r"\bnode\s+-e\b", lowered) is not None:
-            return any(op in command for op in ("+", "-", "*", "/", "%"))
+        operators = ("+", "-", "*", "/", "%")
+        # An interpreter asked to evaluate code, with any flags before `-c` and with a
+        # bare `-` for a stdin/heredoc program. The operator must appear in the code
+        # after that point, so a flag or a path cannot satisfy it.
+        interpreter = re.search(r"\bpython[\d.]*(?:\s+-\S+)*\s+(?:-c\b|-(?=\s|$))",
+                                command)
+        if interpreter is not None:
+            return any(op in command[interpreter.end():] for op in operators)
+        node = re.search(r"\bnode\s+-e\b", command)
+        if node is not None:
+            return any(op in command[node.end():] for op in operators)
         return False
     return False
 
