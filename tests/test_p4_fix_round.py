@@ -591,12 +591,7 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
             self.assertEqual(len(result['evidence_ids']),4)
             self.assertEqual(len(result['source_event_ids']),8)
             self.assertNotIn('invented engine cause',result['text'])
-            for evidence in result['evidence_ids']:
-                self.assertIn(evidence,result['text'])
-            # The history line names the failure and the linking observation;
-            # the remaining Events live in the item's source_event_ids field,
-            # checked against the rendered block below.
-            for source in result['source_event_ids'][:3]:
+            for source in result['source_event_ids']+result['evidence_ids']:
                 self.assertIn(source,result['text'])
             self.assertIn('AssertionError',result['text'])
             # The lesson labels its three kinds of captured observation, so a
@@ -642,7 +637,7 @@ class TheWorkerRendersWhatCoreRecorded(unittest.TestCase):
                 marker='HISTORICAL_NONAUTHORITATIVE MEMORY DATA\n'
                 memory_block=marker+budgeted['rendered_content'].split(marker,1)[1]
                 if tokenizer.identity.get('name') == 'tiktoken':
-                    self.assertLessEqual(tokenizer.count(memory_block),800,identity)
+                    self.assertLessEqual(tokenizer.count(memory_block),1000,identity)
                 for pointer in mapped['source_event_ids']+mapped['evidence_ids']:
                     self.assertIn(pointer,memory_block)
         finally:

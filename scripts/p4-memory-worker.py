@@ -441,13 +441,13 @@ def _add_history_chain(conn: Any, failure: Any, mapped: dict) -> None:
             if rule:
                 diagnosis_bits.append(f"{rule_file}: \"{rule}\"")
             diagnosis_bits.append(f"failed: `{assertion[:110]}`")
-            # The per-section pointer is the capture's Evidence id; the source
-            # and change Events stay in the item's `source_event_ids` field,
-            # which the renderer emits in the same labelled block. Repeating
-            # them in the prose cost the item its MEMORY-section budget (the
-            # renderer omits an oversized item whole), and Events are inert
-            # identifiers to the reader; the Evidence row is the binding.
-            diagnosis = ('\n' + f"diagnosis ({related[1]['evidence_id']}): at failure, "
+            # Every source pointer stays in the text: the Gate's actionable-
+            # history check requires each of `source_event_ids` and
+            # `evidence_ids` to appear here (truncation must never be able to
+            # remove an action's attribution), so a pointer kept only in the
+            # structured field fails the pack.
+            diagnosis = ('\n' + f"diagnosis ({related[1]['evidence_id']}; "
+                         f"{related[1]['source_event_id']}): at failure, "
                          + '; '.join(diagnosis_bits) + '.')
             edits = []
             for record in repaired:
@@ -461,10 +461,12 @@ def _add_history_chain(conn: Any, failure: Any, mapped: dict) -> None:
                 else:
                     edits.append(record['file'] + ': ' + ' '.join(
                         ' '.join(added).split()).removeprefix('return '))
-            repair = ('\n' + f"repair ({related[2]['evidence_id']}): "
+            repair = ('\n' + f"repair ({related[2]['evidence_id']}; "
+                      f"{related[2]['source_event_id']},{related[2]['change_event_id']}): "
                       + '; '.join(edits) + '.')
             validation_output = '\n'.join(line for line in executions[3][1]['stdout'].splitlines() if line == 'OK')
-            post = ('\n' + f"post-hoc ({related[3]['evidence_id']}): "
+            post = ('\n' + f"post-hoc ({related[3]['evidence_id']}; "
+                    f"{related[3]['source_event_id']},{related[3]['change_event_id']}): "
                     f"subsequent rerun: {validation_output[:40]}.")
             text = history + diagnosis + repair + post
             if len(text) > MAX_TEXT:
