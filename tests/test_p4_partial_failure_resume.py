@@ -116,6 +116,56 @@ class PartialFailureReplay(unittest.TestCase):
             conn.close()
         self._two_resumes(module,gate,record)
 
+    def test_g04_terminal_setup_failure_two_resume_keep_counts(self):
+        # G04's setup creates two projects, two rules and their Events before its
+        # pack exists, and the ACL leg can fail after all of that. The replay used
+        # to cover G01/G05 only, so the next resume ran `case_g04` again: measured
+        # growth was +2 projects, +2 rules, +8 Events, +2 memory items, +2 jobs and
+        # a recall trace per resume, doubling the case's counts every time.
+        import os
+        from unittest import mock
+
+        module = _module()
+        gate = _real_gate(self, case_id='P4-G04')
+        gate.config.update({'real_agent_session': True, 'bank_suffix': 'p4-partial-g04',
+                            'dependency_commits': {'P2': '850fbec', 'P3': '7016dab'}})
+        gate.bank_suffix = 'p4-partial-g04'
+        record = module.CaseRecord('P4-G04', 'BLOCKED', mode='real')
+        self._dead_engine(gate)
+        with mock.patch.dict(os.environ, {
+                'JASMINE_MEMORY_BANK_NAMESPACE': 'p4-partial-g04',
+                'JASMINE_HINDSIGHT_URL': 'http://127.0.0.1:1'}):
+            with self.assertRaises(module.Failed) as caught:
+                module.case_g04(gate, record)
+        record.verdict = 'FAIL'
+        record.reason = str(caught.exception)
+        record.failure_class = 'AssertionFailure'
+        # The terminal failure is real and terminal: the setup objects exist, and
+        # no pack was built, so a resume has nothing to fall back on but the seal.
+        self.assertEqual(len(record.project_ids), 2)
+        self.assertEqual(record.receipts, [])
+        self.assertEqual(list(gate.root.glob('pack-*.json')), [])
+        phase1 = self._two_resumes(module, gate, record)
+        sealed = json.loads(Path(phase1['path']).read_text())
+        terminal = sealed['cases']['P4-G04']['terminal_failure']
+        self.assertEqual(terminal['reason'], record.reason)
+        self.assertEqual(terminal['project_ids'], record.project_ids)
+
+    def test_terminal_replay_map_covers_every_pack_case(self):
+        # The map is the single source of truth for two call sites (the seal and
+        # the replay). If it drifts from the cases it cannot protect, the growth it
+        # exists to prevent comes back silently -- one line at a time.
+        import inspect
+
+        module = _module()
+        self.assertEqual(set(module.TERMINAL_SETUP_PACK_KEYS), set(module.NEEDS_P3_PACK))
+        for case_id, key in module.TERMINAL_SETUP_PACK_KEYS.items():
+            with self.subTest(case=case_id):
+                source = inspect.getsource(module.CASES_BY_ID[case_id])
+                self.assertIn(f'"{key}"', source,
+                              f"{case_id} no longer builds {key}; the terminal-setup "
+                              f"replay map names a pack that case does not use")
+
     def test_unsealed_legacy_partial_failure_refuses_reseed(self):
         module=_module();gate=_real_gate(self,case_id='P4-G01')
         before=self._counts(gate)

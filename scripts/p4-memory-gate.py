@@ -85,6 +85,28 @@ NEEDS_P3_PACK = frozenset({"P4-G01", "P4-G02", "P4-G03", "P4-G04",
                            "P4-G05", "P4-G07"})
 NEEDS_REAL_AGENT = frozenset({"P4-G01"})
 
+#: Case -> the exact-pack idempotency key whose presence means the case's setup
+#: phase finished. A terminal setup FAIL (verdict FAIL, no pack built) of any of
+#: these cases is *replayed* on resume from the sealed phase-one record instead of
+#: being re-executed, because re-executing the setup is what duplicated Core
+#: objects on every failed resume. Measured on G04 before this map covered it: each
+#: resume added two projects, two rules, two rule versions, eight Events, two
+#: memory items, two jobs, four attempts and a recall trace, doubling the case's
+#: counts every time. The replay is the only branch that turns "resume after a
+#: failure" into no new objects; where it does not apply, the case is not re-seeded
+#: either -- it refuses.
+#:
+#: G06 is deliberately absent: its durable unit is its own completion marker, not a
+#: pack, and a pre-marker crash is handled by its own restart-under-crash design.
+TERMINAL_SETUP_PACK_KEYS = {
+    "P4-G01": "g01-with-lesson",
+    "P4-G02": "g02-current-decision",
+    "P4-G03": "g03-unknown-protocol",
+    "P4-G04": "g04-project-b-pack",
+    "P4-G05": "g05-degraded-pack",
+    "P4-G07": "g07-lifecycle-pack",
+}
+
 #: G01 asks one question, in both sessions, byte for byte. It used to ask two:
 #: "the device test fails; where should I look first?" on one side and "the device
 #: test fails again; where should I look first?" on the other, so a difference in
@@ -4318,9 +4340,16 @@ def mark_inherited_evidence(gate: Gate, record: CaseRecord,
 
 def _replay_terminal_setup_failure(gate: Gate, record: CaseRecord,
                                    prior_case: dict[str, Any] | None) -> bool:
-    """Partial failed G01/G05 attempts remain failed, with no fresh setup effects."""
-    keys = {'P4-G01': 'g01-with-lesson', 'P4-G05': 'g05-degraded-pack'}
-    key = keys.get(record.case_id)
+    """A terminally failed setup stays failed, with no fresh setup effects.
+
+    Covers every case whose durable setup unit is its exact pack
+    (`TERMINAL_SETUP_PACK_KEYS`). It used to name G01 and G05 only, so a terminal
+    G04 setup failure -- which happens before its pack exists -- was re-executed by
+    the next resume: `case_g04` seeded two more projects, two more rules and their
+    Events, then failed at the same assertion again. Every resume grew the case's
+    object counts, and the counts never came back down.
+    """
+    key = TERMINAL_SETUP_PACK_KEYS.get(record.case_id)
     if gate.case_id != record.case_id:
         raise Failed('terminal failure replay case identity mismatch')
     if key is None or not prior_case or prior_case.get('verdict') != 'FAIL':
@@ -4483,7 +4512,7 @@ def _write_phase_seal(work: Path, phase_name: str, manifest_path: Path,
             "evidence_keys": sorted(record.engine_evidence),
             "sealed_artifacts": sorted(record.sealed_artifacts),
         }
-        if record.case_id in ('P4-G01', 'P4-G05') and record.verdict == 'FAIL':
+        if record.case_id in TERMINAL_SETUP_PACK_KEYS and record.verdict == 'FAIL':
             per_case[record.case_id]['terminal_failure'] = record.as_dict()
     payload = {
         "phase": phase_name,
