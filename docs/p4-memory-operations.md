@@ -215,9 +215,9 @@ G01's prompt, seven exploration categories, controlled baseline/lesson
 comparison, real Agent execution and independent receipts remain required;
 historical subprocess capture alone is not acceptance. The v1 benefit threshold
 (omit at least one exploration category) produced only negative results and is
-superseded by the versioned exploration-cost specification in
-`docs/p4-g01-v2-spec.md`, which is frozen before its run and confirmed by an
-independent reviewer; the v1 negatives are retained as FAIL records.
+to be superseded by the versioned exploration-cost specification in
+`docs/p4-g01-v2-spec.md`; that spec is frozen and confirmed by an independent
+reviewer before any v2 run, and the v1 negatives are retained as FAIL records.
 
 ### Terminal partial-failure replay (every case)
 
