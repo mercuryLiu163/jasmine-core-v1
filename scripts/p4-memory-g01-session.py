@@ -95,12 +95,15 @@ def relative_to_repo(repo: pathlib.Path, path: str) -> str:
     Codex names `file_change` paths absolutely; synthetic transcripts may name
     them relative to the repository. Comparing a relative path against `git
     show` while resolving the workspace side against the process cwd is how a
-    no-op patch became an effective repair.
+    no-op patch became an effective repair. The result is contained: any path
+    that resolves outside the worktree -- `../outside`, a symlink pointing out,
+    an absolute path elsewhere -- raises ValueError, and the caller records the
+    action as unattributable rather than crediting a repair outside the fixture.
     """
     candidate = pathlib.Path(path)
-    if candidate.is_absolute():
-        return str(candidate.resolve().relative_to(repo.resolve()))
-    return str(candidate)
+    base = repo.resolve()
+    resolved = (candidate if candidate.is_absolute() else base / candidate).resolve()
+    return str(resolved.relative_to(base))
 
 
 def changes_for(repo: pathlib.Path, ref: str, path: str) -> tuple[str | None, str | None, str | None]:

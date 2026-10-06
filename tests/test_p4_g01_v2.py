@@ -138,6 +138,16 @@ class FileChangeAttribution(unittest.TestCase):
                        check=True)
         return repo
 
+    def test_paths_outside_the_worktree_are_refused(self) -> None:
+        module = _assembler()
+        repo = self._fixture()
+        (repo.parent / "outside.txt").write_text("elsewhere\n", encoding="utf-8")
+        with self.assertRaises(ValueError):
+            module.relative_to_repo(repo, "../outside.txt")
+        (repo / "sub").mkdir()
+        self.assertEqual(module.relative_to_repo(repo, "sub/../calc.py"), "calc.py")
+        self.assertEqual(module.relative_to_repo(repo, str(repo / "calc.py")), "calc.py")
+
     def test_absolute_paths_are_normalized_and_a_no_op_is_not_a_change(self) -> None:
         module = _assembler()
         repo = self._fixture()
@@ -816,7 +826,7 @@ class V2EndToEnd(unittest.TestCase):
 class AssemblerEndToEnd(unittest.TestCase):
     """`p4-memory-g01-session.py` produces a session the v2 Gate can bind."""
 
-    def test_the_assembler_binds_shell_and_file_change_with_real_exit_codes(self) -> None:
+    def _run_assembler(self, change_paths=None):
         import os
         import tempfile
         gate_module = import_gate_module()
@@ -873,6 +883,7 @@ class AssemblerEndToEnd(unittest.TestCase):
         (repo / "calc.py").write_bytes(
             b"def total(prices, discount):\n    return sum(prices) * (1 - discount / 100)\n")
         (repo / "test_calc.py").write_bytes(b"expected 28.5\n")
+        paths = change_paths or [str(repo / "calc.py"), str(repo / "test_calc.py")]
         transcript = root / "stream.jsonl"
         transcript.write_text("\n".join(json.dumps(event) for event in [
             {"type": "thread.started", "thread_id": thread},
@@ -886,8 +897,7 @@ class AssemblerEndToEnd(unittest.TestCase):
                 "exit_code": 1}},
             {"type": "item.completed", "item": {
                 "type": "file_change", "changes": [
-                    {"path": str(repo / "calc.py"), "kind": "update"},
-                    {"path": str(repo / "test_calc.py"), "kind": "update"}]}},
+                    {"path": path, "kind": "update"} for path in paths]}},
             {"type": "item.completed", "item": {
                 "type": "command_execution", "command": "python -B -m unittest -v",
                 "aggregated_output": "Ran 1 test\nOK", "exit_code": 0}},
@@ -906,7 +916,10 @@ class AssemblerEndToEnd(unittest.TestCase):
             capture_output=True, text=True,
             env={**os.environ, "PYTHONPATH": str(SRC)})
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        session = json.loads((case / "session-g01-lesson.json").read_text())
+        return json.loads((case / "session-g01-lesson.json").read_text()), repo
+
+    def test_the_assembler_binds_shell_and_file_change_with_real_exit_codes(self) -> None:
+        session, repo = self._run_assembler()
         self.assertEqual([event["kind"] for event in session["tool_events"]],
                          ["shell", "shell", "file_change", "shell"])
         self.assertEqual(session["tool_events"][1]["exit_code"], 1)
@@ -928,6 +941,12 @@ class AssemblerEndToEnd(unittest.TestCase):
         self.assertEqual(session["unattributed_changes"], [])
         self.assertIn(".codex/", session["harness_excluded"])
         self.assertTrue(session["tool_actions"])
+
+    def test_a_relative_path_outside_the_worktree_is_not_attributed(self) -> None:
+        session, _ = self._run_assembler(change_paths=["../outside.txt"])
+        action = next(event for event in session["tool_events"]
+                      if event["kind"] == "file_change")
+        self.assertIsNone(action["evidence_id"])
 
 
 
