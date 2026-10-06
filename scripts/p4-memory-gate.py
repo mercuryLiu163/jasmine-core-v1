@@ -1502,8 +1502,14 @@ class Gate:
             "native_receipt_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
             "receipt": receipt,
         })
+        # The block is embedded in the `g01-*-session` receipt, so it must be byte
+        # stable across resumes. `sealed["write"]` is "created" on the first
+        # verification and "unchanged" afterwards, which made a re-verification
+        # produce different receipt bytes and the write-once guard refused it --
+        # a run could pass once and never again. The write outcome is not evidence;
+        # the digest is.
         return {"path": sealed["path"], "sha256": sealed["sha256"],
-                "kind": f"native-session-start-{label}", "write": sealed["write"],
+                "kind": f"native-session-start-{label}",
                 "bytes": Path(sealed["path"]).stat().st_size}
 
     def verify_session(self, pack: dict[str, Any], label: str, *,

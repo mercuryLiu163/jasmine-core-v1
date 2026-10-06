@@ -708,7 +708,10 @@ class NativeSessionStartVerification(unittest.TestCase):
         verified = self._verify()
         native = verified["verified"]["native_session_start"]
         self.assertIsNotNone(native)
-        self.assertEqual(native["write"], "created")
+        # No `write` field: the block must be byte stable across resumes, so the
+        # receipt's created/unchanged outcome is not part of it.
+        self.assertNotIn("write", native)
+        self.assertEqual(native["kind"], "native-session-start-t1")
         sealed = Path(native["path"])
         self.assertEqual(sealed.stat().st_mode & 0o777, 0o600)
         copied = json.loads(sealed.read_text(encoding="utf-8"))
@@ -718,6 +721,16 @@ class NativeSessionStartVerification(unittest.TestCase):
                          _sha256(self.rendered.encode("utf-8")))
         self.assertIn(native["path"],
                       [artifact["path"] for artifact in verified["verified"]["sealed"]])
+
+    def test_the_verified_block_is_byte_stable_across_resumes(self):
+        # The block is embedded in the session receipt, which is write-once. It used
+        # to carry `gate.receipt`'s write outcome ("created" then "unchanged"), so a
+        # second verification produced different bytes and the guard refused a run
+        # that had passed. Payload must be a pure function of the evidence.
+        first = self._verify()["verified"]["native_session_start"]
+        second = self._verify()["verified"]["native_session_start"]
+        self.assertEqual(first, second)
+        self.assertNotIn("write", first)
 
     def test_the_native_requirement_is_scoped_to_the_configured_cases(self):
         # The native mechanism was built for G01's controlled experiment; a global
@@ -899,7 +912,9 @@ class NativeSessionStartVerification(unittest.TestCase):
 
     def test_the_sealed_receipt_is_write_once_across_edits(self):
         first = self._verify()
-        self.assertEqual(first["verified"]["native_session_start"]["write"], "created")
+        # Stable across verifications: the same evidence, the same bytes.
+        self.assertEqual(first["verified"]["native_session_start"],
+                         self._verify()["verified"]["native_session_start"])
         path = self.directory / "session-start-native-session-1.json"
         body = json.loads(path.read_text(encoding="utf-8"))
         body["written_at"] = "2020-01-01T00:00:00Z"
