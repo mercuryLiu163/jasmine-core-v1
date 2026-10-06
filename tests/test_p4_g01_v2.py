@@ -371,7 +371,7 @@ class QualityGate(unittest.TestCase):
         metrics = {"first_repair": 0, "primary": 1, "repeated_reads": 0,
                    "invalid_attempts": 0, "exploration_rounds": 0}
         self.module._g01_v2_quality(self.gate, self.record, session, "g01-lesson",
-                                    metrics, self.pack)
+                                    metrics, self.pack, lesson=True)
         self.assertEqual(session["verified"]["semantic_review"]["verdict"], "consistent")
 
     def test_a_wrong_fix_fails(self) -> None:
@@ -382,7 +382,7 @@ class QualityGate(unittest.TestCase):
                    "invalid_attempts": 0, "exploration_rounds": 0}
         with self.assertRaises(self.module.Failed):
             self.module._g01_v2_quality(self.gate, self.record, session, "g01-lesson",
-                                        metrics, self.pack)
+                                        metrics, self.pack, lesson=True)
 
     def test_a_missing_snapshot_blocks(self) -> None:
         session = self._session(snapshot={})
@@ -390,7 +390,7 @@ class QualityGate(unittest.TestCase):
                    "invalid_attempts": 0, "exploration_rounds": 0}
         with self.assertRaises(self.module.Blocked):
             self.module._g01_v2_quality(self.gate, self.record, session, "g01-lesson",
-                                        metrics, self.pack)
+                                        metrics, self.pack, lesson=True)
 
     def test_a_green_run_before_the_repair_fails(self) -> None:
         session = self._session()
@@ -398,7 +398,7 @@ class QualityGate(unittest.TestCase):
                    "invalid_attempts": 0, "exploration_rounds": 0}
         with self.assertRaises(self.module.Failed):
             self.module._g01_v2_quality(self.gate, self.record, session, "g01-lesson",
-                                        metrics, self.pack)
+                                        metrics, self.pack, lesson=True)
 
     def test_an_answer_without_the_full_triple_fails(self) -> None:
         session = self._session(final_answer="Historically this failed.")
@@ -411,7 +411,7 @@ class QualityGate(unittest.TestCase):
                    "invalid_attempts": 0, "exploration_rounds": 0}
         with self.assertRaises(self.module.Failed):
             self.module._g01_v2_quality(self.gate, self.record, session, "g01-lesson",
-                                        metrics, self.pack)
+                                        metrics, self.pack, lesson=True)
 
 
 class PairPreparation(unittest.TestCase):
@@ -490,6 +490,305 @@ class PairPreparation(unittest.TestCase):
         }), encoding="utf-8")
         with self.assertRaises(SystemExit):
             module.prepare(root, "deadbeef", root / "trees", root, config, prompt)
+
+
+
+class V2EndToEnd(unittest.TestCase):
+    """The whole v2 path over synthetic-but-bound sessions: PASS and FAIL."""
+
+    def setUp(self) -> None:
+        self.module = import_gate_module()
+        self.gate = _real_gate(self, case_id="P4-V2E")
+        self.gate.config = {
+            "g01_version": "v2",
+            "g01_v2_spec_sha256": hashlib.sha256(
+                (REPO_ROOT / "docs" / "p4-g01-v2-spec.md").read_bytes()).hexdigest(),
+            "g01_v2_prompt_sha256": "P" * 64,
+            "g01_v2_prompt_path": "/tmp/g01-session-prompt.txt",
+            "g01_v2_fixture_ref": "R" * 40,
+            "g01_v2_codex_version": "codex 0.159.3",
+            "g01_v2_codex_model": "deepseek",
+        }
+        self.record = self.module.CaseRecord(case_id="P4-G01", verdict="PASS")
+        self.fixed_calc = b"def total(prices, discount):\n    return sum(prices) * (1 - discount / 100)\n"
+        self.fixed_tests = (b"import unittest\n\nfrom calc import total\n\n\n"
+                            b"class TotalTest(unittest.TestCase):\n"
+                            b"    def test_total_applies_discount_as_percent(self):\n"
+                            b"        # NOTES.md: the discount is a percentage of the subtotal.\n"
+                            b"        self.assertAlmostEqual(total([10.0, 20.0], 5.0), 28.5)\n")
+        self.buggy = "def total(prices, discount):\n    return sum(prices) - discount\n"
+        self.memory_id = "mem_" + "M" * 26
+        self.failure_evidence = "evd_" + "F" * 26
+        self.source_task = "tsk_" + "T" * 26
+        self.lesson_answer = (f"Historically this failed ({self.memory_id} "
+                              f"{self.failure_evidence} from {self.source_task}); I verified "
+                              f"the fix on this repository.")
+        self.project = self.gate.seed_project("v2-e2e")
+        self.baseline_pack = {"task_id": self.gate.new_task(self.project, "v2 baseline"),
+                              "memory_selected": []}
+        self.lesson_pack = {"task_id": self.gate.new_task(self.project, "v2 lesson"),
+                            "memory_selected": [{
+            "memory_id": self.memory_id, "memory_type": "FAILURE_LESSON",
+            "source_task_id": self.source_task,
+            "fact": {"evidence_id": self.failure_evidence}}]}
+
+    def _repo(self, label):
+        import tempfile
+        tmp = tempfile.TemporaryDirectory(prefix=f"p4-v2e-{label}-")
+        self.addCleanup(tmp.cleanup)
+        return Path(tmp.name).resolve()
+
+    def _bind(self, task_id, events):
+        for event in events:
+            event["evidence_id"] = self.gate.collect_tool_evidence(
+                task_id, command=event["command"], output=event["output"],
+                exit_code=event.get("exit_code", 0), tool_name=event["tool_name"])
+
+    def _stream(self, label, events):
+        items = []
+        for event in events:
+            if event["kind"] == "shell":
+                items.append({"type": "item.completed", "item": {
+                    "type": "command_execution", "command": event["command"],
+                    "aggregated_output": event["output"], "exit_code": event["exit_code"]}})
+            elif event["kind"] == "file_change":
+                items.append({"type": "item.completed", "item": {
+                    "type": "file_change", "changes": [
+                        {"path": c["path"], "kind": c["kind"]} for c in event["changes"]]}})
+        text = "\n".join(json.dumps(item) for item in items)
+        path = self.gate.root / f"session-{label}.codex.jsonl"
+        path.write_text(text, encoding="utf-8")
+        return text
+
+    def _run_events(self, label, repo):
+        snapshot = {"calc.py": hashlib.sha256(self.fixed_calc).hexdigest(),
+                    "test_calc.py": hashlib.sha256(self.fixed_tests).hexdigest(),
+                    "NOTES.md": "e" * 64, "requirements.txt": "f" * 64}
+        repair = _file_change_event(
+            [("/r/calc.py", "a" * 64, snapshot["calc.py"]),
+             ("/r/test_calc.py", "c" * 64, snapshot["test_calc.py"])],
+            evidence_id="pending")
+        return [
+            _shell_event("ls -la", "calc.py\n"),
+            _shell_event("cat calc.py test_calc.py NOTES.md",
+                         self.buggy + "The discount is in percent, not currency.\n"),
+            _shell_event('rg "total" .', "calc.py:1\n"),
+            _shell_event("cat requirements.txt", "\n"),
+            _shell_event("python -B -m unittest -v", "AssertionError: 25.0 != 27.5",
+                         exit_code=1),
+            repair,
+            _shell_event("python -B -m unittest -v", "Ran 1 test\nOK"),
+        ]
+
+    def _session(self, label, repo, task_id, answer, events, review=None):
+        events = [dict(event) for event in events]
+        self._bind(task_id, events)
+        text = self._stream(label, events)
+        session = {
+            "g01_v2": {"spec_sha256": self.gate.config["g01_v2_spec_sha256"],
+                       "prompt_sha256": self.gate.config["g01_v2_prompt_sha256"],
+                       "fixture_ref": self.gate.config["g01_v2_fixture_ref"],
+                       "codex_version": "codex 0.159.3", "codex_model": "deepseek",
+                       "fixture_repo": str(repo)},
+            "stream_sha256": hashlib.sha256(text.encode()).hexdigest(),
+            "tool_events": events,
+            "snapshot": {"calc.py": hashlib.sha256(self.fixed_calc).hexdigest(),
+                         "test_calc.py": hashlib.sha256(self.fixed_tests).hexdigest(),
+                         "NOTES.md": "e" * 64, "requirements.txt": "f" * 64},
+            "task_completed": True,
+            "final_verification": {"command": "python -B -m unittest -v",
+                                   "output": "Ran 1 test\nOK"},
+            "final_answer": answer,
+            "memory_seen": ([] if label == "g01-baseline" else [{
+                "memory_id": self.memory_id, "evidence_ids": [self.failure_evidence],
+                "source_event_ids": ["evt_" + "S" * 26]}]),
+            "verified": {},
+        }
+        if review is not None:
+            session["semantic_review"] = review
+        return session
+
+    def test_a_pre_registered_pair_decides_and_records_the_metric(self) -> None:
+        baseline_repo, lesson_repo = self._repo("b"), self._repo("l")
+        baseline = self._session("g01-baseline", baseline_repo, self.baseline_pack["task_id"],
+                                 "The discount was subtracted as currency; I fixed it and "
+                                 "the suite is green.", self._run_events("g01-baseline",
+                                                                          baseline_repo))
+        lesson_events = [
+            _shell_event("cat calc.py NOTES.md",
+                         self.buggy + "The discount is in percent, not currency.\n"),
+            _shell_event("python -B -m unittest -v", "AssertionError: 25.0 != 27.5",
+                         exit_code=1),
+            _file_change_event(
+                [("/r/calc.py", "a" * 64, hashlib.sha256(self.fixed_calc).hexdigest()),
+                 ("/r/test_calc.py", "c" * 64, hashlib.sha256(self.fixed_tests).hexdigest())],
+                evidence_id="pending"),
+            _shell_event("python -B -m unittest -v", "Ran 1 test\nOK"),
+        ]
+        review = {"reviewer": "independent reviewer", "verdict": "consistent",
+                  "reviewed_answer_sha256": hashlib.sha256(self.lesson_answer.encode()).hexdigest(),
+                  "findings": f'The answer says "{self.lesson_answer[:40]}" and cites it all.'}
+        lesson = self._session("g01-lesson", lesson_repo, self.lesson_pack["task_id"],
+                               self.lesson_answer, lesson_events, review)
+        self.module._verify_g01_v2(self.gate, self.record, baseline, lesson,
+                                   self.baseline_pack, self.lesson_pack)
+        table = self.record.engine_evidence["g01_v2"]
+        self.assertTrue(table["primary_satisfied"], table)
+        self.assertTrue(table["secondary_satisfied"], table)
+        self.assertEqual(table["baseline"]["primary"], 4)
+        self.assertEqual(table["lesson"]["primary"], 1)
+        self.assertTrue(any(isinstance(receipt, dict) and
+                            receipt.get("kind") == "g01-v2-metric"
+                            for receipt in self.record.receipts))
+
+    def test_an_echo_of_the_anchors_does_not_complete_the_observation_set(self) -> None:
+        events = [
+            _shell_event("echo 'python -B -m unittest' 'AssertionError: 25.0 != 27.5'", ""),
+            _shell_event("echo 'return sum(prices) - discount'", ""),
+            _shell_event("echo 'The discount is in percent, not currency.'", ""),
+            _file_change_event(
+                [("/r/calc.py", "a" * 64, hashlib.sha256(self.fixed_calc).hexdigest())]),
+            _shell_event("python -B -m unittest -v", "Ran 1 test\nOK"),
+        ]
+        metrics = self.module._g01_v2_classify(
+            {"tool_events": events,
+             "snapshot": {"calc.py": hashlib.sha256(self.fixed_calc).hexdigest()}},
+            "the lesson")
+        self.assertFalse(metrics["o_star_complete"])
+        self.assertIsNotNone(metrics["first_repair"])
+
+    def test_an_unknown_native_item_blocks(self) -> None:
+        event = _event("unknown", tool_name="unknown:web_search",
+                       evidence_id="evd_" + "U" * 26, command="unknown:web_search",
+                       output="{}", exit_code=0)
+        with self.assertRaises(self.module.Blocked):
+            self.module._g01_v2_classify({"tool_events": [event]}, "the lesson")
+
+    def test_the_two_sessions_must_name_distinct_worktrees(self) -> None:
+        shared = self._repo("shared")
+        def side(label):
+            text = self._stream(label, [])
+            return {
+                "g01_v2": {"spec_sha256": self.gate.config["g01_v2_spec_sha256"],
+                           "prompt_sha256": self.gate.config["g01_v2_prompt_sha256"],
+                           "fixture_ref": self.gate.config["g01_v2_fixture_ref"],
+                           "codex_version": "codex 0.159.3", "codex_model": "deepseek",
+                           "fixture_repo": str(shared)},
+                "stream_sha256": hashlib.sha256(text.encode()).hexdigest(),
+                "memory_seen": [], "tool_events": [], "verified": {},
+            }
+        with self.assertRaises(self.module.Failed) as caught:
+            self.module._verify_g01_v2(self.gate, self.record, side("g01-baseline"),
+                                       side("g01-lesson"),
+                                       self.baseline_pack, self.lesson_pack)
+        self.assertIn("same worktree", str(caught.exception))
+
+
+class AssemblerEndToEnd(unittest.TestCase):
+    """`p4-memory-g01-session.py` produces a session the v2 Gate can bind."""
+
+    def test_the_assembler_binds_shell_and_file_change_with_real_exit_codes(self) -> None:
+        import os
+        import tempfile
+        gate_module = import_gate_module()
+        tmp = tempfile.TemporaryDirectory(prefix="p4-v2-asm-")
+        self.addCleanup(tmp.cleanup)
+        root = Path(tmp.name)
+        repo = root / "repo"
+        repo.mkdir()
+        (repo / "calc.py").write_bytes(
+            b"def total(prices, discount):\n    return sum(prices) - discount\n")
+        (repo / "test_calc.py").write_bytes(b"expected 27.5\n")
+        (repo / "NOTES.md").write_bytes(b"discount is a percent\n")
+        (repo / "requirements.txt").write_bytes(b"\n")
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=T",
+                        "-c", "user.email=t@example.invalid", "commit", "-qm", "baseline"],
+                       check=True)
+        ref = subprocess.run(["git", "-C", str(repo), "rev-parse", "HEAD"],
+                             capture_output=True, text=True).stdout.strip()
+        hook = b"# hook\n"
+        jasmine = repo / ".codex" / "jasmine"
+        jasmine.mkdir(parents=True)
+        (jasmine / "jasmine-p4-session-start.py").write_bytes(hook)
+
+        work = root / "work"
+        case = work / "P4-G01"
+        case.mkdir(parents=True)
+        config = {"run_id": "p4-asm", "bank_suffix": "p4-asm"}
+        os.environ.setdefault("JASMINE_HINDSIGHT_URL", "http://127.0.0.1:1")
+        gate = gate_module.Gate(work, config, "P4-G01")
+        gate.open()
+        try:
+            project = gate.seed_project("asm")
+            task = gate.new_task(project, "assembler task")
+        finally:
+            gate.close()
+        pack = {"idempotency_key": "g01-with-lesson",
+                "context_pack_id": "ctx_" + "C" * 26,
+                "rendered_sha256": "r" * 64, "task_id": task,
+                "memory_selected": [], "qualified_provenance": []}
+        (case / "pack-ctx.json").write_text(json.dumps(pack), encoding="utf-8")
+
+        thread = "01a110ad-fdda-7220-bb45-867cc9a8c396"
+        (jasmine / f"session-start-{thread}.json").write_text(json.dumps({
+            "session_id": thread, "context_pack_id": pack["context_pack_id"],
+            "pack_sha256": pack["rendered_sha256"],
+            "injected_sha256": pack["rendered_sha256"],
+            "hook_script_sha256": hashlib.sha256(hook).hexdigest(),
+            "source": "startup", "cwd": str(repo),
+            "injected_via": "hookSpecificOutput.additionalContext"}),
+            encoding="utf-8")
+        # The session's work: read, fail, repair via apply_patch, verify green.
+        (repo / "calc.py").write_bytes(
+            b"def total(prices, discount):\n    return sum(prices) * (1 - discount / 100)\n")
+        (repo / "test_calc.py").write_bytes(b"expected 28.5\n")
+        transcript = root / "stream.jsonl"
+        transcript.write_text("\n".join(json.dumps(event) for event in [
+            {"type": "thread.started", "thread_id": thread},
+            {"type": "item.completed", "item": {
+                "type": "command_execution", "command": "cat calc.py NOTES.md",
+                "aggregated_output": "return sum(prices) - discount\npercent\n",
+                "exit_code": 0}},
+            {"type": "item.completed", "item": {
+                "type": "command_execution", "command": "python -B -m unittest -v",
+                "aggregated_output": "Ran 1 test\nAssertionError: 25.0 != 27.5",
+                "exit_code": 1}},
+            {"type": "item.completed", "item": {
+                "type": "file_change", "changes": [
+                    {"path": str(repo / "calc.py"), "kind": "update"},
+                    {"path": str(repo / "test_calc.py"), "kind": "update"}]}},
+            {"type": "item.completed", "item": {
+                "type": "command_execution", "command": "python -B -m unittest -v",
+                "aggregated_output": "Ran 1 test\nOK", "exit_code": 0}},
+        ]), encoding="utf-8")
+        last = root / "last.txt"
+        last.write_text(json.dumps({"final_answer": "The discount was subtracted as "
+                                                  "currency; fixed and verified."}),
+                        encoding="utf-8")
+        (case / "op.json").write_text(json.dumps(config), encoding="utf-8")
+        completed = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "scripts" / "p4-memory-g01-session.py"),
+             "--transcript", str(transcript), "--last", str(last),
+             "--label", "g01-lesson", "--pack-key", "g01-with-lesson",
+             "--work", str(work), "--config", str(case / "op.json"),
+             "--repo", str(repo), "--ref", ref],
+            capture_output=True, text=True,
+            env={**os.environ, "PYTHONPATH": str(SRC)})
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        session = json.loads((case / "session-g01-lesson.json").read_text())
+        self.assertEqual([event["kind"] for event in session["tool_events"]],
+                         ["shell", "shell", "file_change", "shell"])
+        self.assertEqual(session["tool_events"][1]["exit_code"], 1)
+        change = session["tool_events"][2]
+        self.assertIn("file_change:", change["command"])
+        self.assertNotEqual(json.loads(change["output"])[0]["before_sha256"],
+                            json.loads(change["output"])[0]["after_sha256"])
+        self.assertTrue(all(event["evidence_id"] for event in session["tool_events"]))
+        self.assertTrue(session["tool_actions"])
+        self.assertEqual(session["snapshot"]["calc.py"],
+                         hashlib.sha256((repo / "calc.py").read_bytes()).hexdigest())
 
 
 

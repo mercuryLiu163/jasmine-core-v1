@@ -197,15 +197,13 @@ def main() -> int:
             if action["kind"] == "file_change" and action.get("_unattributable"):
                 evidence_ids.append(None)
                 continue
-            if action["kind"] == "file_change" and all(
-                    change.get("no_effect") for change in action["changes"]):
-                # A patch that changed nothing is not a file transition; it is
-                # bound as an ordinary zero-result action so it cannot pretend
-                # to be a repair.
-                pass
             command, output = action_payload(action)
+            # The native exit code is what the Evidence row must carry: the
+            # failing reproduction is an action whose Evidence is a FAIL, and a
+            # hardcoded 0 silently turned it into a PASS and failed the bind.
+            exit_code = int(action.get("exit_code") or 0)
             evidence_ids.append(gate.collect_tool_evidence(
-                pack["task_id"], command=command, output=output, exit_code=0,
+                pack["task_id"], command=command, output=output, exit_code=exit_code,
                 tool_name=action["tool_name"]))
     finally:
         gate.close()
@@ -218,13 +216,10 @@ def main() -> int:
             "tool_name": action["tool_name"],
             "evidence_id": evidence_id,
         }
-        if action["kind"] == "shell":
-            entry["command"], entry["output"] = action_payload(action)
-            entry["exit_code"] = action["exit_code"]
-        elif action["kind"] == "file_change":
+        entry["command"], entry["output"] = action_payload(action)
+        entry["exit_code"] = int(action.get("exit_code") or 0)
+        if action["kind"] == "file_change":
             entry["changes"] = [{k: v for k, v in change.items()} for change in action["changes"]]
-        else:
-            entry["command"], entry["output"] = action_payload(action)
         tool_events.append(entry)
 
     snapshot = {}
@@ -249,6 +244,14 @@ def main() -> int:
     green = [event for event in tool_events
              if event["kind"] == "shell" and "Ran 1 test" in event.get("output", "")
              and "OK" in event.get("output", "")]
+    # The generic session verifier consumes `tool_actions`; the v2 contract
+    # consumes `tool_events`. Both are written from the same bound stream, so a
+    # v2 session cannot pass one and fail the other on a schema difference.
+    tool_actions = [{
+        "command": event["command"], "output": event["output"],
+        "exit_code": event.get("exit_code", 0), "tool_name": event["tool_name"],
+        "evidence_id": event["evidence_id"],
+    } for event in tool_events]
     # Deliberately NOT `session-<label>.transcript.json`: that name is the Gate's
     # sealed copy of the session file itself. The raw Codex stream gets its own
     # name and its own digest field, and the Gate re-extracts it.
@@ -272,6 +275,7 @@ def main() -> int:
         "task_completed": bool(green),
         "final_verification": ({"command": green[-1]["command"], "output": green[-1]["output"]}
                                if green else None),
+        "tool_actions": tool_actions,
         "tool_events": tool_events,
         "unattributed_changes": unattributed,
         "snapshot": snapshot,

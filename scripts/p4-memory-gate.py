@@ -1377,7 +1377,15 @@ class Gate:
         the case directory write-once, so the phase seal and the prior-seal check
         cover it exactly like every other receipt.
         """
-        repo = self.native_session_repo()
+        # Two independent worktrees means two receipt directories; the session's
+        # own provenance names the worktree it ran in, and that is where its
+        # receipt must be found. The config's single repository is only a
+        # fallback for the single-repo v1 runs.
+        session_repo = None
+        provenance = session.get("g01_v2")
+        if isinstance(provenance, dict) and isinstance(provenance.get("fixture_repo"), str):
+            session_repo = Path(provenance["fixture_repo"])
+        repo = session_repo or self.native_session_repo()
         if repo is None:
             raise Failed(
                 f"require_native_session_start is set for {label}, but neither "
@@ -1786,7 +1794,7 @@ class Gate:
                 (task_id, tool_name, command_sha256, output_sha256)).fetchone()
             if reused is not None:
                 return reused["evidence_id"]
-            seed = f"{self.case_id}|{task_id}|{command}|{output_sha256}"
+            seed = f"{self.case_id}|{task_id}|{command}|{output_sha256}|{tool_name}"
             turn_id = "t-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:8]
             tool_use_id = hashlib.sha256(f"{seed}|tool".encode("utf-8")).hexdigest()[:8]
             stored = EvidenceStore(conn, schema_version=SCHEMA_VERSION).record_tool_result(
@@ -2465,11 +2473,13 @@ def _g01_v2_require_frozen(gate: Gate, session: dict[str, Any], label: str) -> N
                      f"{str(provenance.get('spec_sha256'))[:12]}, this run freezes "
                      f"{declared[:12]}")
     prompt_sha = config.get("g01_v2_prompt_sha256")
-    if isinstance(prompt_sha, str) and prompt_sha:
-        if provenance.get("prompt_sha256") != prompt_sha:
-            raise Failed(f"{label} was run against a prompt hashing to "
-                         f"{str(provenance.get('prompt_sha256'))[:12]}, the frozen "
-                         f"prompt hashes to {prompt_sha[:12]}")
+    if not isinstance(prompt_sha, str) or not prompt_sha:
+        raise Blocked("the config carries no g01_v2_prompt_sha256; the frozen prompt "
+                      "must be named before a v2 run")
+    if provenance.get("prompt_sha256") != prompt_sha:
+        raise Failed(f"{label} was run against a prompt hashing to "
+                     f"{str(provenance.get('prompt_sha256'))[:12]}, the frozen "
+                     f"prompt hashes to {prompt_sha[:12]}")
     fixture_ref = config.get("g01_v2_fixture_ref")
     if not isinstance(fixture_ref, str) or not fixture_ref:
         raise Blocked("the config carries no g01_v2_fixture_ref")
@@ -2481,6 +2491,30 @@ def _g01_v2_require_frozen(gate: Gate, session: dict[str, Any], label: str) -> N
         if not isinstance(value, str) or not value:
             raise Blocked(f"the config carries no g01_v2_{key} to record in the "
                           f"manifest")
+
+
+def _g01_v2_prompt_text(gate: Gate) -> str:
+    """The frozen session prompt, read and hash-checked before it is asked.
+
+    The prompt the agent actually receives must be the frozen bytes, not a
+    constant this module happens to carry: v2 pins the full 2003-byte session
+    prompt, and the same text is written as the Task's user.prompt event, so the
+    existing prompt-equality and prompt-hash checks bind the file.
+    """
+    path = gate.config.get("g01_v2_prompt_path")
+    if not isinstance(path, str) or not path:
+        raise Blocked("the config carries no g01_v2_prompt_path; the v2 prompt is a "
+                      "frozen input, not a value the Gate invents")
+    source = Path(path)
+    if not source.is_file():
+        raise Blocked(f"the frozen prompt {source} is not readable")
+    text = source.read_text(encoding="utf-8")
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    frozen = gate.config.get("g01_v2_prompt_sha256")
+    if digest != frozen:
+        raise Failed(f"the prompt at {source} hashes to {digest[:12]}, the config "
+                     f"froze {str(frozen)[:12]}")
+    return text
 
 
 def _g01_v2_stream(gate: Gate, record: CaseRecord, session: dict[str, Any],
@@ -2511,6 +2545,14 @@ def _g01_v2_stream(gate: Gate, record: CaseRecord, session: dict[str, Any],
             if transcript_paths != session_paths:
                 raise Failed(f"file-change action {index} names files the transcript "
                              f"does not: {session_paths} against {transcript_paths}")
+            try:
+                recorded = json.loads(event.get("output") or "[]")
+            except ValueError:
+                raise Failed(f"file-change action {index} carries no readable "
+                             f"transition payload")
+            if [(c.get("path"), c.get("kind")) for c in recorded] != session_paths:
+                raise Failed(f"file-change action {index} records transitions for files "
+                             f"its Evidence payload does not name")
         else:
             command, output = action_payload(action)
             if command != event.get("command") or output != event.get("output"):
@@ -2540,11 +2582,20 @@ def _g01_v2_bind(gate: Gate, record: CaseRecord, session: dict[str, Any],
                 raise Blocked(
                     f"{label} tool action {index} ({event.get('tool_name')!r}) carries no "
                     f"Core Evidence: an unbound action cannot enter the metric")
+            if event.get("kind") == "unknown":
+                raise Blocked(
+                    f"{label} action {index} is a native item type this Gate does not "
+                    f"know ({event.get('tool_name')!r}); an unknown action cannot be "
+                    f"classified and must block rather than be dropped")
             if event.get("kind") == "file_change":
                 row = conn.execute(
                     "SELECT task_id, tool_name FROM evidence WHERE evidence_id=?",
                     (evidence_id,)).fetchone()
-                if row is None or row["task_id"] != task_id or row["tool_name"] != "file_change":
+                if row is None:
+                    raise Blocked(
+                        f"{label} file-change action {index} cites Evidence "
+                        f"{evidence_id!r}, which Core does not hold")
+                if row["task_id"] != task_id or row["tool_name"] != "file_change":
                     raise Failed(
                         f"{label} file-change action {index} claims Evidence "
                         f"{evidence_id!r}, which is not a file-change row on this task")
@@ -2565,9 +2616,25 @@ def _g01_v2_bind(gate: Gate, record: CaseRecord, session: dict[str, Any],
         conn.close()
 
 
+def _g01_v2_reads(event: dict[str, Any], name: str) -> bool:
+    """Whether the action's captured bytes are a read of `name`."""
+    if event.get("kind") == "shell":
+        command = event.get("command") or ""
+        if not G01_V2_SHELL_READ.search(command):
+            return False
+        return re.search(r"(?<![\w.])" + re.escape(name) + r"(?![\w.])",
+                         command) is not None
+    if event.get("kind") == "mcp":
+        return name in (event.get("output") or "")
+    return False
+
+
 def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
     """The frozen classification and metric, computed from the bound event stream."""
     events = session.get("tool_events") or []
+    if any(event.get("kind") == "unknown" for event in events):
+        raise Blocked(f"{label} carries a native tool item type this Gate does not know; "
+                      f"the metric is not computed over work it cannot see")
     effective: list[int] = []
     for index, event in enumerate(events):
         if event.get("kind") != "file_change":
@@ -2609,9 +2676,14 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
                 and G01_V2_SUITE.search(event.get("command") or "")
                 and G01_V2_ASSERTION in output):
             reproduced = index
-        if buggy is None and G01_V2_BUGGY_LINE.search(output):
+        # The anchors are reads of the actual files: an `echo` of the buggy line
+        # is not the observation of calc.py's pre-repair bytes, and a repair
+        # payload can never satisfy them because repair actions are excluded.
+        if (buggy is None and _g01_v2_reads(event, "calc.py")
+                and G01_V2_BUGGY_LINE.search(output)):
             buggy = index
-        if rule is None and G01_V2_RULE_LINE in output:
+        if (rule is None and _g01_v2_reads(event, "NOTES.md")
+                and G01_V2_RULE_LINE in output):
             rule = index
     complete = reproduced is not None and buggy is not None and rule is not None
     epoch = max(reproduced, buggy, rule) if complete else len(events)
@@ -2630,8 +2702,11 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
             rounds += 1
             in_round = True
         command = events[index].get("command") or ""
+        if events[index].get("kind") == "mcp":
+            command = events[index].get("output") or ""
         for candidate in G01_V2_FILES:
-            if candidate in command:
+            # Exact file tokens: "calc.py" must not match inside "test_calc.py".
+            if re.search(r"(?<![\w.])" + re.escape(candidate) + r"(?![\w.])", command):
                 if candidate in seen:
                     repeated += 1
                 else:
@@ -2640,8 +2715,12 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
     for index in effective:
         changes = json.loads(events[index].get("output") or "[]")
         for change in changes:
+            # A change that changed nothing is an edit that did not enter the
+            # diff at all; a change whose end state is not the final snapshot is
+            # an edit that was superseded. Either is an invalid attempt.
             if change.get("before_sha256") == change.get("after_sha256"):
-                continue
+                invalid += 1
+                break
             name = Path(str(change.get("path") or "")).name
             if snapshot.get(name) != change.get("after_sha256"):
                 invalid += 1
@@ -2658,11 +2737,15 @@ def _g01_v2_classify(session: dict[str, Any], label: str) -> dict[str, Any]:
         "invalid_attempts": invalid,
         "exploration_rounds": rounds,
         "tool_events": len(events),
+        "elapsed_seconds": None,
+        "elapsed_basis": "the Codex stream carries no per-action timestamps; recorded "
+                         "only, never judged",
     }
 
 
 def _g01_v2_quality(gate: Gate, record: CaseRecord, session: dict[str, Any],
-                    label: str, metrics: dict[str, Any], pack: dict[str, Any]) -> None:
+                    label: str, metrics: dict[str, Any], pack: dict[str, Any], *,
+                    lesson: bool) -> None:
     """The unchanged quality gate, with the v2 additions. Missing evidence blocks."""
     snapshot = session.get("snapshot")
     if not isinstance(snapshot, dict) or not snapshot:
@@ -2682,34 +2765,51 @@ def _g01_v2_quality(gate: Gate, record: CaseRecord, session: dict[str, Any],
                      f"verification could follow it")
     green_after = [index for index, event in enumerate(session.get("tool_events") or [])
                    if index > metrics["first_repair"] and event.get("kind") == "shell"
+                   and G01_V2_SUITE.search(event.get("command") or "")
                    and "Ran 1 test" in (event.get("output") or "")
                    and "OK" in (event.get("output") or "")]
     if not green_after:
         raise Failed(f"{label}'s green run does not follow its first repair: a green "
                      f"run before the repair does not verify the repair, and a session "
                      f"that skips its own verification is not cheaper, it is unfinished")
-    answer = session.get("final_answer") or ""
-    carried = (pack.get("memory_selected") or [{}])[0]
-    failure_evidence = (carried.get("fact") or {}).get("evidence_id")
-    if not isinstance(failure_evidence, str) or not failure_evidence:
-        failure_evidence = (carried.get("evidence_ids") or [""])[0]
-    triple = (carried.get("memory_id"), failure_evidence,
-              carried.get("source_task_id"))
-    if not all(isinstance(value, str) and value and value in answer for value in triple):
-        raise Failed(
-            f"{label}'s answer does not cite the full provenance triple "
-            f"(memory id, failure Evidence id, source Task id) {triple}: the lesson "
-            f"has to reach what it says")
-    if not any(marker in answer.lower() for marker in
-               ("histor", "previously", "last time", "earlier", "before", "prior")):
-        raise Failed(f"{label}'s answer does not mark the recalled lesson as historical: "
-                     f"{answer[:300]!r}")
-    session["verified"]["semantic_review"] = gate.semantic_review(session, f"the {label} session")
+    # Bind every repair's end state to the final snapshot the byte-exact check
+    # reads: the transitions and the snapshot are separate claims until this
+    # equality makes them one.
+    for index in metrics.get("effective", []):
+        event = (session.get("tool_events") or [])[index]
+        for change in json.loads(event.get("output") or "[]"):
+            name = Path(str(change.get("path") or "")).name
+            if change.get("before_sha256") != change.get("after_sha256") \
+                    and snapshot.get(name) != change.get("after_sha256"):
+                raise Failed(
+                    f"{label} records a transition on {name} ending at "
+                    f"{str(change.get('after_sha256'))[:12]}, the final snapshot is "
+                    f"{str(snapshot.get(name))[:12]}: the repair and the workspace "
+                    f"disagree")
+    if lesson:
+        answer = session.get("final_answer") or ""
+        carried = (pack.get("memory_selected") or [{}])[0]
+        failure_evidence = (carried.get("fact") or {}).get("evidence_id")
+        if not isinstance(failure_evidence, str) or not failure_evidence:
+            failure_evidence = (carried.get("evidence_ids") or [""])[0]
+        triple = (carried.get("memory_id"), failure_evidence,
+                  carried.get("source_task_id"))
+        if not all(isinstance(value, str) and value and value in answer for value in triple):
+            raise Failed(
+                f"{label}'s answer does not cite the full provenance triple "
+                f"(memory id, failure Evidence id, source Task id) {triple}: the lesson "
+                f"has to reach what it says")
+        if not any(marker in answer.lower() for marker in
+                   ("histor", "previously", "last time", "earlier", "before", "prior")):
+            raise Failed(f"{label}'s answer does not mark the recalled lesson as "
+                         f"historical: {answer[:300]!r}")
+        session["verified"]["semantic_review"] = gate.semantic_review(
+            session, f"the {label} session")
     gate.seal_session_artifacts(record, session)
-    record.receipts.append(gate.receipt(
-        f"g01-v2-quality-{label}",
-        {**session["verified"]["completion"], **metrics,
-         "semantic_review": session["verified"]["semantic_review"]}))
+    payload = {**session["verified"]["completion"], **metrics}
+    if "semantic_review" in session["verified"]:
+        payload["semantic_review"] = session["verified"]["semantic_review"]
+    record.receipts.append(gate.receipt(f"g01-v2-quality-{label}", payload))
 
 
 def _g01_v2_verdict(baseline: dict[str, Any], lesson: dict[str, Any]) -> dict[str, Any]:
@@ -2739,10 +2839,24 @@ def _verify_g01_v2(gate: Gate, record: CaseRecord, baseline: dict[str, Any],
         _g01_v2_require_frozen(gate, side, label)
         _g01_v2_stream(gate, record, side, label)
         _g01_v2_bind(gate, record, side, label, side_pack["task_id"])
+    baseline_repo = (baseline.get("g01_v2") or {}).get("fixture_repo")
+    lesson_repo = (session.get("g01_v2") or {}).get("fixture_repo")
+    if not isinstance(baseline_repo, str) or not isinstance(lesson_repo, str) \
+            or not baseline_repo or not lesson_repo:
+        raise Blocked("the sessions do not name the worktrees they ran in")
+    if Path(baseline_repo).resolve() == Path(lesson_repo).resolve():
+        raise Failed(f"both sessions ran in the same worktree ({baseline_repo}), so the "
+                     f"baseline's final state was never captured independently of the "
+                     f"lesson's")
+    if baseline.get("memory_seen") not in (None, []):
+        raise Failed(f"the baseline session claims to have seen memory "
+                     f"{baseline.get('memory_seen')!r} while its pack carried none")
     baseline_metrics = _g01_v2_classify(baseline, "g01-baseline")
     lesson_metrics = _g01_v2_classify(session, "g01-lesson")
-    _g01_v2_quality(gate, record, baseline, "g01-baseline", baseline_metrics, baseline_pack)
-    _g01_v2_quality(gate, record, session, "g01-lesson", lesson_metrics, pack)
+    baseline_metrics["effective"] = [index for index, name in
+                                     enumerate(baseline_metrics["classes"]) if name == "R"]
+    lesson_metrics["effective"] = [index for index, name in
+                                   enumerate(lesson_metrics["classes"]) if name == "R"]
     verdict = _g01_v2_verdict(baseline_metrics, lesson_metrics)
     if verdict["unmeasurable"]:
         raise Failed(
@@ -2767,6 +2881,10 @@ def _verify_g01_v2(gate: Gate, record: CaseRecord, baseline: dict[str, Any],
     }
     record.engine_evidence["g01_v2"] = table
     record.receipts.append(gate.receipt("g01-v2-metric", table))
+    _g01_v2_quality(gate, record, baseline, "g01-baseline", baseline_metrics,
+                    baseline_pack, lesson=False)
+    _g01_v2_quality(gate, record, session, "g01-lesson", lesson_metrics, pack,
+                    lesson=True)
     check(secondary_ok,
           f"the lesson side regressed on a secondary metric: repeated reads "
           f"{lesson_metrics['repeated_reads']} vs {baseline_metrics['repeated_reads']}, "

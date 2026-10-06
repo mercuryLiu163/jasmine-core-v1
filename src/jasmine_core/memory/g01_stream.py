@@ -12,9 +12,12 @@ import json
 from typing import Any
 
 #: Item types in the `codex exec --json` stream that are tool actions. Everything
-#: else (`agent_message`, `reasoning`, usage events) is not an action and never
-#: enters the metric.
+#: else (`agent_message`, `reasoning`) is not an action and never enters the
+#: metric; any other completed item is an *unknown* action, which the Gate
+#: refuses rather than counting nothing: a future Codex build that records new
+#: tool work must block the run, not silently undercount it.
 ACTION_ITEM_TYPES = ("command_execution", "file_change", "mcp_tool_call")
+NON_ACTION_ITEM_TYPES = ("agent_message", "reasoning")
 
 
 def _canonical(value: Any) -> str:
@@ -73,8 +76,12 @@ def extract_actions(text: str) -> list[dict[str, Any]]:
                 "tool_name": f"mcp:{tool}",
                 "payload": item,
             })
-        # Unknown item types are not actions. They are not silently merged into
-        # the stream either: they simply carry no tool work.
+        elif item_type not in NON_ACTION_ITEM_TYPES:
+            actions.append({
+                "kind": "unknown",
+                "tool_name": f"unknown:{item_type}",
+                "payload": item,
+            })
     return actions
 
 
@@ -109,4 +116,6 @@ def action_payload(action: dict[str, Any]) -> tuple[str, str]:
         return command, _canonical(body)
     if kind == "mcp":
         return str(action.get("tool_name") or "mcp"), _canonical(action.get("payload"))
+    if kind == "unknown":
+        return str(action.get("tool_name") or "unknown"), _canonical(action.get("payload"))
     raise ValueError(f"unknown action kind {kind!r}")
