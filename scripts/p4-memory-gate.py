@@ -1230,6 +1230,28 @@ class Gate:
                 return Path(candidate)
         return None
 
+    def native_session_start_cases(self) -> set[str]:
+        """Which cases' session receipts must carry a native SessionStart binding.
+
+        `require_native_session_start` is the master switch; the scope defaults to
+        the one case whose controlled experiment the native mechanism was built
+        for. The other cases' sessions answer a question from an injected pack and
+        do no repository work, so demanding a Codex session and a staged injection
+        per case would multiply the run without adding evidence about Memory. A
+        deployment that wants the requirement elsewhere names the cases in
+        `native_session_start_cases`.
+        """
+        if not self.config.get("require_native_session_start"):
+            return set()
+        configured = self.config.get("native_session_start_cases")
+        if configured is None:
+            return {"P4-G01"}
+        if (not isinstance(configured, list)
+                or not all(isinstance(v, str) and v for v in configured)):
+            raise Failed("native_session_start_cases must be a list of non-empty case "
+                         "ids, or absent to default to P4-G01")
+        return set(configured)
+
     def stage_native_injection(self, pack: dict[str, Any]) -> dict[str, Any]:
         """Write the exact pack bytes and the pointer the native hook reads.
 
@@ -1660,7 +1682,7 @@ class Gate:
         if problems:
             raise Failed("the agent session receipt does not stand up: " + "; ".join(problems))
         native_receipt = None
-        if self.config.get("require_native_session_start"):
+        if self.case_id in self.native_session_start_cases():
             native_receipt = self._verify_native_session_start(pack, label, session,
                                                                recomputed)
         # The sealed bytes are receipts too, so they land in the seal with everything
@@ -5498,6 +5520,8 @@ def main() -> int:
         },
         "native_session_start": {
             "required": bool(config.get("require_native_session_start")),
+            "scope": (sorted(config.get("native_session_start_cases") or ["P4-G01"])
+                      if config.get("require_native_session_start") else []),
             "attestation":
                 "operator asserts the native SessionStart receipts were produced by "
                 "Codex firing the installed hook. The Gate verifies the installed "

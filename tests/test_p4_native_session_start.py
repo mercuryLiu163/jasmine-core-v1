@@ -719,6 +719,32 @@ class NativeSessionStartVerification(unittest.TestCase):
         self.assertIn(native["path"],
                       [artifact["path"] for artifact in verified["verified"]["sealed"]])
 
+    def test_the_native_requirement_is_scoped_to_the_configured_cases(self):
+        # The native mechanism was built for G01's controlled experiment; a global
+        # flag would demand a Codex session and a staged injection from every
+        # answer-only session too. The default scope is G01, a deployment can name
+        # others, and the flag off means no scope at all.
+        self.gate.config["require_native_session_start"] = True
+        self.gate.config.pop("native_session_start_cases", None)
+        self.assertEqual(self.gate.native_session_start_cases(), {"P4-G01"})
+        self.gate.config["native_session_start_cases"] = ["P4-G02"]
+        self.assertEqual(self.gate.native_session_start_cases(), {"P4-G02"})
+        self.gate.config["native_session_start_cases"] = "P4-G02"
+        with self.assertRaises(self.module.Failed):
+            self.gate.native_session_start_cases()
+        self.gate.config["require_native_session_start"] = False
+        self.gate.config["native_session_start_cases"] = ["P4-G02"]
+        self.assertEqual(self.gate.native_session_start_cases(), set())
+
+    def test_a_case_outside_the_scope_needs_no_native_receipt(self):
+        self.gate.config["require_native_session_start"] = True
+        self.gate.config["native_session_start_cases"] = ["P4-G02"]
+        self.gate.session_path("t1").write_text(
+            json.dumps(self._session(), ensure_ascii=False), encoding="utf-8")
+        verified = self.gate.verify_session(self._pack(), "t1",
+                                            require_tool_actions=False)
+        self.assertIsNone(verified["verified"]["native_session_start"])
+
     def test_the_flag_off_keeps_the_old_contract(self):
         self.gate.config["require_native_session_start"] = False
         self.directory.joinpath("session-start-native-session-1.json").unlink(
