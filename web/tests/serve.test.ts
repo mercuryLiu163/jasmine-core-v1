@@ -13,7 +13,9 @@
  */
 
 import { createServer } from 'node:http'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { connect } from 'node:net'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
@@ -85,7 +87,7 @@ function rawRequest(port: number, target: string, method = 'GET'): Promise<RawRe
 describe('classifyRequestTarget', () => {
   it('accepts origin-form paths and separates API from static', () => {
     expect(classifyRequestTarget('/v1/interpretations').kind).toBe('api')
-    expect(classifyRequestTarget('/v1/interpretations/int_1?limit=5').kind).toBe('api')
+    expect(classifyRequestTarget('/v1/interpretations/int_01M4B6VGC29ESRDRQR62DX8AK8?limit=5').kind).toBe('api')
     expect(classifyRequestTarget('/').kind).toBe('static')
     expect(classifyRequestTarget('/assets/index.js').kind).toBe('static')
   })
@@ -107,12 +109,20 @@ describe('classifyRequestTarget', () => {
 describe('dashboard host request targets', () => {
   let server: ReturnType<typeof createDashboardServer>
   let port = 0
+  let root = ''
+  const SHELL = '<!doctype html><html><body>static shell</body></html>'
 
   beforeAll(async () => {
+    // The static root is created here rather than pointing at `web/dist`. Rooting
+    // it at the real build output made this suite depend on `vite build` having
+    // run first: with no `dist`, `GET /` answered 404 and the suite failed for a
+    // reason that had nothing to do with the code under test.
+    root = await mkdtemp(join(tmpdir(), 'p6-serve-'))
+    await writeFile(join(root, 'index.html'), SHELL)
     // An unreachable Core is fine: every assertion here is about refusal *by the
     // host*, before anything is forwarded.
     server = createDashboardServer({
-      root: join(process.cwd(), 'dist'),
+      root,
       origin: new URL('http://127.0.0.1:1'),
       allowlist: loadAllowlist(join(process.cwd(), 'server')),
     })
@@ -122,6 +132,7 @@ describe('dashboard host request targets', () => {
 
   afterAll(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()))
+    await rm(root, { recursive: true, force: true })
   })
 
   it('refuses a protocol-relative target instead of serving the shell', async () => {
@@ -148,7 +159,7 @@ describe('dashboard host request targets', () => {
     // The probe Core is at 127.0.0.1:1 (nothing listening), so a *forwarded*
     // request answers 502 proxy_core_unreachable while a refused one answers 404
     // proxy_path_not_allowed. That difference is the assertion.
-    const allowed = await rawRequest(port, '/v1/interpretations/int_1/correct', 'POST')
+    const allowed = await rawRequest(port, '/v1/interpretations/int_01M4B6VGC29ESRDRQR62DX8AK8/correct', 'POST')
     expect(allowed.status).toBe(502)
     expect(allowed.body).toContain('proxy_core_unreachable')
 
@@ -156,7 +167,7 @@ describe('dashboard host request targets', () => {
     expect(refused.status).toBe(404)
     expect(refused.body).toContain('proxy_path_not_allowed')
 
-    const wrongVerb = await rawRequest(port, '/v1/interpretations/int_1/correct', 'PUT')
+    const wrongVerb = await rawRequest(port, '/v1/interpretations/int_01M4B6VGC29ESRDRQR62DX8AK8/correct', 'PUT')
     expect(wrongVerb.status).toBe(404)
     expect(wrongVerb.body).toContain('proxy_path_not_allowed')
   })
@@ -165,6 +176,15 @@ describe('dashboard host request targets', () => {
     const reply = await rawRequest(port, '/')
     expect(reply.status).toBe(200)
     expect(reply.contentType).toContain('text/html')
+    expect(reply.body).toContain('static shell')
+  })
+
+  it('does not need a prior `vite build` to serve the shell it owns', async () => {
+    // Guards the defect this suite was fixed for: the static root must be the one
+    // the test created, not `web/dist`. If someone points it back at the build
+    // output, this fails on a clean checkout instead of only sometimes.
+    expect(root).not.toContain(`${join('web', 'dist')}`)
+    expect(root.startsWith(tmpdir())).toBe(true)
   })
 })
 
@@ -208,16 +228,16 @@ describe('proxy forwards a write body intact', () => {
   })
 
   it('delivers the JSON body and a Content-Length to Core', async () => {
-    const payload = JSON.stringify({ host_id: 'hst_1', reason: 'r', expected_revision: 1 })
+    const payload = JSON.stringify({ host_id: 'hst_01M4B6VGC29ESRDRQR62DX8AK8', reason: 'r', expected_revision: 1 })
     const reply = await rawRequestWithBody(
       dashboardPort,
-      '/v1/interpretations/int_1/reject',
+      '/v1/interpretations/int_01M4B6VGC29ESRDRQR62DX8AK8/reject',
       'POST',
       payload,
     )
     expect(reply.status).toBe(200)
     expect(seen).toHaveLength(1)
-    expect(seen[0]?.url).toBe('/v1/interpretations/int_1/reject')
+    expect(seen[0]?.url).toBe('/v1/interpretations/int_01M4B6VGC29ESRDRQR62DX8AK8/reject')
     expect(seen[0]?.contentType).toContain('application/json')
     expect(seen[0]?.contentLength).toBe(String(Buffer.byteLength(payload)))
     expect(JSON.parse(seen[0]?.body ?? '{}')).toMatchObject({ reason: 'r', expected_revision: 1 })

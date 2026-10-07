@@ -30,7 +30,14 @@ ALLOWLIST_PATH = ROOT / "web" / "server" / "core-paths.json"
 #: Admin/key surfaces the browser proxy must never forward, whatever a token holds.
 FORBIDDEN_PREFIXES = ("/v1/auth/", "/v1/audit")
 #: The synthetic value substituted for a captured segment in a Core pattern.
-SAMPLE = "sample"
+#: Every captured segment in Core's route table is a public id, so this is a
+#: well-formed id of Core's own shape (ADR 0001: ``<prefix>_`` + 26 Crockford
+#: base32 characters). A word like ``sample`` would not be a path the dashboard
+#: could ever produce, and would stop the allowlist from being checked against
+#: the shape it actually uses.
+SAMPLE = "abc_01M4B6VGC29ESRDRQR62DX8AK8"
+#: Core's own id shape, as the allowlist spells it.
+ID_RE = r"[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}"
 
 
 def sample_path(pattern: re.Pattern[str]) -> str | None:
@@ -72,6 +79,73 @@ class DashboardProxyContract(unittest.TestCase):
             self.assertIsNotNone(candidate, f"cannot derive a sample for {route.pattern.pattern}")
             samples.append(candidate)
         return samples
+
+    def test_read_allowlist_only_names_real_get_routes(self) -> None:
+        """The GET allowlist must not admit a path Core only answers for POST.
+
+        `test_every_allowlisted_path_exists_in_core` accepts a match against *any*
+        method, so it cannot see this: the loose `[A-Za-z0-9_]+` id patterns also
+        matched POST-only literals, and `GET /v1/rules/proposals` was forwarded to
+        Core (which answered 400 `rule_id must be a rul_ id`) instead of being
+        refused by the proxy. Ids use Core's real shape, so those words cannot
+        match, and every remaining GET pattern must correspond to a real GET route.
+        """
+        by_method = self.core_samples_by_method()
+        get_samples = [p for method, p in by_method if method == "GET"]
+        # A path that exists as both GET and POST is legitimately matched by a GET
+        # pattern; only a path with *no* GET route is evidence of over-broadness.
+        post_only = [p for method, p in by_method
+                     if method != "GET" and p not in get_samples]
+        for pattern in self.allowed:
+            with self.subTest(pattern=pattern.pattern):
+                self.assertTrue(
+                    any(pattern.fullmatch(sample) for sample in get_samples),
+                    f"GET pattern {pattern.pattern!r} matches no real GET route",
+                )
+                over_broad = [sample for sample in post_only if pattern.fullmatch(sample)]
+                self.assertFalse(
+                    over_broad,
+                    f"GET pattern {pattern.pattern!r} also matches non-GET route(s) "
+                    f"{over_broad}, so the proxy would forward them",
+                )
+
+    def test_allowlists_are_exactly_the_frozen_shapes(self) -> None:
+        """Silent widening is the failure mode, so pin both sets exactly."""
+        self.assertEqual(
+            self.allowlist["paths"],
+            [
+                "^/v1/health$", "^/v1/meta/schema$", "^/v1/hosts$", "^/v1/actors$",
+                "^/v1/projects$", f"^/v1/projects/{ID_RE}$",
+                "^/v1/tasks$", f"^/v1/tasks/{ID_RE}$",
+                f"^/v1/tasks/{ID_RE}/(steps|history|evidence)$",
+                "^/v1/sessions$", f"^/v1/sessions/{ID_RE}$",
+                f"^/v1/steps/{ID_RE}$", f"^/v1/steps/{ID_RE}/history$",
+                "^/v1/events$", f"^/v1/events/{ID_RE}$",
+                "^/v1/rules/active$",
+                f"^/v1/rules/{ID_RE}$", f"^/v1/rules/{ID_RE}/history$",
+                f"^/v1/evidence/{ID_RE}$",
+                "^/v1/interpretations$", f"^/v1/interpretations/{ID_RE}$",
+                "^/v1/reviews/pending$", f"^/v1/reviews/{ID_RE}$",
+                "^/v1/resolutions/preview$", f"^/v1/resolutions/{ID_RE}$",
+            ],
+        )
+        self.assertEqual(
+            self.allowlist["write_paths"],
+            [
+                f"^/v1/interpretations/{ID_RE}/(correct|reject|rerun)$",
+                f"^/v1/reviews/{ID_RE}/(approve|reject)$",
+                "^/v1/rules/proposals$",
+                f"^/v1/rules/{ID_RE}/(approve|supersede|retire)$",
+            ],
+        )
+
+    def core_samples_by_method(self) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = []
+        for route in ROUTES:
+            candidate = sample_path(route.pattern)
+            self.assertIsNotNone(candidate, f"cannot derive a sample for {route.pattern.pattern}")
+            out.append((route.method, candidate))
+        return out
 
     def test_every_allowlisted_path_exists_in_core(self) -> None:
         samples = self.core_samples()
@@ -128,8 +202,8 @@ class DashboardProxyContract(unittest.TestCase):
         # The endpoints deliberately NOT opened in this slice.
         for path in (
             "/v1/evidence/confirm",
-            "/v1/resolutions/res_x/manual-reapply",
-            "/v1/resolve/int_x",
+            "/v1/resolutions/res_01M4B6VGC29ESRDRQR62DX8AK8/manual-reapply",
+            "/v1/resolve/int_01M4B6VGC29ESRDRQR62DX8AK8",
             "/v1/tool-results",
             "/v1/workspace/fingerprint",
         ):
@@ -147,29 +221,29 @@ class DashboardProxyContract(unittest.TestCase):
             "/v1/hosts",
             "/v1/actors",
             "/v1/projects",
-            "/v1/projects/prj_x",
+            "/v1/projects/prj_01M4B6VGC29ESRDRQR62DX8AK8",
             "/v1/tasks",
-            "/v1/tasks/tsk_x",
-            "/v1/tasks/tsk_x/steps",
-            "/v1/tasks/tsk_x/history",
-            "/v1/tasks/tsk_x/evidence",
-            "/v1/steps/stp_x",
-            "/v1/steps/stp_x/history",
+            "/v1/tasks/tsk_01M4B6VGC29ESRDRQR62DX8AK8",
+            "/v1/tasks/tsk_01M4B6VGC29ESRDRQR62DX8AK8/steps",
+            "/v1/tasks/tsk_01M4B6VGC29ESRDRQR62DX8AK8/history",
+            "/v1/tasks/tsk_01M4B6VGC29ESRDRQR62DX8AK8/evidence",
+            "/v1/steps/stp_01M4B6VGC29ESRDRQR62DX8AK8",
+            "/v1/steps/stp_01M4B6VGC29ESRDRQR62DX8AK8/history",
             "/v1/sessions",
-            "/v1/sessions/ses_x",
+            "/v1/sessions/ses_01M4B6VGC29ESRDRQR62DX8AK8",
             "/v1/events",
-            "/v1/events/evt_x",
+            "/v1/events/evt_01M4B6VGC29ESRDRQR62DX8AK8",
             "/v1/rules/active",
-            "/v1/rules/rul_x",
-            "/v1/rules/rul_x/history",
-            "/v1/evidence/evd_x",
+            "/v1/rules/rul_01M4B6VGC29ESRDRQR62DX8AK8",
+            "/v1/rules/rul_01M4B6VGC29ESRDRQR62DX8AK8/history",
+            "/v1/evidence/evd_01M4B6VGC29ESRDRQR62DX8AK8",
             # P6-02 read slice: the real P2 collection/detail paths.
             "/v1/interpretations",
-            "/v1/interpretations/int_x",
+            "/v1/interpretations/int_01M4B6VGC29ESRDRQR62DX8AK8",
             "/v1/reviews/pending",
-            "/v1/reviews/rvw_x",
+            "/v1/reviews/rvw_01M4B6VGC29ESRDRQR62DX8AK8",
             "/v1/resolutions/preview",
-            "/v1/resolutions/res_x",
+            "/v1/resolutions/res_01M4B6VGC29ESRDRQR62DX8AK8",
         ]
         for path in needed:
             self.assertTrue(

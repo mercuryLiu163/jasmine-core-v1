@@ -393,9 +393,13 @@ def main(argv: list[str] | None = None) -> int:
 
     tests = ""
     if not args.skip_tests:
+        # Build first, then typecheck, then test. An independent validator found the
+        # old order (vitest before vite build) failed its own block on a clean
+        # checkout, because a test depended on `web/dist`. That dependency is gone,
+        # but the artefact under test should still exist before it is declared good.
+        tests += run([str(WEB / "node_modules" / ".bin" / "vite"), "build"], WEB)
         tests += run([str(WEB / "node_modules" / ".bin" / "tsc"), "--noEmit", "--pretty", "false"], WEB)
         tests += run([str(WEB / "node_modules" / ".bin" / "vitest"), "run"], WEB)
-        tests += run([str(WEB / "node_modules" / ".bin" / "vite"), "build"], WEB)
         (out / "automated-tests.txt").write_text(tests, encoding="utf-8")
 
     steps = []
@@ -487,26 +491,30 @@ The browser trace performs these actions against the running dashboard:
     # milestone-A PASS (an independent validator caught that contradiction).
     if p2_mode:
         tail = [
-            "## Not verified by this run",
+            "## What this run does not cover",
             "",
-            "- Milestone B (correct/reject/rerun, review approve/reject, Rule management) — not started.",
-            "- P6-T03 (audited human writes) and P6-T04/T05/T06 (P3/P4/P7-01 inspectors) — out of scope.",
+            "- The audited writes themselves (correct/reject/rerun, review approve/reject, Rule",
+            "  management). This pass proves the READ half only; the writes are covered by",
+            "  `scripts/p6/p6_t03_gate.py`, whose report sits beside this one.",
+            "- P6-T04/T05/T06 (P3/P4/P7-01 inspectors) — out of scope.",
             "- The operator's own Core and a real captured conversation; this run used an isolated",
             "  fixture whose data was produced by the real pipeline with a component-simulation provider.",
             "- Independent review and validation of this exact bundle.",
             "",
             "## Verdict",
             "",
-            "`P6-02 milestone A (read slice): delivered on an isolated fixture` — the write half of",
-            "P6-02 is not started, an independent verdict binds this commit separately, and no part of",
-            "the P6 stage or V1 is released by this run.",
+            "`P6-02 milestone A (read slice): delivered and trace-verified on an isolated fixture`.",
+            "`P6-02 milestone B (audited human writes): implemented; see the Gate report in this",
+            "directory for its per-action evidence`. `P6-02` as a whole is PARTIAL — manual reapply and",
+            "the Task/Step/Evidence writes are not delivered — and no part of the P6 stage or V1 is",
+            "released by this run.",
             "",
         ]
     else:
         tail = [
             "## Not verified by this run",
             "",
-            "- P6-T03 (audited human writes) — P6-02 not delivered.",
+            "- P6-T03 (audited human writes) — delivered after P6-01; see P6-02-COMPLIANCE.md.",
             "- P6-T04 (actual injected Context), P6-T05 (Memory degradation), P6-T06 (Validation",
             "  drill-down) — P3/P4/P7-01 contracts not frozen.",
             "- Real operator Core and real captured conversation; this run used the scratch fixture.",
@@ -560,7 +568,7 @@ The browser trace performs these actions against the running dashboard:
             "`interpretation_results` when a provider deadline has passed | PASS (fixture-scoped) |",
             "",
             "`p2_truth_writes: []` is a fixture-scoped observation, **not** a claim that GET never writes.",
-            "See `lazy-recovery-proof.md` in this directory.",
+            "See `lazy-recovery-probe/lazy-recovery-proof.md` in this directory.",
             "",
         ] + gate_lines[1:]
     if failed:

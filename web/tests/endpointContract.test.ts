@@ -49,31 +49,31 @@ describe('every dashboard endpoint call is forwarded by the proxy', () => {
       endpoints.health(signal),
       endpoints.metaSchema(signal),
       endpoints.listProjects({ limit: 50, offset: 0 }, signal),
-      endpoints.getProject('prj_x', signal),
-      endpoints.listTasks('prj_x', { limit: 50, offset: 0 }, signal),
+      endpoints.getProject('prj_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.listTasks('prj_01M4B6VGC29ESRDRQR62DX8AK8', { limit: 50, offset: 0 }, signal),
       endpoints.listTasks(null, { limit: 50, offset: 0 }, signal),
-      endpoints.getTask('tsk_x', signal),
-      endpoints.listSteps('tsk_x', signal),
-      endpoints.getStep('stp_x', signal),
-      endpoints.taskHistory('tsk_x', signal),
-      endpoints.stepHistory('stp_x', signal),
+      endpoints.getTask('tsk_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.listSteps('tsk_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.getStep('stp_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.taskHistory('tsk_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.stepHistory('stp_01M4B6VGC29ESRDRQR62DX8AK8', signal),
       endpoints.listSessions(null, { limit: 50, offset: 0 }, signal),
-      endpoints.listSessions('prj_x', { limit: 50, offset: 0 }, signal),
-      endpoints.listEvents({ project_id: 'prj_x', limit: 100 }, signal),
-      endpoints.listEvents({ session_id: 'ses_x', after_seq: 7, limit: 100 }, signal),
-      endpoints.getEvent('evt_x', signal),
-      endpoints.listActiveRules({ project_id: 'prj_x' }, signal),
-      endpoints.getRule('rul_x', signal),
-      endpoints.getRuleHistory('rul_x', signal),
-      endpoints.listTaskEvidence('tsk_x', signal),
-      endpoints.getEvidence('evd_x', signal),
-      endpoints.listInterpretations({ project_id: 'prj_x', limit: 50 }, signal),
-      endpoints.listInterpretations({ event_id: 'evt_x', status: 'EXTRACTED', after_id: 'int_x', limit: 50 }, signal),
-      endpoints.getInterpretation('int_x', signal),
-      endpoints.listPendingReviews({ project_id: 'prj_x', after_id: 'rvw_x', limit: 50 }, signal),
-      endpoints.getReview('rvw_x', signal),
-      endpoints.previewResolution('int_x', signal),
-      endpoints.getResolution('res_x', signal),
+      endpoints.listSessions('prj_01M4B6VGC29ESRDRQR62DX8AK8', { limit: 50, offset: 0 }, signal),
+      endpoints.listEvents({ project_id: 'prj_01M4B6VGC29ESRDRQR62DX8AK8', limit: 100 }, signal),
+      endpoints.listEvents({ session_id: 'ses_01M4B6VGC29ESRDRQR62DX8AK8', after_seq: 7, limit: 100 }, signal),
+      endpoints.getEvent('evt_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.listActiveRules({ project_id: 'prj_01M4B6VGC29ESRDRQR62DX8AK8' }, signal),
+      endpoints.getRule('rul_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.getRuleHistory('rul_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.listTaskEvidence('tsk_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.getEvidence('evd_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.listInterpretations({ project_id: 'prj_01M4B6VGC29ESRDRQR62DX8AK8', limit: 50 }, signal),
+      endpoints.listInterpretations({ event_id: 'evt_01M4B6VGC29ESRDRQR62DX8AK8', status: 'EXTRACTED', after_id: 'int_01M4B6VGC29ESRDRQR62DX8AK8', limit: 50 }, signal),
+      endpoints.getInterpretation('int_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.listPendingReviews({ project_id: 'prj_01M4B6VGC29ESRDRQR62DX8AK8', after_id: 'rvw_01M4B6VGC29ESRDRQR62DX8AK8', limit: 50 }, signal),
+      endpoints.getReview('rvw_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.previewResolution('int_01M4B6VGC29ESRDRQR62DX8AK8', signal),
+      endpoints.getResolution('res_01M4B6VGC29ESRDRQR62DX8AK8', signal),
       endpoints.listHosts(signal),
       endpoints.listActors(signal),
     ])
@@ -86,14 +86,14 @@ describe('every dashboard endpoint call is forwarded by the proxy', () => {
     // The P2 collections page by an opaque `after_id` cursor, and the preview
     // requires an explicit interpretation_id - neither is a wildcard read.
     const preview = fake.requests.find((request) => request.path === '/v1/resolutions/preview')
-    expect(preview?.query.get('interpretation_id')).toBe('int_x')
+    expect(preview?.query.get('interpretation_id')).toBe('int_01M4B6VGC29ESRDRQR62DX8AK8')
     expect(fake.requests.some((request) => request.path === '/v1/reviews/pending')).toBe(true)
     expect(fake.requests.some((request) => request.path === '/v1/reviews')).toBe(false)
     expect(fake.requests.some((request) => request.path === '/v1/resolutions')).toBe(false)
 
     // The sessions filter must be server-side, not a client-side slice.
     const filtered = fake.requests.find(
-      (request) => request.path === '/v1/sessions' && request.query.get('project_id') === 'prj_x',
+      (request) => request.path === '/v1/sessions' && request.query.get('project_id') === 'prj_01M4B6VGC29ESRDRQR62DX8AK8',
     )
     expect(filtered).toBeDefined()
     expect(filtered?.query.get('limit')).toBe('50')

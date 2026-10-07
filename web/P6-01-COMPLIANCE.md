@@ -7,6 +7,15 @@ that exercises it. Anything not listed here is not claimed.
 Legend: **D** = delivered, **P** = partially delivered (the gap is named),
 **N/A** = out of P6-01 scope by the taskbook, **U** = explicitly 未接入.
 
+> **Scope of this document.** It describes the **P6-01** commit and is kept as that
+> record. Statements below in the present tense about the dashboard offering no
+> write UI — for example "no write UI exists", "no write forms in P6-01", "P6-02 is
+> not delivered" — were true of P6-01 and are **no longer true of the product**:
+> P6-02 milestone A (the read slice) and milestone B (the seven audited writes) have
+> since landed. Read them as history, not as a description of the current tree. See
+> `P6-02-COMPLIANCE.md` for what is delivered now, what is still open, and the
+> per-action evidence for the writes.
+
 ## §4 work items
 
 | Item | State | Implementation | Evidence |

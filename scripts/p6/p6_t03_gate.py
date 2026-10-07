@@ -143,6 +143,22 @@ class Gate:
         with self._ro() as conn:
             return int(conn.execute("SELECT COUNT(*) AS n FROM audit_log").fetchone()["n"])
 
+    def max_audit_seq(self) -> int:
+        with self._ro() as conn:
+            row = conn.execute("SELECT COALESCE(MAX(seq), 0) AS m FROM audit_log").fetchone()
+            return int(row["m"])
+
+    def audit_since(self, path: str, seq_after: int) -> list[dict[str, Any]]:
+        """Audit rows for `path` appended after `seq_after`, in order."""
+        with self._ro() as conn:
+            rows = conn.execute(
+                "SELECT seq, request_id, actor_id, method, path, decision, status_code, "
+                "scope, target_id, error_code FROM audit_log "
+                "WHERE seq > ? AND path = ? ORDER BY seq",
+                (seq_after, path),
+            ).fetchall()
+            return [dict(row) for row in rows]
+
     def audit_rows_for(self, path: str, *, method: str = "POST",
                        actor_id: str | None = None) -> list[dict[str, Any]]:
         """Audit rows the gate's own request produced, newest last."""
@@ -207,6 +223,39 @@ def _check(label: str, ok: bool, evidence: Any) -> dict[str, Any]:
     return {"check": label, "ok": bool(ok), "evidence": evidence}
 
 
+def _audit_check(g: "Gate", path: str, seq_before: int, request_id: str,
+                 expected_status: int | None, *, expected_actor_id: str | None = None,
+                 expected_decision: str = "allow") -> dict[str, Any]:
+    """The frozen `审计读回` dimension, per action.
+
+    It is not enough that an audit row exists for this path somewhere: the
+    objective asks for readback per operation. So this pins the one row appended
+    by *this* request — correlated by our own `X-Request-Id`, which Core records
+    verbatim in `audit_log.request_id` — and checks that it names the actor, the
+    POST, the decision and the status Core returned. A refusal is read back the
+    same way (`decision = deny`), so "the refusal happened and was audited" is one
+    check rather than two.
+    """
+    actor = expected_actor_id or g.d["actors"]["human"]
+    rows = g.audit_since(path, seq_before)
+    mine = [row for row in rows if row["request_id"] == request_id]
+    ok = (
+        len(rows) == 1
+        and len(mine) == 1
+        and mine[0]["method"] == "POST"
+        and mine[0]["decision"] == expected_decision
+        and mine[0]["status_code"] == expected_status
+        and mine[0]["actor_id"] == actor
+    )
+    return _check(
+        f"audit readback: exactly one new row for this request_id, actor {actor[:12]}…, "
+        f"decision {expected_decision}, HTTP {expected_status}",
+        ok,
+        {"rows_for_path_since": len(rows), "matched_request_id": len(mine),
+         "row": mine[0] if mine else (rows[-1:] or None)},
+    )
+
+
 def action_interpretation_correct(g: Gate) -> None:
     """`POST /v1/interpretations/{int}/correct` — human, revisions, audit."""
     root = g.d["p2"]["applied_interpretation_id"]
@@ -223,7 +272,9 @@ def action_interpretation_correct(g: Gate) -> None:
     changes_before = _change_rows(g, "CORRECT")
     key = new_key("correct")
     request_id = f"t03-correct-{uuid.uuid4().hex[:8]}"
-    result = g.human.request("POST", f"/v1/interpretations/{target}/correct", {
+    path = f"/v1/interpretations/{target}/correct"
+    audit_before = g.max_audit_seq()
+    result = g.human.request("POST", path, {
         "idempotency_key": key,
         "host_id": g.d["host_id"],
         "reason": "T03 gate: correct with a real human key",
@@ -247,14 +298,7 @@ def action_interpretation_correct(g: Gate) -> None:
                {"before": revision, "after": after["revision"]}),
         _check("a child interpretation was created", bool(child), child),
         _check_new_change(changes_before, _change_rows(g, "CORRECT"), revision + 1),
-        _check("audit recorded the attempt with the human actor",
-               any(row["actor_id"] == g.d["actors"]["human"] and row["status_code"] == 201
-                   for row in g.audit_rows_for(f"/v1/interpretations/{target}/correct")),
-               [row for row in g.audit_rows_for(f"/v1/interpretations/{target}/correct")][-2:]),
-        _check("audit carries our X-Request-Id",
-               any(row["request_id"] == request_id
-                   for row in g.audit_rows_for(f"/v1/interpretations/{target}/correct")),
-               request_id),
+        _audit_check(g, path, audit_before, request_id, result["status"]),
     ]
     _finish(g, "interpretation.correct", {
         "method": "POST", "path": f"/v1/interpretations/{target}/correct",
@@ -275,12 +319,15 @@ def action_interpretation_reject(g: Gate) -> None:
     truth_before = g.truth_fingerprint()
     changes_before = _change_rows(g, "REJECT")
     key = new_key("reject")
-    result = g.human.request("POST", f"/v1/interpretations/{target}/reject", {
+    path = f"/v1/interpretations/{target}/reject"
+    request_id = f"t03-reject-{uuid.uuid4().hex[:8]}"
+    audit_before = g.max_audit_seq()
+    result = g.human.request("POST", path, {
         "idempotency_key": key,
         "host_id": g.d["host_id"],
         "reason": "T03 gate: reject leaves Truth untouched",
         "expected_revision": revision,
-    })
+    }, request_id=request_id)
     after = g.head(root)
     truth_after = g.truth_fingerprint()
     checks = [
@@ -293,6 +340,7 @@ def action_interpretation_reject(g: Gate) -> None:
         _check("Truth row counts unchanged", truth_before == truth_after,
                {"before": truth_before, "after": truth_after}),
         _check_new_change(changes_before, _change_rows(g, "REJECT"), revision + 1),
+        _audit_check(g, path, audit_before, request_id, result["status"]),
     ]
     _finish(g, "interpretation.reject", {
         "method": "POST", "path": f"/v1/interpretations/{target}/reject",
@@ -313,12 +361,15 @@ def action_interpretation_rerun(g: Gate) -> None:
     truth_before = g.truth_fingerprint()
     changes_before = _change_rows(g, "RERUN")
     key = new_key("rerun")
-    result = g.human.request("POST", f"/v1/interpretations/{target}/rerun", {
+    path = f"/v1/interpretations/{target}/rerun"
+    request_id = f"t03-rerun-{uuid.uuid4().hex[:8]}"
+    audit_before = g.max_audit_seq()
+    result = g.human.request("POST", path, {
         "idempotency_key": key,
         "host_id": g.d["host_id"],
         "reason": "T03 gate: rerun through the fixture provider",
         "expected_revision": revision,
-    })
+    }, request_id=request_id)
     after = g.head(root)
     truth_after = g.truth_fingerprint()
     body = result["payload"]
@@ -332,6 +383,7 @@ def action_interpretation_rerun(g: Gate) -> None:
         # `rerun` reserves then completes, so its own row reaches revision+1 and
         # the head ends one step further on.
         _check_new_change(changes_before, _change_rows(g, "RERUN"), revision + 1),
+        _audit_check(g, path, audit_before, request_id, result["status"]),
         _check("Truth row counts unchanged", truth_before == truth_after,
                {"before": truth_before, "after": truth_after}),
     ]
@@ -379,7 +431,10 @@ def action_review_approve(g: Gate) -> None:
         return
     key = new_key("approve")
     application_before = g.application_fingerprint()
-    result = g.human.request("POST", f"/v1/reviews/{review_id}/approve", {
+    path = f"/v1/reviews/{review_id}/approve"
+    request_id = f"t03-approve-{uuid.uuid4().hex[:8]}"
+    audit_before = g.max_audit_seq()
+    result = g.human.request("POST", path, {
         "idempotency_key": key,
         "host_id": g.d["host_id"],
         "reason": "T03 gate: approve the server plan",
@@ -387,7 +442,7 @@ def action_review_approve(g: Gate) -> None:
         "expected_revisions": preview_of(review)["expected_revisions"],
         "expected_context_digest": preview_of(review)["expected_context_digest"],
         "actions": actions,
-    })
+    }, request_id=request_id)
     after = g.get(f"/v1/reviews/{review_id}")["review"]
     application_after = g.application_fingerprint()
     applied = isinstance(result["payload"], dict) and (result["payload"].get("result") or {}).get("disposition")
@@ -410,10 +465,7 @@ def action_review_approve(g: Gate) -> None:
                    for a, item in zip(actions, preview_of(review)["plan"]["items"])),
                {"sent": len(actions), "plan": len(preview_of(review)["plan"]["items"]),
                 "actions": actions}),
-        _check("audit recorded the human approve",
-               any(row["actor_id"] == g.d["actors"]["human"]
-                   for row in g.audit_rows_for(f"/v1/reviews/{review_id}/approve")),
-               g.audit_rows_for(f"/v1/reviews/{review_id}/approve")[-1:]),
+        _audit_check(g, path, audit_before, request_id, result["status"]),
     ]
     _finish(g, "review.approve", {
         "method": "POST", "path": f"/v1/reviews/{review_id}/approve",
@@ -432,12 +484,15 @@ def action_review_reject(g: Gate) -> None:
     review = g.get(f"/v1/reviews/{review_id}")["review"]
     truth_before = g.truth_fingerprint()
     key = new_key("review-reject")
-    result = g.human.request("POST", f"/v1/reviews/{review_id}/reject", {
+    path = f"/v1/reviews/{review_id}/reject"
+    request_id = f"t03-review-reject-{uuid.uuid4().hex[:8]}"
+    audit_before = g.max_audit_seq()
+    result = g.human.request("POST", path, {
         "idempotency_key": key,
         "host_id": g.d["host_id"],
         "reason": "T03 gate: reject the plan",
         "expected_revision": review["revision"],
-    })
+    }, request_id=request_id)
     after = g.get(f"/v1/reviews/{review_id}")["review"]
     truth_after = g.truth_fingerprint()
     checks = [
@@ -448,6 +503,7 @@ def action_review_reject(g: Gate) -> None:
                {"before": review["revision"], "after": after["revision"]}),
         _check("Truth row counts unchanged", truth_before == truth_after,
                {"before": truth_before, "after": truth_after}),
+        _audit_check(g, path, audit_before, request_id, result["status"]),
     ]
     _finish(g, "review.reject", {
         "method": "POST", "path": f"/v1/reviews/{review_id}/reject",
@@ -478,7 +534,9 @@ def action_rule_propose(g: Gate) -> None:
         "host_id": g.d["host_id"],
         "event_id": event_id,
     }
-    result = g.human.request("POST", "/v1/rules/proposals", body)
+    request_id = f"t03-propose-{uuid.uuid4().hex[:8]}"
+    audit_before = g.max_audit_seq()
+    result = g.human.request("POST", "/v1/rules/proposals", body, request_id=request_id)
     payload = result["payload"]
     rule = payload.get("rule") or {}
     checks = [
@@ -498,10 +556,7 @@ def action_rule_propose(g: Gate) -> None:
                {"sent": event_id, "returned": (payload.get("event") or {}).get("event_id")}),
         _check("origin Event is the one sent",
                (rule.get("origin_event_id")) == origin, rule.get("origin_event_id")),
-        _check("audit recorded the human proposal",
-               any(row["actor_id"] == g.d["actors"]["human"]
-                   for row in g.audit_rows_for("/v1/rules/proposals")),
-               g.audit_rows_for("/v1/rules/proposals")[-1:]),
+        _audit_check(g, "/v1/rules/proposals", audit_before, request_id, result["status"]),
     ]
     _finish(g, "rule.propose", {
         "method": "POST", "path": "/v1/rules/proposals",
@@ -517,9 +572,12 @@ def action_rule_approve(g: Gate) -> None:
     rule_id = g.d["seeded"]["rules"]["proposed"]
     rule = g.get(f"/v1/rules/{rule_id}")["rule"]
     event_id = new_event_id()
-    result = g.human.request("POST", f"/v1/rules/{rule_id}/approve", {
+    path = f"/v1/rules/{rule_id}/approve"
+    request_id = f"t03-rule-approve-{uuid.uuid4().hex[:8]}"
+    audit_before = g.max_audit_seq()
+    result = g.human.request("POST", path, {
         "expected_revision": rule["revision"], "host_id": g.d["host_id"], "event_id": event_id,
-    })
+    }, request_id=request_id)
     after = g.get(f"/v1/rules/{rule_id}")["rule"]
     payload = result["payload"]
     checks = [
@@ -534,6 +592,7 @@ def action_rule_approve(g: Gate) -> None:
         _check("version unchanged by approve", after["version"] == rule["version"],
                {"before": rule["version"], "after": after["version"]}),
         _check("replayed is false", payload.get("replayed") is False, payload.get("replayed")),
+        _audit_check(g, path, audit_before, request_id, result["status"]),
     ]
     _finish(g, "rule.approve", {
         "method": "POST", "path": f"/v1/rules/{rule_id}/approve",
@@ -555,7 +614,10 @@ def action_rule_supersede(g: Gate) -> None:
     # propose path uses is refused here.
     origin = g.d["p2"]["event_ids"]["project_scope"]
     event_id = new_event_id()
-    result = g.human.request("POST", f"/v1/rules/{rule_id}/supersede", {
+    path = f"/v1/rules/{rule_id}/supersede"
+    request_id = f"t03-rule-supersede-{uuid.uuid4().hex[:8]}"
+    audit_before = g.max_audit_seq()
+    result = g.human.request("POST", path, {
         "expected_revision": rule["revision"],
         "host_id": g.d["host_id"],
         "scope": rule["scope"],
@@ -566,7 +628,7 @@ def action_rule_supersede(g: Gate) -> None:
         "content": f"{rule['content']} (T03 gate supersede)",
         "matcher": rule["matcher"],
         "event_id": event_id,
-    })
+    }, request_id=request_id)
     after = g.get(f"/v1/rules/{rule_id}")["rule"]
     checks = [
         _check("HTTP 200", result["status"] == 200, result["status"]),
@@ -581,6 +643,7 @@ def action_rule_supersede(g: Gate) -> None:
         _check("Rule is still ACTIVE", after["status"] == "ACTIVE", after["status"]),
         _check("new content is the sent content", "T03 gate supersede" in after["content"],
                after["content"]),
+        _audit_check(g, path, audit_before, request_id, result["status"]),
         _check("history now has the superseded snapshot",
                any(entry["rule"]["status"] == "SUPERSEDED"
                    for entry in g.get(f"/v1/rules/{rule_id}/history")["history"]),
@@ -602,9 +665,12 @@ def action_rule_retire(g: Gate) -> None:
     rule_id = g.d["p2"]["retire_rule_id"]
     rule = g.get(f"/v1/rules/{rule_id}")["rule"]
     event_id = new_event_id()
-    result = g.human.request("POST", f"/v1/rules/{rule_id}/retire", {
+    path = f"/v1/rules/{rule_id}/retire"
+    request_id = f"t03-rule-retire-{uuid.uuid4().hex[:8]}"
+    audit_before = g.max_audit_seq()
+    result = g.human.request("POST", path, {
         "expected_revision": rule["revision"], "host_id": g.d["host_id"], "event_id": event_id,
-    })
+    }, request_id=request_id)
     after = g.get(f"/v1/rules/{rule_id}")["rule"]
     checks = [
         _check("HTTP 200", result["status"] == 200, result["status"]),
@@ -620,6 +686,7 @@ def action_rule_retire(g: Gate) -> None:
                                g.get(f"/v1/rules/active?project_id={g.d['p2']['project_id']}")
                                ["rules"]],
                rule_id),
+        _audit_check(g, path, audit_before, request_id, result["status"]),
     ]
     _finish(g, "rule.retire", {
         "method": "POST", "path": f"/v1/rules/{rule_id}/retire",
@@ -640,10 +707,13 @@ def negative_read_token(g: Gate) -> None:
     rule_id = g.d["seeded"]["rules"]["active"]
     rule = g.get(f"/v1/rules/{rule_id}")["rule"]
     truth_before = g.truth_fingerprint()
-    result = g.reader.request("POST", f"/v1/rules/{rule_id}/retire", {
+    path = f"/v1/rules/{rule_id}/retire"
+    request_id = f"t03-neg-read-token-{uuid.uuid4().hex[:8]}"
+    audit_before = g.max_audit_seq()
+    result = g.reader.request("POST", path, {
         "expected_revision": rule["revision"], "host_id": g.d["host_id"],
         "event_id": new_event_id(),
-    })
+    }, request_id=request_id)
     after = g.get(f"/v1/rules/{rule_id}")["rule"]
     checks = [
         _check("403 forbidden_scope",
@@ -653,10 +723,8 @@ def negative_read_token(g: Gate) -> None:
                after["status"] == rule["status"] and after["revision"] == rule["revision"],
                {"before": rule["revision"], "after": after["revision"]}),
         _check("Truth unchanged", truth_before == g.truth_fingerprint(), truth_before),
-        _check("the refusal itself is audited",
-               any(row["status_code"] == 403 and row["error_code"] == "forbidden_scope"
-                   for row in g.audit_rows_for(f"/v1/rules/{rule_id}/retire")),
-               g.audit_rows_for(f"/v1/rules/{rule_id}/retire")[-1:]),
+        _audit_check(g, path, audit_before, request_id, 403,
+                     expected_actor_id=g.d["actors"]["read"], expected_decision="deny"),
     ]
     _finish(g, "negative: read-only token", {
         "method": "POST", "path": f"/v1/rules/{rule_id}/retire", "token": "p2_read (read slice only)",

@@ -54,27 +54,33 @@ describe('classifyRequestTarget (dev proxy)', () => {
 })
 
 describe('isAllowedCoreRequest', () => {
+  // The allowlist names Core's real id shape (`[a-z]{3}_` + 26 Crockford base32
+  // characters, ADR 0001), so these fixtures are ids Core would accept rather than
+  // the `prj_01ABC` / `int_1` placeholders a looser pattern used to tolerate.
+  const ID_BODY = '01M4B6VGC29ESRDRQR62DX8AK8'
+  const id = (prefix: string): string => `${prefix}_${ID_BODY}`
+
   it('allows the frozen read paths the dashboard uses', () => {
     for (const path of [
       '/v1/health',
       '/v1/meta/schema',
       '/v1/projects',
-      '/v1/projects/prj_01ABC',
+      `/v1/projects/${id('prj')}`,
       '/v1/tasks',
-      '/v1/tasks/tsk_01ABC',
-      '/v1/tasks/tsk_01ABC/steps',
-      '/v1/tasks/tsk_01ABC/history',
-      '/v1/tasks/tsk_01ABC/evidence',
-      '/v1/steps/stp_01ABC',
-      '/v1/steps/stp_01ABC/history',
+      `/v1/tasks/${id('tsk')}`,
+      `/v1/tasks/${id('tsk')}/steps`,
+      `/v1/tasks/${id('tsk')}/history`,
+      `/v1/tasks/${id('tsk')}/evidence`,
+      `/v1/steps/${id('stp')}`,
+      `/v1/steps/${id('stp')}/history`,
       '/v1/events',
-      '/v1/events/evt_01ABC',
+      `/v1/events/${id('evt')}`,
       '/v1/sessions',
-      '/v1/sessions/ses_01ABC',
+      `/v1/sessions/${id('ses')}`,
       '/v1/rules/active',
-      '/v1/rules/rul_01ABC',
-      '/v1/rules/rul_01ABC/history',
-      '/v1/evidence/evd_01ABC',
+      `/v1/rules/${id('rul')}`,
+      `/v1/rules/${id('rul')}/history`,
+      `/v1/evidence/${id('evd')}`,
       '/v1/hosts',
       '/v1/actors',
     ]) {
@@ -91,23 +97,23 @@ describe('isAllowedCoreRequest', () => {
 
   it('milestone B opens exactly the four frozen POST shapes', () => {
     for (const path of [
-      '/v1/interpretations/int_1/correct',
-      '/v1/interpretations/int_1/reject',
-      '/v1/interpretations/int_1/rerun',
-      '/v1/reviews/rvw_1/approve',
-      '/v1/reviews/rvw_1/reject',
+      `/v1/interpretations/${id('int')}/correct`,
+      `/v1/interpretations/${id('int')}/reject`,
+      `/v1/interpretations/${id('int')}/rerun`,
+      `/v1/reviews/${id('rvw')}/approve`,
+      `/v1/reviews/${id('rvw')}/reject`,
       '/v1/rules/proposals',
-      '/v1/rules/rul_1/approve',
-      '/v1/rules/rul_1/supersede',
-      '/v1/rules/rul_1/retire',
+      `/v1/rules/${id('rul')}/approve`,
+      `/v1/rules/${id('rul')}/supersede`,
+      `/v1/rules/${id('rul')}/retire`,
     ]) {
       expect(isAllowedCoreRequest('POST', path), path).toBe(true)
     }
     // Deliberately not opened in this slice.
     for (const path of [
       '/v1/evidence/confirm',
-      '/v1/resolutions/res_1/manual-reapply',
-      '/v1/resolve/int_1',
+      `/v1/resolutions/${id('res')}/manual-reapply`,
+      `/v1/resolve/${id('int')}`,
       '/v1/tool-results',
       '/v1/workspace/fingerprint',
       '/v1/events',
@@ -119,8 +125,8 @@ describe('isAllowedCoreRequest', () => {
     }
     // A write path must not be reachable with another verb, and a collection
     // must not become writable through the write section.
-    expect(isAllowedCoreRequest('PUT', '/v1/interpretations/int_1/correct')).toBe(false)
-    expect(isAllowedCoreRequest('GET', '/v1/interpretations/int_1/correct')).toBe(false)
+    expect(isAllowedCoreRequest('PUT', `/v1/interpretations/${id('int')}/correct`)).toBe(false)
+    expect(isAllowedCoreRequest('GET', `/v1/interpretations/${id('int')}/correct`)).toBe(false)
     expect(isAllowedCoreRequest('POST', '/v1/interpretations')).toBe(false)
     expect(isAllowedCoreRequest('POST', '/v1/reviews/pending')).toBe(false)
   })
