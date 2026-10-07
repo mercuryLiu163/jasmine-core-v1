@@ -178,12 +178,15 @@ the `reason`/`idempotency_key` fields the interpretation/review writes require.
 
 `P6-02 milestone A (read slice): independently reviewed and validated` — the r2
 verdict binds commit `693afe6`. `P6-02 milestone B (audited human writes):
-implemented and gated by the implementer` — the T03 Gate drives all seven shipped
+independently validated, PASS-WITH-CAVEATS` — the T03 Gate drives all seven shipped
 writes through the dashboard proxy with a real human key and records the frozen
-tuple per action plus the refusal/conflict/replay negatives; it has **not** yet
-had an independent reviewer or validator. Two earlier "frozen commits" were also
-incomplete (the dashboard's `web/src/lib/` was gitignored and untracked); that is
-fixed and the tip is now built and tested from a clean checkout. `P6-02: PARTIAL` overall — manual
+tuple per action (method/path/scope/actor/host/source/replay-key/revision/audit
+readback) plus the refusal/conflict/replay negatives; a second party rebuilt the
+fixture, the checkout and the servers and reproduced it. Its four findings are fixed
+in `c7c5480`. Two earlier "frozen commits" were incomplete (the dashboard's
+`web/src/lib/` was gitignored and untracked); that is fixed and the tip is built and
+tested from a clean checkout. A separate code review of the write panels is still
+outstanding. `P6-02: PARTIAL` overall — manual
 reapply and the Task/Step/Evidence writes are not delivered, and no Gate has run
 against the operator's own Core. `P6` as a stage is not complete. Details, evidence
 and the side-effect finding: `P6-02-COMPLIANCE.md`.

@@ -202,8 +202,15 @@ proxy as the endpoint under test:
   before and after, so "leaves Truth alone" is a measurement, not an assertion;
   `review.approve` is checked the other way round — that it really did bind a plan
   to its source Event;
-* `audit_log` grew for every attempt, including the refusals, carrying the actor,
-  method, path, decision, status and error code.
+* `audit_log` grew for every attempt, including the refusals, and **each of the nine
+  writes now has its own audit-readback check**. The gate sends a unique
+  `X-Request-Id` per action — Core records it verbatim in `audit_log.request_id` —
+  and asserts that exactly one row was appended for that request, naming the actor,
+  the POST, the decision and the status Core returned. A refusal is read back the
+  same way (`decision = deny`), so "refused and audited" is a single check. The
+  Gate totals 76 checks and 0 unchecked; an earlier revision checked audit only for
+  `interpretation.correct`, `review.approve` and `rule.propose`, which is exactly the
+  gap the objective's per-action `审计读回` requirement rules out.
 
 Two limits are stated rather than glossed over. The audit readback is a
 read-only SQLite read of the fixture's `audit_log`: no fixture token carries
@@ -211,6 +218,25 @@ read-only SQLite read of the fixture's `audit_log`: no fixture token carries
 at all**, and the report says so instead of implying the UI displayed it. And the
 `rerun` path exercises the fixture's `component_simulation` provider — it proves
 the audited command path, not a real model call.
+
+## The read allowlist names only real GET routes
+
+Ids in `web/server/core-paths.json` use Core's own shape — `[a-z]{3}_` followed by 26
+Crockford base32 characters (ADR 0001) — and method-specific sub-paths are split, so
+the GET list carries `(steps|history|evidence)` while the POST-only
+`transition|criteria|accept` appear only in the write list (where they are absent,
+because those writes are not delivered). Two consequences, both verified live:
+
+* `GET /v1/rules/proposals` and `GET /v1/evidence/confirm` are now answered by the
+  proxy with `404 proxy_path_not_allowed`. Previously the loose `[A-Za-z0-9_]+` id
+  pattern also matched those literals, so the proxy forwarded the GET and Core
+  refused it with `400` — no write either way, but the allowlist was admitting paths
+  that are not real GET routes;
+* a request for a malformed id (`int_1`) never reaches Core at all.
+
+`tests/p6/test_dashboard_proxy_contract.py` pins this from both directions: every GET
+pattern must match a real GET route *and* no path that lacks one, and both allowlists
+are asserted exactly, so the set cannot widen silently.
 
 ## Not delivered (still open in P6-02)
 
@@ -246,12 +272,28 @@ worktree of the exact commit. The milestone-B bundle carries one.
 
 `P6-02 milestone A: delivered, independently reviewed and validated` (the r2
 verdict binds `693afe6`; see the packaging caveat above — that commit is complete
-only together with its working tree). `P6-02 milestone B: implemented and gated
-by the implementer` — the T03 Gate above passes all seven actions and every
-negative on an isolated fixture, and the tip now builds from a clean checkout, but
-milestone B **has not** had an independent reviewer or validator. Two review
-attempts against `b834f53` were stopped once the packaging defect was found, since
-a verdict on a commit that cannot be checked out is not worth having. `P6-02: PARTIAL` as a whole; manual reapply and the Task/Step/Evidence
+only together with its working tree).
+
+`P6-02 milestone B: independently validated, PASS-WITH-CAVEATS`. A validator that
+built its own fixture, its own clean checkout and its own servers reproduced the
+Gate (13/13 actions, 71/71 checks at the time), every negative, the read-slice
+no-write result across all 33 tables, and the proxy perimeter; it also confirmed the
+packaging fix and found that the gate did *not* falsely pass on a consumed fixture
+(BLOCKED) or a pre-approved review (FAIL). Its four findings are fixed in `c7c5480`:
+
+1. per-action audit readback was missing for 6 of the 9 writes (now present for all
+   nine — see above);
+2. the disclosed "flake" was not flaky but deterministic: `serve.test.ts` rooted its
+   static host at `web/dist`, so it failed without a build. The test now creates a
+   temp root it owns, and the suite passes with no `dist` at all;
+3. `p6_verify.py` ran `vitest` before `vite build`; it now builds first;
+4. the GET allowlist admitted two paths that are not real GET routes (see above).
+
+Milestone B is therefore validated by a second party, with those caveats closed in
+the recorded commit. It has had no separate *code review* of the UI panels: two
+review attempts were stopped — the first when the packaging defect was found, the
+second when these fixes superseded its commit — so the panel-level review is still
+outstanding. `P6-02` as a whole remains PARTIAL. `P6-02: PARTIAL` as a whole; manual reapply and the Task/Step/Evidence
 writes are not delivered, and no Gate has run against the operator's own Core or a
 real captured conversation. `P6` as a stage is not complete and nothing here
 releases V1.
