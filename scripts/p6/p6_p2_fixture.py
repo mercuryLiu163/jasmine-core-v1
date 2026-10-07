@@ -57,6 +57,17 @@ READ_SCOPES = [
     "objects:read", "events:read", "state:read", "authority:read", "evidence:read",
     "interpretations:read", "reviews:read", "resolutions:read",
 ]
+#: The P2 *write* slice: a real human actor with the scopes Core requires for the
+#: milestone-B actions, on top of the read slice. The browser is never given this
+#: token; the T03 Gate uses it deliberately, as the operator would.
+P2_WRITE_SCOPES = READ_SCOPES + [
+    "interpretations:process", "interpretations:manage",
+    "reviews:manage", "resolutions:process", "resolutions:read",
+    "authority:propose", "authority:manage",
+    "objects:write", "events:write", "state:write", "state:accept",
+    "evidence:confirm", "guard:check", "fingerprint:read",
+]
+
 WRITE_SCOPES = READ_SCOPES + [
     "objects:write", "events:write", "state:write", "state:accept",
     "authority:propose", "authority:manage", "evidence:confirm",
@@ -150,6 +161,10 @@ class Fixture:
             read_token = issuer.issue_key(
                 actor_id=self.base.reader, label="p6-ui-readonly-p2",
                 scopes=READ_SCOPES)["token"]
+            # A real human actor with the write scopes, for the T03 Gate only.
+            human_token = issuer.issue_key(
+                actor_id=self.base.human, label="p6-p2-human-write",
+                scopes=P2_WRITE_SCOPES)["token"]
         finally:
             conn.close()
 
@@ -163,6 +178,7 @@ class Fixture:
             json.dumps(descriptor, indent=2, ensure_ascii=False), encoding="utf-8")
         tokens = json.loads((self.out / "tokens.json").read_text(encoding="utf-8"))
         tokens["p2_read"] = read_token
+        tokens["p2_human"] = human_token
         (self.out / "tokens.json").write_text(json.dumps(tokens, indent=2), encoding="utf-8")
         os.chmod(self.out / "tokens.json", 0o600)
         return descriptor
