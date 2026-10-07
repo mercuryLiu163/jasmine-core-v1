@@ -60,7 +60,9 @@ def api(core: str, token: str, path: str) -> tuple[int, object]:
 
 
 def snapshot(core: str, token: str, project_id: str | None, task_id: str | None,
-             evidence_id: str | None, rule_id: str | None) -> dict[str, object]:
+             evidence_id: str | None, rule_id: str | None,
+             interpretation_id: str | None = None, review_id: str | None = None,
+             resolution_id: str | None = None) -> dict[str, object]:
     """Read the objects the trace touches. Any change here means a Truth write."""
     result: dict[str, object] = {}
     reads = {
@@ -83,6 +85,19 @@ def snapshot(core: str, token: str, project_id: str | None, task_id: str | None,
     if rule_id:
         reads["rule"] = f"/v1/rules/{rule_id}"
         reads["rule_history"] = f"/v1/rules/{rule_id}/history"
+    # P6-02 read slice. `reviews/pending` and `resolutions/preview` have no
+    # collection siblings, so they are snapshotted exactly as the UI reads them.
+    if project_id:
+        reads["interpretations"] = f"/v1/interpretations?project_id={project_id}&limit=50"
+        reads["reviews_pending"] = f"/v1/reviews/pending?project_id={project_id}&limit=50"
+    for name, path in (
+        ("interpretation", f"/v1/interpretations/{interpretation_id}" if interpretation_id else None),
+        ("resolution_preview", f"/v1/resolutions/preview?interpretation_id={interpretation_id}" if interpretation_id else None),
+        ("review", f"/v1/reviews/{review_id}" if review_id else None),
+        ("resolution", f"/v1/resolutions/{resolution_id}" if resolution_id else None),
+    ):
+        if path:
+            reads[name] = path
     for name, path in reads.items():
         status, body = api(core, token, path)
         result[name] = {"path": path, "status": status, "body": body}
@@ -130,6 +145,64 @@ def dev_proxy_check(ui: str, token: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+#: P2 tables the read slice can touch through lazy recovery. Digesting them
+#: before/after is what lets the report say *which* read wrote, if any.
+P2_TABLES = [
+    "interpretations", "interpretation_results", "interpretation_changes",
+    "interpretation_operation_completions", "maintenance_heads",
+    "resolutions", "resolution_results", "reviews", "review_changes",
+    "source_applications", "source_application_changes", "events", "audit_log",
+]
+
+
+def normalise_body(body: object) -> object:
+    """Strip per-response correlation ids before comparing two reads.
+
+    Every Core response carries a fresh `request_id`; comparing full bodies would
+    report every *error* response as "changed" even when the refusal is identical.
+    """
+    if isinstance(body, dict):
+        return {key: normalise_body(value) for key, value in body.items() if key != "request_id"}
+    if isinstance(body, list):
+        return [normalise_body(item) for item in body]
+    return body
+
+
+def p2_table_digest(db_path: str | None) -> dict[str, object] | None:
+    """Read-only digest of the P2 tables, for an honest side-effect comparison."""
+    if not db_path:
+        return None
+    import hashlib
+    import sqlite3
+
+    from pathlib import Path as _Path
+
+    path = _Path(db_path)
+    if not path.exists():
+        return None
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    out: dict[str, object] = {}
+    try:
+        for table in P2_TABLES:
+            try:
+                rows = conn.execute(f"SELECT * FROM {table}").fetchall()
+            except sqlite3.Error:
+                out[table] = {"present": False}
+                continue
+            payload = "\n".join(
+                json.dumps(dict(row), sort_keys=True, ensure_ascii=False, default=str) for row in rows
+            )
+            out[table] = {
+                "present": True,
+                "rows": len(rows),
+                "sha256": hashlib.sha256(payload.encode("utf-8")).hexdigest(),
+            }
+    finally:
+        conn.close()
+    return out
+
+
 def run(command: list[str], cwd: Path) -> str:
     completed = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
     return (
@@ -164,6 +237,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--rule")
     parser.add_argument("--evidence")
     parser.add_argument("--event")
+    parser.add_argument("--interpretation", help="P6-02: interpretation id to open")
+    parser.add_argument("--pending-interpretation", dest="pending_interpretation")
+    parser.add_argument("--review", help="P6-02: pending review id to open")
+    parser.add_argument("--resolution", help="P6-02: resolution id to open")
+    parser.add_argument("--p2-project", dest="p2_project", help="P6-02: scope for the review queue")
+    parser.add_argument("--db", help="P6-02: fixture db path, for the P2 table before/after dump")
     parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument("--dev-ui", help="also record the allowlist checks against a Vite dev server")
     args = parser.parse_args(argv)
@@ -178,7 +257,9 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"warning": "worktree is dirty; the evidence binds to this commit but not to "
                                       "the exact tree", "dirty": started_dirty}, indent=2))
 
-    before = snapshot(args.core, token, args.project, args.task, args.evidence, args.rule)
+    before = snapshot(args.core, token, args.project, args.task, args.evidence, args.rule,
+                      args.interpretation, args.review, args.resolution)
+    tables_before = p2_table_digest(args.db) if args.db else None
 
     trace_command = [
         "node", str(ROOT / "scripts" / "p6" / "browser_trace.mjs"),
@@ -188,18 +269,41 @@ def main(argv: list[str] | None = None) -> int:
         "--out", str(out),
     ]
     for flag, value in (("--project", args.project), ("--task", args.task), ("--step", args.step),
-                        ("--rule", args.rule), ("--evidence", args.evidence), ("--event", args.event)):
+                        ("--rule", args.rule), ("--evidence", args.evidence), ("--event", args.event),
+                        ("--interpretation", args.interpretation),
+                        ("--pending-interpretation", args.pending_interpretation),
+                        ("--review", args.review), ("--resolution", args.resolution),
+                        ("--p2-project", args.p2_project)):
         if value:
             trace_command += [flag, value]
     trace_output = run(trace_command, ROOT)
     (out / "browser-trace.stdout.txt").write_text(trace_output, encoding="utf-8")
 
-    after = snapshot(args.core, token, args.project, args.task, args.evidence, args.rule)
-    changed = sorted(name for name in before if before[name] != after.get(name))
+    after = snapshot(args.core, token, args.project, args.task, args.evidence, args.rule,
+                     args.interpretation, args.review, args.resolution)
+    tables_after = p2_table_digest(args.db) if args.db else None
+    changed = sorted(
+        name for name in before
+        if normalise_body(before[name]) != normalise_body(after.get(name))
+    )
+    table_changes = {}
+    if tables_before is not None and tables_after is not None:
+        for name in sorted(set(tables_before) | set(tables_after)):
+            if tables_before.get(name) != tables_after.get(name):
+                table_changes[name] = {"before": tables_before.get(name), "after": tables_after.get(name)}
+    # `audit_log` records every request, so a read-only run *must* grow it; that is
+    # evidence of auditing, not a Truth write. Everything else changing would be a
+    # write performed by a GET and is reported separately.
+    truth_writes = {name: value for name, value in table_changes.items() if name != "audit_log"}
     (out / "truth-before-after.json").write_text(
         json.dumps({"captured_at": now(), "before": before, "after": after,
                     "changed_reads": changed,
-                    "verdict": "unchanged" if not changed else "CHANGED"}, indent=2,
+                    "p2_tables_before": tables_before, "p2_tables_after": tables_after,
+                    "p2_tables_changed": table_changes,
+                    "p2_truth_writes": truth_writes,
+                    "audit_log_grew": "audit_log" in table_changes,
+                    "verdict": "unchanged" if not changed else "CHANGED",
+                    "table_verdict": "unchanged" if not truth_writes else "CHANGED"}, indent=2,
                    ensure_ascii=False) + "\n", encoding="utf-8")
 
     # The browser request log already carries method/path/status/request id with
@@ -356,9 +460,11 @@ The browser trace performs these actions against the running dashboard:
                                        encoding="utf-8")
 
     print(json.dumps({"out": str(out), "browser_steps": manifest["browser_steps"],
-                      "truth_changed": changed, "commit": manifest["commit"],
+                      "truth_changed_reads": changed, "p2_truth_writes": sorted(truth_writes),
+                      "audit_log_grew": "audit_log" in table_changes,
+                      "commit": manifest["commit"],
                       "commit_changed_during_run": manifest["commit_changed_during_run"]}, indent=2))
-    return 1 if failed or changed else 0
+    return 1 if failed or changed or truth_writes else 0
 
 
 if __name__ == "__main__":

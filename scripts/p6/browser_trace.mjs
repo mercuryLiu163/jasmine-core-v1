@@ -58,6 +58,11 @@ function parseArgs(argv) {
       case '--event': args.event = next; index += 1; break
       case '--rule': args.rule = next; index += 1; break
       case '--evidence': args.evidence = next; index += 1; break
+      case '--interpretation': args.interpretation = next; index += 1; break
+      case '--pending-interpretation': args.pendingInterpretation = next; index += 1; break
+      case '--review': args.review = next; index += 1; break
+      case '--resolution': args.resolution = next; index += 1; break
+      case '--p2-project': args.p2Project = next; index += 1; break
       case '--out': args.out = next; index += 1; break
       case '--headful': args.headful = true; break
       default: throw new Error(`unknown argument ${flag}`)
@@ -373,12 +378,23 @@ async function main() {
     )
 
     // 2. Overview -> Project
-    await clickByText(cdp, 'a', '打开 Project 视图') 
-      .then(() => trace.record('Overview -> Project link clicked', true))
+    await clickByText(cdp, 'a', '打开 Project 视图')
+      .then(() => trace.record('Overview -> Project link clicked (selected row)', true))
       .catch(async () => {
-        // Fall back to the project table link when no row is selected.
-        await clickByText(cdp, 'a', 'Jasmine')
-        trace.record('Overview -> Project link clicked (table row)', true)
+        // Fall back to the first project row link. Deliberately not a project
+        // *name*: the trace must not depend on how a fixture names its data.
+        const point = await evaluate(cdp, `(() => {
+          const link = document.querySelector('table a[href^="#/project/"]')
+          if (!link) return null
+          link.scrollIntoView({ block: 'center' })
+          const box = link.getBoundingClientRect()
+          return { x: Math.round(box.left + box.width / 2), y: Math.round(box.top + box.height / 2) }
+        })()`)
+        if (!point) throw new Error('no project row link on the Overview')
+        for (const type of ['mousePressed', 'mouseReleased']) {
+          await cdp.send('Input.dispatchMouseEvent', { type, x: point.x, y: point.y, button: 'left', clickCount: 1 })
+        }
+        trace.record('Overview -> Project link clicked (first project row)', true)
       })
     await waitFor(cdp, `document.body.textContent.includes('Tasks(已载入范围内')`, { label: 'Project view' })
     trace.record('Project view reads GET /v1/tasks?project_id=', true)
@@ -539,9 +555,201 @@ async function main() {
     // 8. Conversation + 未接入 marker
     await cdp.send('Page.navigate', { url: `${args.ui}/#/conversation` })
     await waitFor(cdp, `document.body.textContent.includes('Raw Event(')`, { label: 'Conversation' })
-    const conversationText = await evaluate(cdp, 'document.body.textContent')
-    trace.record('Interpretation area is explicitly 未接入', conversationText.includes('未接入'))
+    const conversation = await evaluate(cdp, `(() => {
+      const text = document.body.textContent ?? ''
+      const select = document.querySelector('select')
+      const options = select ? [...select.querySelectorAll('option')].map((o) => o.value) : []
+      const panel = [...document.querySelectorAll('section')]
+        .find((n) => (n.getAttribute('aria-label') ?? '').includes('Interpretation / Resolver'))
+      return {
+        options,
+        // The delivered read slice replaces the stale "waiting for P2" panel.
+        deliveredReadLink: Boolean(panel?.querySelector('a[href*="/interpretations"]')),
+        panelText: (panel?.textContent ?? '').replace(/\s+/g, ' ').slice(0, 160),
+      }
+    })()`)
+    trace.record(
+      'Conversation has a link into the delivered Interpretation reads',
+      conversation.deliveredReadLink === true,
+      conversation.panelText,
+    )
+    const expectedEventTypes = [
+      'interpretation.bound', 'interpretation.corrected', 'interpretation.rejected',
+      'interpretation.rerun', 'resolution.command', 'review.approved', 'review.rejected',
+    ]
+    trace.record(
+      'Conversation event filter offers every Core event type (>=31 options incl. placeholder)',
+      conversation.options.length >= 31 &&
+        expectedEventTypes.every((type) => conversation.options.includes(type)),
+      `${conversation.options.length} options; missing=${
+        JSON.stringify(expectedEventTypes.filter((t) => !conversation.options.includes(t)))
+      }`,
+    )
     await trace.screenshot(cdp, '08-conversation')
+
+    // 8b. P6-02 read slice: interpretations, pending reviews, resolutions.
+    if (args.interpretation) {
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/interpretations` })
+      // Wait for a rendered row, not the panel title: the title exists while the
+      // first page is still loading, and reading then would race the fetch.
+      await waitFor(cdp, `document.querySelector('a[href^="#/interpretation/"]') !== null`,
+        { label: 'interpretation rows' })
+      const listState = await evaluate(cdp, `(() => {
+        const text = document.body.textContent ?? ''
+        const row = document.querySelector('a[href^="#/interpretation/"]')
+        return {
+          hasTarget: text.includes(${JSON.stringify(args.interpretation)}),
+          rowHref: row ? row.getAttribute('href') : null,
+          noTotalClaim: text.includes('Core 不返回总数'),
+          countLabel: [...document.querySelectorAll('section')].some((n) => {
+            const label = n.getAttribute('aria-label') || ''
+            return label.startsWith('Interpretations(已载入 ') && label.endsWith(' 条)')
+          }),
+          panelTitle: ([...document.querySelectorAll('section')]
+            .map((n) => n.getAttribute('aria-label') ?? '')
+            .find((label) => label.startsWith('Interpretations(')) ?? ''),
+          sideEffectNote: text.includes('不等于「零副作用」') || text.includes('零副作用'),
+        }
+      })()`)
+      trace.record('interpretation list renders real rows from Core',
+        listState.hasTarget === true && listState.countLabel === true,
+        `${listState.panelTitle} rows->${listState.rowHref}`)
+      trace.record('interpretation list declares loaded range and no total',
+        listState.noTotalClaim === true)
+      trace.record('interpretation list states the lazy-recovery read caveat',
+        listState.sideEffectNote === true)
+      await trace.screenshot(cdp, '10-interpretations')
+
+      if (listState.rowHref) {
+        await cdp.send('Page.navigate', { url: `${args.ui}/${listState.rowHref}` })
+        await waitFor(cdp, `document.body.textContent.includes('Candidates(')`,
+          { label: 'interpretation detail' })
+        const detailState = await evaluate(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          const sections = [...document.querySelectorAll('section')].map((n) => n.getAttribute('aria-label') ?? '')
+          return {
+            hasRecord: text.includes(${JSON.stringify(args.interpretation)}),
+            hasCandidates: text.includes('Candidates('),
+            hasLineage: text.includes('Lineage 与 maintenance') || text.includes('根解释'),
+            hasPreviewPanel: sections.some((label) => label.includes('Resolution 预览')),
+            sourceEventLink: Boolean(document.querySelector('a[data-kind="event"]')),
+            sideEffectNote: text.includes('maintenance.get'),
+            noWriteButtons: !['Correct', 'Approve', 'Reject', 'Re-run'].some((label) =>
+              [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(label))),
+          }
+        })()`)
+        trace.record('interpretation detail shows the record, its candidates and lineage',
+          detailState.hasRecord && detailState.hasCandidates && detailState.hasLineage,
+          JSON.stringify(detailState))
+        trace.record('interpretation detail states the maintenance.get recovery caveat',
+          detailState.sideEffectNote === true)
+        const previewPanel = await evaluate(cdp, `(() => {
+          const panel = [...document.querySelectorAll('section')]
+            .find((n) => (n.getAttribute('aria-label') ?? '').includes('Resolution 预览'))
+          const text = (panel?.textContent ?? '').replace(/\s+/g, ' ')
+          return { conflict: text.includes('预览被拒绝'), emptyPlan: text.includes('空:计划项'),
+                   code: (text.match(/interpretation_[a-z_]+/) ?? [''])[0] }
+        })()`)
+        trace.record('a stale interpretation renders the preview conflict (not an empty plan)',
+          previewPanel.conflict === true && previewPanel.emptyPlan === false && previewPanel.code !== '',
+          JSON.stringify(previewPanel))
+        trace.record('interpretation detail offers no write action',
+          detailState.noWriteButtons === true)
+        await trace.screenshot(cdp, '11-interpretation')
+      }
+
+      if (args.pendingInterpretation) {
+        await cdp.send('Page.navigate', {
+          url: `${args.ui}/#/interpretation/${encodeURIComponent(args.pendingInterpretation)}`,
+        })
+        await waitFor(cdp, `document.querySelector('section') !== null`, { label: 'pending interpretation' })
+        const preview = await waitFor(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          if (text.includes('正在读取')) return ''
+          return text
+        })()`, { label: 'preview settled' })
+        const previewState = await evaluate(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          const panel = [...document.querySelectorAll('section')]
+            .find((n) => (n.getAttribute('aria-label') ?? '').includes('Resolution 预览'))
+          const panelText = (panel?.textContent ?? '').replace(/\s+/g, ' ')
+          return {
+            disposition: panelText.includes('PENDING_REVIEW'),
+            action: panelText.includes('CREATE_RULE'),
+            pendingBadge: panelText.includes('需要人工审批'),
+            conflictShown: panelText.includes('预览被拒绝'),
+            isPlanNotApplied: panelText.includes('不是已应用的决议'),
+          }
+        })()`)
+        trace.record('resolution preview is the server plan (PENDING_REVIEW / CREATE_RULE)',
+          previewState.disposition && previewState.action && previewState.pendingBadge,
+          JSON.stringify(previewState))
+        trace.record('resolution preview states it is a plan, not an applied resolution',
+          previewState.isPlanNotApplied === true)
+        await trace.screenshot(cdp, '12-resolution-preview')
+        void preview
+      }
+
+      if (args.review) {
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/reviews${args.p2Project ? `?project_id=${encodeURIComponent(args.p2Project)}` : ''}` })
+        await waitFor(cdp, `document.querySelector('a[href^="#/review/"]') !== null
+          || document.body.textContent.includes('空:待审批 Review')`,
+          { label: 'pending review rows or an empty queue' })
+        const queue = await evaluate(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          return {
+            hasReview: text.includes(${JSON.stringify(args.review)}),
+            hookHref: document.querySelector('a[href^="#/review/"]')?.getAttribute('href') ?? null,
+            noTotalClaim: text.includes('不会把「没有更多待审批」写成「全部已处理」'),
+            noApproveButton: ![...document.querySelectorAll('button')].some((b) =>
+              /批准|通过|Approve/i.test(b.textContent ?? '')),
+          }
+        })()`)
+        trace.record('pending review queue lists the review Core reports',
+          queue.hasReview === true && queue.noTotalClaim === true, JSON.stringify(queue))
+        trace.record('pending review queue offers no approve action', queue.noApproveButton === true)
+        await trace.screenshot(cdp, '13-reviews')
+
+        if (queue.hookHref) {
+          await cdp.send('Page.navigate', { url: `${args.ui}/${queue.hookHref}` })
+          await waitFor(cdp,
+            `document.body.textContent.includes('当前可审批计划') || document.body.textContent.includes('预览冲突')`,
+            { label: 'review detail body' })
+          const review = await evaluate(cdp, `(() => {
+            const text = document.body.textContent ?? ''
+            return {
+              hasId: text.includes(${JSON.stringify(args.review)}),
+              hasPreviewOrConflict: text.includes('当前可审批计划') || text.includes('预览冲突'),
+              resolutionLink: Boolean(document.querySelector('a[href^="#/resolution/"]')),
+            }
+          })()`)
+          trace.record('review detail shows the plan (or the conflict) and links its resolution',
+            review.hasId && review.hasPreviewOrConflict && review.resolutionLink,
+            JSON.stringify(review))
+          await trace.screenshot(cdp, '14-review')
+        }
+      }
+
+      if (args.resolution) {
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/resolution/${encodeURIComponent(args.resolution)}` })
+        // Data-dependent: the disposition badge only exists once the row loaded.
+        await waitFor(cdp, `document.body.textContent.includes('reasons')`,
+          { label: 'resolution detail body' })
+        const resolution = await evaluate(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          return {
+            hasId: text.includes(${JSON.stringify(args.resolution)}),
+            hasDisposition: text.includes('PENDING_REVIEW') || text.includes('APPLIED'),
+            hasReasons: text.includes('reasons'),
+            linksInterpretation: Boolean(document.querySelector('a[href^="#/interpretation/"]')),
+          }
+        })()`)
+        trace.record('resolution detail shows disposition, reasons and its interpretation',
+          resolution.hasId && resolution.hasDisposition && resolution.hasReasons &&
+            resolution.linksInterpretation, JSON.stringify(resolution))
+        await trace.screenshot(cdp, '15-resolution')
+      }
+    }
 
     // 9. negative: an unknown route is not silently the Overview
     await cdp.send('Page.navigate', { url: `${args.ui}/#/nonsense/route` })
@@ -565,7 +773,10 @@ async function main() {
     // The walkthrough deliberately provokes one 401 (the bogus-token sign-in), and
     // Chrome logs every failed network response at error level. Those lines are
     // evidence, not defects; anything else is an unexpected error.
-    const expectedRefusals = consoleErrors.filter((line) => /Failed to load resource.*(401|403)/.test(line))
+    // 401 = the deliberate bogus-token probe; 409 = the deliberate stale-preview
+    // probe. Both are provoked on purpose, so Chrome's network log line for them
+    // is evidence, not a defect.
+    const expectedRefusals = consoleErrors.filter((line) => /Failed to load resource.*(401|403|409)/.test(line))
     const unexpectedErrors = consoleErrors.filter((line) => !expectedRefusals.includes(line))
     trace.record(
       'no unexpected console errors during the walkthrough',

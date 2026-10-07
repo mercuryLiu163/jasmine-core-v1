@@ -66,6 +66,13 @@ describe('every dashboard endpoint call is forwarded by the proxy', () => {
       endpoints.getRuleHistory('rul_x', signal),
       endpoints.listTaskEvidence('tsk_x', signal),
       endpoints.getEvidence('evd_x', signal),
+      endpoints.listInterpretations({ project_id: 'prj_x', limit: 50 }, signal),
+      endpoints.listInterpretations({ event_id: 'evt_x', status: 'EXTRACTED', after_id: 'int_x', limit: 50 }, signal),
+      endpoints.getInterpretation('int_x', signal),
+      endpoints.listPendingReviews({ project_id: 'prj_x', after_id: 'rvw_x', limit: 50 }, signal),
+      endpoints.getReview('rvw_x', signal),
+      endpoints.previewResolution('int_x', signal),
+      endpoints.getResolution('res_x', signal),
       endpoints.listHosts(signal),
       endpoints.listActors(signal),
     ])
@@ -73,7 +80,15 @@ describe('every dashboard endpoint call is forwarded by the proxy', () => {
     const paths = fake.requests.map((request) => `${request.method} ${request.path}`)
     const refused = fake.requests.filter((request) => !isAllowed(request.method, request.path))
     expect(refused.map((request) => `${request.method} ${request.path}`)).toEqual([])
-    expect(paths.length).toBe(23)
+    expect(paths.length).toBe(30)
+
+    // The P2 collections page by an opaque `after_id` cursor, and the preview
+    // requires an explicit interpretation_id - neither is a wildcard read.
+    const preview = fake.requests.find((request) => request.path === '/v1/resolutions/preview')
+    expect(preview?.query.get('interpretation_id')).toBe('int_x')
+    expect(fake.requests.some((request) => request.path === '/v1/reviews/pending')).toBe(true)
+    expect(fake.requests.some((request) => request.path === '/v1/reviews')).toBe(false)
+    expect(fake.requests.some((request) => request.path === '/v1/resolutions')).toBe(false)
 
     // The sessions filter must be server-side, not a client-side slice.
     const filtered = fake.requests.find(

@@ -240,3 +240,193 @@ export interface StepList {
 export interface EventList {
   events: RawEvent[]
 }
+
+/* ------------------------------------------------------------------ *
+ * P2 interpretation / resolution / review (read slice).
+ *
+ * Field sets were copied from real responses of the frozen P2 Core
+ * (schema v8): `GET /v1/interpretations[/{id}]`, `GET /v1/reviews/pending[/{id}]`,
+ * `GET /v1/resolutions/preview`, `GET /v1/resolutions/{id}`. The three
+ * collections page with `after_id` and return `next_after_id`; none of them
+ * returns a total count, so the UI must not imply one.
+ * ------------------------------------------------------------------ */
+
+/** `PROCESSING` | `EXTRACTED` | `FAILED` | `INTERRUPTED`; unknown values render verbatim. */
+export interface InterpretationCandidate {
+  kind: string
+  content: string
+  impact: string
+  certainty: string
+  confidence: number
+  rationale: string
+  scope: {
+    kind: string
+    project_id: string | null
+    task_id: string | null
+    path: string | null
+    tool: string | null
+  }
+  source_span: { start: number; end: number; quote: string }
+}
+
+export interface Interpretation {
+  interpretation_id: string
+  event_id: string
+  project_id: string | null
+  task_id: string | null
+  session_id: string | null
+  host_id: string
+  source_actor_id: string
+  source_actor_kind: string
+  source_type: string
+  processor_actor_id: string
+  extractor_id: string
+  extractor_model: string
+  extractor_version: string
+  provider: string
+  prompt_version: string
+  output_schema_version: string
+  schema_digest: string
+  config_digest: string
+  input_hash: string
+  parent_interpretation_id: string | null
+  created_at: string
+  deadline_at: string
+  config: JsonObject
+  status: string
+  raw_result_json: string | null
+  candidates: InterpretationCandidate[] | null
+  confidence: number | null
+  error_code: string | null
+  completed_at: string | null
+  /** Detail responses add the maintenance view (lineage / rerun bookkeeping). */
+  maintenance_head?: MaintenanceHead
+  maintenance_history?: MaintenanceChange[]
+  operation_completions?: OperationCompletion[]
+}
+
+export interface MaintenanceHead {
+  root_interpretation_id: string
+  current_interpretation_id: string
+  revision: number
+  status: string
+  pending_operation_event_id: string | null
+  pending_child_interpretation_id: string | null
+}
+
+export interface MaintenanceChange {
+  operation_event_id: string
+  root_interpretation_id: string
+  from_interpretation_id: string | null
+  to_interpretation_id: string
+  action: string
+  actor_id: string
+  reason: string | null
+  from_revision: number
+  to_revision: number
+  created_at: string
+}
+
+export interface OperationCompletion {
+  operation_event_id: string
+  child_interpretation_id: string
+  child_status: string
+  applied: number
+  expected_revision: number
+  head_revision: number
+  completed_at: string
+  detail: string
+}
+
+export interface InterpretationPage {
+  items: Interpretation[]
+  next_after_id: string | null
+}
+
+export interface ResolutionAction {
+  kind?: string
+  target_kind?: string
+  target_id?: string
+  [key: string]: unknown
+}
+
+export interface ResolutionResult {
+  resolution_id: string
+  interpretation_id: string
+  source_event_id: string
+  command_event_id: string
+  policy_version: string
+  disposition: string
+  /** Applicable/disposition reasons; unknown values are rendered verbatim. */
+  reasons: string[]
+  actions: ResolutionAction[]
+  source_bindings: unknown[]
+  canonical_resolution_id: string | null
+  latest_application_id: string | null
+  execution_actor_id: string | null
+  review_id: string | null
+  review_actor_id: string | null
+  review_command_event_id: string | null
+}
+
+export interface Resolution {
+  resolution_id: string
+  interpretation_id: string
+  source_event_id: string
+  actor_id: string
+  command_event_id: string
+  policy_version: string
+  context_digest: string
+  expected_context: JsonObject
+  plan: ResolutionPlan
+  request_hash: string
+  created_at: string
+  result: ResolutionResult
+  manual_application_history: JsonObject[]
+}
+
+export interface PlanItem {
+  candidate_index: number
+  candidate: InterpretationCandidate
+  /** `CREATE_RULE` | `ATTACH_TASK` | `CREATE_TASK` | `NO_ACTION` | unknown. */
+  action: string
+  pending: boolean
+  reason: string
+}
+
+export interface ResolutionPlan {
+  policy_version: string
+  disposition: string
+  items: PlanItem[]
+}
+
+export interface ResolutionPreview {
+  interpretation_id: string
+  source_event_id: string
+  policy_version: string
+  plan: ResolutionPlan
+  expected_revisions: JsonObject
+  expected_context_digest: string
+  maintenance_head: MaintenanceHead
+  source_application: JsonObject | null
+}
+
+export interface Review {
+  review_id: string
+  resolution_id: string
+  /** `PENDING` | `APPROVED` | `REJECTED` | `SOURCE_REPLAYED`; unknown renders verbatim. */
+  status: string
+  revision: number
+  created_at: string
+  updated_at: string
+  resolution: Resolution
+  history: Array<JsonObject & { result: unknown }>
+  /** Present unless the current preview conflicts (then `preview_error` is). */
+  preview?: ResolutionPreview
+  preview_error?: { code: string; details: JsonObject }
+}
+
+export interface ReviewPage {
+  items: Review[]
+  next_after_id: string | null
+}

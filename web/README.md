@@ -24,6 +24,9 @@ Memory (P4) and Validation (P7-01) are **not** wired — those screens say
 | Source Event | Event deep link | `/v1/events/{id}` |
 | Authority | Rules | `/v1/rules/active`, `/v1/rules/{id}`, `/v1/rules/{id}/history` |
 | Evidence | Task → Evidence, Evidence deep link | `/v1/tasks/{id}/evidence`, `/v1/evidence/{id}` |
+| Interpretation list/detail (P6-02 A) | Interpretations, Interpretation deep link | `/v1/interpretations` (`after_id` paging), `/v1/interpretations/{id}` |
+| Pending reviews (P6-02 A) | 待审批 Review, Review deep link | `/v1/reviews/pending`, `/v1/reviews/{id}` |
+| Resolution plan/record (P6-02 A) | Interpretation → Resolution 预览, Resolution deep link | `/v1/resolutions/preview?interpretation_id=`, `/v1/resolutions/{id}` |
 
 The board's columns are **Step** statuses (`PLANNED`, `IN_PROGRESS`, `EXECUTED`,
 `VERIFIED`, `ACCEPTED`, `FAILED`, `BLOCKED`, `STALE`, `SKIPPED`). The **Task**
@@ -72,6 +75,11 @@ its own loud column; nothing is folded into "other".
 
 ## Running it
 
+The P6-02 read slice additionally needs `interpretations:read`, `reviews:read`
+and `resolutions:read`. Core also requires `events:read` on the interpretation
+endpoints and `interpretations:read` on the review/resolution ones; a missing
+scope is reported as `forbidden` next to the data and is never worked around.
+
 ```bash
 cd web
 npm install                      # uses the committed package-lock.json
@@ -111,6 +119,22 @@ through the real HTTP API, and `scripts/p6/browser_trace.mjs` drives a real
 headless Chrome through sign-in, source tracing, deep-link refresh and sign-out,
 writing screenshots plus a redacted request log to a run directory:
 
+For the P6-02 read slice there is a second fixture, composed on top of the P1
+scenario so the Task board and the interpretation chain live in one world:
+
+```bash
+python3 scripts/p6/p6_p2_fixture.py build --out /private/tmp/p6-p2
+python3 scripts/p6/p6_p2_fixture.py serve --out /private/tmp/p6-p2 --port 8795 &
+node scripts/p6/browser_trace.mjs --ui http://127.0.0.1:5183 \
+  --token-file /private/tmp/p6-p2/tokens.json --token-key p2_read \
+  --interpretation int_… --pending-interpretation int_… --review rvw_… --resolution res_… \
+  --p2-project prj_… --out validation-runs/p6/<run-id>
+```
+
+Its data is produced by the real Core pipeline with a **component-simulation
+provider**, exactly as P2's own tests do; that is labelled in the fixture
+descriptor and is not a real model run.
+
 ```bash
 cd ..
 python3 scripts/p6/p6_scratch.py build --out /private/tmp/p6-scratch
@@ -132,19 +156,29 @@ The trace never writes the Authorization header value; it records only
 
 `P6-01-COMPLIANCE.md` maps every P6-01 work item (P6-A01…A08) and every
 applicable negative case to its implementation, its evidence, and what is
-explicitly *not* delivered.
+explicitly *not* delivered. `P6-02-COMPLIANCE.md` does the same for the P6-02
+read slice, including the verified finding that Core's interpretation/review
+reads can write through lazy recovery.
 
 ## Deliberately not implemented here
 
 | Screen | Owner | Waiting on |
 | --- | --- | --- |
-| Interpretation / Review, Correct / Reject / Re-run | P6-02 | P2 contracts are merged (`/v1/interpretations`, `/v1/reviews`, `/v1/resolutions`); the P6-02 view, the proxy read paths and the contract test are not delivered |
+| Correct / Reject / Re-run, Approve / Reject, manual reapply | P6-02 milestone B | The P6-02 **read** slice is delivered (`P6-02-COMPLIANCE.md`); the audited write half needs a real human actor/provenance chain and an independent permission Gate |
 | Checkpoint compare | P3 | checkpoint read API |
 | Context inspector (actual injection) | P3 | persisted pack + injection receipt |
 | Memory jobs / recall / management | P4 | Memory adapter read + management API |
 | Validation inspector (run list, artifacts) | P7-01 | minimal validation read API + safe artifact contract |
 | online / backup / storage | P5 / P7 | health read contracts |
 | All writes (Rule, Task, Step, Evidence confirmation) | P6-02 | P2 policy gate + independent permission Gate |
+
+## Status
+
+`P6-02 milestone A (read slice): delivered and verified on an isolated fixture`;
+`P6-02: PARTIAL` because milestone B (audited human writes) is not started, and
+an independent reviewer/validator has yet to confirm this slice. `P6` as a stage
+is not complete. Details, evidence and the side-effect finding:
+`P6-02-COMPLIANCE.md`.
 
 ## Phase status
 

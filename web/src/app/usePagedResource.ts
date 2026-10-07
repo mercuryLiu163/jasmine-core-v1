@@ -16,12 +16,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { CoreApiError, isAbortError } from '../api/errors'
 
+/**
+ * Some Core collections page by `offset`, some by `after_seq`, and the P2 ones
+ * by an opaque `after_id` string; the hook must not assume numbers.
+ */
+export type Cursor = string | number
+
 export interface PageResult<T> {
   items: T[]
   /** Rows in this page, as returned by Core. */
   count: number
   /** Cursor for the next page, or null when the loader knows it is done. */
-  nextCursor: number | null
+  nextCursor: Cursor | null
   /** True only when the loader proved there is nothing further. */
   complete: boolean
 }
@@ -38,7 +44,7 @@ export interface Paged<T> {
   reload: () => void
 }
 
-type Loader<T> = (cursor: number | null, signal: AbortSignal) => Promise<PageResult<T>>
+type Loader<T> = (cursor: Cursor | null, signal: AbortSignal) => Promise<PageResult<T>>
 
 function signatureOf(deps: readonly unknown[]): string {
   return deps
@@ -83,7 +89,7 @@ export function usePagedResource<T>(
   const [nonce, setNonce] = useState(0)
   const [state, setState] = useState<Internal<T>>(EMPTY<T>)
 
-  const cursorRef = useRef<number | null>(null)
+  const cursorRef = useRef<Cursor | null>(null)
   const generationRef = useRef(0)
   const controllerRef = useRef<AbortController | null>(null)
 
@@ -172,13 +178,22 @@ export function usePagedResource<T>(
   }
 }
 
+/** The offset/after_seq loaders own numeric cursors; fail loudly otherwise. */
+function numericCursor(cursor: Cursor | null): number | null {
+  if (cursor === null) return null
+  if (typeof cursor !== 'number') {
+    throw new Error(`this loader expects a numeric cursor, received ${typeof cursor}`)
+  }
+  return cursor
+}
+
 /** Offset paging for the object collections (`limit`/`offset`). */
 export function offsetLoader<T>(options: {
   limit: number
   fetch: (offset: number, limit: number, signal: AbortSignal) => Promise<{ items: T[]; count: number }>
 }): Loader<T> {
   return async (cursor, signal) => {
-    const offset = cursor ?? 0
+    const offset = numericCursor(cursor) ?? 0
     const page = await options.fetch(offset, options.limit, signal)
     const complete = page.count < options.limit
     return {
@@ -196,7 +211,7 @@ export function afterSeqLoader<T extends { seq: number }>(options: {
   fetch: (afterSeq: number | null, limit: number, signal: AbortSignal) => Promise<{ items: T[]; count: number }>
 }): Loader<T> {
   return async (cursor, signal) => {
-    const page = await options.fetch(cursor, options.limit, signal)
+    const page = await options.fetch(numericCursor(cursor), options.limit, signal)
     const last = page.items.length > 0 ? page.items[page.items.length - 1] : undefined
     const complete = page.count < options.limit
     return {
@@ -204,6 +219,30 @@ export function afterSeqLoader<T extends { seq: number }>(options: {
       count: page.count,
       complete,
       nextCursor: complete || last === undefined ? null : last.seq,
+    }
+  }
+}
+
+/** `after_id` paging for the P2 collections, which have no `offset`/`after_seq`. */
+export function afterIdLoader<T>(options: {
+  limit: number
+  /** Returns the page plus the cursor Core reported (`next_after_id`). */
+  fetch: (
+    afterId: string | null,
+    limit: number,
+    signal: AbortSignal,
+  ) => Promise<{ items: T[]; nextAfterId: string | null }>
+}): Loader<T> {
+  return async (cursor, signal) => {
+    const afterId = cursor === null || cursor === undefined ? null : String(cursor)
+    const page = await options.fetch(afterId, options.limit, signal)
+    return {
+      items: page.items,
+      count: page.items.length,
+      // Core says there is no further page by returning a null cursor; a full
+      // page alone is not proof, which is why this trusts `next_after_id`.
+      complete: page.nextAfterId === null,
+      nextCursor: page.nextAfterId,
     }
   }
 }

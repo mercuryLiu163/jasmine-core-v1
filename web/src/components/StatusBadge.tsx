@@ -9,7 +9,17 @@
 
 import { cls } from '../lib/classNames'
 
-export type BadgeKind = 'task' | 'step' | 'evidence' | 'reference' | 'rule' | 'session'
+export type BadgeKind =
+  | 'task'
+  | 'step'
+  | 'evidence'
+  | 'reference'
+  | 'rule'
+  | 'session'
+  | 'interpretation'
+  | 'disposition'
+  | 'review'
+  | 'action'
 
 type Tone = 'neutral' | 'progress' | 'good' | 'warn' | 'bad' | 'unknown'
 
@@ -62,7 +72,44 @@ const SESSION: Record<string, ToneSpec> = {
   ended: { glyph: '■', tone: 'neutral' },
 }
 
+// P2 vocabularies, copied from the frozen enums: interpretations.STATUSES
+// (PROCESSING/EXTRACTED/FAILED/INTERRUPTED), the resolution dispositions the
+// policy and review paths emit, `reviews.change` statuses, and the plan actions
+// in resolution_policy. Anything else renders as `? VALUE` in the unknown tone.
+const INTERPRETATION: Record<string, ToneSpec> = {
+  PROCESSING: { glyph: '◐', tone: 'progress' },
+  EXTRACTED: { glyph: '✔', tone: 'good' },
+  FAILED: { glyph: '✖', tone: 'bad' },
+  INTERRUPTED: { glyph: '⚠', tone: 'warn', label: '提供方中断,结果不完整' },
+}
+
+const DISPOSITION: Record<string, ToneSpec> = {
+  APPLIED: { glyph: '✔', tone: 'good' },
+  PENDING_REVIEW: { glyph: '◌', tone: 'warn', label: '等待人工审批,未生效' },
+  NO_ACTION: { glyph: '○', tone: 'neutral' },
+  REJECTED: { glyph: '✖', tone: 'bad' },
+  SOURCE_REPLAYED: { glyph: '↺', tone: 'neutral', label: '来源已被其他决议应用' },
+}
+
+const REVIEW: Record<string, ToneSpec> = {
+  PENDING: { glyph: '◌', tone: 'warn', label: '待人工审批' },
+  APPROVED: { glyph: '✔', tone: 'good' },
+  REJECTED: { glyph: '✖', tone: 'bad' },
+  SOURCE_REPLAYED: { glyph: '↺', tone: 'neutral' },
+}
+
+const ACTION: Record<string, ToneSpec> = {
+  CREATE_RULE: { glyph: '§', tone: 'progress' },
+  ATTACH_TASK: { glyph: '▤', tone: 'progress' },
+  CREATE_TASK: { glyph: '▤', tone: 'progress' },
+  NO_ACTION: { glyph: '○', tone: 'neutral' },
+}
+
 const VOCABULARY: Record<BadgeKind, Record<string, ToneSpec>> = {
+  interpretation: INTERPRETATION,
+  disposition: DISPOSITION,
+  review: REVIEW,
+  action: ACTION,
   step: STEP,
   task: TASK,
   evidence: EVIDENCE,

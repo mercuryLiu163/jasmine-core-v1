@@ -24,7 +24,13 @@
     "^/v1/rules/[A-Za-z0-9_]+$",
     "^/v1/rules/[A-Za-z0-9_]+/(history|approve|supersede|retire)$",
     "^/v1/evidence/confirm$",
-    "^/v1/evidence/[A-Za-z0-9_]+$"
+    "^/v1/evidence/[A-Za-z0-9_]+$",
+    "^/v1/interpretations$",
+    "^/v1/interpretations/[A-Za-z0-9_]+$",
+    "^/v1/reviews/pending$",
+    "^/v1/reviews/[A-Za-z0-9_]+$",
+    "^/v1/resolutions/preview$",
+    "^/v1/resolutions/[A-Za-z0-9_]+$"
   ],
-  "phase_note": "P6-01 forwards GET only: the browser is same-origin, so no preflight is needed and OPTIONS is deliberately NOT forwarded (it reached Core in review and returned 405 with a real audit row, which made 'read-only proxy' untrue). Mutation paths are listed for the later P6-02/P6-03 PRs; the method allowlist is what gates them, and Core still enforces scopes and actor kind per request."
+  "phase_note": "P6-01/P6-02 read slice forwards GET only: the browser is same-origin, so no preflight is needed and OPTIONS is deliberately NOT forwarded. Mutation paths are listed for the later P6-02 milestone B; the method allowlist is what gates them, and Core still enforces scopes and actor kind per request. There is no /v1/reviews or /v1/resolutions collection: the P2 collection reads are /v1/interpretations and /v1/reviews/pending (after_id cursor), plus /v1/resolutions/preview which requires an explicit interpretation_id."
 }

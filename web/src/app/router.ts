@@ -26,6 +26,17 @@ export type Route =
     }
   | { name: 'rules'; projectId: string | null; taskId: string | null; ruleId: string | null }
   | { name: 'evidence'; evidenceId: string | null; taskId: string | null }
+  | {
+      name: 'interpretations'
+      projectId: string | null
+      taskId: string | null
+      eventId: string | null
+      status: string | null
+    }
+  | { name: 'interpretation'; interpretationId: string }
+  | { name: 'reviews'; projectId: string | null; taskId: string | null }
+  | { name: 'review'; reviewId: string }
+  | { name: 'resolution'; resolutionId: string }
   | { name: 'event'; eventId: string }
   | { name: 'pending'; key: string }
   | { name: 'unknown'; raw: string }
@@ -77,6 +88,30 @@ export function parseHash(hash: string): Route {
       ruleId: query.get('rule_id'),
     }
   }
+  if (head === 'interpretations') {
+    return {
+      name: 'interpretations',
+      projectId: query.get('project_id'),
+      taskId: query.get('task_id'),
+      eventId: query.get('event_id'),
+      status: query.get('status'),
+    }
+  }
+  if (head === 'interpretation') {
+    const interpretationId = segment(parts[1])
+    return interpretationId ? { name: 'interpretation', interpretationId } : { name: 'unknown', raw }
+  }
+  if (head === 'reviews') {
+    return { name: 'reviews', projectId: query.get('project_id'), taskId: query.get('task_id') }
+  }
+  if (head === 'review') {
+    const reviewId = segment(parts[1])
+    return reviewId ? { name: 'review', reviewId } : { name: 'unknown', raw }
+  }
+  if (head === 'resolution') {
+    const resolutionId = segment(parts[1])
+    return resolutionId ? { name: 'resolution', resolutionId } : { name: 'unknown', raw }
+  }
   if (head === 'evidence') {
     return { name: 'evidence', evidenceId: query.get('evidence_id'), taskId: query.get('task_id') }
   }
@@ -122,6 +157,21 @@ export function hrefFor(route: Route): string {
       })}`
     case 'evidence':
       return `#/evidence${queryString({ evidence_id: route.evidenceId, task_id: route.taskId })}`
+    case 'interpretations':
+      return `#/interpretations${queryString({
+        project_id: route.projectId,
+        task_id: route.taskId,
+        event_id: route.eventId,
+        status: route.status,
+      })}`
+    case 'interpretation':
+      return `#/interpretation/${encodeURIComponent(route.interpretationId)}`
+    case 'reviews':
+      return `#/reviews${queryString({ project_id: route.projectId, task_id: route.taskId })}`
+    case 'review':
+      return `#/review/${encodeURIComponent(route.reviewId)}`
+    case 'resolution':
+      return `#/resolution/${encodeURIComponent(route.resolutionId)}`
     case 'event':
       return `#/event/${encodeURIComponent(route.eventId)}`
     case 'pending':
@@ -146,4 +196,16 @@ export const sourceHref = {
     taskId: string | null = null,
     sessionId: string | null = null,
   ): string => hrefFor({ name: 'conversation', projectId, taskId, sessionId }),
+  interpretations: (
+    projectId: string | null,
+    taskId: string | null = null,
+    eventId: string | null = null,
+    status: string | null = null,
+  ): string => hrefFor({ name: 'interpretations', projectId, taskId, eventId, status }),
+  interpretation: (interpretationId: string): string =>
+    hrefFor({ name: 'interpretation', interpretationId }),
+  review: (reviewId: string): string => hrefFor({ name: 'review', reviewId }),
+  reviews: (projectId: string | null, taskId: string | null = null): string =>
+    hrefFor({ name: 'reviews', projectId, taskId }),
+  resolution: (resolutionId: string): string => hrefFor({ name: 'resolution', resolutionId }),
 }

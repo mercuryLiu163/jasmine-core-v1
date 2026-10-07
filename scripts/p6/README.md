@@ -116,3 +116,40 @@ node scripts/p6/p6_pending_check.mjs --ui http://127.0.0.1:5180 \
 
 Exit code is non-zero if any area is unmarked, an unknown key is silently
 rendered, or an unfrozen path is requested.
+
+## `p6_p2_fixture.py` — P1 scenario + real P2 rows
+
+Composes on `p6_scratch.Scratch` (so the Task board has Steps) and then produces
+real P2 data through the real pipeline — `InterpretationStore.process`,
+`ResolverStore.resolve`, `ReviewStore` — with a component-simulation provider.
+It seeds an applied resolution, a `PENDING_REVIEW` resolution with its review
+row, a `correct`ed child interpretation and a rejected one, plus enough
+interpretations to page.
+
+```bash
+python3 scripts/p6/p6_p2_fixture.py build --out /private/tmp/p6-p2
+python3 scripts/p6/p6_p2_fixture.py serve --out /private/tmp/p6-p2 --port 8795
+```
+
+`tokens.json` then also carries `p2_read`, a token with exactly the P6-02 read
+scopes. The descriptor records the provider as a simulation, not a model run.
+
+## `p6_lazy_recovery_probe.py` — the GET that writes
+
+Core's interpretation and review reads call `maintenance.recover` /
+`InterpretationStore._recover`, which can write. This probe proves it instead of
+assuming it: it copies a fixture, inserts the crashed-provider precondition (an
+interpretation past its deadline with no result row — the chain is append-only by
+trigger), serves that copy itself, issues a plain
+`GET /v1/interpretations?limit=50`, and reports the before/after row counts.
+
+```bash
+python3 scripts/p6/p6_lazy_recovery_probe.py --db /private/tmp/p6-p2/core.db \
+  --workspace /private/tmp/p6-p2/workspace \
+  --token-file /private/tmp/p6-p2/tokens.json --token-key p2_read \
+  --out validation-runs/p6/<run-id>
+```
+
+Observed: `interpretation_results` 8 → 9 with
+`status=INTERRUPTED, error_code=provider_interrupted`. Therefore P6-02 describes
+these endpoints as "GET, but not guaranteed side-effect free".

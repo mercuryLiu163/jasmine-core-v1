@@ -18,7 +18,7 @@ import { offsetLoader, usePagedResource } from '../app/usePagedResource'
 import { useResource } from '../app/useResource'
 import { Pager } from '../components/Pager'
 import { StatusBadge } from '../components/StatusBadge'
-import { Empty, ErrorPanel, Loading, Panel, StaleBanner, Unavailable } from '../components/States'
+import { Empty, ErrorPanel, Loading, Panel, StaleBanner } from '../components/States'
 import { KeyValue, SourceLink } from '../components/Trace'
 import { formatTimestamp } from '../lib/text'
 
@@ -217,12 +217,18 @@ export function ProjectView({ projectId }: { projectId: string }): JSX.Element {
         </p>
       </Panel>
 
-      <Panel title="未接入">
-        <Unavailable
-          feature="Interpretation / Resolver"
-          owner="P2 主线"
-          pending="interpretations、correct/reject/rerun、reviews/pending/approve 读写契约"
-        />
+      <Panel title="Interpretation / Resolver">
+        <p className="state state--meta">
+          P2 契约已合并;本项目下的解释链现在是只读视图,写入动作属于 P6-02 里程碑 B(未交付)。
+        </p>
+        <ul className="plain">
+          <li>
+            <a href={sourceHref.interpretations(projectId)}>本项目的 Interpretations</a>
+          </li>
+          <li>
+            <a href={sourceHref.reviews(projectId)}>本项目的待审批 Review</a>
+          </li>
+        </ul>
       </Panel>
     </div>
   )

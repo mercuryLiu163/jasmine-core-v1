@@ -20,6 +20,12 @@ export const REQUIRED_READ_SCOPES = [
   'state:read',
   'authority:read',
   'evidence:read',
+  // P6-02 read slice. The interpretation endpoints also require `events:read`
+  // and the review/resolution ones also require `interpretations:read`, which
+  // Core enforces server-side; the UI only reports what it is refused.
+  'interpretations:read',
+  'reviews:read',
+  'resolutions:read',
 ] as const
 
 interface SessionValue {

@@ -15,15 +15,21 @@ import { Panel } from './components/States'
 import { ConversationView } from './views/ConversationView'
 import { EventView } from './views/EventView'
 import { EvidenceView } from './views/EvidenceView'
+import { InterpretationsView } from './views/InterpretationsView'
+import { InterpretationView } from './views/InterpretationView'
 import { OverviewView } from './views/OverviewView'
 import { PendingView, pendingKeys } from './views/PendingView'
 import { ProjectView } from './views/ProjectView'
+import { ResolutionView, ReviewView } from './views/ReviewView'
+import { ReviewsView } from './views/ReviewsView'
 import { RulesView } from './views/RulesView'
 import { TaskView } from './views/TaskView'
 
 const NAV = [
   { label: 'Overview', href: hrefFor({ name: 'overview' }) },
   { label: 'Conversation', href: hrefFor({ name: 'conversation', projectId: null, taskId: null, sessionId: null }) },
+  { label: 'Interpretations', href: hrefFor({ name: 'interpretations', projectId: null, taskId: null, eventId: null, status: null }) },
+  { label: '待审批 Review', href: hrefFor({ name: 'reviews', projectId: null, taskId: null }) },
   { label: 'Rules', href: hrefFor({ name: 'rules', projectId: null, taskId: null, ruleId: null }) },
 ]
 
@@ -90,6 +96,8 @@ export function App(): JSX.Element {
 function isCurrent(route: Route, href: string): boolean {
   if (href.endsWith('/overview')) return route.name === 'overview'
   if (href.includes('/conversation')) return route.name === 'conversation'
+  if (href.includes('/interpretations')) return route.name === 'interpretations'
+  if (href.includes('/reviews')) return route.name === 'reviews'
   if (href.includes('/rules')) return route.name === 'rules'
   return false
 }
@@ -124,6 +132,23 @@ function renderRoute(route: Route): JSX.Element {
       )
     case 'event':
       return <EventView eventId={route.eventId} />
+    case 'interpretations':
+      return (
+        <InterpretationsView
+          projectId={route.projectId}
+          taskId={route.taskId}
+          eventId={route.eventId}
+          status={route.status}
+        />
+      )
+    case 'interpretation':
+      return <InterpretationView interpretationId={route.interpretationId} />
+    case 'reviews':
+      return <ReviewsView projectId={route.projectId} taskId={route.taskId} />
+    case 'review':
+      return <ReviewView reviewId={route.reviewId} />
+    case 'resolution':
+      return <ResolutionView resolutionId={route.resolutionId} />
     case 'pending':
       return <PendingView pendingKey={route.key} />
     case 'unknown':

@@ -25,9 +25,12 @@ export function Pager({
         <code>count</code> 是本页长度,不是总数)。
         {paged.complete ? ' 最后一页短于 limit,可判定已到末尾。' : ' 是否还有更多由 Core 决定。'}
       </p>
-      {paged.error ? (
+      {paged.error && paged.items.length > 0 ? (
+        // Only a failure that happened *after* rows were already shown belongs
+        // here; a failed first page is the view's own error panel, and rendering
+        // both would show the same refusal twice.
         <ErrorPanel error={paged.error} what={noun} onRetry={paged.reload} />
-      ) : (
+      ) : paged.error ? null : (
         <div className="pager__actions">
           {paged.hasMore ? (
             <button type="button" onClick={paged.loadMore} disabled={paged.loading}>

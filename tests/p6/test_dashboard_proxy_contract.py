@@ -130,12 +130,56 @@ class DashboardProxyContract(unittest.TestCase):
             "/v1/rules/rul_x",
             "/v1/rules/rul_x/history",
             "/v1/evidence/evd_x",
+            # P6-02 read slice: the real P2 collection/detail paths.
+            "/v1/interpretations",
+            "/v1/interpretations/int_x",
+            "/v1/reviews/pending",
+            "/v1/reviews/rvw_x",
+            "/v1/resolutions/preview",
+            "/v1/resolutions/res_x",
         ]
         for path in needed:
             self.assertTrue(
                 any(pattern.fullmatch(path) for pattern in self.allowed),
                 f"{path} is used by the dashboard but not forwarded by the proxy",
             )
+
+    def test_p2_collections_have_no_wildcard_collection_route(self) -> None:
+        # `/v1/reviews` and `/v1/resolutions` are deliberately NOT collection
+        # GETs, so the allowlist must not make them look like one.
+        for path in ("/v1/reviews", "/v1/resolutions"):
+            self.assertFalse(
+                any(pattern.fullmatch(path) for pattern in self.allowed),
+                f"{path} must not be allowlisted as a collection",
+            )
+            self.assertFalse(
+                any(pattern.fullmatch(path) for pattern in self.allowed),
+                f"{path} must not be reachable",
+            )
+
+    def test_conversation_event_filter_matches_the_core_enum(self) -> None:
+        """The UI dropdown and `models.EVENT_TYPES` must not drift apart.
+
+        The dashboard renders unknown event types verbatim, so a stale list is a
+        usability bug rather than a truth bug - but it is exactly the kind of
+        silent drift a contract test should catch.
+        """
+        source = (ROOT / "web" / "src" / "views" / "ConversationView.tsx").read_text(encoding="utf-8")
+        marker = "const EVENT_TYPES = ["
+        start = source.index(marker) + len(marker)
+        end = source.index("] as const", start)
+        block = source[start:end]
+        listed = set(re.findall(r"'([^']+)'", block))
+        from jasmine_core.models import EVENT_TYPES
+
+        self.assertEqual(
+            sorted(EVENT_TYPES - listed), [],
+            "Core event types missing from the dashboard filter",
+        )
+        self.assertEqual(
+            sorted(listed - EVENT_TYPES), [],
+            "dashboard filter lists event types Core does not define",
+        )
 
     def test_traversal_and_absolute_targets_are_not_matched(self) -> None:
         for hostile in (

@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { offsetLoader, usePagedResource } from '../src/app/usePagedResource'
-import type { PageResult } from '../src/app/usePagedResource'
+import type { Cursor, PageResult } from '../src/app/usePagedResource'
 
 interface Row {
   id: string
@@ -12,9 +12,9 @@ interface Row {
 function pageLoader(
   pages: Record<string, PageResult<Row>[]>,
   options: { delayMs?: number } = {},
-): (scope: string) => (cursor: number | null, signal: AbortSignal) => Promise<PageResult<Row>> {
+): (scope: string) => (cursor: Cursor | null, signal: AbortSignal) => Promise<PageResult<Row>> {
   return (scope) => async (cursor, signal) => {
-    const index = cursor === null ? 0 : cursor
+    const index = cursor === null ? 0 : Number(cursor)
     if (options.delayMs) {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(resolve, options.delayMs)

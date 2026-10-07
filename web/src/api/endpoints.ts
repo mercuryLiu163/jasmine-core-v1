@@ -11,6 +11,8 @@
 import type { CoreClient, QueryValue } from './client'
 import type {
   Actor,
+  Interpretation,
+  InterpretationPage,
   EventList,
   EventPage,
   Evidence,
@@ -20,7 +22,11 @@ import type {
   MetaSchema,
   Project,
   ProjectPage,
+  Resolution,
+  ResolutionPreview,
   RawEvent,
+  Review,
+  ReviewPage,
   Rule,
   RuleHistoryEntry,
   RulePage,
@@ -124,6 +130,60 @@ export function makeEndpoints(client: CoreClient) {
       client.get<EvidencePage>(`/tasks/${id(taskId)}/evidence`, { signal }),
     getEvidence: (evidenceId: string, signal?: AbortSignal) =>
       client.get<{ evidence: Evidence }>(`/evidence/${id(evidenceId)}`, { signal }),
+
+    // --- P2 read slice -------------------------------------------------
+    // There is no `GET /v1/reviews` or `GET /v1/resolutions` collection: the
+    // only collection reads are `interpretations` and `reviews/pending`, both
+    // cursor-paged with `after_id` and returning `next_after_id` (no count).
+    listInterpretations: (
+      query: {
+        event_id?: string | null
+        project_id?: string | null
+        task_id?: string | null
+        status?: string | null
+        after_id?: string | null
+        limit?: number
+      },
+      signal?: AbortSignal,
+    ) =>
+      client.get<InterpretationPage>('/interpretations', {
+        query: {
+          event_id: query.event_id,
+          project_id: query.project_id,
+          task_id: query.task_id,
+          status: query.status,
+          after_id: query.after_id,
+          limit: query.limit ?? DEFAULT_OBJECT_LIMIT,
+        },
+        signal,
+      }),
+    getInterpretation: (interpretationId: string, signal?: AbortSignal) =>
+      client.get<{ interpretation: Interpretation }>(
+        `/interpretations/${id(interpretationId)}`,
+        { signal },
+      ),
+    listPendingReviews: (
+      query: { project_id?: string | null; task_id?: string | null; after_id?: string | null; limit?: number },
+      signal?: AbortSignal,
+    ) =>
+      client.get<ReviewPage>('/reviews/pending', {
+        query: {
+          project_id: query.project_id,
+          task_id: query.task_id,
+          after_id: query.after_id,
+          limit: query.limit ?? DEFAULT_OBJECT_LIMIT,
+        },
+        signal,
+      }),
+    getReview: (reviewId: string, signal?: AbortSignal) =>
+      client.get<{ review: Review }>(`/reviews/${id(reviewId)}`, { signal }),
+    previewResolution: (interpretationId: string, signal?: AbortSignal) =>
+      client.get<ResolutionPreview>('/resolutions/preview', {
+        query: { interpretation_id: interpretationId },
+        signal,
+      }),
+    getResolution: (resolutionId: string, signal?: AbortSignal) =>
+      client.get<{ resolution: Resolution }>(`/resolutions/${id(resolutionId)}`, { signal }),
 
     listHosts: (signal?: AbortSignal) => client.get<{ hosts: Host[] }>('/hosts', { signal }),
     listActors: (signal?: AbortSignal) => client.get<{ actors: Actor[] }>('/actors', { signal }),

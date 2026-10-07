@@ -8,8 +8,9 @@
  * complete chat capture.
  *
  * Tool results and other machine events keep their own label and can never be
- * rendered as a human utterance. The Interpretation column is an explicit
- * "未接入" panel: P2 owns that contract and no local inference stands in for it.
+ * rendered as a human utterance. The Interpretation column links to the delivered
+ * read views instead of guessing: P2 owns that contract, and the dashboard shows
+ * what Core recorded rather than inferring it from event text.
  */
 
 import { useId, useMemo, useState } from 'react'
@@ -22,7 +23,7 @@ import { afterSeqLoader, offsetLoader, usePagedResource } from '../app/usePagedR
 import { EventRow } from '../components/EventRow'
 import { Pager } from '../components/Pager'
 import { StatusBadge } from '../components/StatusBadge'
-import { Empty, ErrorPanel, Loading, Panel, StaleBanner, Unavailable } from '../components/States'
+import { Empty, ErrorPanel, Loading, Panel, StaleBanner } from '../components/States'
 import { formatTimestamp } from '../lib/text'
 
 const EVENT_TYPES = [
@@ -49,6 +50,15 @@ const EVENT_TYPES = [
   'evidence.confirmed',
   'workspace.fingerprinted',
   'step.staled',
+  // P2 additions. This list must match `models.EVENT_TYPES` in the frozen Core;
+  // tests/p6/test_dashboard_proxy_contract.py parses it and fails on drift.
+  'interpretation.bound',
+  'interpretation.corrected',
+  'interpretation.rejected',
+  'interpretation.rerun',
+  'resolution.command',
+  'review.approved',
+  'review.rejected',
 ] as const
 
 export function ConversationView({
@@ -201,13 +211,31 @@ export function ConversationView({
         </Panel>
 
         <div className="stack">
-          <Panel title="Interpretation / Resolver">
-            <Unavailable
-              feature="Interpretation 与 Resolver 结果"
-              owner="P2 主线"
-              pending="/interpret、correct/reject/rerun、reviews/pending 读写契约与真实 Resolver policy"
-              note="左列是 Core 逐字保留的 Raw Event;右侧的解释、置信度与派生 Truth 在契约冻结前保持空,不用关键词或本地推断顶替。"
-            />
+          <Panel title="Interpretation / Resolver(读取视图已交付)">
+            <p className="state state--meta">
+              左列是 Core 逐字保留的 Raw Event;解释、候选、Resolver 计划与待审批 Review 现在有独立的只读视图。
+              P2 契约已合并,browser 只读这几条 GET:
+            </p>
+            <ul className="plain">
+              <li>
+                <a href={sourceHref.interpretations(projectId, taskId)}>当前范围的全部解释</a>
+                {' · '}
+                <a href={sourceHref.interpretations(projectId, taskId, null, 'EXTRACTED')}>
+                  仅 EXTRACTED
+                </a>
+                {' · '}
+                <a href={sourceHref.interpretations(projectId, taskId, null, 'PROCESSING')}>
+                  处理中
+                </a>
+              </li>
+              <li>
+                <a href={sourceHref.reviews(projectId, taskId)}>当前范围的待审批 Review</a>
+              </li>
+            </ul>
+            <p className="state state--meta">
+              本页不会用关键词或本地推断顶替解释结果;<strong>写入</strong>(correct/reject/rerun、
+              approve/reject)属于 P6-02 里程碑 B,尚未交付,按钮不存在。
+            </p>
           </Panel>
 
           <Panel title="Sessions">
