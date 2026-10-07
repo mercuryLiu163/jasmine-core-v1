@@ -28,7 +28,9 @@ try {
   HERE = process.cwd()
 }
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost'])
-const FORWARDED_HEADERS = ['authorization', 'content-type', 'accept', 'x-request-id']
+// `content-length` matters: Core reads the body by Content-Length only, so a
+// chunked forward (no Content-Length) arrives empty and every write is refused.
+const FORWARDED_HEADERS = ['authorization', 'content-type', 'content-length', 'accept', 'x-request-id']
 
 /**
  * Response headers applied to every served file. The CSP is sent as a real

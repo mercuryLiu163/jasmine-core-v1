@@ -25,6 +25,38 @@ interface RawReply {
   body: string
 }
 
+function rawRequestWithBody(
+  port: number,
+  target: string,
+  method: string,
+  body: string,
+): Promise<RawReply> {
+  return new Promise((resolve, reject) => {
+    const socket = connect(port, '127.0.0.1', () => {
+      socket.write(
+        `${method} ${target} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n` +
+          'Content-Type: application/json\r\n' +
+          `Content-Length: ${Buffer.byteLength(body)}\r\n` +
+          'Connection: close\r\n\r\n' +
+          body,
+      )
+    })
+    let data = ''
+    socket.setEncoding('utf8')
+    socket.on('data', (chunk) => (data += chunk))
+    socket.on('error', reject)
+    socket.on('end', () => {
+      const [head, ...rest] = data.split('\r\n\r\n')
+      const lines = (head ?? '').split('\r\n')
+      resolve({
+        status: Number.parseInt((lines[0] ?? '').split(' ')[1] ?? '0', 10),
+        contentType: lines.find((line) => line.toLowerCase().startsWith('content-type')) ?? '',
+        body: rest.join('\r\n\r\n'),
+      })
+    })
+  })
+}
+
 function rawRequest(port: number, target: string, method = 'GET'): Promise<RawReply> {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1', () => {
@@ -133,6 +165,69 @@ describe('dashboard host request targets', () => {
     const reply = await rawRequest(port, '/')
     expect(reply.status).toBe(200)
     expect(reply.contentType).toContain('text/html')
+  })
+})
+
+describe('proxy forwards a write body intact', () => {
+  let upstream: ReturnType<typeof createServer>
+  let upstreamPort = 0
+  let dashboard: ReturnType<typeof createDashboardServer>
+  let dashboardPort = 0
+  const seen: Array<{ url: string; contentType?: string; contentLength?: string; body: string }> = []
+
+  beforeAll(async () => {
+    upstream = createServer((req, res) => {
+      let body = ''
+      req.setEncoding('utf8')
+      req.on('data', (chunk) => (body += chunk))
+      req.on('end', () => {
+        seen.push({
+          url: req.url ?? '',
+          contentType: req.headers['content-type'],
+          contentLength: req.headers['content-length'],
+          body,
+        })
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({ ok: true }))
+      })
+    })
+    await new Promise<void>((resolve) => upstream.listen(0, '127.0.0.1', () => resolve()))
+    upstreamPort = (upstream.address() as { port: number }).port
+    dashboard = createDashboardServer({
+      root: join(process.cwd(), 'dist'),
+      origin: new URL(`http://127.0.0.1:${upstreamPort}`),
+      allowlist: loadAllowlist(join(process.cwd(), 'server')),
+    })
+    await new Promise<void>((resolve) => dashboard.listen(0, '127.0.0.1', () => resolve()))
+    dashboardPort = (dashboard.address() as { port: number }).port
+  })
+
+  afterAll(async () => {
+    await new Promise<void>((resolve) => dashboard.close(() => resolve()))
+    await new Promise<void>((resolve) => upstream.close(() => resolve()))
+  })
+
+  it('delivers the JSON body and a Content-Length to Core', async () => {
+    const payload = JSON.stringify({ host_id: 'hst_1', reason: 'r', expected_revision: 1 })
+    const reply = await rawRequestWithBody(
+      dashboardPort,
+      '/v1/interpretations/int_1/reject',
+      'POST',
+      payload,
+    )
+    expect(reply.status).toBe(200)
+    expect(seen).toHaveLength(1)
+    expect(seen[0]?.url).toBe('/v1/interpretations/int_1/reject')
+    expect(seen[0]?.contentType).toContain('application/json')
+    expect(seen[0]?.contentLength).toBe(String(Buffer.byteLength(payload)))
+    expect(JSON.parse(seen[0]?.body ?? '{}')).toMatchObject({ reason: 'r', expected_revision: 1 })
+  })
+
+  it('still refuses a write that is not allowlisted', async () => {
+    const before = seen.length
+    const reply = await rawRequestWithBody(dashboardPort, '/v1/evidence/confirm', 'POST', '{}')
+    expect(reply.status).toBe(404)
+    expect(seen).toHaveLength(before)
   })
 })
 

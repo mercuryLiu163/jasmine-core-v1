@@ -29,7 +29,15 @@ const WRITE_METHODS = new Set(
 )
 const WRITE_PATHS = (allowlist.write_paths ?? []).map((pattern) => new RegExp(pattern))
 /** Headers worth forwarding. Anything else (cookies, origin, host) is dropped. */
-const FORWARDED_HEADERS = ['authorization', 'content-type', 'accept', 'x-request-id'] as const
+const FORWARDED_HEADERS = [
+  'authorization',
+  'content-type',
+  // Core reads a request body by Content-Length only; forwarding the body without
+  // this header makes Node use chunked encoding and Core sees an empty body.
+  'content-length',
+  'accept',
+  'x-request-id',
+] as const
 
 export class ProxyConfigError extends Error {}
 
