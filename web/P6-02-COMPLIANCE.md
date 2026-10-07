@@ -220,13 +220,38 @@ decision; the second needs a Gate of its own, and `evidence/confirm` additionall
 needs a human prompt the browser cannot mint (ADR 0007). `browser_trace.mjs`
 asserts the absence of any Evidence-confirm control.
 
+## A packaging defect found after the first milestone-B evidence run
+
+`web/src/lib/` was never in a commit. The root `.gitignore` carries Python's
+`lib/` pattern, and gitignore patterns are path-agnostic, so it also matched the
+dashboard's own `web/src/lib/` — `classNames.ts`, `text.ts`, `useMaskedText.ts`
+and (since milestone B) `ids.ts`, all imported by committed code.
+
+This is worse than a missing file, because it made the *frozen-commit claim*
+untrue without any check being able to notice: the tests, the browser trace and
+the Gate all ran in a working tree that happened to contain those files, so
+everything passed while a clean checkout of the same commit did not compile. It
+was found by running `git worktree add --detach <commit>` — a checkout with no
+untracked carry-over — and watching `tsc` fail with `Cannot find module
+'../lib/text'`. The same was true of the milestone-A verdict commit (`693afe6`)
+and of the P6-01 baseline, so the r2 and r3 verdicts are bound to commits that
+are complete only together with a working tree.
+
+The fix is a `!web/src/lib/` negation rather than a rename, so the layout the
+reviewed commits used is preserved, and every evidence run from now on includes
+`clean-checkout.txt`: `tsc`, `vitest` and `vite build` executed inside a fresh
+worktree of the exact commit. The milestone-B bundle carries one.
+
 ## Status
 
 `P6-02 milestone A: delivered, independently reviewed and validated` (the r2
-verdict binds `693afe6`). `P6-02 milestone B: implemented and gated by the
-implementer` — the T03 Gate above passes all seven actions and every negative on
-an isolated fixture, but milestone B **has not** had an independent reviewer or
-validator. `P6-02: PARTIAL` as a whole; manual reapply and the Task/Step/Evidence
+verdict binds `693afe6`; see the packaging caveat above — that commit is complete
+only together with its working tree). `P6-02 milestone B: implemented and gated
+by the implementer` — the T03 Gate above passes all seven actions and every
+negative on an isolated fixture, and the tip now builds from a clean checkout, but
+milestone B **has not** had an independent reviewer or validator. Two review
+attempts against `b834f53` were stopped once the packaging defect was found, since
+a verdict on a commit that cannot be checked out is not worth having. `P6-02: PARTIAL` as a whole; manual reapply and the Task/Step/Evidence
 writes are not delivered, and no Gate has run against the operator's own Core or a
 real captured conversation. `P6` as a stage is not complete and nothing here
 releases V1.

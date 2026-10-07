@@ -181,7 +181,9 @@ verdict binds commit `693afe6`. `P6-02 milestone B (audited human writes):
 implemented and gated by the implementer` — the T03 Gate drives all seven shipped
 writes through the dashboard proxy with a real human key and records the frozen
 tuple per action plus the refusal/conflict/replay negatives; it has **not** yet
-had an independent reviewer or validator. `P6-02: PARTIAL` overall — manual
+had an independent reviewer or validator. Two earlier "frozen commits" were also
+incomplete (the dashboard's `web/src/lib/` was gitignored and untracked); that is
+fixed and the tip is now built and tested from a clean checkout. `P6-02: PARTIAL` overall — manual
 reapply and the Task/Step/Evidence writes are not delivered, and no Gate has run
 against the operator's own Core. `P6` as a stage is not complete. Details, evidence
 and the side-effect finding: `P6-02-COMPLIANCE.md`.
