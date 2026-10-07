@@ -4,7 +4,7 @@ Scope: P6-02 as defined by `evidence/p6-rebase-handoff-20261007/NEXT-P6-02.md`.
 Milestone **A** is the read slice; milestone **B** is the audited human writes.
 Both are described below, and each says what is *not* delivered. Nothing here
 claims P6, or even P6-02, is finished: manual reapply and the Task/Step/Evidence
-writes are still open, and no click-through Gate has run.
+writes are still open.
 
 Baseline: `850fbec` (P2-01/02/03 merged, schema v8). The P6-01 product baseline
 `12fd0ba` is untouched and its bound bundle is reproducible: building that commit in
@@ -256,6 +256,17 @@ because those writes are not delivered). Two consequences, both verified live:
 pattern must match a real GET route *and* no path that lacks one, and both allowlists
 are asserted exactly, so the set cannot widen silently.
 
+## The browser click-through Gate
+
+`scripts/p6/browser_trace.mjs --submit-writes` drives the write panels with **real
+clicks** on a disposable fixture and verifies each by re-reading the object: the Rule is
+ACTIVE afterwards with its revision advanced, the maintenance head advances by exactly
+one, the Review is REJECTED in its own `status / revision` row, and the created Rule is
+fetched by the id Core returned and read as PROPOSED. It is opt-in because it mutates
+Truth. It exists because the HTTP Gate and the unit tests each proved their own side of
+the seam and neither crossed it — a gap an independent review named as blocking, and
+then falsified the first version of.
+
 ## Not delivered (still open in P6-02)
 
 `POST /v1/resolutions/{res}/manual-reapply`, and the Task/Step/Evidence writes.
@@ -331,11 +342,38 @@ object where Core requires a list, that `payload: null` passed the approve edito
 validation, that the reset-button label named the wrong key, that several read-only
 strings were still shipped, and that the body tests covered only four of the nine
 writes while claiming to cover all of them. All of these are fixed, with regression
-tests, in `6c03f17`..`HEAD`; the panel-level verdict is therefore **not yet
-re-issued**, and milestone B should not be read as code-reviewed until a re-review
-lands.
+tests, in `6c03f17`..`HEAD`.
+
+The review was then re-issued and is closed: a **re-review** returned PASS-WITH-CAVEATS
+with the two blockers independently verified fixed, a **confirmation pass** confirmed
+those caveats closed, and a third pass verified the **browser click-through Gate** once
+it existed. That last pass returned **FAIL for the Gate's own checks** and was right —
+three of the four "re-read the object" checks matched text that is always on the page
+("ACTIVE" appears in the panel titles), so they could pass with the object unchanged.
+They now force a real reload and read the object's own row, and the re-verification
+returned **PASS**. Every POST in that run is followed by a GET of the same object.
+
+So milestone B has been code-reviewed, and the review's findings — including the ones
+that invalidated my own Gate — are recorded here rather than summarised away.
 
 `P6-02: PARTIAL` as a whole — manual reapply and the Task/Step/Evidence writes are
-not delivered, no click-through Gate has run, and no Gate has run against the
-operator's own Core or a real captured conversation. `P6` as a stage is not complete
-and nothing here releases V1.
+not delivered, and no Gate has run against the operator's own Core or a real captured
+conversation. `P6` as a stage is not complete and nothing here releases V1.
+
+## Limits worth stating rather than leaving implicit
+
+* **An unresolved write whose object you leave is dropped.** A timeout or transport
+  failure is reported as `unknown` with a read-back instruction — but only while you
+  are still on that object. If you navigate away before the outcome arrives, the
+  response is discarded rather than attached to the object you moved to, because
+  showing "结果未知" next to an object that was never written would be a worse lie than
+  silence. The command's fate is in Core's `audit_log` and in the previous object's own
+  state; the UI will not invent a banner on the new one. This is deliberate, and it is
+  the cost of never misattributing an outcome.
+* **A hung request keeps the next object's panel disabled** until it settles, because
+  `busy` describes the outstanding request rather than the panel's own state. That is
+  what stops a click being silently swallowed, and it is the visible side of the limit
+  above.
+* **No real-browser click-through against the operator's Core.** The click-through Gate
+  runs against a disposable fixture; see the bundle README for what it does and does not
+  cover.

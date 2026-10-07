@@ -1285,8 +1285,11 @@ async function main() {
           const match = text.match(/head revision ([0-9]+)/)
           return match ? Number(match[1]) : 0
         })()`, { label: 'root head revision after' })
-        trace.record('and the maintenance head really advanced on re-read',
-          revisionAfter > revisionBefore,
+        // Exactly one step, not merely "greater": a reject is one change, and a bare
+        // `>` could in principle be satisfied by Core's lazy recovery advancing the head
+        // during the re-read's own GET. An exact step makes any extra write visible.
+        trace.record('and the maintenance head advanced exactly one step on re-read',
+          revisionAfter === revisionBefore + 1,
           `before=${revisionBefore} after=${revisionAfter}`)
         await trace.screenshot(cdp, '18-write-reject')
       }

@@ -290,7 +290,7 @@ def action_interpretation_correct(g: Gate) -> None:
         _check("body keys are Core's allow-list",
                result["sent_keys"] == ["expected_revision", "host_id", "idempotency_key", "reason", "result"],
                result["sent_keys"]),
-        _check("the corrected result is the interpretation's own raw_result_json",
+        _check("the corrected result is a Core-valid result (>=1 candidate, the schema minimum)",
                isinstance(corrected, dict) and len(corrected.get("candidates") or []) >= 1,
                {"candidates": len(corrected.get("candidates") or []),
                 "keys": sorted(corrected)[:8]}),
@@ -453,8 +453,16 @@ def action_review_approve(g: Gate) -> None:
         _check("the approval actually bound a plan to its source Event",
                application_after != application_before,
                {"before": application_before, "after": application_after}),
-        _check("Core returned a plan mutation/outcome", isinstance(result["payload"], dict),
-               sorted(result["payload"])[:8] if isinstance(result["payload"], dict) else None),
+        # Was `isinstance(payload, dict)`, which can never fail — the client returns a
+        # dict even for an error body. Assert the artifact Core actually produces for an
+        # approval instead: the review command Event that carries it.
+        _check("Core returned the review command Event",
+               isinstance(result["payload"].get("result"), dict)
+               and isinstance(result["payload"]["result"].get("review_command_event_id"), str)
+               and result["payload"]["result"]["review_command_event_id"].startswith("evt_"),
+               {"review_command_event_id":
+                    (result["payload"].get("result") or {}).get("review_command_event_id"),
+                "disposition": (result["payload"].get("result") or {}).get("disposition")}),
         _check("review left PENDING", after["status"] != "PENDING",
                {"before": review["status"], "after": after["status"]}),
         _check("review revision advanced", after["revision"] > review["revision"],
