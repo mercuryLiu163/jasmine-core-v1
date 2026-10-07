@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ProxyConfigError,
+  classifyRequestTarget,
   isAllowedCoreRequest,
   resolveCoreOrigin,
 } from '../server/core-proxy'
@@ -23,6 +24,32 @@ describe('resolveCoreOrigin', () => {
     expect(() => resolveCoreOrigin('http://user:pass@127.0.0.1:8787')).toThrow(ProxyConfigError)
     expect(() => resolveCoreOrigin('http://127.0.0.1:8787/v1')).toThrow(ProxyConfigError)
     expect(() => resolveCoreOrigin('not a url')).toThrow(ProxyConfigError)
+  })
+})
+
+describe('classifyRequestTarget (dev proxy)', () => {
+  // The dev proxy and the static host must agree: an absolute-form or
+  // protocol-relative target is refused before any allowlist logic runs, so it
+  // can never fall through to Vite's static handling and receive the SPA shell.
+  it('marks origin-form API paths as api and other paths as static', () => {
+    expect(classifyRequestTarget('/v1/interpretations').kind).toBe('api')
+    expect(classifyRequestTarget('/src/main.tsx').kind).toBe('static')
+    expect(classifyRequestTarget('/').kind).toBe('static')
+  })
+
+  it('marks malformed targets as bad', () => {
+    for (const hostile of ['//v1/auth/keys', 'http://127.0.0.1:8795/v1/auth/keys', '*', 'v1/x']) {
+      expect(classifyRequestTarget(hostile).kind, hostile).toBe('bad')
+    }
+  })
+
+  it('agrees with the static host on every case that matters', async () => {
+    const serve = await import('../server/serve.mjs')
+    for (const target of ['/v1/health', '/', '//v1/auth/keys', 'http://x/v1/health', '*']) {
+      expect(serve.classifyRequestTarget(target).kind, target).toBe(
+        classifyRequestTarget(target).kind,
+      )
+    }
   })
 })
 

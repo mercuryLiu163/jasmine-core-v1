@@ -29,6 +29,41 @@ const FORWARDED_HEADERS = ['authorization', 'content-type', 'accept', 'x-request
 
 export class ProxyConfigError extends Error {}
 
+export type TargetKind = 'api' | 'static' | 'bad'
+
+/**
+ * Classify an HTTP request target before anything else looks at it.
+ *
+ * Only an origin-form path (`/…`, but not `//…`) is a path this host serves.
+ * An absolute-form target (`scheme://host/…`) and a protocol-relative one
+ * (`//host/…`) are legal HTTP for a proxy but are not something this dashboard
+ * ever issues, and treating them as a local path let a malformed request fall
+ * through to the static handler and receive the SPA shell with 200 — which looks
+ * like a reachable endpoint. They are refused outright instead.
+ */
+export function classifyRequestTarget(rawUrl: string | undefined): {
+  kind: TargetKind
+  pathname: string
+  reason?: string
+} {
+  const value = rawUrl ?? ''
+  if (value.length === 0) return { kind: 'bad', pathname: value, reason: 'empty request target' }
+  if (value.startsWith('//')) {
+    return { kind: 'bad', pathname: value, reason: 'protocol-relative request target' }
+  }
+  if (!value.startsWith('/')) {
+    return { kind: 'bad', pathname: value, reason: 'absolute or non-origin request target' }
+  }
+  let pathname: string
+  try {
+    pathname = new URL(value, 'http://ui.invalid').pathname
+  } catch {
+    return { kind: 'bad', pathname: value, reason: 'unparsable request target' }
+  }
+  if (pathname.startsWith('/v1/') || pathname === '/v1') return { kind: 'api', pathname }
+  return { kind: 'static', pathname }
+}
+
 /** Parse and validate the operator-configured Core origin. Loopback HTTP only. */
 export function resolveCoreOrigin(raw: string | undefined): URL {
   const value = (raw ?? '').trim() || 'http://127.0.0.1:8787'
@@ -138,7 +173,12 @@ export function proxyCoreRequest(
 /** Vite dev/preview middleware: same-origin `/v1/*` -> operator's loopback Core. */
 export function coreProxyPlugin(origin: URL): Plugin {
   const middleware = (req: IncomingMessage, res: ServerResponse, next: () => void): void => {
-    if (!(req.url ?? '').startsWith('/v1/')) {
+    const target = classifyRequestTarget(req.url)
+    if (target.kind === 'bad') {
+      refuse(res, 400, 'proxy_bad_target', `refused request target: ${target.reason ?? 'malformed'}`)
+      return
+    }
+    if (target.kind === 'static') {
       next()
       return
     }

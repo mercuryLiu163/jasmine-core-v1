@@ -18,7 +18,15 @@ import { createReadStream, existsSync, readFileSync, realpathSync, statSync } fr
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-const HERE = fileURLToPath(new URL('.', import.meta.url))
+// `import.meta.url` is a file: URL when this module is run by node, but a test
+// runner may load it through its own module graph (an http: URL), so fall back
+// to the working directory instead of throwing at import time.
+let HERE = process.cwd()
+try {
+  HERE = fileURLToPath(new URL('.', import.meta.url))
+} catch {
+  HERE = process.cwd()
+}
 const LOOPBACK = new Set(['127.0.0.1', '::1', 'localhost'])
 const FORWARDED_HEADERS = ['authorization', 'content-type', 'accept', 'x-request-id']
 
@@ -92,6 +100,30 @@ export function isAllowed(allowlist, method, pathname) {
   )
 }
 
+/**
+ * See `core-proxy.ts` for why: an absolute-form or protocol-relative request
+ * target must be refused, not resolved against the bundle root, or it falls
+ * through to the SPA shell and answers 200 for an API-shaped path.
+ */
+export function classifyRequestTarget(rawUrl) {
+  const value = rawUrl ?? ''
+  if (value.length === 0) return { kind: 'bad', pathname: value, reason: 'empty request target' }
+  if (value.startsWith('//')) {
+    return { kind: 'bad', pathname: value, reason: 'protocol-relative request target' }
+  }
+  if (!value.startsWith('/')) {
+    return { kind: 'bad', pathname: value, reason: 'absolute or non-origin request target' }
+  }
+  let pathname
+  try {
+    pathname = new URL(value, 'http://ui.invalid').pathname
+  } catch {
+    return { kind: 'bad', pathname: value, reason: 'unparsable request target' }
+  }
+  if (pathname.startsWith('/v1/') || pathname === '/v1') return { kind: 'api', pathname }
+  return { kind: 'static', pathname }
+}
+
 function sendJson(res, status, body) {
   res.statusCode = status
   res.setHeader('content-type', 'application/json; charset=utf-8')
@@ -100,6 +132,13 @@ function sendJson(res, status, body) {
 }
 
 export function proxy(req, res, origin, allowlist) {
+  const classified = classifyRequestTarget(req.url)
+  if (classified.kind === 'bad') {
+    sendJson(res, 400, {
+      error: { code: 'proxy_bad_target', message: `refused request target: ${classified.reason}` },
+    })
+    return
+  }
   let target
   try {
     target = new URL(req.url, 'http://ui.invalid')
@@ -156,6 +195,19 @@ export function proxy(req, res, origin, allowlist) {
 }
 
 export function serveStatic(req, res, root) {
+  const classified = classifyRequestTarget(req.url)
+  if (classified.kind === 'bad' || classified.kind === 'api') {
+    // Belt and braces: an API-shaped path must never be answered with the shell.
+    sendJson(res, 400, {
+      error: {
+        code: classified.kind === 'api' ? 'static_api_path_refused' : 'static_bad_path',
+        message: classified.kind === 'api'
+          ? 'API paths are only served by the proxy'
+          : `refused request target: ${classified.reason}`,
+      },
+    })
+    return
+  }
   let target
   let relative
   try {
@@ -188,7 +240,14 @@ export function serveStatic(req, res, root) {
 
 export function createDashboardServer({ root, origin, allowlist = loadAllowlist() }) {
   return http.createServer((req, res) => {
-    if ((req.url ?? '').startsWith('/v1/')) proxy(req, res, origin, allowlist)
+    const target = classifyRequestTarget(req.url)
+    if (target.kind === 'bad') {
+      sendJson(res, 400, {
+        error: { code: 'proxy_bad_target', message: `refused request target: ${target.reason}` },
+      })
+      return
+    }
+    if (target.kind === 'api') proxy(req, res, origin, allowlist)
     else serveStatic(req, res, root)
   })
 }
