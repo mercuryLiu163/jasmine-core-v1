@@ -5,6 +5,10 @@
  * quietly get wrong: reusing one idempotency key per intent, never auto-retrying
  * after a conflict, never turning an unknown result into a success, and never
  * inventing a disposition the server did not return.
+ *
+ * The last block covers the field *name*: Authority writes replay on a
+ * client-minted `event_id` and refuse `idempotency_key` as an unknown field, so
+ * sending the wrong one is a guaranteed 400.
  */
 
 import { act, renderHook, waitFor } from '@testing-library/react'
@@ -13,6 +17,7 @@ import { describe, expect, it } from 'vitest'
 import { CoreApiError } from '../src/api/errors'
 import type { WriteResult } from '../src/api/endpoints'
 import { classifyWriteError, useWriteAction } from '../src/app/useWriteAction'
+import { isEventId, newEventId } from '../src/lib/ids'
 
 describe('classifyWriteError', () => {
   it('treats revision and idempotency conflicts as conflicts, not failures', () => {
@@ -54,20 +59,20 @@ describe('useWriteAction', () => {
       await result.current.submit({ reason: 'r', host_id: 'hst_1', expected_revision: 1 })
     })
     expect(result.current.state).toBe('conflict')
-    const afterConflict = result.current.idempotencyKey
+    const afterConflict = result.current.writeKey
     await act(async () => {
       await result.current.submit({ reason: 'r', host_id: 'hst_1', expected_revision: 1 })
     })
     expect(seen[0]).toBe(seen[1])
-    expect(result.current.idempotencyKey).toBe(afterConflict)
+    expect(result.current.writeKey).toBe(afterConflict)
     expect(result.current.state).toBe('succeeded')
   })
 
   it('mints a new key only when the draft is reset', async () => {
     const { result } = renderHook(() => useWriteAction(async () => ok))
-    const first = result.current.idempotencyKey
+    const first = result.current.writeKey
     act(() => result.current.resetDraft())
-    expect(result.current.idempotencyKey).not.toBe(first)
+    expect(result.current.writeKey).not.toBe(first)
     expect(result.current.state).toBe('idle')
     expect(result.current.result).toBeNull()
   })
@@ -135,5 +140,91 @@ describe('useWriteAction', () => {
     })
     await waitFor(() => expect(result.current.state).toBe('succeeded'))
     expect(result.current.result?.replayed).toBe(true)
+  })
+})
+
+describe('Authority writes key on event_id, not idempotency_key', () => {
+  const ok: WriteResult = { replayed: false }
+
+  it('sends a valid evt_ id as the replay key and never sends idempotency_key', async () => {
+    const bodies: Array<Record<string, unknown>> = []
+    const { result } = renderHook(() =>
+      useWriteAction(
+        async (body) => {
+          bodies.push(body)
+          return ok
+        },
+        { keyKind: 'event_id' },
+      ),
+    )
+    expect(result.current.keyKind).toBe('event_id')
+    await act(async () => {
+      await result.current.submit({ host_id: 'hst_1', expected_revision: 2 })
+    })
+    expect(bodies).toHaveLength(1)
+    const body = bodies[0] ?? {}
+    // Core's `_fields` allow-list for approve/retire is exactly these three keys,
+    // so an extra idempotency_key would be a 400 invalid_request.
+    expect(Object.keys(body).sort()).toEqual(['event_id', 'expected_revision', 'host_id'])
+    expect(isEventId(String(body['event_id']))).toBe(true)
+    expect(body['idempotency_key']).toBeUndefined()
+  })
+
+  it('reuses the same event_id across a retry so Core can replay it', async () => {
+    const keys: string[] = []
+    const { result } = renderHook(() =>
+      useWriteAction(
+        async (body) => {
+          keys.push(String(body['event_id']))
+          if (keys.length === 1) {
+            throw new CoreApiError({
+              kind: 'conflict',
+              status: 409,
+              code: 'revision_conflict',
+              message: 'stale',
+            })
+          }
+          return { replayed: true }
+        },
+        { keyKind: 'event_id' },
+      ),
+    )
+    await act(async () => {
+      await result.current.submit({ host_id: 'hst_1', expected_revision: 2 })
+    })
+    expect(result.current.state).toBe('conflict')
+    await act(async () => {
+      await result.current.submit({ host_id: 'hst_1', expected_revision: 3 })
+    })
+    expect(keys[0]).toBe(keys[1])
+    expect(isEventId(keys[0] ?? '')).toBe(true)
+  })
+
+  it('mints a fresh event_id only on reset, so a new intent is a new command', async () => {
+    const { result } = renderHook(() =>
+      useWriteAction(async () => ok, { keyKind: 'event_id' }),
+    )
+    const first = result.current.writeKey
+    act(() => result.current.resetDraft())
+    expect(result.current.writeKey).not.toBe(first)
+    expect(isEventId(result.current.writeKey)).toBe(true)
+  })
+})
+
+describe('newEventId', () => {
+  it('matches Core\'s `<prefix>_<26 Crockford base32>` id shape', () => {
+    expect(newEventId()).toMatch(/^evt_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$/)
+  })
+
+  it('does not repeat, so two intents cannot collide into one command', () => {
+    const seen = new Set<string>()
+    for (let index = 0; index < 200; index += 1) seen.add(newEventId())
+    expect(seen.size).toBe(200)
+  })
+
+  it('refuses strings Core would reject as a malformed event id', () => {
+    for (const bad of ['', 'evt_', 'evt_short', 'evt_' + 'I'.repeat(26), 'rul_' + 'A'.repeat(26)]) {
+      expect(isEventId(bad)).toBe(false)
+    }
   })
 })

@@ -10,6 +10,12 @@
  * Each Rule shows scope, status, version/revision, enforcement, origin Event and
  * change Event, plus the full version history from
  * `GET /v1/rules/{id}/history`.
+ *
+ * Milestone B adds the four Authority writes below the reads. They are driven
+ * by `RuleWrites`, which owns their different contract (no `reason`, no
+ * `idempotency_key`; `event_id` is the replay key). This view only decides
+ * *which* Rule is open, because a transition must send back the revision Core
+ * returned for that exact Rule.
  */
 
 import { useId, useState } from 'react'
@@ -19,10 +25,11 @@ import { hrefFor, sourceHref } from '../app/router'
 import { useSession } from '../app/session'
 import { useResource } from '../app/useResource'
 import { StatusBadge } from '../components/StatusBadge'
-import { Empty, ErrorPanel, Loading, Panel, StaleBanner, Unavailable } from '../components/States'
+import { Empty, ErrorPanel, Loading, Panel, StaleBanner } from '../components/States'
 import { JsonBlock } from '../components/JsonBlock'
 import { KeyValue, SourceLink } from '../components/Trace'
 import { formatTimestamp } from '../lib/text'
+import { RuleWrites } from './RuleWrites'
 
 export function RulesView({
   projectId,
@@ -192,15 +199,22 @@ export function RulesView({
         ) : null}
       </Panel>
 
-      <Panel title="未接入">
-        <Unavailable
-          feature="Rule 人工写入(proposal / approve / supersede / retire)"
-          owner="P6-02(依赖 Core 权限与人工修改审计 Gate)"
-          pending="受控表单 + expected_revision/409 交互 + 独立权限 Gate"
-          tone="forbidden"
-          note="P6-01 只读:本页不提供任何写按钮,也不会代替 human/system actor 批准 Rule。"
-        />
-      </Panel>
+      <h2 className="section">人工修改 Authority(全部为审计写)</h2>
+      <p className="state state--meta">
+        下面四个动作都要求 <strong>human 或 trusted system</strong> actor,并由 Core 校验
+        scope、revision 与 Event 来源;本页只提交,不代替任何人批准 Rule。每次提交都会生成一条
+        command Event,可以用上面的历史与 Event 链接核对。
+      </p>
+      <RuleWrites
+        rule={detail.data?.rule ?? null}
+        projectId={projectId}
+        taskId={taskId}
+        onReadback={() => {
+          detail.reload()
+          history.reload()
+          active.reload()
+        }}
+      />
     </div>
   )
 }

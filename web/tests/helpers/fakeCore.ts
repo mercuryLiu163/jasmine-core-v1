@@ -3,9 +3,13 @@
  *
  * It answers only the routes a test declares and records every request, so a
  * test can assert *what the UI asked for* (scope, paging cursor, absence of an
- * Authorization header after sign-out) rather than only what it rendered. An
- * undeclared route returns a Core-shaped 404, which is exactly what the real
- * server does for an unknown path.
+ * Authorization header after sign-out, and — for writes — the exact body) rather
+ * than only what it rendered. An undeclared route returns a Core-shaped 404,
+ * which is exactly what the real server does for an unknown path.
+ *
+ * The body is recorded because Core validates write fields with an exact
+ * allow-list: an extra `reason` or `idempotency_key` is a 400, so a test has to
+ * be able to see the body the UI actually sent, not just that it sent one.
  */
 
 import { vi } from 'vitest'
@@ -25,6 +29,8 @@ export interface RecordedRequest {
   query: URLSearchParams
   authorization: string | null
   requestId: string | null
+  /** The parsed JSON body, or null for a body-less request. */
+  body: Record<string, unknown> | null
 }
 
 export interface FakeCore {
@@ -56,6 +62,7 @@ export function installFakeCore(
       query: url.searchParams,
       authorization: headers.get('authorization'),
       requestId: headers.get('x-request-id'),
+      body: parseBody(init?.body),
     }
     requests.push(recorded)
 
@@ -99,6 +106,18 @@ export function installFakeCore(
     restore: () => {
       globalThis.fetch = original
     },
+  }
+}
+
+function parseBody(body: BodyInit | null | undefined): Record<string, unknown> | null {
+  if (typeof body !== 'string' || body === '') return null
+  try {
+    const parsed: unknown = JSON.parse(body)
+    return typeof parsed === 'object' && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null
+  } catch {
+    return null
   }
 }
 

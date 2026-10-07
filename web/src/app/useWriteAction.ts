@@ -4,10 +4,16 @@
  * The rules the handoff freezes are encoded here once, so every write panel
  * behaves the same way:
  *
- * 1. **One idempotency key per intent.** It is created on the first submit and
+ * 1. **One replay key per intent.** It is created on the first submit and
  *    reused on every retry of that same intent; `resetDraft` starts a new intent
  *    and only then gets a new key. A retry after a timeout must never mint a new
  *    key, because Core would treat it as a second command.
+ *
+ *    Which key that is depends on the endpoint family, and the difference is
+ *    Core's, not a preference: interpretation and review writes take an
+ *    `idempotency_key`, while Authority writes take a client-minted `event_id`
+ *    and *reject* `idempotency_key` as an unknown field. `keyKind` carries that
+ *    distinction so a panel cannot send the wrong one.
  * 2. **The basis is read, not guessed.** The caller passes the revision it read;
  *    Core compares it and answers `409` when the object moved.
  * 3. **A conflict keeps the draft.** `revision_conflict`, `interpretation_not_current`,
@@ -25,8 +31,12 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 
 import { CoreApiError, isAbortError } from '../api/errors'
 import type { WriteResult } from '../api/endpoints'
+import { newEventId } from '../lib/ids'
 
 export type WriteState = 'idle' | 'submitting' | 'succeeded' | 'conflict' | 'refused' | 'unknown'
+
+/** The body field Core replays on: its name is fixed per endpoint family. */
+export type WriteKeyKind = 'idempotency_key' | 'event_id'
 
 export interface WriteAction {
   state: WriteState
@@ -36,8 +46,10 @@ export interface WriteAction {
   error: CoreApiError | null
   /** The request id of the last attempt, for correlation and readback. */
   requestId: string | null
-  /** The idempotency key this intent will reuse. */
-  idempotencyKey: string
+  /** The field name the replay key is sent in: `idempotency_key` or `event_id`. */
+  keyKind: WriteKeyKind
+  /** The replay key this intent will reuse; its field name is `keyKind`. */
+  writeKey: string
   /** True while a request is in flight, so a double click cannot double-send. */
   busy: boolean
   submit: (body: Record<string, unknown>) => Promise<void>
@@ -45,7 +57,11 @@ export interface WriteAction {
   resetDraft: () => void
 }
 
-function newKey(): string {
+function newKey(kind: WriteKeyKind): string {
+  return kind === 'event_id' ? newEventId() : newIdempotencyKey()
+}
+
+function newIdempotencyKey(): string {
   const globalCrypto = globalThis.crypto
   if (globalCrypto && typeof globalCrypto.randomUUID === 'function') {
     return `ui-${globalCrypto.randomUUID()}`
@@ -76,7 +92,9 @@ export function classifyWriteError(error: CoreApiError): WriteState {
 
 export function useWriteAction(
   send: (body: Record<string, unknown>, signal: AbortSignal) => Promise<WriteResult>,
+  options: { keyKind?: WriteKeyKind } = {},
 ): WriteAction {
+  const keyKind = options.keyKind ?? 'idempotency_key'
   const [state, setState] = useState<WriteState>('idle')
   const [result, setResult] = useState<WriteResult | null>(null)
   const [error, setError] = useState<CoreApiError | null>(null)
@@ -85,7 +103,7 @@ export function useWriteAction(
   // Stable per intent: regenerated only when the draft is reset or submitted
   // successfully (a new intent after a refusal keeps the same key so a retry of
   // the *same* intent is a replay, not a second command).
-  const keyRef = useRef<string>(newKey())
+  const keyRef = useRef<string>(newKey(keyKind))
   const inFlight = useRef(false)
   const sendRef = useRef(send)
   sendRef.current = send
@@ -98,7 +116,9 @@ export function useWriteAction(
     const controller = new AbortController()
     try {
       const response = await sendRef.current(
-        { ...body, idempotency_key: keyRef.current },
+        // `keyKind` is fixed for the lifetime of this hook instance, so the field
+        // name cannot drift from the key that was minted for it.
+        { ...body, [keyKind]: keyRef.current },
         controller.signal,
       )
       setResult(response)
@@ -135,13 +155,13 @@ export function useWriteAction(
   }, [])
 
   const resetDraft = useCallback(() => {
-    keyRef.current = newKey()
+    keyRef.current = newKey(keyKind)
     setResult(null)
     setError(null)
     setRequestId(null)
     setState('idle')
     setNonce((value) => value + 1)
-  }, [])
+  }, [keyKind])
 
   return useMemo(
     () => ({
@@ -149,12 +169,13 @@ export function useWriteAction(
       result,
       error,
       requestId,
-      idempotencyKey: keyRef.current,
+      keyKind,
+      writeKey: keyRef.current,
       busy: state === 'submitting',
       submit,
       resetDraft,
     }),
     // `nonce` is what makes a reset visible to consumers that read the key.
-    [state, result, error, requestId, nonce, submit, resetDraft],
+    [state, result, error, requestId, keyKind, nonce, submit, resetDraft],
   )
 }

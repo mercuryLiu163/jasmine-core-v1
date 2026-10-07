@@ -8,7 +8,11 @@
  * - the **host** is chosen from `GET /v1/hosts`, because Core validates that the
  *   host exists and the browser has no Registry identity of its own — the
  *   dashboard never claims to be a host it did not read;
- * - a **reason** is required, as Core requires it;
+ * - a **reason** is required when Core's endpoint takes one. Authority writes
+ *   validate their fields exactly and do not accept `reason`, so their panels
+ *   say so instead of sending a field Core would refuse;
+ * - the **replay key** is labelled for what it is (`idempotency_key` or the
+ *   `event_id` Authority replays on), never a generic "key";
  * - a **conflict** shows Core's own details next to the draft and keeps the draft;
  * - a **refusal** names the missing scope/role and offers no alternative
  *   credential;
@@ -19,7 +23,7 @@
 import { useId, useState } from 'react'
 import type { ReactNode } from 'react'
 
-import type { WriteAction } from '../app/useWriteAction'
+import type { WriteAction, WriteKeyKind } from '../app/useWriteAction'
 import { useSession } from '../app/session'
 import { useResource } from '../app/useResource'
 import { JsonBlock } from './JsonBlock'
@@ -38,7 +42,27 @@ export interface WritePanelProps {
   build: (input: { reason: string; hostId: string }) => Record<string, unknown> | string
   /** Disables submit until the endpoint-specific fields are valid. */
   ready: boolean
+  /**
+   * `'required'` (default) shows and requires the `reason` input.
+   * `'none'` hides it, because this endpoint's Core contract rejects `reason`
+   * as an unknown field — the panel must not offer a field that cannot be sent.
+   */
+  reasonMode?: 'required' | 'none'
   onSucceeded?: () => void
+}
+
+/** What the replay key is, in Core's own terms, per endpoint family. */
+const KEY_LABELS: Record<WriteKeyKind, { label: string; note: string }> = {
+  idempotency_key: {
+    label: 'idempotency_key',
+    note: '幂等键在本次意图内复用;超时重试不会换键,Core 会识别为同一命令。',
+  },
+  event_id: {
+    label: 'event_id(重放键)',
+    note:
+      'Authority 写入不接受 idempotency_key,而是按客户端提供的 event_id 去重:' +
+      '同键同内容返回原结果(replayed),同键不同内容 Core 判 event_id_conflict。',
+  },
 }
 
 export function WritePanel({
@@ -49,6 +73,7 @@ export function WritePanel({
   fields,
   build,
   ready,
+  reasonMode = 'required',
   onSucceeded,
 }: WritePanelProps): JSX.Element {
   const { endpoints } = useSession()
@@ -60,7 +85,10 @@ export function WritePanel({
   const hostIdField = useId()
 
   const effectiveHost = hostId || hosts.data?.hosts[0]?.host_id || ''
-  const canSubmit = ready && effectiveHost !== '' && reason.trim() !== '' && !action.busy
+  const needsReason = reasonMode === 'required'
+  const canSubmit =
+    ready && effectiveHost !== '' && (!needsReason || reason.trim() !== '') && !action.busy
+  const keyLabel = KEY_LABELS[action.keyKind]
 
   const onSubmit = async (): Promise<void> => {
     const body = build({ reason: reason.trim(), hostId: effectiveHost })
@@ -97,16 +125,24 @@ export function WritePanel({
               ))}
             </select>
           </label>
-          <label htmlFor={reasonId}>
-            reason(Core 必填)
-            <input
-              id={reasonId}
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              placeholder="为什么做这个改动"
-              autoComplete="off"
-            />
-          </label>
+          {needsReason ? (
+            <label htmlFor={reasonId}>
+              reason(Core 必填)
+              <input
+                id={reasonId}
+                value={reason}
+                onChange={(event) => setReason(event.target.value)}
+                placeholder="为什么做这个改动"
+                autoComplete="off"
+              />
+            </label>
+          ) : (
+            <p className="state state--meta" data-testid="no-reason-field">
+              Core 的这个端点在 <code>rule.proposed</code>/<code>rule.*</code> 事件里记录 actor、
+              host 与 <code>expected_revision</code>,但<strong>不接受 reason 字段</strong>
+              (多传会被判 unknown fields)。因此本面板不提供 reason 输入,也不发送它。
+            </p>
+          )}
         </div>
 
         {fields}
@@ -124,7 +160,7 @@ export function WritePanel({
             重置草稿(换新幂等键)
           </button>
           <span className="muted">
-            幂等键 <code>{action.idempotencyKey.slice(0, 18)}…</code> 在本次意图内复用;超时重试不会换键。
+            {keyLabel.label} <code>{action.writeKey.slice(0, 18)}…</code> {keyLabel.note}
           </span>
         </div>
 
