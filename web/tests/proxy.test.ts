@@ -89,10 +89,47 @@ describe('isAllowedCoreRequest', () => {
     expect(isAllowedCoreRequest('POST', '/v1/auth/keys/key_1/revoke')).toBe(false)
   })
 
-  it('is P6-01 read-only: no method other than GET is forwarded', () => {
+  it('milestone B opens exactly the four frozen POST shapes', () => {
+    for (const path of [
+      '/v1/interpretations/int_1/correct',
+      '/v1/interpretations/int_1/reject',
+      '/v1/interpretations/int_1/rerun',
+      '/v1/reviews/rvw_1/approve',
+      '/v1/reviews/rvw_1/reject',
+      '/v1/rules/proposals',
+      '/v1/rules/rul_1/approve',
+      '/v1/rules/rul_1/supersede',
+      '/v1/rules/rul_1/retire',
+    ]) {
+      expect(isAllowedCoreRequest('POST', path), path).toBe(true)
+    }
+    // Deliberately not opened in this slice.
+    for (const path of [
+      '/v1/evidence/confirm',
+      '/v1/resolutions/res_1/manual-reapply',
+      '/v1/resolve/int_1',
+      '/v1/tool-results',
+      '/v1/workspace/fingerprint',
+      '/v1/events',
+      '/v1/tasks',
+      '/v1/auth/keys',
+      '/v1/audit',
+    ]) {
+      expect(isAllowedCoreRequest('POST', path), path).toBe(false)
+    }
+    // A write path must not be reachable with another verb, and a collection
+    // must not become writable through the write section.
+    expect(isAllowedCoreRequest('PUT', '/v1/interpretations/int_1/correct')).toBe(false)
+    expect(isAllowedCoreRequest('GET', '/v1/interpretations/int_1/correct')).toBe(false)
+    expect(isAllowedCoreRequest('POST', '/v1/interpretations')).toBe(false)
+    expect(isAllowedCoreRequest('POST', '/v1/reviews/pending')).toBe(false)
+  })
+
+  it('keeps the read surface GET-only even though writes exist', () => {
     expect(isAllowedCoreRequest('POST', '/v1/tasks')).toBe(false)
     expect(isAllowedCoreRequest('POST', '/v1/events')).toBe(false)
-    expect(isAllowedCoreRequest('POST', '/v1/rules/proposals')).toBe(false)
+    // `rules/proposals` is open for milestone B; the state machine is not.
+    expect(isAllowedCoreRequest('POST', '/v1/rules/proposals')).toBe(true)
     expect(isAllowedCoreRequest('POST', '/v1/tasks/tsk_1/transition')).toBe(false)
     expect(isAllowedCoreRequest('DELETE', '/v1/projects/prj_1')).toBe(false)
     // The browser is same-origin, so no preflight is needed; forwarding OPTIONS

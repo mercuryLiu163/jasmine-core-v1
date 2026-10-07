@@ -32,5 +32,15 @@
     "^/v1/resolutions/preview$",
     "^/v1/resolutions/[A-Za-z0-9_]+$"
   ],
-  "phase_note": "P6-01/P6-02 read slice forwards GET only: the browser is same-origin, so no preflight is needed and OPTIONS is deliberately NOT forwarded. Mutation paths are listed for the later P6-02 milestone B; the method allowlist is what gates them, and Core still enforces scopes and actor kind per request. There is no /v1/reviews or /v1/resolutions collection: the P2 collection reads are /v1/interpretations and /v1/reviews/pending (after_id cursor), plus /v1/resolutions/preview which requires an explicit interpretation_id."
+  "phase_note": "P6-01/P6-02 read slice forwards GET only: the browser is same-origin, so no preflight is needed and OPTIONS is deliberately NOT forwarded. Mutation paths are listed for the later P6-02 milestone B; the method allowlist is what gates them, and Core still enforces scopes and actor kind per request. There is no /v1/reviews or /v1/resolutions collection: the P2 collection reads are /v1/interpretations and /v1/reviews/pending (after_id cursor), plus /v1/resolutions/preview which requires an explicit interpretation_id.",
+  "write_methods": [
+    "POST"
+  ],
+  "write_paths": [
+    "^/v1/interpretations/[A-Za-z0-9_]+/(correct|reject|rerun)$",
+    "^/v1/reviews/[A-Za-z0-9_]+/(approve|reject)$",
+    "^/v1/rules/proposals$",
+    "^/v1/rules/[A-Za-z0-9_]+/(approve|supersede|retire)$"
+  ],
+  "write_note": "Milestone B writes, frozen per method+path. `manual-reapply`, `resolve/{int}` and `evidence/confirm` are deliberately absent: the first two need an explicit operator decision outside this slice, and a web button cannot produce ADR 0007 human-prompt provenance. Core still enforces scope, actor kind, idempotency and revision per request."
 }

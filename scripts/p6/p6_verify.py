@@ -253,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--p2-project", dest="p2_project", help="P6-02: scope for the review queue")
     parser.add_argument("--completion-interpretation", dest="completion_interpretation",
                         help="P6-02: interpretation whose operation completion must render")
+    parser.add_argument("--completion-actions", dest="completion_actions",
+                        help="P6-02: comma-separated maintenance actions Core reports for that chain")
     parser.add_argument("--db", help="P6-02: fixture db path, for the P2 table before/after dump")
     parser.add_argument("--scopes", help="override the recorded token scopes (else read from the fixture descriptor)")
     parser.add_argument("--label", default=None, help="run label, e.g. 'P6-02 milestone A'")
@@ -311,7 +313,8 @@ def main(argv: list[str] | None = None) -> int:
                         ("--pending-interpretation", args.pending_interpretation),
                         ("--review", args.review), ("--resolution", args.resolution),
                         ("--p2-project", args.p2_project),
-                        ("--completion-interpretation", args.completion_interpretation)):
+                        ("--completion-interpretation", args.completion_interpretation),
+                        ("--completion-actions", args.completion_actions)):
         if value:
             trace_command += [flag, value]
     trace_output = run(trace_command, ROOT)
@@ -470,6 +473,45 @@ The browser trace performs these actions against the running dashboard:
   dataset.
 """, encoding="utf-8")
 
+    # The tail must describe the run that actually happened: a P6-02 read-slice
+    # run must not append the P6-01 "P6-02 not delivered" verdict to its own
+    # milestone-A PASS (an independent validator caught that contradiction).
+    if p2_mode:
+        tail = [
+            "## Not verified by this run",
+            "",
+            "- Milestone B (correct/reject/rerun, review approve/reject, Rule management) — not started.",
+            "- P6-T03 (audited human writes) and P6-T04/T05/T06 (P3/P4/P7-01 inspectors) — out of scope.",
+            "- The operator's own Core and a real captured conversation; this run used an isolated",
+            "  fixture whose data was produced by the real pipeline with a component-simulation provider.",
+            "- Independent review and validation of this exact bundle.",
+            "",
+            "## Verdict",
+            "",
+            "`P6-02 milestone A (read slice): delivered on an isolated fixture` — the write half of",
+            "P6-02 is not started, an independent verdict binds this commit separately, and no part of",
+            "the P6 stage or V1 is released by this run.",
+            "",
+        ]
+    else:
+        tail = [
+            "## Not verified by this run",
+            "",
+            "- P6-T03 (audited human writes) — P6-02 not delivered.",
+            "- P6-T04 (actual injected Context), P6-T05 (Memory degradation), P6-T06 (Validation",
+            "  drill-down) — P3/P4/P7-01 contracts not frozen.",
+            "- Real operator Core and real captured conversation; this run used the scratch fixture.",
+            "- Independent review and independent validation: see the reviewer/validator reports added",
+            "  next to this file when they exist. Until then this file is the implementer's own result",
+            "  and must not be read as an independent PASS.",
+            "",
+            "## Verdict",
+            "",
+            "`P6-01: PARTIAL` — the read-only dashboard and its real browser trace work on the fixture;",
+            "P6 as a stage is not complete and no part of V1 is released by this run.",
+            "",
+        ]
+
     gate_lines = [
         f"# {label} verification result",
         "",
@@ -489,20 +531,7 @@ The browser trace performs these actions against the running dashboard:
         + ("PASS (unit + trace)" if not failed else "FAIL") + " |",
         "| P6-T07 maintainability | scope switch drops the previous project's rows (component test); pagination appends by cursor; unknown route is loud; failure/unknown are not shown as empty | "
         + ("PARTIAL — no long-list/throttling run yet") + " |",
-        "",
-        "## Not verified by this run",
-        "",
-        "- P6-T03 (audited human writes) — P6-02 not delivered.",
-        "- P6-T04 (actual injected Context), P6-T05 (Memory degradation), P6-T06 (Validation drill-down) — P3/P4/P7-01 contracts not frozen.",
-        "- Real operator Core and real captured conversation; this run used the scratch fixture.",
-        "- Independent review and independent validation: see the reviewer/validator reports added next to this file when they exist. Until then this file is the implementer's own result and must not be read as an independent PASS.",
-        "",
-        "## Verdict",
-        "",
-        "`P6-01: PARTIAL` — the read-only dashboard and its real browser trace work on the fixture; "
-        "P6 as a stage is not complete and no part of V1 is released by this run.",
-        "",
-    ]
+    ] + tail
     if p2_mode:
         gate_lines = gate_lines[:1] + [
             "",

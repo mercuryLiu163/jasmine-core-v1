@@ -29,7 +29,10 @@ function rawRequest(port: number, target: string, method = 'GET'): Promise<RawRe
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1', () => {
       socket.write(
-        `${method} ${target} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nConnection: close\r\n\r\n`,
+        `${method} ${target} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n` +
+          (method === 'POST' ? 'Content-Type: application/json\r\nContent-Length: 2\r\n' : '') +
+          'Connection: close\r\n\r\n' +
+          (method === 'POST' ? '{}' : ''),
       )
     })
     let data = ''
@@ -107,6 +110,23 @@ describe('dashboard host request targets', () => {
     const reply = await rawRequest(port, '/v1/auth/keys')
     expect(reply.status).toBe(404)
     expect(reply.body).toContain('proxy_path_not_allowed')
+  })
+
+  it('forwards an allowlisted write but refuses an unlisted one', async () => {
+    // The probe Core is at 127.0.0.1:1 (nothing listening), so a *forwarded*
+    // request answers 502 proxy_core_unreachable while a refused one answers 404
+    // proxy_path_not_allowed. That difference is the assertion.
+    const allowed = await rawRequest(port, '/v1/interpretations/int_1/correct', 'POST')
+    expect(allowed.status).toBe(502)
+    expect(allowed.body).toContain('proxy_core_unreachable')
+
+    const refused = await rawRequest(port, '/v1/evidence/confirm', 'POST')
+    expect(refused.status).toBe(404)
+    expect(refused.body).toContain('proxy_path_not_allowed')
+
+    const wrongVerb = await rawRequest(port, '/v1/interpretations/int_1/correct', 'PUT')
+    expect(wrongVerb.status).toBe(404)
+    expect(wrongVerb.body).toContain('proxy_path_not_allowed')
   })
 
   it('keeps serving the shell for real static paths', async () => {

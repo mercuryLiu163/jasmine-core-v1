@@ -73,6 +73,8 @@ export function loadAllowlist(directory = HERE) {
   return {
     methods: new Set(raw.methods.map((method) => method.toUpperCase())),
     paths: raw.paths.map((pattern) => new RegExp(pattern)),
+    write_methods: raw.write_methods ?? [],
+    write_paths: raw.write_paths ?? [],
   }
 }
 
@@ -94,10 +96,14 @@ export function resolveCoreOrigin(raw) {
 }
 
 export function isAllowed(allowlist, method, pathname) {
-  return (
-    allowlist.methods.has((method ?? 'GET').toUpperCase()) &&
-    allowlist.paths.some((pattern) => pattern.test(pathname))
-  )
+  const verb = (method ?? 'GET').toUpperCase()
+  if (allowlist.methods.has(verb)) {
+    return allowlist.paths.some((pattern) => pattern.test(pathname))
+  }
+  if ((allowlist.write_methods ?? []).includes(verb)) {
+    return (allowlist.write_paths ?? []).some((pattern) => new RegExp(pattern).test(pathname))
+  }
+  return false
 }
 
 /**

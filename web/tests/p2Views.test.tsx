@@ -492,7 +492,7 @@ describe('load-more failure and scope switching', () => {
         if (request.path !== '/v1/interpretations') return undefined
         return request.query.get('after_id')
           ? coreError(503, 'database_busy', 'busy')
-          : { body: { items: [interpretation()], next_after_id: 'int_1' } }
+          : { body: { items: [interpretation({ interpretation_id: 'int_page1' })], next_after_id: 'int_page1' } }
       },
     )
     const panel = await screen.findByRole('region', { name: /Interpretations\(已载入 1 条\)/ })
@@ -500,7 +500,7 @@ describe('load-more failure and scope switching', () => {
     await waitFor(() => expect(within(panel).getAllByRole('alert').length).toBe(1))
     expect(within(panel).getByRole('alert').textContent).toContain('database_busy')
     // The first row is still on screen: a failed next page is not a wipe.
-    expect(panel.textContent).toContain('int_1')
+    expect(panel.textContent).toContain('int_page1')
   })
 
   it('drops the previous project scope instead of showing it under the new one', async () => {

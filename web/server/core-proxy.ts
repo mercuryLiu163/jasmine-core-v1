@@ -24,6 +24,10 @@ import allowlist from './core-paths.json' with { type: 'json' }
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '::1', 'localhost'])
 const ALLOWED_METHODS = new Set(allowlist.methods.map((method) => method.toUpperCase()))
 const ALLOWED_PATHS = allowlist.paths.map((pattern) => new RegExp(pattern))
+const WRITE_METHODS = new Set(
+  (allowlist.write_methods ?? []).map((method) => method.toUpperCase()),
+)
+const WRITE_PATHS = (allowlist.write_paths ?? []).map((pattern) => new RegExp(pattern))
 /** Headers worth forwarding. Anything else (cookies, origin, host) is dropped. */
 const FORWARDED_HEADERS = ['authorization', 'content-type', 'accept', 'x-request-id'] as const
 
@@ -91,8 +95,10 @@ export function resolveCoreOrigin(raw: string | undefined): URL {
 }
 
 export function isAllowedCoreRequest(method: string, pathname: string): boolean {
-  if (!ALLOWED_METHODS.has(method.toUpperCase())) return false
-  return ALLOWED_PATHS.some((pattern) => pattern.test(pathname))
+  const verb = method.toUpperCase()
+  if (ALLOWED_METHODS.has(verb)) return ALLOWED_PATHS.some((pattern) => pattern.test(pathname))
+  if (WRITE_METHODS.has(verb)) return WRITE_PATHS.some((pattern) => pattern.test(pathname))
+  return false
 }
 
 function refuse(res: ServerResponse, status: number, code: string, message: string): void {

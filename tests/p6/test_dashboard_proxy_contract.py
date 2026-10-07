@@ -62,6 +62,8 @@ class DashboardProxyContract(unittest.TestCase):
         self.allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
         self.allowed = [re.compile(pattern) for pattern in self.allowlist["paths"]]
         self.methods = {method.upper() for method in self.allowlist["methods"]}
+        self.write_paths = [re.compile(pattern) for pattern in self.allowlist.get("write_paths", [])]
+        self.write_methods = {method.upper() for method in self.allowlist.get("write_methods", [])}
 
     def core_samples(self) -> list[str]:
         samples: list[str] = []
@@ -96,8 +98,12 @@ class DashboardProxyContract(unittest.TestCase):
                 any(pattern.fullmatch(sample) for pattern in self.allowed),
                 f"{sample} must not be reachable through the browser proxy",
             )
+            self.assertFalse(
+                any(pattern.fullmatch(sample) for pattern in self.write_paths),
+                f"{sample} must not be reachable through the write proxy either",
+            )
 
-    def test_p6_01_is_read_only(self) -> None:
+    def test_read_surface_is_get_only(self) -> None:
         self.assertEqual({"GET"}, self.methods)
         for sample in self.core_samples():
             for method in ("POST", "PUT", "PATCH", "DELETE", "OPTIONS"):
@@ -106,6 +112,33 @@ class DashboardProxyContract(unittest.TestCase):
                     self.methods,
                     f"{method} {sample} would be a write from the browser",
                 )
+
+    def test_write_surface_is_narrow_and_real(self) -> None:
+        """Milestone B opens four POST shapes and nothing else.
+
+        The write section is separate from the read section on purpose: adding a
+        write path must not widen what GET may reach, and every write pattern must
+        be backed by a real Core route.
+        """
+        self.assertEqual({"POST"}, self.write_methods)
+        samples = self.core_samples()
+        for pattern in self.write_paths:
+            backed = [sample for sample in samples if pattern.fullmatch(sample)]
+            self.assertTrue(backed, f"write pattern {pattern.pattern!r} matches no Core route")
+        # The endpoints deliberately NOT opened in this slice.
+        for path in (
+            "/v1/evidence/confirm",
+            "/v1/resolutions/res_x/manual-reapply",
+            "/v1/resolve/int_x",
+            "/v1/tool-results",
+            "/v1/workspace/fingerprint",
+        ):
+            self.assertFalse(
+                any(pattern.fullmatch(path) for pattern in self.write_paths),
+                f"{path} must not be open to the browser in this slice",
+            )
+        # Reads stay GET-only even though writes exist.
+        self.assertEqual({"GET"}, self.methods)
 
     def test_read_paths_the_dashboard_needs_are_allowed(self) -> None:
         needed = [

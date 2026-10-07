@@ -64,6 +64,7 @@ function parseArgs(argv) {
       case '--resolution': args.resolution = next; index += 1; break
       case '--p2-project': args.p2Project = next; index += 1; break
       case '--completion-interpretation': args.completionInterpretation = next; index += 1; break
+      case '--completion-actions': args.completionActions = next; index += 1; break
       case '--out': args.out = next; index += 1; break
       case '--headful': args.headful = true; break
       default: throw new Error(`unknown argument ${flag}`)
@@ -714,15 +715,25 @@ async function main() {
             hasHeadApplied: text.indexOf('head applied yes') >= 0 || text.indexOf('head applied no') >= 0,
             hasRevisions: text.indexOf('expected head r') >= 0 && text.indexOf('observed r') >= 0,
             undefinedLeak: text.indexOf('undefined') >= 0,
-            history: ['CORRECT', 'RERUN'].filter((action) => page.indexOf(action) >= 0),
+            // The caller passes the actions Core reports for this chain; the step
+            // used to hardcode two of three and only assert non-empty, which
+            // under-reported RERUN_COMPLETE.
+            expected: (${JSON.stringify(args.completionActions || 'CORRECT,RERUN,RERUN_COMPLETE')}).split(','),
+            history: (${JSON.stringify(args.completionActions || 'CORRECT,RERUN,RERUN_COMPLETE')})
+              .split(',').filter((action) => page.indexOf(action) >= 0),
+            unknownActions: ['CORRECT', 'REJECT', 'RERUN', 'RERUN_COMPLETE']
+              .filter((action) => page.indexOf(action) >= 0)
+              .filter((action) => (${JSON.stringify(args.completionActions || 'CORRECT,RERUN,RERUN_COMPLETE')}).indexOf(action) < 0),
           }
         })()`)
         trace.record('operation completion renders the real columns (no invented fields)',
           completion.hasStatus && completion.hasHeadApplied && completion.hasRevisions &&
           completion.undefinedLeak === false,
           completion.text.slice(0, 160))
-        trace.record('maintenance history names the real actions',
-          completion.history.length > 0, JSON.stringify(completion.history))
+        trace.record('maintenance history renders every real action Core reports',
+          completion.expected.every((action) => completion.history.includes(action)) &&
+          completion.unknownActions.length === 0,
+          `rendered=${JSON.stringify(completion.history)} expected=${JSON.stringify(completion.expected)}`)
         await trace.screenshot(cdp, '16-operation-completion')
       }
 

@@ -25,6 +25,8 @@ export interface ParsedArgs {
 export interface Allowlist {
   methods: Set<string>
   paths: RegExp[]
+  write_methods?: string[]
+  write_paths?: string[]
 }
 
 export function parseArgs(argv: string[]): ParsedArgs
