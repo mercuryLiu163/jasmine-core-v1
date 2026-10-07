@@ -4,11 +4,15 @@ Scope: P6-02 as defined by `evidence/p6-rebase-handoff-20261007/NEXT-P6-02.md`.
 Milestone **A** is the read slice; milestone **B** is the audited human writes.
 Both are described below, and each says what is *not* delivered. Nothing here
 claims P6, or even P6-02, is finished: manual reapply and the Task/Step/Evidence
-writes are still open, and milestone B has not had an independent review.
+writes are still open, and no click-through Gate has run.
 
 Baseline: `850fbec` (P2-01/02/03 merged, schema v8). The P6-01 product baseline
-`12fd0ba` is untouched: its bound bundle `index-Bn3SCuxd.js`
-(`1047915010c1e2…9d6e58`) is still what that commit builds.
+`12fd0ba` is untouched and its bound bundle is reproducible: building that commit in
+a clean worktree (with the three `web/src/lib` modules it shipped, which were
+untracked at the time) yields `index-Bn3SCuxd.js` hashing to
+`1047915010c1e23bd2004f1de095a7d045a97aa52841a5b9a8fd02e1309d6e58`, byte for byte
+the recorded `1047915010c1e2…9d6e58`. `12fd0ba` is also an unmodified ancestor of
+this work.
 
 ## What milestone A delivers
 
@@ -293,7 +297,9 @@ Milestone B is therefore validated by a second party, with those caveats closed 
 the recorded commit. It has had no separate *code review* of the UI panels: two
 review attempts were stopped — the first when the packaging defect was found, the
 second when these fixes superseded its commit — so the panel-level review is still
-outstanding. `P6-02` as a whole remains PARTIAL. `P6-02: PARTIAL` as a whole; manual reapply and the Task/Step/Evidence
-writes are not delivered, and no Gate has run against the operator's own Core or a
-real captured conversation. `P6` as a stage is not complete and nothing here
-releases V1.
+outstanding.
+
+`P6-02: PARTIAL` as a whole — manual reapply and the Task/Step/Evidence writes are
+not delivered, no click-through Gate has run, and no Gate has run against the
+operator's own Core or a real captured conversation. `P6` as a stage is not complete
+and nothing here releases V1.
