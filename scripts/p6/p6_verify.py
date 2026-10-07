@@ -244,6 +244,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--task")
     parser.add_argument("--step")
     parser.add_argument("--rule")
+    parser.add_argument("--proposed-rule", dest="proposed_rule",
+                        help="P6-02b: a PROPOSED Rule, to show APPROVE armed")
+    parser.add_argument("--retire-rule", dest="retire_rule",
+                        help="P6-02b: a second ACTIVE Rule, to show RETIRE armed")
+    parser.add_argument("--reject-review", dest="reject_review",
+                        help="P6-02b: the second PENDING review, so REJECT has a target")
     parser.add_argument("--evidence")
     parser.add_argument("--event")
     parser.add_argument("--interpretation", help="P6-02: interpretation id to open")
@@ -314,7 +320,10 @@ def main(argv: list[str] | None = None) -> int:
                         ("--review", args.review), ("--resolution", args.resolution),
                         ("--p2-project", args.p2_project),
                         ("--completion-interpretation", args.completion_interpretation),
-                        ("--completion-actions", args.completion_actions)):
+                        ("--completion-actions", args.completion_actions),
+                        ("--proposed-rule", args.proposed_rule),
+                        ("--retire-rule", args.retire_rule),
+                        ("--reject-review", args.reject_review)):
         if value:
             trace_command += [flag, value]
     trace_output = run(trace_command, ROOT)

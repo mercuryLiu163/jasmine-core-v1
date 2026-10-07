@@ -101,7 +101,9 @@ export function WritePanel({
   }
 
   return (
-    <section className="panel write-panel" aria-label={title}>
+    // Stable hooks: the T03 Gate and the browser trace need to find *this*
+    // panel's fields without depending on generated ids or on translated text.
+    <section className="panel write-panel" aria-label={title} data-write-panel={title}>
       <header className="panel__head">
         <h2>{title}</h2>
         <span className="muted">{basis}</span>
@@ -134,6 +136,7 @@ export function WritePanel({
                 onChange={(event) => setReason(event.target.value)}
                 placeholder="为什么做这个改动"
                 autoComplete="off"
+                data-testid="write-reason"
               />
             </label>
           ) : (
@@ -153,7 +156,12 @@ export function WritePanel({
         ) : null}
 
         <div className="filters">
-          <button type="button" onClick={() => void onSubmit()} disabled={!canSubmit}>
+          <button
+            type="button"
+            onClick={() => void onSubmit()}
+            disabled={!canSubmit}
+            data-testid="write-submit"
+          >
             {action.busy ? '提交中…' : submitLabel}
           </button>
           <button type="button" onClick={action.resetDraft} disabled={action.busy}>

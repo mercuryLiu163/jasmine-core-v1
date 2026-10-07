@@ -58,6 +58,7 @@ function parseArgs(argv) {
       case '--event': args.event = next; index += 1; break
       case '--rule': args.rule = next; index += 1; break
       case '--proposed-rule': args.proposedRule = next; index += 1; break
+      case '--reject-review': args.rejectReview = next; index += 1; break
       case '--retire-rule': args.retireRule = next; index += 1; break
       case '--evidence': args.evidence = next; index += 1; break
       case '--interpretation': args.interpretation = next; index += 1; break
@@ -529,6 +530,12 @@ async function main() {
     if (args.rule) {
       await cdp.send('Page.navigate', { url: `${args.ui}/#/rules?rule_id=${encodeURIComponent(args.rule)}${args.project ? `&project_id=${encodeURIComponent(args.project)}` : ''}` })
       await waitFor(cdp, `document.body.textContent.includes('版本历史')`, { label: 'Rule history' })
+      // The panels need `detail.data.rule`, which is a separate request from the
+      // history: waiting only for '版本历史' can observe the page with the
+      // history settled and the Rule still loading, and then report a missing
+      // panel as a product failure.
+      await waitFor(cdp, `document.querySelector('section[data-write-panel]') !== null`,
+        { label: 'Authority write panels' })
       const ruleText = await evaluate(cdp, 'document.body.textContent')
       trace.record('Rule detail and version history render', ruleText.includes('rule_key'))
 
@@ -558,8 +565,15 @@ async function main() {
           approveDisabled: button(approve)?.disabled ?? null,
           supersedeDisabled: button(supersede)?.disabled ?? null,
           retireDisabled: button(retire)?.disabled ?? null,
-          keyKind: (propose?.textContent ?? '').includes('event_id'),
-          noIdempotencyOnAuthority: !(propose?.textContent ?? '').includes('idempotency_key'),
+          // The key the panel will actually send: labelled event_id(重放键) and
+          // shown as an evt_ id. The panel does name idempotency_key, but only to
+          // say these endpoints refuse it.
+          labelsEventId: (propose?.textContent ?? '').includes('event_id(重放键)'),
+          showsEventIdValue: [...(propose?.querySelectorAll('code') ?? [])]
+            .some((n) => /^evt_/.test((n.textContent ?? '').trim())),
+          saysIdempotencyRefused: (propose?.textContent ?? '').includes('不接受 idempotency_key'),
+          showsNoIdempotencyKeyValue: ![...(propose?.querySelectorAll('code') ?? [])]
+            .some((n) => /^ui-/.test((n.textContent ?? '').trim())),
         }
       })()`)
       trace.record(
@@ -573,9 +587,16 @@ async function main() {
         `hasReason=${authority.proposeHasReason} explains=${authority.proposeSaysNoReason}`,
       )
       trace.record(
-        'Authority panels name event_id as the replay key and never idempotency_key',
-        authority.keyKind === true && authority.noIdempotencyOnAuthority === true,
-        `event_id=${authority.keyKind} noIdempotency=${authority.noIdempotencyOnAuthority}`,
+        'Authority panels send event_id as the replay key, shown as a real evt_ id',
+        authority.labelsEventId === true && authority.showsEventIdValue === true &&
+          authority.showsNoIdempotencyKeyValue === true,
+        `labels=${authority.labelsEventId} showsEvt=${authority.showsEventIdValue} ` +
+          `noUiKey=${authority.showsNoIdempotencyKeyValue}`,
+      )
+      trace.record(
+        'Authority panels disclose that Core refuses idempotency_key here',
+        authority.saysIdempotencyRefused === true,
+        String(authority.saysIdempotencyRefused),
       )
       trace.record(
         'Propose offers a real origin Event picker and a rule_key field',
@@ -591,7 +612,12 @@ async function main() {
 
       if (args.proposedRule) {
         await cdp.send('Page.navigate', { url: `${args.ui}/#/rules?rule_id=${encodeURIComponent(args.proposedRule)}${args.project ? `&project_id=${encodeURIComponent(args.project)}` : ''}` })
-        await waitFor(cdp, `document.body.textContent.includes('版本历史')`, { label: 'PROPOSED rule' })
+        await waitFor(cdp,
+          `document.body.textContent.includes(${JSON.stringify(args.proposedRule)})`,
+          { label: 'PROPOSED rule detail' })
+        await waitFor(cdp,
+          `document.querySelector('section[data-write-panel^="Approve"]') !== null`,
+          { label: 'PROPOSED rule approve panel' })
         const proposed = await evaluate(cdp, `(() => {
           const panel = [...document.querySelectorAll('section')]
             .find((n) => (n.getAttribute('aria-label') ?? '').includes('Approve'))
@@ -609,7 +635,12 @@ async function main() {
 
       if (args.retireRule) {
         await cdp.send('Page.navigate', { url: `${args.ui}/#/rules?rule_id=${encodeURIComponent(args.retireRule)}${args.project ? `&project_id=${encodeURIComponent(args.project)}` : ''}` })
-        await waitFor(cdp, `document.body.textContent.includes('版本历史')`, { label: 'ACTIVE retire target' })
+        await waitFor(cdp,
+          `document.body.textContent.includes(${JSON.stringify(args.retireRule)})`,
+          { label: 'retire target Rule detail' })
+        await waitFor(cdp,
+          `document.querySelector('section[data-write-panel^="Retire"]') !== null`,
+          { label: 'ACTIVE retire target panel' })
         const retireState = await evaluate(cdp, `(() => {
           const panel = (needle) => [...document.querySelectorAll('section')]
             .find((n) => (n.getAttribute('aria-label') ?? '').includes(needle))
@@ -882,6 +913,59 @@ async function main() {
             review.hasId && review.hasPreviewOrConflict && review.resolutionLink,
             JSON.stringify(review))
           await trace.screenshot(cdp, '14-review')
+        }
+
+        // The second PENDING review exists so the T03 Gate can exercise REJECT
+        // without consuming APPROVE's target: it must still render as a live,
+        // actionable review here, with the same panels.
+        if (args.rejectReview) {
+          await cdp.send('Page.navigate', { url: `${args.ui}/#/review/${encodeURIComponent(args.rejectReview)}` })
+          await waitFor(cdp,
+            `document.body.textContent.includes('当前可审批计划') || document.body.textContent.includes('预览冲突')`,
+            { label: 'reject-review detail body' })
+          // A Node-side CSS selector for one panel's field, plus an in-page
+          // helper with the same rule. `startsWith` on the title avoids depending
+          // on the parenthesised, translated remainder of the label.
+          const panelSelector = (needle) =>
+            `section[data-write-panel^="${needle}"]`
+          const second = await evaluate(cdp, `(() => {
+            const panel = (needle) => [...document.querySelectorAll('section[data-write-panel]')]
+              .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith(needle)) ?? null
+            const text = document.body.textContent ?? ''
+            const reject = panel('Reject')
+            return {
+              hasId: text.includes(${JSON.stringify(args.rejectReview)}),
+              pending: text.includes('PENDING'),
+              approveAvailable: Boolean(panel('Approve')),
+              rejectReasonRequired: (reject?.querySelector('[data-testid="write-reason"]') !== null),
+              rejectDisabledBeforeReason: reject?.querySelector('[data-testid="write-submit"]')?.disabled ?? null,
+            }
+          })()`)
+          await trace.record(
+            'the second PENDING review renders both write panels',
+            second.hasId && second.pending && second.approveAvailable === true,
+            JSON.stringify(second),
+          )
+          // REJECT is armed once a reason is present; the trace types but never
+          // clicks, because a screenshot run must not mutate Truth.
+          await typeInto(cdp,
+            `${panelSelector('Reject')} [data-testid="write-reason"]`,
+            'T03 trace: reason present so the button is armed (not submitted)')
+          const armed = await evaluate(cdp, `(() => {
+            const reject = [...document.querySelectorAll('section[data-write-panel]')]
+              .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith('Reject'))
+            return {
+              disabled: reject?.querySelector('[data-testid="write-submit"]')?.disabled ?? null,
+              typed: reject?.querySelector('[data-testid="write-reason"]')?.value?.length ?? 0,
+            }
+          })()`)
+          trace.record(
+            'REJECT arms only after a reason, and REJECT never submits by itself',
+            second.rejectReasonRequired === true &&
+              second.rejectDisabledBeforeReason === true && armed.disabled === false,
+            `${JSON.stringify(second)} armed=${JSON.stringify(armed)}`,
+          )
+          await trace.screenshot(cdp, '14b-reject-review')
         }
       }
 
