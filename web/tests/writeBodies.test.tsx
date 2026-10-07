@@ -619,3 +619,69 @@ describe('every remaining write body is pinned too', () => {
 function buttonFor(panel: HTMLElement, name: string): HTMLButtonElement {
   return within(panel).getByRole('button', { name }) as HTMLButtonElement
 }
+
+describe('local validation names the right prefix and the right keys', () => {
+  it('refuses a task id offered as a project scope id', async () => {
+    // A prefix-agnostic check let a `tsk_` id pass as `project_id` and Core answered
+    // 404, while the message claimed a prefix the check did not enforce. The panel
+    // reports the first failing field, so the other fields are filled first.
+    const user = userEvent.setup()
+    await enter(user, `#/rules?rule_id=rul_1&project_id=${PROJECT_ID}&task_id=${TASK_ID}`, {
+      ...rulesRoutes,
+    })
+    const panel = await screen.findByRole('region', { name: 'Propose(提出新的 Rule)' })
+    await user.type(within(panel).getByLabelText(/rule_key/), 'ui.badscope')
+    await user.selectOptions(
+      within(panel).getByLabelText(/候选 origin Event/),
+      'evt_01M4B63ER9AR3M3V55FHRWZ66X',
+    )
+    const projectField = within(panel).getByLabelText(/scope.project_id/)
+    await user.clear(projectField)
+    await user.type(projectField, TASK_ID)
+    await waitFor(() =>
+      expect(panel.textContent).toContain('project scope 需要 Core 形状的 project_id'),
+    )
+    expect(buttonFor(panel, '提交提案').disabled).toBe(true)
+    expect(fake!.callsTo('POST', '/v1/rules/proposals')).toHaveLength(0)
+  })
+
+  it('refuses unknown keys in verification_requirements instead of sending them', async () => {
+    const user = userEvent.setup()
+    await enter(user, RULES_HASH, { ...rulesRoutes })
+    const panel = await screen.findByRole('region', { name: 'Propose(提出新的 Rule)' })
+    await user.type(within(panel).getByLabelText(/rule_key/), 'ui.keys')
+    await user.selectOptions(
+      within(panel).getByLabelText(/候选 origin Event/),
+      'evt_01M4B63ER9AR3M3V55FHRWZ66X',
+    )
+    await user.type(within(panel).getByLabelText(/^content\(Core 必填/), 'content')
+    await user.selectOptions(within(panel).getByLabelText('enforcement'), 'VERIFY')
+    const requirements = within(panel).getByLabelText(/verification_requirements/) as HTMLTextAreaElement
+    // `user.type` treats `{` as an escape sequence, so paste the JSON literally.
+    await user.clear(requirements)
+    await user.click(requirements)
+    await user.paste('{"requirements":[{"key":"k","kind":"BUILD","required_result":"PASS","surprise":1}]}')
+    await waitFor(() => expect(panel.textContent).toContain('requirement 不认识的键'))
+    expect(buttonFor(panel, '提交提案').disabled).toBe(true)
+    expect(fake!.callsTo('POST', '/v1/rules/proposals')).toHaveLength(0)
+  })
+
+  it('refuses an unknown top-level key in verification_requirements', async () => {
+    const user = userEvent.setup()
+    await enter(user, RULES_HASH, { ...rulesRoutes })
+    const panel = await screen.findByRole('region', { name: 'Propose(提出新的 Rule)' })
+    await user.type(within(panel).getByLabelText(/rule_key/), 'ui.top')
+    await user.selectOptions(
+      within(panel).getByLabelText(/候选 origin Event/),
+      'evt_01M4B63ER9AR3M3V55FHRWZ66X',
+    )
+    await user.type(within(panel).getByLabelText(/^content\(Core 必填/), 'content')
+    await user.selectOptions(within(panel).getByLabelText('enforcement'), 'VERIFY')
+    const requirements = within(panel).getByLabelText(/verification_requirements/) as HTMLTextAreaElement
+    await user.clear(requirements)
+    await user.click(requirements)
+    await user.paste('{"requirements":[{"key":"k","kind":"BUILD","required_result":"PASS"}],"extra":1}')
+    await waitFor(() => expect(panel.textContent).toContain('Core 只接受 requirements'))
+    expect(buttonFor(panel, '提交提案').disabled).toBe(true)
+  })
+})

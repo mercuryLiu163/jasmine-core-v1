@@ -457,3 +457,38 @@ describe('a response belongs to the target that issued it', () => {
     expect(result.current.error).toBeNull()
   })
 })
+
+describe('the panel must not look idle while a request is outstanding', () => {
+  it('keeps busy true across a target change until the request settles', async () => {
+    // Without this, a target change reset `state` to idle while the previous request
+    // was still in flight: the button re-enabled and a click was silently dropped.
+    let release: (() => void) | null = null
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { result, rerender } = renderHook(
+      ({ target }: { target: string }) =>
+        useWriteAction(
+          async () => {
+            await gate
+            return { replayed: false }
+          },
+          { keyKind: 'event_id', targetKey: target },
+        ),
+      { initialProps: { target: 'rul_A' } },
+    )
+    let pending: Promise<void> = Promise.resolve()
+    await act(async () => {
+      pending = result.current.submit({ expected_revision: 1 })
+    })
+    expect(result.current.busy).toBe(true)
+    rerender({ target: 'rul_B' })
+    // The panel state resets, but the request has not settled, so it is still busy.
+    expect(result.current.busy).toBe(true)
+    await act(async () => {
+      release?.()
+      await pending
+    })
+    await waitFor(() => expect(result.current.busy).toBe(false))
+  })
+})

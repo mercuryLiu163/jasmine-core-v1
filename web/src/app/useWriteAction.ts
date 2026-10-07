@@ -125,6 +125,10 @@ export function useWriteAction(
   // initialiser runs once, so no randomness is spent on re-render.
   const [writeKey, setWriteKey] = useState<string>(() => newKey(keyKind))
   const inFlight = useRef(false)
+  // Counted in state, not derived from `state`: a target change resets `state` to
+  // 'idle' while a request is still outstanding, which left the button enabled and
+  // then silently dropped the click. `busy` must describe the request, not the panel.
+  const [pending, setPending] = useState(0)
   const sendRef = useRef(send)
   sendRef.current = send
   // Latest target, readable from an async continuation. A response belongs to the
@@ -153,6 +157,7 @@ export function useWriteAction(
   const submit = useCallback(async (body: Record<string, unknown>) => {
     if (inFlight.current) return
     inFlight.current = true
+    setPending((value) => value + 1)
     const issuedFor = targetKey
     setState('submitting')
     setError(null)
@@ -209,6 +214,7 @@ export function useWriteAction(
       }
     } finally {
       inFlight.current = false
+      setPending((value) => value - 1)
     }
   }, [keyKind, writeKey])
 
@@ -228,10 +234,10 @@ export function useWriteAction(
       requestId,
       keyKind,
       writeKey,
-      busy: state === 'submitting',
+      busy: pending > 0 || state === 'submitting',
       submit,
       resetDraft,
     }),
-    [state, result, error, requestId, keyKind, writeKey, submit, resetDraft],
+    [state, result, error, requestId, keyKind, writeKey, pending, submit, resetDraft],
   )
 }

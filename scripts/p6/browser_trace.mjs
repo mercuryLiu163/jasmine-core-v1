@@ -1079,6 +1079,35 @@ async function main() {
         return { ok: true }
       })()`
 
+      const reloadAndReauth = async (targetUrl) => {
+        await cdp.send('Page.reload', { ignoreCache: true })
+        await waitFor(cdp,
+          `document.querySelector('input[type=password]') !== null || ` +
+          `document.body.textContent.includes('Core 健康与 Schema')`,
+          { label: 'reload settled' })
+        if (await evaluate(cdp, `document.querySelector('input[type=password]') !== null`)) {
+          await evaluate(cdp, `(() => {
+            const el = document.querySelector('input[type=password]')
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+            setter.call(el, '')
+            el.dispatchEvent(new Event('input', { bubbles: true }))
+            return true
+          })()`)
+          await typeInto(cdp, 'input[type=password]', token)
+          await clickByText(cdp, 'button', '使用此 token')
+          // Not the Overview heading: the reload preserved whatever hash was current,
+          // so a successful sign-in lands on *that* route. The sign-in form disappearing
+          // is the condition that holds either way.
+          await waitFor(cdp, `document.querySelector('input[type=password]') === null`,
+            { label: 're-authenticated after reload' })
+        }
+        if (targetUrl) {
+          // A hash change is not a fetch, but the caller's own row wait is: reaching it
+          // requires the reload's request to have resolved. So no extra gate here.
+          await cdp.send('Page.navigate', { url: targetUrl })
+        }
+      }
+
       const setField = async (selector, value) => evaluate(cdp, `(() => {
         const el = document.querySelector(${JSON.stringify(selector)})
         if (!el) return { ok: false, why: 'field not found' }
@@ -1123,6 +1152,23 @@ async function main() {
         })()`)
       }
 
+      const readKv = (label) => `(() => {
+        for (const list of document.querySelectorAll('dl.kv')) {
+          for (const row of list.querySelectorAll(':scope > div')) {
+            const dt = row.querySelector('dt')
+            const dd = row.querySelector('dd')
+            if (dt && dd && (dt.textContent ?? '').trim() === ${JSON.stringify(label)}) {
+              return (dd.textContent ?? '').trim()
+            }
+          }
+        }
+        return null
+      })()`
+      const revisionOf = (text) => {
+        const match = (text ?? '').match(/\/\s*([0-9]+)/)
+        return match ? Number(match[1]) : null
+      }
+
       // --- a Rule that is PROPOSED: click Approve, then re-read its status ---
       if (args.proposedRule) {
         const url = `${args.ui}/#/rules?rule_id=${encodeURIComponent(args.proposedRule)}`
@@ -1131,21 +1177,30 @@ async function main() {
           { label: 'proposed Rule detail' })
         await waitFor(cdp, `document.querySelector('section[data-write-panel^="Approve"]') !== null`,
           { label: 'Approve panel' })
+        // Read the object's own status/revision rows before the click, so the check
+        // after it is a comparison of this Rule rather than a substring of the page.
+        const beforeStatus = await evaluate(cdp, readKv('status'))
+        const beforeRevision = revisionOf(await evaluate(cdp, readKv('version / revision')))
         const clicked = await evaluate(cdp, panelButton('Approve', 'button.click()'))
         const outcome = await waitForSubmitted('Approve')
         trace.record('clicking Approve in the browser submits and Core accepts it',
           clicked.ok === true && outcome.submitted === true && outcome.conflict === false,
           `clicked=${JSON.stringify(clicked)} outcome=${JSON.stringify(outcome)}`)
-        await cdp.send('Page.navigate', { url })
-        await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(args.proposedRule)})`,
-          { label: 're-read after approve' })
-        const status = await waitFor(cdp, `(() => {
-          const text = document.body.textContent ?? ''
-          if (!text.includes('rule_key')) return ''
-          return text.includes('ACTIVE') ? 'ACTIVE' : (text.includes('PROPOSED') ? 'PROPOSED' : '')
-        })()`, { label: 'approved status' })
+        await reloadAndReauth(url)
+        await waitFor(cdp, `document.querySelector('section[data-write-panel]') !== null`,
+          { label: 'rule detail after reload' })
+        const afterStatus = await waitFor(cdp, `(() => {
+          const value = ${readKv('status')}
+          return value ?? ''
+        })()`, { label: 'approved status row' })
+        const afterRevision = revisionOf(await evaluate(cdp, readKv('version / revision')))
+        const wentActive = (beforeStatus ?? '').includes('PROPOSED') && afterStatus.includes('ACTIVE')
+        const revisionAdvanced = typeof beforeRevision === 'number' &&
+          typeof afterRevision === 'number' && afterRevision > beforeRevision
         trace.record('and the Rule really is ACTIVE on re-read, not just a success banner',
-          status === 'ACTIVE', String(status))
+          wentActive && revisionAdvanced,
+          `status ${JSON.stringify(beforeStatus)} -> ${JSON.stringify(afterStatus)} · ` +
+            `revision ${beforeRevision} -> ${afterRevision}`)
         await trace.screenshot(cdp, '17-write-approve')
       }
 
@@ -1221,11 +1276,10 @@ async function main() {
         trace.record('typing a reason and clicking Reject submits in the browser',
           clicked.ok === true && outcome.submitted === true,
           `clicked=${JSON.stringify(clicked)} outcome=${JSON.stringify(outcome)}`)
-        // Back to the root route: a route change (not the same hash) is what makes the
-        // resource refetch, so this reads Core's current head rather than a cache.
-        await cdp.send('Page.navigate', { url: rootUrl })
-        await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(args.interpretation)})`,
-          { label: 'root page settled for the after read' })
+        // Forced refetch rather than a route change: a route change happens to work
+        // when the ids differ, but reads a cache when the passed id is already the
+        // current head — which would report a real write as a failure.
+        await reloadAndReauth(rootUrl)
         const revisionAfter = await waitFor(cdp, `(() => {
           const text = document.body.textContent ?? ''
           const match = text.match(/head revision ([0-9]+)/)
@@ -1252,11 +1306,16 @@ async function main() {
         })()`, { label: 'review Reject armed after typing' })
         const clicked = await evaluate(cdp, panelButton('Reject', 'button.click()'))
         const outcome = await waitForSubmitted('Reject')
-        await cdp.send('Page.navigate', { url: `${args.ui}/#/review/${encodeURIComponent(args.rejectReview)}` })
-        await waitFor(cdp, `document.body.textContent.includes('REJECTED')`,
-          { label: 'rejected review status', timeoutMs: 20000 })
+        await reloadAndReauth(`${args.ui}/#/review/${encodeURIComponent(args.rejectReview)}`)
+        // The status/revision row of a freshly fetched Review, not the word "REJECTED"
+        // anywhere on the page — Core's raw response in the success block contains it.
+        const reviewStatus = await waitFor(cdp, `(() => {
+          const value = ${readKv('status / revision')}
+          return value && value.includes('REJECTED') ? value : ''
+        })()`, { label: 'rejected review status row', timeoutMs: 20000 })
         trace.record('clicking Reject on a Review really leaves it REJECTED on re-read',
-          clicked.ok === true && outcome.submitted === true, `outcome=${JSON.stringify(outcome)}`)
+          clicked.ok === true && outcome.submitted === true && reviewStatus.includes('REJECTED'),
+          `row=${JSON.stringify(reviewStatus)} outcome=${JSON.stringify(outcome)}`)
         await trace.screenshot(cdp, '19-write-review-reject')
       }
 
@@ -1306,9 +1365,29 @@ async function main() {
         })()`, { label: 'Propose ready' })
         const clicked = await evaluate(cdp, panelButton('Propose', 'button.click()'))
         const outcome = await waitForSubmitted('Propose')
+        // Read the created Rule's id out of Core's own response, then fetch it. Without
+        // this the check only proved a banner appeared.
+        const createdId = await evaluate(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          const match = text.match(/rul_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/)
+          return match ? match[0] : null
+        })()`)
+        let createdStatus = null
+        if (createdId) {
+          await reloadAndReauth(
+            `${args.ui}/#/rules?rule_id=${encodeURIComponent(createdId)}` +
+              (args.project ? `&project_id=${encodeURIComponent(args.project)}` : ''),
+          )
+          createdStatus = await waitFor(cdp, `(() => {
+            const value = ${readKv('status')}
+            return value ?? ''
+          })()`, { label: 'created Rule status row' })
+        }
         trace.record('the Propose form submits from a real click and creates a PROPOSED Rule',
-          clicked.ok === true && outcome.submitted === true,
-          `rule_key=${ruleKey} filled=${JSON.stringify(filled)} outcome=${JSON.stringify(outcome)}`)
+          clicked.ok === true && outcome.submitted === true && createdId !== null &&
+            (createdStatus ?? '').includes('PROPOSED'),
+          `rule_key=${ruleKey} created=${createdId} status=${JSON.stringify(createdStatus)} ` +
+            `outcome=${JSON.stringify(outcome)}`)
         await trace.screenshot(cdp, '20-write-propose')
       } else {
         trace.record('the Propose form submits from a real click and creates a PROPOSED Rule',

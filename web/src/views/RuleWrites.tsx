@@ -36,11 +36,13 @@ import { isEventId } from '../lib/ids'
 /** Mirrors `authority.RULE_KEY`; a bad key is refused by Core before any write. */
 const RULE_KEY_RE = /^[a-z][a-z0-9_.-]{0,127}$/
 /**
- * Core's public id shape (`ids.ID_RE`: `<prefix>_` + 26 Crockford base32 chars).
- * A looser regex would let the operator submit an id Core answers `invalid_request`
- * for; the exact shape turns that into an immediate, specific message.
+ * Core's public id shape (`ids.ID_RE`: `<prefix>_` + 26 Crockford base32 chars), per
+ * prefix. A prefix-agnostic `[a-z]{3}_` let a `tsk_` id pass as a `project_id` and Core
+ * answered 404, while the message claimed to check a prefix it did not — so the check
+ * would have been both wrong and reassuring.
  */
-const ID_SHAPE = /^[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$/
+const idShape = (prefix: string): RegExp =>
+  new RegExp(`^${prefix}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$`)
 
 /**
  * Mirrors `authority._path` for `matcher.path_prefix`: an absolute, canonical POSIX
@@ -86,14 +88,14 @@ function scopeError(draft: ScopeDraft): string | null {
     }
     return null
   }
-  if (!ID_SHAPE.test(draft.projectId.trim())) {
+  if (!idShape('prj').test(draft.projectId.trim())) {
     return 'project scope 需要 Core 形状的 project_id(prj_ + 26 位 Crockford base32)'
   }
   if (draft.kind === 'project') {
     if (draft.taskId.trim()) return 'project scope 不能同时指定 task_id'
     return null
   }
-  if (!ID_SHAPE.test(draft.taskId.trim())) {
+  if (!idShape('tsk').test(draft.taskId.trim())) {
     return 'task scope 需要 Core 形状的 task_id(tsk_ + 26 位 Crockford base32)'
   }
   return null
@@ -195,6 +197,12 @@ function verificationError(raw: string, draft: ContentDraft): string | null {
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
     return 'verification_requirements 必须是对象 {requirements: [...]}'
   }
+  // Core's `_requirement_set` allows exactly `{requirements}`; an extra top-level key
+  // is `invalid_request`, not a harmless addition.
+  const unknownTop = Object.keys(parsed as Record<string, unknown>).filter((key) => key !== 'requirements')
+  if (unknownTop.length > 0) {
+    return `verification_requirements 不认识的键: ${unknownTop.join('、')}(Core 只接受 requirements)`
+  }
   const requirements = (parsed as { requirements?: unknown }).requirements
   if (!Array.isArray(requirements) || requirements.length === 0) {
     return 'verification_requirements.requirements 必须是非空数组'
@@ -203,6 +211,12 @@ function verificationError(raw: string, draft: ContentDraft): string | null {
   for (const item of requirements) {
     if (typeof item !== 'object' || item === null || Array.isArray(item)) {
       return '每个 requirement 必须是对象'
+    }
+    // Mirrors Core's per-member allow-list (`evidence._requirement_set`).
+    const allowed = ['key', 'kind', 'required_result', 'tool_name', 'command_sha256', 'artifact_sha256']
+    const unknown = Object.keys(item as Record<string, unknown>).filter((k) => !allowed.includes(k))
+    if (unknown.length > 0) {
+      return `requirement 不认识的键: ${unknown.join('、')}(Core 只接受 ${allowed.join('/')})`
     }
     const key = (item as { key?: unknown }).key
     if (typeof key !== 'string' || key === '' || key.length > 128) {
