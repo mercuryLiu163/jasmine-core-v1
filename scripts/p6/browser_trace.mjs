@@ -57,6 +57,8 @@ function parseArgs(argv) {
       case '--step': args.step = next; index += 1; break
       case '--event': args.event = next; index += 1; break
       case '--rule': args.rule = next; index += 1; break
+      case '--proposed-rule': args.proposedRule = next; index += 1; break
+      case '--retire-rule': args.retireRule = next; index += 1; break
       case '--evidence': args.evidence = next; index += 1; break
       case '--interpretation': args.interpretation = next; index += 1; break
       case '--pending-interpretation': args.pendingInterpretation = next; index += 1; break
@@ -529,6 +531,98 @@ async function main() {
       await waitFor(cdp, `document.body.textContent.includes('版本历史')`, { label: 'Rule history' })
       const ruleText = await evaluate(cdp, 'document.body.textContent')
       trace.record('Rule detail and version history render', ruleText.includes('rule_key'))
+
+      // 6b. The Authority write surface (P6-02 milestone B). The trace only
+      // *renders* these panels: it never submits, because a screenshot run must
+      // not mutate Truth. That the exact body each panel builds is Core-legal is
+      // pinned by `web/tests/writeBodies.test.tsx`, and the live audited path is
+      // proven by `scripts/p6/p6_t03_gate.py`.
+      const authority = await evaluate(cdp, `(() => {
+        const panel = (needle) => [...document.querySelectorAll('section')]
+          .find((n) => (n.getAttribute('aria-label') ?? '').includes(needle)) ?? null
+        const propose = panel('Propose')
+        const approve = panel('Approve')
+        const supersede = panel('Supersede')
+        const retire = panel('Retire')
+        const label = (node, needle) => node
+          ? [...node.querySelectorAll('label')].find((l) => (l.textContent ?? '').includes(needle)) ?? null
+          : null
+        const button = (node) => node ? node.querySelector('button') : null
+        return {
+          panels: [propose, approve, supersede, retire].map((n) => Boolean(n)),
+          proposeHasReason: Boolean(label(propose, 'reason')),
+          proposeSaysNoReason: (propose?.textContent ?? '').includes('不接受 reason 字段'),
+          proposeHasOriginPicker: Boolean(label(propose, '候选 origin Event')),
+          proposeHasRuleKey: Boolean(label(propose, 'rule_key')),
+          supersedeSaysLockedScope: (supersede?.textContent ?? '').includes('不支持跨 scope 替换'),
+          approveDisabled: button(approve)?.disabled ?? null,
+          supersedeDisabled: button(supersede)?.disabled ?? null,
+          retireDisabled: button(retire)?.disabled ?? null,
+          keyKind: (propose?.textContent ?? '').includes('event_id'),
+          noIdempotencyOnAuthority: !(propose?.textContent ?? '').includes('idempotency_key'),
+        }
+      })()`)
+      trace.record(
+        'Authority write surface renders all four panels (propose/approve/supersede/retire)',
+        authority.panels.every(Boolean),
+        JSON.stringify(authority.panels),
+      )
+      trace.record(
+        'Authority panels take no reason field, because Core rejects it as unknown',
+        authority.proposeHasReason === false && authority.proposeSaysNoReason === true,
+        `hasReason=${authority.proposeHasReason} explains=${authority.proposeSaysNoReason}`,
+      )
+      trace.record(
+        'Authority panels name event_id as the replay key and never idempotency_key',
+        authority.keyKind === true && authority.noIdempotencyOnAuthority === true,
+        `event_id=${authority.keyKind} noIdempotency=${authority.noIdempotencyOnAuthority}`,
+      )
+      trace.record(
+        'Propose offers a real origin Event picker and a rule_key field',
+        authority.proposeHasOriginPicker === true && authority.proposeHasRuleKey === true,
+        JSON.stringify(authority),
+      )
+      trace.record(
+        'Supersede states that Core refuses cross-scope replacement',
+        authority.supersedeSaysLockedScope === true,
+        String(authority.supersedeSaysLockedScope),
+      )
+      await trace.screenshot(cdp, '06b-rule-writes')
+
+      if (args.proposedRule) {
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/rules?rule_id=${encodeURIComponent(args.proposedRule)}${args.project ? `&project_id=${encodeURIComponent(args.project)}` : ''}` })
+        await waitFor(cdp, `document.body.textContent.includes('版本历史')`, { label: 'PROPOSED rule' })
+        const proposed = await evaluate(cdp, `(() => {
+          const panel = [...document.querySelectorAll('section')]
+            .find((n) => (n.getAttribute('aria-label') ?? '').includes('Approve'))
+          const button = panel ? panel.querySelector('button') : null
+          return { disabled: button?.disabled ?? null,
+                   text: (panel?.textContent ?? '').split(String.fromCharCode(10)).join(' ').slice(0, 200) }
+        })()`)
+        trace.record(
+          'Approve is enabled only for a PROPOSED Rule',
+          proposed.disabled === false,
+          `disabled=${proposed.disabled} ${proposed.text}`,
+        )
+        await trace.screenshot(cdp, '06c-rule-approve')
+      }
+
+      if (args.retireRule) {
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/rules?rule_id=${encodeURIComponent(args.retireRule)}${args.project ? `&project_id=${encodeURIComponent(args.project)}` : ''}` })
+        await waitFor(cdp, `document.body.textContent.includes('版本历史')`, { label: 'ACTIVE retire target' })
+        const retireState = await evaluate(cdp, `(() => {
+          const panel = (needle) => [...document.querySelectorAll('section')]
+            .find((n) => (n.getAttribute('aria-label') ?? '').includes(needle))
+          const approve = panel('Approve')?.querySelector('button')
+          const retire = panel('Retire')?.querySelector('button')
+          return { approveDisabled: approve?.disabled ?? null, retireDisabled: retire?.disabled ?? null }
+        })()`)
+        trace.record(
+          'An ACTIVE Rule cannot be approved but can be retired',
+          retireState.approveDisabled === true && retireState.retireDisabled === false,
+          JSON.stringify(retireState),
+        )
+      }
       await trace.screenshot(cdp, '06-rule')
     }
 

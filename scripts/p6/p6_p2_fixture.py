@@ -41,6 +41,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "p6"))
 from p6_scratch import Scratch  # noqa: E402  (P1 scenario builder)
 
 from jasmine_core import SCHEMA_VERSION, auth, db, ids, registry  # noqa: E402
+from jasmine_core.authority import AuthorityStore  # noqa: E402
 from jasmine_core.events import EventStore  # noqa: E402
 from jasmine_core.interpretations import InterpretationStore  # noqa: E402
 from jasmine_core.interpreter_provider import _base_config  # noqa: E402
@@ -172,6 +173,7 @@ class Fixture:
             **base,
             "provider": "component_simulation (p6-fixture.v1) — NOT a real model run",
             "read_only_token_scopes": READ_SCOPES,
+            "human_write_token_scopes": P2_WRITE_SCOPES,
             "p2": p2,
         }
         (self.out / "descriptor.json").write_text(
@@ -194,6 +196,15 @@ class Fixture:
             event, _ = events.append(NewEvent(
                 event_type="user.prompt", source_system="p6-p2-fixture", actor_id=self.human,
                 actor_kind="human", host_id=self.host, project_id=project, task_id=task,
+                payload={"text": text}, occurred_at=None))
+            return event["event_id"]
+
+        def project_event(text: str) -> str:
+            """A project-scoped Event: `AuthorityStore._origin` requires the origin
+            Event's scope to match the Rule's, and a task-scoped prompt will not do."""
+            event, _ = events.append(NewEvent(
+                event_type="user.prompt", source_system="p6-p2-fixture", actor_id=self.human,
+                actor_kind="human", host_id=self.host, project_id=project, task_id=None,
                 payload={"text": text}, occurred_at=None))
             return event["event_id"]
 
@@ -265,21 +276,67 @@ class Fixture:
         extra = [interpret(prompt(f"{TEXT} (page case {index})"), f"fixture-page-{index}")
                  for index in range(4)]
 
+        # 6. A second PENDING review, so the T03 Gate can exercise review REJECT
+        #    without consuming the review the APPROVE path needs. Same shape as
+        #    case 2 (two candidates, one project Rule that needs a human).
+        reject_event = prompt(TEXT + " (reject review case)")
+        reject_pending = interpret(reject_event, "fixture-reject-review",
+                                   action=two_candidate_output)
+        reject_resolution = resolver.resolve(
+            reject_pending, resolve_body(reject_pending, "resolve-reject-review"),
+            actor_id=self.human)["resolution"]
+        reject_items = reviews.list(limit=50)["items"]
+        reject_review_id = next(
+            (item["review_id"] for item in reject_items
+             if item["resolution_id"] == reject_resolution["resolution_id"]), None)
+
+        # 7. A second ACTIVE project Rule, so RETIRE has a target of its own
+        #    (SUPERSEDE keeps a Rule ACTIVE, so the two actions cannot share one).
+        #    Its origin is a *project-scoped* Event: `AuthorityStore._origin`
+        #    requires the origin Event's scope to equal the Rule's, and a
+        #    task-scoped prompt will not satisfy a project Rule. The id is
+        #    published because SUPERSEDE needs the same kind of origin.
+        project_origin = project_event("Project-scope Event for project Rules.")
+        retire_rule_id = self._seed_retire_rule(
+            conn, project=project, host=self.host, human=self.human,
+            origin_event_id=project_origin, rule_key="p6-fixture-retire-target")
+
         return {
             "project_id": project, "task_id": task,
             "applied_interpretation_id": applied, "applied_resolution_id": applied_resolution,
             "pending_interpretation_id": pending,
             "pending_resolution_id": pending_resolution["resolution_id"],
             "pending_review_id": review_id,
+            "reject_review_id": reject_review_id,
+            "reject_review_interpretation_id": reject_pending,
+            "reject_review_resolution_id": reject_resolution["resolution_id"],
+            "retire_rule_id": retire_rule_id,
             "child_interpretation_id": child,
             "rerun_child_interpretation_id": rerun["result"]["child_interpretation_id"],
             "rerun_completion": (resolver.maintenance.get(child).get("operation_completions") or [None])[0],
             "rejected_interpretation_id": rejected,
             "extra_interpretation_ids": extra,
             "event_ids": {"applied": applied_event, "pending": review_event,
-                          "rejected": rejected_event},
+                          "rejected": rejected_event, "reject_review": reject_event,
+                          "project_scope": project_origin},
             "provider_calls": simulation.calls,
         }
+
+    @staticmethod
+    def _seed_retire_rule(conn, *, project: str, host: str, human: str,
+                          origin_event_id: str, rule_key: str) -> str:
+        """Create and approve a project-scope Rule, so RETIRE has its own target."""
+        authority = AuthorityStore(conn, schema_version=SCHEMA_VERSION)
+        proposed = authority.propose({
+            "rule_key": rule_key, "kind": "RULE", "severity": "NORMAL",
+            "enforcement": "CONTEXT", "content": "Fixture rule kept only to be retired.",
+            "matcher": {}, "scope": {"kind": "project", "project_id": project},
+            "origin_event_id": origin_event_id, "host_id": host,
+        }, actor_id=human)
+        rule_id = proposed["rule"]["rule_id"]
+        authority.transition(rule_id, "approve",
+                             {"host_id": host, "expected_revision": 1}, actor_id=human)
+        return rule_id
 
     def serve(self, port: int) -> None:
         from jasmine_core.api.server import serve
