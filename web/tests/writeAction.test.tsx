@@ -390,3 +390,70 @@ describe('a replay key belongs to one intent, not one hook instance', () => {
     expect(result.current.result).toBeNull()
   })
 })
+
+describe('a response belongs to the target that issued it', () => {
+  it('does not show a previous target\'s result under the new target', async () => {
+    // The operator can move between Rules while a write is in flight. The command
+    // still happened, but its outcome is not the new object's: showing "已提交" there
+    // would claim a write the operator did not make on that object.
+    let release: (() => void) | null = null
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { result, rerender } = renderHook(
+      ({ target }: { target: string }) =>
+        useWriteAction(
+          async () => {
+            await gate
+            return { replayed: false, result: { from: target } }
+          },
+          { keyKind: 'event_id', targetKey: target },
+        ),
+      { initialProps: { target: 'rul_A' } },
+    )
+    let pending: Promise<void> = Promise.resolve()
+    await act(async () => {
+      pending = result.current.submit({ expected_revision: 1 })
+    })
+    expect(result.current.state).toBe('submitting')
+    rerender({ target: 'rul_B' })
+    await waitFor(() => expect(result.current.state).toBe('idle'))
+    await act(async () => {
+      release?.()
+      await pending
+    })
+    expect(result.current.state).toBe('idle')
+    expect(result.current.result).toBeNull()
+    expect(result.current.error).toBeNull()
+  })
+
+  it('does not surface a previous target\'s error under the new target', async () => {
+    let release: (() => void) | null = null
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { result, rerender } = renderHook(
+      ({ target }: { target: string }) =>
+        useWriteAction(
+          async () => {
+            await gate
+            throw new CoreApiError({ kind: 'conflict', status: 409, code: 'revision_conflict', message: 'moved' })
+          },
+          { keyKind: 'event_id', targetKey: target },
+        ),
+      { initialProps: { target: 'rul_A' } },
+    )
+    let pending: Promise<void> = Promise.resolve()
+    await act(async () => {
+      pending = result.current.submit({ expected_revision: 1 })
+    })
+    rerender({ target: 'rul_B' })
+    await waitFor(() => expect(result.current.state).toBe('idle'))
+    await act(async () => {
+      release?.()
+      await pending
+    })
+    expect(result.current.state).toBe('idle')
+    expect(result.current.error).toBeNull()
+  })
+})

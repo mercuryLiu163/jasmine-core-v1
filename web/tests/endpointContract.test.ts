@@ -19,6 +19,8 @@ import { installFakeCore, type FakeCore } from './helpers/fakeCore'
 
 const ALLOWED_METHODS = new Set(allowlist.methods.map((method) => method.toUpperCase()))
 const ALLOWED_PATHS = allowlist.paths.map((pattern) => new RegExp(pattern))
+const ALLOWED_WRITE_PATHS = (allowlist.write_paths ?? []).map((pattern) => new RegExp(pattern))
+const ID_BODY = '01M4B6VGC29ESRDRQR62DX8AK8'
 
 let fake: FakeCore | null = null
 
@@ -32,6 +34,35 @@ function isAllowed(method: string, path: string): boolean {
 }
 
 describe('every dashboard endpoint call is forwarded by the proxy', () => {
+  it('issues only POSTs that the write allowlist carries', async () => {
+    // GET-only coverage was a gap: a tenth write added to `endpoints.ts` but not to
+    // `core-paths.json` `write_paths` would have gone unnoticed until runtime.
+    fake = installFakeCore({}, () => ({ body: {} }))
+    const client = new CoreClient({ getToken: () => 'tok' })
+    const endpoints = makeEndpoints(client)
+    const signal = new AbortController().signal
+    const body = { host_id: ID_BODY, reason: 'r', expected_revision: 1 }
+    const writes: Array<[string, Promise<unknown>]> = [
+      ['/v1/interpretations/int_' + ID_BODY + '/correct', endpoints.correctInterpretation('int_' + ID_BODY, body, signal)],
+      ['/v1/interpretations/int_' + ID_BODY + '/reject', endpoints.rejectInterpretation('int_' + ID_BODY, body, signal)],
+      ['/v1/interpretations/int_' + ID_BODY + '/rerun', endpoints.rerunInterpretation('int_' + ID_BODY, body, signal)],
+      ['/v1/reviews/rvw_' + ID_BODY + '/approve', endpoints.approveReview('rvw_' + ID_BODY, body, signal)],
+      ['/v1/reviews/rvw_' + ID_BODY + '/reject', endpoints.rejectReview('rvw_' + ID_BODY, body, signal)],
+      ['/v1/rules/proposals', endpoints.proposeRule(body, signal)],
+      ['/v1/rules/rul_' + ID_BODY + '/approve', endpoints.approveRule('rul_' + ID_BODY, body, signal)],
+      ['/v1/rules/rul_' + ID_BODY + '/supersede', endpoints.supersedeRule('rul_' + ID_BODY, body, signal)],
+      ['/v1/rules/rul_' + ID_BODY + '/retire', endpoints.retireRule('rul_' + ID_BODY, body, signal)],
+    ]
+    await Promise.allSettled(writes.map(([, promise]) => promise))
+    const notForwarded = fake!.requests
+      .filter((request) => request.method === 'POST')
+      .filter((request) => !ALLOWED_WRITE_PATHS.some((pattern) => pattern.test(request.path)))
+      .map((request) => `POST ${request.path}`)
+    expect(notForwarded).toEqual([])
+    expect(fake!.requests.filter((r) => r.method === 'POST')).toHaveLength(writes.length)
+  })
+
+
   it('issues only GET requests on allowlisted paths', async () => {
     // Answer any declared Core path so the endpoint functions all resolve.
     fake = installFakeCore(

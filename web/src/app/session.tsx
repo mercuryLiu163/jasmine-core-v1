@@ -13,7 +13,9 @@ import type { ReactNode } from 'react'
 import { CoreClient } from '../api/client'
 import { makeEndpoints, type Endpoints } from '../api/endpoints'
 
-/** Scopes P6-01 asks the operator to grant a read-only dashboard token. */
+/** Read scopes the dashboard asks the operator to grant. The audited writes need
+ * more (`interpretations:manage`, `reviews:manage`, `authority:propose|manage`, …);
+ * the UI never asks for those, it only reports what Core refuses. */
 export const REQUIRED_READ_SCOPES = [
   'objects:read',
   'events:read',

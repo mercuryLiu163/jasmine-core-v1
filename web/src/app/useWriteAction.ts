@@ -127,16 +127,22 @@ export function useWriteAction(
   const inFlight = useRef(false)
   const sendRef = useRef(send)
   sendRef.current = send
+  // Latest target, readable from an async continuation. A response belongs to the
+  // target that issued it: if the operator has moved on, applying it here would show
+  // one object's outcome under another.
+  const targetRef = useRef(targetKey)
+  targetRef.current = targetKey
 
   // A different target is a different command: it gets its own key, and the previous
-  // target's result must not sit next to it. This deliberately skips the first run so
-  // the key shown before any submit is the key that will be sent.
-  const mounted = useRef(false)
+  // target's result must not sit next to it. The condition compares the *previous*
+  // target rather than a "first run" flag: `StrictMode` invokes effects twice on
+  // mount, which would defeat a flag and re-mint the displayed key, while a comparison
+  // is idempotent. Skipping the initial run is what keeps the key shown before any
+  // submit identical to the key that is sent.
+  const previousTarget = useRef(targetKey)
   useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true
-      return
-    }
+    if (previousTarget.current === targetKey) return
+    previousTarget.current = targetKey
     setWriteKey(newKey(keyKind))
     setResult(null)
     setError(null)
@@ -147,6 +153,7 @@ export function useWriteAction(
   const submit = useCallback(async (body: Record<string, unknown>) => {
     if (inFlight.current) return
     inFlight.current = true
+    const issuedFor = targetKey
     setState('submitting')
     setError(null)
     const controller = new AbortController()
@@ -157,12 +164,24 @@ export function useWriteAction(
         { ...body, [keyKind]: writeKey },
         controller.signal,
       )
+      // The operator moved to another object while this was in flight. The command
+      // did happen, but its outcome is not this object's, so it is dropped rather
+      // than shown against the wrong target — the panel would otherwise read
+      // "已提交" for a write the operator did not make here.
+      if (targetRef.current !== issuedFor) return
       setResult(response)
       setState('succeeded')
       // The command is resolved. A further submit is a NEW command, so it must not
       // carry this key: Core would refuse it as a conflict with the body just sent.
       setWriteKey(newKey(keyKind))
     } catch (caught) {
+      // Same reasoning on the failure path, and it matters more here: a timeout is
+      // genuinely unresolved, and reporting it under the *new* target would attach an
+      // unknown outcome to an object that was never written. The command's fate is in
+      // Core's audit log and in the previous object's state, which is where the
+      // operator can read it back; inventing a banner on this object would be worse
+      // than silence.
+      if (targetRef.current !== issuedFor) return
       if (isAbortError(caught)) {
         setState('unknown')
         setError(

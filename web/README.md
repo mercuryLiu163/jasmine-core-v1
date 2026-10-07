@@ -4,10 +4,10 @@ A browser UI for inspecting the Jasmine Core V1 Truth store. It is a **window on
 Core**, never a source of truth: it reads only the frozen `GET` endpoints of
 `docs/api/core-api-v1.md` and issues only the audited writes of P6-02 milestone B, and it never decides whether a Step is verified.
 
-This is the **P6-01** delivery: the part of the P6 taskbook that the P1-scope
-Core can already support. Interpretation/Resolver (P2), Context/Checkpoint (P3),
-Memory (P4) and Validation (P7-01) are **not** wired — those screens say
-`未接入` and name the owning phase instead of showing sample data.
+This is the **P6-02** delivery: the P6-01 shell plus the P2 Interpretation/Resolver
+reads and the P6-02 milestone-B audited writes. Context/Checkpoint (P3), Memory (P4)
+and Validation (P7-01) are **not** wired — those screens say `未接入` and name the
+owning phase instead of showing sample data.
 
 ## What is implemented
 
@@ -51,7 +51,8 @@ its own loud column; nothing is folded into "other".
   start-up to be loopback HTTP with no credentials and no path.
 * **Path allowlist.** `server/core-paths.json` lists the frozen paths the proxy
   will forward. `/v1/auth/keys` and `/v1/audit` are deliberately absent, and the
-  mutation surface is exactly the seven audited writes listed above (same-origin, so
+  mutation surface is exactly the four audited write shapes (nine endpoints) listed
+  above (same-origin, so
   no preflight is needed; forwarding `OPTIONS` was removed after review), so the
   browser cannot mint a key, read audit, or reach any mutation path outside them.
   The allowlist is read **once at start-up** (`createDashboardServer` ->
@@ -94,8 +95,8 @@ P6_CORE_ORIGIN=http://127.0.0.1:8789 npm run build
 P6_CORE_ORIGIN=http://127.0.0.1:8789 npm start -- --port 5180
 ```
 
-Then open the printed URL, paste a **read-only** token with these scopes, and
-sign in:
+Then open the printed URL, paste a token with these read scopes, and sign in (the
+audited writes need further scopes, which the dashboard reports as refusals):
 
 ```
 objects:read  events:read  state:read  authority:read  evidence:read

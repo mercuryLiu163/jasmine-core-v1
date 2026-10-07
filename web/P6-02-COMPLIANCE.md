@@ -185,8 +185,7 @@ component, so retiring Rule A and then Rule B sent A's `event_id` for B and Core
 refused the second command as `event_id_conflict` — a legitimate action reported as a
 conflict with an object that had not moved. Both halves are now pinned: a retry of an
 unresolved command keeps its key, and a resolved command or a new target gets a new
-one. The id is minted once per intent and reused on every retry, so a retry
-after a timeout is a replay rather than a second command.
+one.
 
 Four things the panels refuse to do:
 

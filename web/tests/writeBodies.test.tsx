@@ -37,8 +37,10 @@ afterEach(() => {
 
 const HEALTH = { status: 'ok', core_version: '0.1.0', schema_version: 8 }
 const HOSTS = { hosts: [{ host_id: 'hst_1', display_name: 'local', name: 'local' }] }
-const PROJECT_ID = 'prj_1'
-const TASK_ID = 'tsk_1'
+// Core-shaped ids: the panels validate scope ids against Core's own id shape, so a
+// `prj_1` fixture would be refused locally and never reach the assertion.
+const PROJECT_ID = 'prj_01M4B6VGC29ESRDRQR62DX8AK8'
+const TASK_ID = 'tsk_01M4B6VGC29ESRDRQR62DX8AK8'
 
 function rule(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {

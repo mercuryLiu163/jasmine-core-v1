@@ -3,8 +3,8 @@
  *
  * The token is typed into a `type="password"` field with a proper label, is
  * validated by *using* it (a real GET), and is held in memory only. The page
- * states the exact scopes a P6-01 read-only token needs and never mints,
- * bootstraps or guesses one. Nothing here writes to storage or the URL.
+ * states the exact scopes this dashboard asks for and never mints, bootstraps or
+ * guesses one. Nothing here writes to storage or the URL.
  */
 
 import { useId, useState } from 'react'
@@ -80,7 +80,7 @@ export function SignIn(): JSX.Element {
         </button>
       </form>
       <p id={helpId} className="muted">
-        只读 token 需要的 scope:{' '}
+        token 需要的 scope(读切片;写入还需要 interpretations:manage 等):{' '}
         {REQUIRED_READ_SCOPES.map((scope) => (
           <code key={scope}>{scope}</code>
         ))}

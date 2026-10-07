@@ -35,6 +35,30 @@ import { isEventId } from '../lib/ids'
 
 /** Mirrors `authority.RULE_KEY`; a bad key is refused by Core before any write. */
 const RULE_KEY_RE = /^[a-z][a-z0-9_.-]{0,127}$/
+/**
+ * Core's public id shape (`ids.ID_RE`: `<prefix>_` + 26 Crockford base32 chars).
+ * A looser regex would let the operator submit an id Core answers `invalid_request`
+ * for; the exact shape turns that into an immediate, specific message.
+ */
+const ID_SHAPE = /^[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$/
+
+/**
+ * Mirrors `authority._path` for `matcher.path_prefix`: an absolute, canonical POSIX
+ * path. `PurePosixPath(value) == value` is what Core checks last, which is why a
+ * trailing slash and dot segments are refused.
+ */
+function pathPrefixError(value: string): string | null {
+  if (!value.startsWith('/')) return 'matcher.path_prefix 必须是绝对路径(以 / 开头)'
+  if (value.includes('//')) return 'matcher.path_prefix 不能包含 //'
+  if (value.includes('\\') || value.includes('\u0000')) {
+    return 'matcher.path_prefix 不能包含反斜杠或 NUL'
+  }
+  if (value.split('/').some((part) => part === '.' || part === '..')) {
+    return 'matcher.path_prefix 不能包含 . 或 .. 片段'
+  }
+  if (value !== '/' && value.endsWith('/')) return 'matcher.path_prefix 不能以 / 结尾'
+  return null
+}
 const KINDS = ['RULE', 'DECISION', 'ACCEPTANCE'] as const
 const SEVERITIES = ['HARD', 'NORMAL'] as const
 const ENFORCEMENTS = ['CONTEXT', 'DENY', 'CONFIRM', 'VERIFY'] as const
@@ -62,15 +86,15 @@ function scopeError(draft: ScopeDraft): string | null {
     }
     return null
   }
-  if (!/^prj_[A-Za-z0-9_]+$/.test(draft.projectId.trim())) {
-    return 'project scope 需要 prj_ 开头的 project_id'
+  if (!ID_SHAPE.test(draft.projectId.trim())) {
+    return 'project scope 需要 Core 形状的 project_id(prj_ + 26 位 Crockford base32)'
   }
   if (draft.kind === 'project') {
     if (draft.taskId.trim()) return 'project scope 不能同时指定 task_id'
     return null
   }
-  if (!/^tsk_[A-Za-z0-9_]+$/.test(draft.taskId.trim())) {
-    return 'task scope 需要 tsk_ 开头的 task_id'
+  if (!ID_SHAPE.test(draft.taskId.trim())) {
+    return 'task scope 需要 Core 形状的 task_id(tsk_ + 26 位 Crockford base32)'
   }
   return null
 }
@@ -135,8 +159,13 @@ function contentError(draft: ContentDraft, parsedMatcher: { value?: unknown; err
     if (!(MATCHER_KEYS as readonly string[]).includes(key)) {
       return `matcher 不认识的键 ${key};只允许 ${MATCHER_KEYS.join('/')}`
     }
-    if (typeof (matcher as Record<string, unknown>)[key] !== 'string') {
-      return `matcher.${key} 必须是文本`
+    const entry = (matcher as Record<string, unknown>)[key]
+    if (typeof entry !== 'string') return `matcher.${key} 必须是文本`
+    if (entry === '') return `matcher.${key} 不能为空(Core 要求非空文本)`
+    if (entry.length > 512) return `matcher.${key} 最多 512 个字符`
+    if (key === 'path_prefix') {
+      const problem = pathPrefixError(entry)
+      if (problem !== null) return problem
     }
   }
   if ((draft.enforcement === 'DENY' || draft.enforcement === 'CONFIRM') && Object.keys(matcher).length === 0) {
@@ -153,10 +182,34 @@ function verificationError(raw: string, draft: ContentDraft): string | null {
   if (draft.kind !== 'ACCEPTANCE' && draft.enforcement !== 'VERIFY') {
     return 'verification_requirements 需要 kind=ACCEPTANCE 或 enforcement=VERIFY'
   }
+  let parsed: unknown
   try {
-    JSON.parse(raw)
+    parsed = JSON.parse(raw)
   } catch (error) {
     return `verification_requirements 不是合法 JSON: ${error instanceof Error ? error.message : String(error)}`
+  }
+  // Core's `_requirement_set` requires `{requirements: [...]}`, non-empty, with a
+  // unique non-empty `key` per member. The `kind`/`required_result` enums are left to
+  // Core: duplicating them here would drift the moment Core grows one, and the panel
+  // already says Core is the authority.
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    return 'verification_requirements 必须是对象 {requirements: [...]}'
+  }
+  const requirements = (parsed as { requirements?: unknown }).requirements
+  if (!Array.isArray(requirements) || requirements.length === 0) {
+    return 'verification_requirements.requirements 必须是非空数组'
+  }
+  const keys = new Set<string>()
+  for (const item of requirements) {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      return '每个 requirement 必须是对象'
+    }
+    const key = (item as { key?: unknown }).key
+    if (typeof key !== 'string' || key === '' || key.length > 128) {
+      return '每个 requirement 需要非空且不超过 128 字符的 key'
+    }
+    if (keys.has(key)) return `requirement key 重复: ${key}`
+    keys.add(key)
   }
   return null
 }
@@ -365,10 +418,25 @@ export function RuleWrites({
     return trimmed ? { project_id: trimmed } : {}
   }
   const candidateQuery = scopeQuery(scope.kind, scope.projectId, scope.taskId)
+  // Propose's candidates.
   const events = useResource(
     (signal) => endpoints.listEvents({ ...candidateQuery, limit: 50 }, signal),
     // The query is derived from the scope draft, so it is the dependency.
     [candidateQuery.project_id, candidateQuery.task_id],
+  )
+  // Supersede's candidates are fetched for the *Rule's* scope. Filtering the
+  // propose-scope list instead left the dropdown empty whenever the two scopes
+  // differed, which looks like "Core has no Events" rather than "wrong scope".
+  const ruleScopeQuery = scopeQuery(
+    rule?.scope.kind ?? 'global',
+    rule?.scope.project_id ?? '',
+    rule?.scope.task_id ?? '',
+  )
+  const ruleEvents = useResource(
+    rule === null
+      ? null
+      : (signal) => endpoints.listEvents({ ...ruleScopeQuery, limit: 50 }, signal),
+    [rule?.rule_id, ruleScopeQuery.project_id, ruleScopeQuery.task_id],
   )
   const inScope = (
     event: { project_id: string | null; task_id: string | null },
@@ -385,7 +453,7 @@ export function RuleWrites({
   )
   // The Supersede panel's own candidates, from the Rule's scope rather than the
   // propose form's.
-  const ruleScopeCandidates = (events.data?.events ?? []).filter((event) =>
+  const ruleScopeCandidates = (ruleEvents.data?.events ?? []).filter((event) =>
     rule ? inScope(event, rule.scope.kind, rule.scope.project_id ?? '', rule.scope.task_id ?? '') : false,
   )
 

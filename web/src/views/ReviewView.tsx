@@ -8,7 +8,8 @@
  *
  * `GET /v1/resolutions/{res}` is the persisted decision: disposition, reasons,
  * actions, the plan Core stored, the expected context and any manual application
- * history. Read-only: no approve/reject/reapply control exists in this slice.
+ * history. Approve/Reject are delivered on the review detail page; manual reapply is
+ * not, and this file ships no control for it.
  */
 
 import type { Resolution, Review } from '../api/types'
