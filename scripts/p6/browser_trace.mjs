@@ -566,7 +566,7 @@ async function main() {
         options,
         // The delivered read slice replaces the stale "waiting for P2" panel.
         deliveredReadLink: Boolean(panel?.querySelector('a[href*="/interpretations"]')),
-        panelText: (panel?.textContent ?? '').replace(/\s+/g, ' ').slice(0, 160),
+        panelText: (panel?.textContent ?? '').split(String.fromCharCode(10)).join(' ').slice(0, 160),
       }
     })()`)
     trace.record(
@@ -647,7 +647,7 @@ async function main() {
         const previewPanel = await evaluate(cdp, `(() => {
           const panel = [...document.querySelectorAll('section')]
             .find((n) => (n.getAttribute('aria-label') ?? '').includes('Resolution 预览'))
-          const text = (panel?.textContent ?? '').replace(/\s+/g, ' ')
+          const text = (panel?.textContent ?? '').split(String.fromCharCode(10)).join(' ')
           return { conflict: text.includes('预览被拒绝'), emptyPlan: text.includes('空:计划项'),
                    code: (text.match(/interpretation_[a-z_]+/) ?? [''])[0] }
         })()`)
@@ -673,7 +673,7 @@ async function main() {
           const text = document.body.textContent ?? ''
           const panel = [...document.querySelectorAll('section')]
             .find((n) => (n.getAttribute('aria-label') ?? '').includes('Resolution 预览'))
-          const panelText = (panel?.textContent ?? '').replace(/\s+/g, ' ')
+          const panelText = (panel?.textContent ?? '').split(String.fromCharCode(10)).join(' ')
           return {
             disposition: panelText.includes('PENDING_REVIEW'),
             action: panelText.includes('CREATE_RULE'),
@@ -702,15 +702,19 @@ async function main() {
           { label: 'operation completion row' })
         const completion = await evaluate(cdp, `(() => {
           const row = document.querySelector('[data-testid=operation-completion]')
-          const text = (row?.textContent ?? '').replace(/\s+/g, ' ').trim()
-          const page = document.body.textContent ?? ''
+          // Plain string predicates: inside this template literal a regex escape
+          // like \\s is eaten, which once turned /\\s+/ into /s+/ and deleted
+          // every letter "s" from the extracted text.
+          const text = (row ? row.textContent : '').split(String.fromCharCode(10)).join(' ').split('  ').join(' ').trim()
+          const page = document.body.textContent || ''
+          const statuses = ['EXTRACTED', 'FAILED', 'INTERRUPTED']
           return {
             text,
-            hasStatus: /EXTRACTED|FAILED|INTERRUPTED/.test(text),
-            hasHeadApplied: text.includes('head applied yes') || text.includes('head applied no'),
-            hasRevisions: /expected head r\d+/.test(text) && /observed r\d+/.test(text),
-            undefinedLeak: text.includes('undefined'),
-            history: ['CORRECT', 'RERUN'].filter((action) => page.includes(action)),
+            hasStatus: statuses.some((value) => text.indexOf(value) >= 0),
+            hasHeadApplied: text.indexOf('head applied yes') >= 0 || text.indexOf('head applied no') >= 0,
+            hasRevisions: text.indexOf('expected head r') >= 0 && text.indexOf('observed r') >= 0,
+            undefinedLeak: text.indexOf('undefined') >= 0,
+            history: ['CORRECT', 'RERUN'].filter((action) => page.indexOf(action) >= 0),
           }
         })()`)
         trace.record('operation completion renders the real columns (no invented fields)',
