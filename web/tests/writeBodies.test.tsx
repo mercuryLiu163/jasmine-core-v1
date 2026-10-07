@@ -127,7 +127,10 @@ describe('Authority write bodies', () => {
 
     const panel = await screen.findByRole('region', { name: 'Propose(提出新的 Rule)' })
     await user.type(within(panel).getByLabelText(/rule_key/), 'ui.new.rule')
-    await user.selectOptions(within(panel).getByLabelText('候选 origin Event'), 'evt_01M4B63ER9AR3M3V55FHRWZ66X')
+    await user.selectOptions(
+      within(panel).getByLabelText(/候选 origin Event/),
+      'evt_01M4B63ER9AR3M3V55FHRWZ66X',
+    )
     await user.type(within(panel).getByLabelText(/^content\(Core 必填/), 'Prefer the smoke test.')
     await user.click(within(panel).getByRole('button', { name: '提交提案' }))
 

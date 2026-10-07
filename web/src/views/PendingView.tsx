@@ -19,13 +19,14 @@ interface PendingSpec {
 
 const SPECS: Record<string, PendingSpec> = {
   interpretation: {
-    title: 'Interpretation / Review 写入',
-    feature: 'Correct / Reject / Re-run、Approve / Reject、人工 reapply',
-    owner: 'P6-02 里程碑 B',
+    title: 'Interpretation / Review 人工 reapply',
+    feature: '人工 reapply(把已应用的 Resolution 重新应用一次)',
+    owner: 'P6-02 后续',
     pending:
-      '写入通过真实 human actor/来源链、expected_revision 冲突重审、幂等 command Event 与审计读回的独立 Gate',
+      'POST /v1/resolutions/{id}/manual-reapply 自己的载荷/权限表,以及操作者对上一次应用的明确决策',
     note:
-      'P2 的读取契约已合并,解释列表/详情与待审批 Review 已是只读视图;这里只列仍未交付的写入动作。' +
+      'Correct / Reject / Re-run、Approve / Reject 与 Rule 管理已交付,入口在各自的详情页;' +
+      '这里只列仍未交付的写入动作。' +
       'pending 条数一律来自 Core 的 /v1/reviews/pending,不用关键词或文案自行计算。',
   },
   checkpoint: {

@@ -154,11 +154,12 @@ export function ReviewsView({
 
       <Panel title="本切片未交付">
         <Unavailable
-          feature="Approve / Reject 与人工 reapply"
-          owner="P6-02 里程碑 B"
-          pending="reviews:manage 写入契约、真实 human 身份与审计读回 Gate"
+          feature="人工 reapply(把已应用的 Resolution 重新应用一次)"
+          owner="P6-02 后续"
+          pending="POST /v1/resolutions/{id}/manual-reapply 自己的载荷/权限表与操作者决策"
           tone="forbidden"
-          note="本页不提供审批按钮;按钮点击不能替代 Core 对 human actor 与来源链的校验。"
+          note="Approve/Reject 已在 Review 详情页交付;本页只列队列,不提供审批按钮,列表也不会
+          用关键词或本地推断顶替 Core 的 /v1/reviews/pending。"
         />
       </Panel>
     </div>

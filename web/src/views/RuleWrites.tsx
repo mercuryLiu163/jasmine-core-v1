@@ -273,7 +273,7 @@ function OriginField({
   return (
     <div className="filters">
       <label htmlFor={selectId}>
-        候选 origin Event
+        候选 origin Event(按当前 scope 过滤)
         <select
           id={selectId}
           value={candidates.some((event) => event.event_id === value) ? value : ''}
@@ -330,14 +330,6 @@ export function RuleWrites({
     { keyKind: 'event_id' },
   )
 
-  // Recent Events in the scope being viewed: a real origin to choose from, so
-  // the operator does not have to paste an id from memory.
-  const events = useResource(
-    (signal) => endpoints.listEvents({ project_id: projectId, task_id: taskId, limit: 20 }, signal),
-    [projectId, taskId],
-  )
-  const candidates = events.data?.events ?? []
-
   const [ruleKey, setRuleKey] = useState('')
   const [proposeOrigin, setProposeOrigin] = useState('')
   const [scope, setScope] = useState<ScopeDraft>({
@@ -347,13 +339,40 @@ export function RuleWrites({
   })
   const [proposeContent, setProposeContent] = useState<ContentDraft>(EMPTY_CONTENT)
 
+  // `AuthorityStore._origin` requires the origin Event's scope to equal the
+  // Rule's, so the candidate list follows the scope being proposed for instead of
+  // the scope being viewed: a task-scoped prompt Event is refused for a project
+  // Rule, and offering it would be offering a guaranteed 400.
+  const candidateQuery = ((): { project_id?: string; task_id?: string } => {
+    if (scope.kind === 'global') return {}
+    const project = scope.projectId.trim()
+    if (scope.kind === 'task' && scope.taskId.trim()) {
+      return { project_id: project, task_id: scope.taskId.trim() }
+    }
+    return project ? { project_id: project } : {}
+  })()
+  const events = useResource(
+    (signal) => endpoints.listEvents({ ...candidateQuery, limit: 50 }, signal),
+    // The query is derived from the scope draft, so it is the dependency.
+    [candidateQuery.project_id, candidateQuery.task_id],
+  )
+  const candidates = (events.data?.events ?? []).filter((event) => {
+    if (scope.kind === 'global') return event.project_id === null && event.task_id === null
+    if (scope.kind === 'project') return event.project_id === candidateQuery.project_id && event.task_id === null
+    return true
+  })
+
   // Supersede keeps its own draft, seeded from the Rule Core returned, so editing
-  // the replacement cannot silently change the proposal form's content.
+  // the replacement cannot silently change the proposal form's content. The seed
+  // is keyed on the Rule's identity *and* revision: refetching the same revision
+  // must not discard the operator's edits.
   const [supersedeContent, setSupersedeContent] = useState<ContentDraft>(EMPTY_CONTENT)
   const [supersedeOrigin, setSupersedeOrigin] = useState('')
+  const seedKey = rule ? `${rule.rule_id}:${rule.revision}` : null
   useEffect(() => {
     if (rule) setSupersedeContent(contentFrom(rule))
-  }, [rule?.rule_id, rule?.revision, rule])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedKey])
 
   const proposeMatcher = parseJsonField(proposeContent.matcher, 'matcher')
   const supersedeMatcher = parseJsonField(supersedeContent.matcher, 'matcher')

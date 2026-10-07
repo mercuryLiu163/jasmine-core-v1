@@ -234,7 +234,8 @@ export function ConversationView({
             </ul>
             <p className="state state--meta">
               本页不会用关键词或本地推断顶替解释结果;<strong>写入</strong>(correct/reject/rerun、
-              approve/reject)属于 P6-02 里程碑 B,尚未交付,按钮不存在。
+              approve/reject)在<strong>解释详情页</strong>与<strong>Review 详情页</strong>交付,
+              本页只读 Raw Event,不提供写按钮。
             </p>
           </Panel>
 

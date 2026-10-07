@@ -220,6 +220,7 @@ def action_interpretation_correct(g: Gate) -> None:
     # gate sends that same real document rather than inventing one. Core's
     # output schema requires 1..16 candidates, so an empty list is a 400.
     corrected = json.loads(detail["raw_result_json"])
+    changes_before = _change_rows(g, "CORRECT")
     key = new_key("correct")
     request_id = f"t03-correct-{uuid.uuid4().hex[:8]}"
     result = g.human.request("POST", f"/v1/interpretations/{target}/correct", {
@@ -245,8 +246,7 @@ def action_interpretation_correct(g: Gate) -> None:
         _check("head revision advanced exactly one step", after["revision"] == revision + 1,
                {"before": revision, "after": after["revision"]}),
         _check("a child interpretation was created", bool(child), child),
-        _check("command is visible as an interpretation change", _change_row(g, target, "CORRECT"),
-               _change_row(g, target, "CORRECT")),
+        _check_new_change(changes_before, _change_rows(g, "CORRECT"), revision + 1),
         _check("audit recorded the attempt with the human actor",
                any(row["actor_id"] == g.d["actors"]["human"] and row["status_code"] == 201
                    for row in g.audit_rows_for(f"/v1/interpretations/{target}/correct")),
@@ -273,6 +273,7 @@ def action_interpretation_reject(g: Gate) -> None:
     target = head["current_interpretation_id"]
     revision = head["revision"]
     truth_before = g.truth_fingerprint()
+    changes_before = _change_rows(g, "REJECT")
     key = new_key("reject")
     result = g.human.request("POST", f"/v1/interpretations/{target}/reject", {
         "idempotency_key": key,
@@ -291,8 +292,7 @@ def action_interpretation_reject(g: Gate) -> None:
                {"before": revision, "after": after["revision"]}),
         _check("Truth row counts unchanged", truth_before == truth_after,
                {"before": truth_before, "after": truth_after}),
-        _check("REJECT recorded in interpretation_changes", _change_row(g, target, "REJECT"),
-               _change_row(g, target, "REJECT")),
+        _check_new_change(changes_before, _change_rows(g, "REJECT"), revision + 1),
     ]
     _finish(g, "interpretation.reject", {
         "method": "POST", "path": f"/v1/interpretations/{target}/reject",
@@ -311,6 +311,7 @@ def action_interpretation_rerun(g: Gate) -> None:
     target = head["current_interpretation_id"]
     revision = head["revision"]
     truth_before = g.truth_fingerprint()
+    changes_before = _change_rows(g, "RERUN")
     key = new_key("rerun")
     result = g.human.request("POST", f"/v1/interpretations/{target}/rerun", {
         "idempotency_key": key,
@@ -328,7 +329,9 @@ def action_interpretation_rerun(g: Gate) -> None:
         _check("a child interpretation was created", bool(child), child),
         _check("head moved on", after["revision"] > revision,
                {"before": revision, "after": after["revision"]}),
-        _check("RERUN recorded", _change_row(g, target, "RERUN"), _change_row(g, target, "RERUN")),
+        # `rerun` reserves then completes, so its own row reaches revision+1 and
+        # the head ends one step further on.
+        _check_new_change(changes_before, _change_rows(g, "RERUN"), revision + 1),
         _check("Truth row counts unchanged", truth_before == truth_after,
                {"before": truth_before, "after": truth_after}),
     ]
@@ -402,9 +405,11 @@ def action_review_approve(g: Gate) -> None:
         _check("review revision advanced", after["revision"] > review["revision"],
                {"before": review["revision"], "after": after["revision"]}),
         _check("actions were the server plan, one per candidate",
+               len(actions) == len(preview_of(review)["plan"]["items"]) and
                all(a["candidate_index"] == item["candidate_index"]
                    for a, item in zip(actions, preview_of(review)["plan"]["items"])),
-               actions),
+               {"sent": len(actions), "plan": len(preview_of(review)["plan"]["items"]),
+                "actions": actions}),
         _check("audit recorded the human approve",
                any(row["actor_id"] == g.d["actors"]["human"]
                    for row in g.audit_rows_for(f"/v1/reviews/{review_id}/approve")),
@@ -765,14 +770,36 @@ def preview_of(review: dict[str, Any]) -> dict[str, Any]:
     return review.get("preview") or {}
 
 
-def _change_row(g: Gate, interpretation_id: str, action: str) -> list[str]:
+def _change_rows(g: Gate, action: str) -> list[dict[str, Any]]:
+    """Every `interpretation_changes` row for the FI root and this action.
+
+    Counting rows, rather than asking whether one exists, is the difference
+    between evidence and decoration: the fixture itself corrects and reruns the
+    applied interpretation, so an existence check passes before the gate writes
+    anything at all.
+    """
     with g._ro() as conn:
         rows = conn.execute(
-            "SELECT action FROM interpretation_changes WHERE root_interpretation_id=? "
-            "AND action=? ORDER BY rowid DESC LIMIT 1",
+            "SELECT action, from_revision, to_revision, operation_event_id FROM interpretation_changes "
+            "WHERE root_interpretation_id=? AND action=? ORDER BY rowid",
             (g.d["p2"]["applied_interpretation_id"], action),
         ).fetchall()
-        return [row["action"] for row in rows]
+        return [dict(row) for row in rows]
+
+
+def _check_new_change(before: list[dict[str, Any]], after: list[dict[str, Any]],
+                      expected_to_revision: int) -> dict[str, Any]:
+    """The gate's own write appended exactly one row, at the right revision."""
+    appended = len(after) == len(before) + 1
+    revision_ok = appended and after[-1]["to_revision"] == expected_to_revision
+    return _check(
+        f"exactly one new {after[-1]['action'] if after else '?'} row, reaching revision "
+        f"{expected_to_revision}",
+        appended and revision_ok,
+        {"before": len(before), "after": len(after),
+         "to_revision": after[-1]["to_revision"] if after else None,
+         "expected_to_revision": expected_to_revision},
+    )
 
 
 def _finish(g: Gate, action: str, frozen: dict[str, Any], checks: list[dict[str, Any]],

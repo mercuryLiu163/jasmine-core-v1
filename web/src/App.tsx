@@ -79,9 +79,11 @@ export function App(): JSX.Element {
       {signedIn ? (
         <>
           <p className="readonly-banner" role="note">
-            只读视图:本页不提供 Rule/Task/State/Evidence 的写按钮,不调用 fingerprint 扫描,
-            不代表 P6 已验收。浏览器只发 GET,但 Core 的解释/Review 读取会执行惰性恢复
-            (可能写入 INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。<a href={hrefFor({ name: 'pending', key: 'validation' })}>Validation</a>、
+            受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、
+            Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire),不提供
+            Task/State/Evidence 的写按钮,不调用 fingerprint 扫描,不代表 P6 已验收。浏览器还会
+            发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理
+            rerun),详见 P6-02-COMPLIANCE.md。<a href={hrefFor({ name: 'pending', key: 'validation' })}>Validation</a>、
             <a href={hrefFor({ name: 'pending', key: 'context' })}>Context</a>、
             <a href={hrefFor({ name: 'pending', key: 'memory' })}>Memory</a> 等按依赖分别标未接入。
           </p>

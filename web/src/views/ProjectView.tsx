@@ -219,7 +219,8 @@ export function ProjectView({ projectId }: { projectId: string }): JSX.Element {
 
       <Panel title="Interpretation / Resolver">
         <p className="state state--meta">
-          P2 契约已合并;本项目下的解释链现在是只读视图,写入动作属于 P6-02 里程碑 B(未交付)。
+          P2 契约已合并;本项目下的解释链可以只读查看,人工写入(correct/reject/rerun、
+          approve/reject、Rule 管理)在各自的详情页交付,本页只做导航与只读概览。
         </p>
         <ul className="plain">
           <li>

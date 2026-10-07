@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "P6 read-only dashboard for Jasmine Core V1. Reads the frozen Core API; never a source of truth.",
+  "description": "P6 dashboard for Jasmine Core V1. Reads the frozen Core API and, since P6-02 milestone B, issues only the seven frozen audited writes; never a source of truth.",
   "engines": {
     "node": ">=20"
   },

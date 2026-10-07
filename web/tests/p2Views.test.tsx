@@ -322,7 +322,11 @@ describe('Conversation event filter', () => {
     const panel = await screen.findByRole('region', { name: /Interpretation \/ Resolver/ })
     expect(panel.textContent).toContain('读取视图已交付')
     expect(within(panel).getByRole('link', { name: /当前范围的全部解释/ })).toBeTruthy()
-    expect(panel.textContent).toContain('里程碑 B')
+    // The note must point at where the writes actually live, and must not claim
+    // this page offers them: the Conversation view reads Raw Events only.
+    expect(panel.textContent).toContain('解释详情页')
+    expect(panel.textContent).toContain('Review 详情页')
+    expect(panel.textContent).toContain('本页只读 Raw Event')
   })
 })
 
