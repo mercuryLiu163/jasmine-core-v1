@@ -20,7 +20,7 @@
  * - a **success** shows Core's response verbatim, including `replayed`.
  */
 
-import { useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import type { WriteAction, WriteKeyKind } from '../app/useWriteAction'
@@ -40,6 +40,13 @@ export interface WritePanelProps {
   fields: ReactNode
   /** Builds the body; the panel adds `reason`, `host_id` and `idempotency_key`. */
   build: (input: { reason: string; hostId: string }) => Record<string, unknown> | string
+  /**
+   * Identity of the object being written. Changing it clears this panel's local
+   * draft: the panels for two different interpretations share one component
+   * instance, so without this the reason typed for one would appear on the next
+   * (`useWriteAction` handles the key, but `reason` lives here).
+   */
+  targetKey?: string
   /** Disables submit until the endpoint-specific fields are valid. */
   ready: boolean
   /**
@@ -73,6 +80,7 @@ export function WritePanel({
   fields,
   build,
   ready,
+  targetKey,
   reasonMode = 'required',
   onSucceeded,
 }: WritePanelProps): JSX.Element {
@@ -83,6 +91,13 @@ export function WritePanel({
   const [validation, setValidation] = useState<string | null>(null)
   const reasonId = useId()
   const hostIdField = useId()
+
+  // A different target is a different command: the reason written for the previous
+  // one must not be submitted for this one.
+  useEffect(() => {
+    setReason('')
+    setValidation(null)
+  }, [targetKey])
 
   const effectiveHost = hostId || hosts.data?.hosts[0]?.host_id || ''
   const needsReason = reasonMode === 'required'
@@ -165,10 +180,20 @@ export function WritePanel({
             {action.busy ? '提交中…' : submitLabel}
           </button>
           <button type="button" onClick={action.resetDraft} disabled={action.busy}>
-            重置草稿(换新幂等键)
+            重置草稿(换新{action.keyKind === 'event_id' ? ' event_id' : '幂等键'})
           </button>
           <span className="muted">
-            {keyLabel.label} <code>{action.writeKey.slice(0, 18)}…</code> {keyLabel.note}
+            {action.state === 'succeeded' ? (
+              <>
+                {keyLabel.label} 上一次提交已完成;再次提交属于新的意图,将使用{' '}
+                <code>{action.writeKey.slice(0, 18)}…</code>。{keyLabel.note}
+              </>
+            ) : (
+              <>
+                本次意图的 {keyLabel.label} <code>{action.writeKey.slice(0, 18)}…</code>{' '}
+                {keyLabel.note}
+              </>
+            )}
           </span>
         </div>
 

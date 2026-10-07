@@ -141,7 +141,7 @@ both directions.
 
 ## Milestone B — audited human modification
 
-Seven writes are shipped. The proxy forward list is what bounds them
+Nine writes are shipped, across four frozen POST shapes. The proxy forward list is what bounds them
 (`web/server/core-paths.json` `write_methods: ["POST"]`), and Core still enforces
 scope, actor kind, revision, idempotency and source per request — the browser can
 only *ask*.
@@ -163,14 +163,29 @@ allowed)`: `AuthorityStore.propose`/`transition` answer an extra `reason` with
 additionally refuses `expected_revision` (`UnexpectedExpectedRevision`). So
 `useWriteAction` carries the key *kind* and `WritePanel` has a `reasonMode="none"`
 that hides the reason input rather than offering a field Core would refuse.
-`web/tests/writeBodies.test.tsx` asserts the exact key set of every write the UI
-can send, so a blanket "add reason/idempotency_key everywhere" change fails there
-instead of in Core.
+`web/tests/writeBodies.test.tsx` asserts the exact key set of **all nine** writes the
+UI can send — including `review/{id}/approve`, the only body carrying
+`expected_revisions`, `expected_context_digest` and `actions` — so a blanket "add
+reason/idempotency_key everywhere" change fails there instead of in Core. An earlier
+revision claimed this while asserting only four; an independent review caught the gap
+and the remaining five were added.
 
 `src/lib/ids.ts` mints the `evt_` id in Core's exact shape
 (`<prefix>_<26 Crockford base32>`), which ADR 0001 sanctions for exactly this:
 *"An `evt` body is opaque: clients may derive it deterministically for idempotent
-retries."* The id is minted once per intent and reused on every retry, so a retry
+retries."* The key belongs to a *command*, and a command lasts until it resolves: the
+key is reused on every retry — including a retry after a conflict, where nothing was
+written and the operator has corrected the basis — and is replaced when the command
+succeeds, when the target changes, or when the operator resets the draft. `WritePanel`
+clears its `reason` draft on a target change for the same reason.
+
+An independent review found this the hard way, and the fix is worth stating because
+the failure was invisible from the outside: the key used to be scoped to the mounted
+component, so retiring Rule A and then Rule B sent A's `event_id` for B and Core
+refused the second command as `event_id_conflict` — a legitimate action reported as a
+conflict with an object that had not moved. Both halves are now pinned: a retry of an
+unresolved command keeps its key, and a resolved command or a new target gets a new
+one. The id is minted once per intent and reused on every retry, so a retry
 after a timeout is a replay rather than a second command.
 
 Four things the panels refuse to do:
@@ -303,10 +318,23 @@ reaching Core, real-shaped POSTs on all four write families still arrived), and 
 frozen bundle verified 44/44 hash-exact.
 
 Milestone B is therefore validated by a second party, with those caveats closed in
-the recorded commit. It has had no separate *code review* of the UI panels: two
-review attempts were stopped — the first when the packaging defect was found, the
-second when these fixes superseded its commit — so the panel-level review is still
-outstanding.
+the recorded commit.
+
+The separate **code review of the UI panels** then returned **FAIL**, and it was
+right. It reproduced one functional defect in the central invariant of the surface —
+the replay key was scoped to the mounted component rather than to a command, so a
+second Authority write reused the first one's `event_id` and Core refused it as
+`event_id_conflict` — plus a latent version of the same leak across interpretations
+and reviews (the key *and* the reason draft). It also found that the supersede panel
+offered origin Events filtered by the propose scope rather than the Rule's, that the
+propose scope did not follow the route, that `expected_revisions` was typed as an
+object where Core requires a list, that `payload: null` passed the approve editor's
+validation, that the reset-button label named the wrong key, that several read-only
+strings were still shipped, and that the body tests covered only four of the nine
+writes while claiming to cover all of them. All of these are fixed, with regression
+tests, in `6c03f17`..`HEAD`; the panel-level verdict is therefore **not yet
+re-issued**, and milestone B should not be read as code-reviewed until a re-review
+lands.
 
 `P6-02: PARTIAL` as a whole — manual reapply and the Task/Step/Evidence writes are
 not delivered, no click-through Gate has run, and no Gate has run against the

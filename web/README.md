@@ -1,9 +1,8 @@
-# Jasmine Core Dashboard (P6-01, read-only)
+# Jasmine Core Dashboard (P6-02)
 
 A browser UI for inspecting the Jasmine Core V1 Truth store. It is a **window on
-Core**, never a source of truth: it issues only the frozen `GET` endpoints of
-`docs/api/core-api-v1.md`, it never writes, and it never decides whether a Step
-is verified.
+Core**, never a source of truth: it reads only the frozen `GET` endpoints of
+`docs/api/core-api-v1.md` and issues only the audited writes of P6-02 milestone B, and it never decides whether a Step is verified.
 
 This is the **P6-01** delivery: the part of the P6 taskbook that the P1-scope
 Core can already support. Interpretation/Resolver (P2), Context/Checkpoint (P3),
@@ -27,7 +26,7 @@ Memory (P4) and Validation (P7-01) are **not** wired — those screens say
 | Interpretation list/detail (P6-02 A) | Interpretations, Interpretation deep link | `/v1/interpretations` (`after_id` paging), `/v1/interpretations/{id}` |
 | Pending reviews (P6-02 A) | 待审批 Review, Review deep link | `/v1/reviews/pending`, `/v1/reviews/{id}` |
 | Resolution plan/record (P6-02 A) | Interpretation → Resolution 预览, Resolution deep link | `/v1/resolutions/preview?interpretation_id=`, `/v1/resolutions/{id}` |
-| Audited human writes (P6-02 B) | Interpretation → Correct/Reject/Re-run; Review → Approve/Reject; Rules → Propose/Approve/Supersede/Retire | `POST` on the seven frozen shapes in `server/core-paths.json` `write_paths` |
+| Audited human writes (P6-02 B) | Interpretation → Correct/Reject/Re-run; Review → Approve/Reject; Rules → Propose/Approve/Supersede/Retire | `POST` on the four frozen POST shapes in `server/core-paths.json` `write_paths` (nine endpoints) |
 
 The board's columns are **Step** statuses (`PLANNED`, `IN_PROGRESS`, `EXECUTED`,
 `VERIFIED`, `ACCEPTED`, `FAILED`, `BLOCKED`, `STALE`, `SKIPPED`). The **Task**
@@ -51,10 +50,10 @@ its own loud column; nothing is folded into "other".
   Core (`P6_CORE_ORIGIN`, default `http://127.0.0.1:8787`), which is validated at
   start-up to be loopback HTTP with no credentials and no path.
 * **Path allowlist.** `server/core-paths.json` lists the frozen paths the proxy
-  will forward. `/v1/auth/keys` and `/v1/audit` are deliberately absent, and only
-  `GET` is forwarded in P6-01 (same-origin, so no preflight is needed; forwarding
-  `OPTIONS` was removed after review), so the browser cannot mint a key, read
-  audit, issue a write, or even probe a mutation path through this channel.
+  will forward. `/v1/auth/keys` and `/v1/audit` are deliberately absent, and the
+  mutation surface is exactly the seven audited writes listed above (same-origin, so
+  no preflight is needed; forwarding `OPTIONS` was removed after review), so the
+  browser cannot mint a key, read audit, or reach any mutation path outside them.
   The allowlist is read **once at start-up** (`createDashboardServer` ->
   `loadAllowlist()`), so editing `server/core-paths.json` requires restarting the
   host: a long-running process keeps the allowlist it booted with.

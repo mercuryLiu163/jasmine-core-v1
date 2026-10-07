@@ -4,10 +4,18 @@
  * The rules the handoff freezes are encoded here once, so every write panel
  * behaves the same way:
  *
- * 1. **One replay key per intent.** It is created on the first submit and
- *    reused on every retry of that same intent; `resetDraft` starts a new intent
- *    and only then gets a new key. A retry after a timeout must never mint a new
- *    key, because Core would treat it as a second command.
+ * 1. **One replay key per command, for as long as that command is unresolved.** It
+ *    is created before the first submit and reused on every retry — including a
+ *    retry after a conflict, where the operator has corrected the basis — because a
+ *    retry must never look like a second command. It is replaced when the command
+ *    *completes*, when the target changes, or when the operator resets the draft.
+ *
+ *    Both halves matter, and each was learned from a failure. Keeping the key after
+ *    a success means the next command carries it too, and Core keys replay on the
+ *    value alone, so it refuses the second command as a conflict with the first
+ *    (`event_id_conflict` for Authority, `idempotency_conflict` for the rest) — an
+ *    operator could not retire two Rules in one sitting. Minting a key per *submit*
+ *    is the opposite error: a retry after a timeout becomes a second command.
  *
  *    Which key that is depends on the endpoint family, and the difference is
  *    Core's, not a preference: interpretation and review writes take an
@@ -27,7 +35,7 @@
  *    (including `replayed: true`); the hook never fabricates a result.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { CoreApiError, isAbortError } from '../api/errors'
 import type { WriteResult } from '../api/endpoints'
@@ -90,23 +98,51 @@ export function classifyWriteError(error: CoreApiError): WriteState {
   return 'unknown'
 }
 
+export interface WriteActionOptions {
+  keyKind?: WriteKeyKind
+  /**
+   * Identity of the object being written — a rule id, an interpretation id, and so
+   * on. It is part of the intent, so a key is never carried from one target to
+   * another. Without it, two panels that share a hook instance (the Rule panels do,
+   * while the operator moves between Rules) would send one key for two commands,
+   * and Core would refuse the second as a conflict.
+   */
+  targetKey?: string
+}
+
 export function useWriteAction(
   send: (body: Record<string, unknown>, signal: AbortSignal) => Promise<WriteResult>,
-  options: { keyKind?: WriteKeyKind } = {},
+  options: WriteActionOptions = {},
 ): WriteAction {
   const keyKind = options.keyKind ?? 'idempotency_key'
+  const targetKey = options.targetKey ?? ''
   const [state, setState] = useState<WriteState>('idle')
   const [result, setResult] = useState<WriteResult | null>(null)
   const [error, setError] = useState<CoreApiError | null>(null)
   const [requestId, setRequestId] = useState<string | null>(null)
-  const [nonce, setNonce] = useState(0)
-  // Stable per intent: regenerated only when the draft is reset or submitted
-  // successfully (a new intent after a refusal keeps the same key so a retry of
-  // the *same* intent is a replay, not a second command).
-  const keyRef = useRef<string>(newKey(keyKind))
+  // The key is state, not a ref: the panel displays it, and a ref mutated without a
+  // render would leave the displayed key describing a previous intent. The lazy
+  // initialiser runs once, so no randomness is spent on re-render.
+  const [writeKey, setWriteKey] = useState<string>(() => newKey(keyKind))
   const inFlight = useRef(false)
   const sendRef = useRef(send)
   sendRef.current = send
+
+  // A different target is a different command: it gets its own key, and the previous
+  // target's result must not sit next to it. This deliberately skips the first run so
+  // the key shown before any submit is the key that will be sent.
+  const mounted = useRef(false)
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true
+      return
+    }
+    setWriteKey(newKey(keyKind))
+    setResult(null)
+    setError(null)
+    setRequestId(null)
+    setState('idle')
+  }, [targetKey, keyKind])
 
   const submit = useCallback(async (body: Record<string, unknown>) => {
     if (inFlight.current) return
@@ -118,11 +154,14 @@ export function useWriteAction(
       const response = await sendRef.current(
         // `keyKind` is fixed for the lifetime of this hook instance, so the field
         // name cannot drift from the key that was minted for it.
-        { ...body, [keyKind]: keyRef.current },
+        { ...body, [keyKind]: writeKey },
         controller.signal,
       )
       setResult(response)
       setState('succeeded')
+      // The command is resolved. A further submit is a NEW command, so it must not
+      // carry this key: Core would refuse it as a conflict with the body just sent.
+      setWriteKey(newKey(keyKind))
     } catch (caught) {
       if (isAbortError(caught)) {
         setState('unknown')
@@ -152,15 +191,14 @@ export function useWriteAction(
     } finally {
       inFlight.current = false
     }
-  }, [])
+  }, [keyKind, writeKey])
 
   const resetDraft = useCallback(() => {
-    keyRef.current = newKey(keyKind)
+    setWriteKey(newKey(keyKind))
     setResult(null)
     setError(null)
     setRequestId(null)
     setState('idle')
-    setNonce((value) => value + 1)
   }, [keyKind])
 
   return useMemo(
@@ -170,12 +208,11 @@ export function useWriteAction(
       error,
       requestId,
       keyKind,
-      writeKey: keyRef.current,
+      writeKey,
       busy: state === 'submitting',
       submit,
       resetDraft,
     }),
-    // `nonce` is what makes a reset visible to consumers that read the key.
-    [state, result, error, requestId, keyKind, nonce, submit, resetDraft],
+    [state, result, error, requestId, keyKind, writeKey, submit, resetDraft],
   )
 }

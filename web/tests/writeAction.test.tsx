@@ -64,8 +64,9 @@ describe('useWriteAction', () => {
       await result.current.submit({ reason: 'r', host_id: 'hst_1', expected_revision: 1 })
     })
     expect(seen[0]).toBe(seen[1])
-    expect(result.current.writeKey).toBe(afterConflict)
     expect(result.current.state).toBe('succeeded')
+    // The command is resolved, so the key shown now belongs to the *next* intent.
+    expect(result.current.writeKey).not.toBe(afterConflict)
   })
 
   it('mints a new key only when the draft is reset', async () => {
@@ -226,5 +227,166 @@ describe('newEventId', () => {
     for (const bad of ['', 'evt_', 'evt_short', 'evt_' + 'I'.repeat(26), 'rul_' + 'A'.repeat(26)]) {
       expect(isEventId(bad)).toBe(false)
     }
+  })
+})
+
+describe('a replay key belongs to one intent, not one hook instance', () => {
+  const ok: WriteResult = { replayed: false }
+
+  it('does not carry the key to a different target', async () => {
+    // The Rule panels keep one hook instance while the operator moves between Rules.
+    // Reusing the key would make Core refuse the second retire as event_id_conflict
+    // ("belongs to a different rule") — a legitimate action reported as a conflict.
+    const keys: string[] = []
+    const { result, rerender } = renderHook(
+      ({ target }: { target: string }) =>
+        useWriteAction(
+          async (body) => {
+            keys.push(`${target}:${String(body['event_id'])}`)
+            return ok
+          },
+          { keyKind: 'event_id', targetKey: target },
+        ),
+      { initialProps: { target: 'rul_A' } },
+    )
+    await act(async () => {
+      await result.current.submit({ expected_revision: 5, host_id: 'hst_1' })
+    })
+    rerender({ target: 'rul_B' })
+    await act(async () => {
+      await result.current.submit({ expected_revision: 5, host_id: 'hst_1' })
+    })
+    expect(keys).toHaveLength(2)
+    const [first, second] = keys
+    expect(first?.split(':')[1]).not.toBe(second?.split(':')[1])
+    expect(isEventId(first?.split(':')[1] ?? '')).toBe(true)
+    expect(isEventId(second?.split(':')[1] ?? '')).toBe(true)
+  })
+
+  it('keeps the key when a conflicted command is corrected and retried', async () => {
+    // Nothing was written when Core answered 409, so the corrected retry is still the
+    // same command and must stay a replay rather than become a second one.
+    const keys: string[] = []
+    const { result } = renderHook(() =>
+      useWriteAction(
+        async (body) => {
+          keys.push(String(body['idempotency_key']))
+          if (keys.length === 1) {
+            throw new CoreApiError({ kind: 'conflict', status: 409, code: 'rule_key_conflict', message: 'taken' })
+          }
+          return ok
+        },
+        { targetKey: 'rules/proposals' },
+      ),
+    )
+    await act(async () => {
+      await result.current.submit({ rule_key: 'ui.first' })
+    })
+    expect(result.current.state).toBe('conflict')
+    await act(async () => {
+      await result.current.submit({ rule_key: 'ui.second' })
+    })
+    expect(keys[0]).toBe(keys[1])
+  })
+
+  it('retires two different Rules with two different keys', async () => {
+    // The failure this guards: one hook instance stays mounted while the operator
+    // moves between Rules, so a key kept after success would be sent for the second
+    // Rule and Core would answer event_id_conflict ("belongs to a different rule").
+    const keys: string[] = []
+    const { result } = renderHook(() =>
+      useWriteAction(
+        async (body) => {
+          keys.push(String(body['event_id']))
+          return ok
+        },
+        { keyKind: 'event_id', targetKey: 'rul_A' },
+      ),
+    )
+    await act(async () => {
+      await result.current.submit({ expected_revision: 5, host_id: 'hst_1' })
+    })
+    expect(result.current.state).toBe('succeeded')
+    act(() => result.current.resetDraft())
+    await act(async () => {
+      await result.current.submit({ expected_revision: 5, host_id: 'hst_1' })
+    })
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).not.toBe(keys[1])
+  })
+
+  it('mints a new key after a successful command, so the next one is not a replay', async () => {
+    const keys: string[] = []
+    const { result } = renderHook(() =>
+      useWriteAction(async (body) => {
+        keys.push(String(body['idempotency_key']))
+        return ok
+      }),
+    )
+    await act(async () => {
+      await result.current.submit({ rule_key: 'ui.first' })
+    })
+    await act(async () => {
+      await result.current.submit({ rule_key: 'ui.second' })
+    })
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).not.toBe(keys[1])
+  })
+
+  it('still reuses the key for a retry of the identical intent', async () => {
+    const keys: string[] = []
+    const { result } = renderHook(() =>
+      useWriteAction(
+        async (body) => {
+          keys.push(String(body['idempotency_key']))
+          if (keys.length === 1) {
+            throw new CoreApiError({ kind: 'unreachable', status: null, code: 'ui_core_unreachable', message: 'timeout' })
+          }
+          return ok
+        },
+        { targetKey: 'int_1' },
+      ),
+    )
+    const body = { reason: 'r', host_id: 'hst_1', expected_revision: 2 }
+    await act(async () => {
+      await result.current.submit(body)
+    })
+    await act(async () => {
+      await result.current.submit({ ...body })
+    })
+    expect(keys).toHaveLength(2)
+    expect(keys[0]).toBe(keys[1])
+  })
+
+  it('shows the key it will actually send on the first submit', async () => {
+    // The panel displays the key before anything is sent; that key must be the one
+    // used, or the disclosure is untrue.
+    const sent: string[] = []
+    const { result } = renderHook(() =>
+      useWriteAction(async (body) => {
+        sent.push(String(body['idempotency_key']))
+        return ok
+      }),
+    )
+    const displayed = result.current.writeKey
+    await act(async () => {
+      await result.current.submit({ reason: 'r' })
+    })
+    expect(sent[0]).toBe(displayed)
+  })
+
+  it('clears the previous target\'s result so it is not shown next to another', async () => {
+    const { result, rerender } = renderHook(
+      ({ target }: { target: string }) =>
+        useWriteAction(async () => ok, { targetKey: target }),
+      { initialProps: { target: 'rul_A' } },
+    )
+    await act(async () => {
+      await result.current.submit({ expected_revision: 5 })
+    })
+    expect(result.current.state).toBe('succeeded')
+    rerender({ target: 'rul_B' })
+    await waitFor(() => expect(result.current.state).toBe('idle'))
+    expect(result.current.result).toBeNull()
   })
 })

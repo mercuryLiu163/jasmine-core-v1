@@ -100,6 +100,13 @@ export interface RawEvent {
   body_sha256: string
 }
 
+/** One member of `Resolution.preview.expected_revisions`. */
+export interface ExpectedRevision {
+  object_type: string
+  object_id: string
+  revision: number
+}
+
 export interface RuleScope {
   kind: string
   project_id: string | null
@@ -419,7 +426,13 @@ export interface ResolutionPreview {
   source_event_id: string
   policy_version: string
   plan: ResolutionPlan
-  expected_revisions: JsonObject
+  /**
+   * A **list**, not a map: `ResolverStore._validate_revisions` requires an array of
+   * `{object_type, object_id, revision}` (`object_type` in project/task/step/rule)
+   * and rejects anything else with `expected_revisions must be bounded array`. It is
+   * returned verbatim by the preview and must be sent back verbatim.
+   */
+  expected_revisions: ExpectedRevision[]
   expected_context_digest: string
   maintenance_head: MaintenanceHead
   source_application: JsonObject | null

@@ -60,7 +60,7 @@ export function SignIn(): JSX.Element {
 
   return (
     <main id="main" className="signin">
-      <h1>Jasmine Core Dashboard(P6-01 只读)</h1>
+      <h1>Jasmine Core Dashboard(P6-02)</h1>
       <p>
         页面通过同源代理读取本机 Core。token 只保存在内存中:刷新或点击“退出”即清除,
         不写入 localStorage/sessionStorage/IndexedDB,不进入 URL、日志或打包产物。

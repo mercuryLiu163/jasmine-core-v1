@@ -339,9 +339,10 @@ function interpretationRow(): Record<string, unknown> {
   }
 }
 
-function interpretationDetail(): Record<string, unknown> {
+function interpretationDetail(interpretationId = 'int_1'): Record<string, unknown> {
   return {
     ...interpretationRow(),
+    interpretation_id: interpretationId,
     candidates: [],
     raw_result_json: '{"ok":true}',
     confidence: 0.9,
@@ -350,4 +351,269 @@ function interpretationDetail(): Record<string, unknown> {
     maintenance_history: [],
     operation_completions: [],
   }
+}
+
+/**
+ * The remaining five writes, so "every write the UI can send" is literally true.
+ *
+ * The gaps were real: `review/{id}/approve` is the only body carrying
+ * `expected_revisions`, `expected_context_digest` and `actions`, and it had no body
+ * test at all, while `correct`, `rerun`, `review.reject` and `rule.retire` were only
+ * asserted to have *been called*.
+ */
+describe('every remaining write body is pinned too', () => {
+  function reviewFixture(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+    return {
+      review_id: 'rvw_1',
+      resolution_id: 'res_1',
+      status: 'PENDING',
+      revision: 2,
+      history: [],
+      preview: {
+        interpretation_id: 'int_1',
+        source_event_id: 'evt_01M4B63ER9AR3M3V55FHRWZ66X',
+        policy_version: 'jasmine.resolution.v1',
+        plan: {
+          policy_version: 'jasmine.resolution.v1',
+          disposition: 'PENDING_REVIEW',
+          items: [
+            {
+              candidate_index: 0,
+              action: 'NO_ACTION',
+              pending: false,
+              reason: 'scope_or_impact_requires_review',
+              candidate: {
+                kind: 'RULE',
+                content: 'Always run the device smoke test.',
+                impact: 'MEDIUM',
+                certainty: 'EXPLICIT',
+                confidence: 0.9,
+                rationale: 'fixture',
+                scope: { kind: 'PROJECT', project_id: 'prj_1', task_id: null, path: null, tool: null },
+                source_span: { start: 0, end: 3, quote: '你好' },
+              },
+            },
+          ],
+        },
+        expected_revisions: [
+          { object_type: 'project', object_id: 'prj_1', revision: 1 },
+        ],
+        expected_context_digest: 'f'.repeat(64),
+      },
+      resolution: {
+        resolution_id: 'res_1',
+        interpretation_id: 'int_1',
+        source_event_id: 'evt_01M4B63ER9AR3M3V55FHRWZ66X',
+        result: { disposition: 'PENDING_REVIEW', reasons: ['scope_or_impact_requires_review'], actions: [] },
+        plan: { policy_version: 'jasmine.resolution.v1', disposition: 'PENDING_REVIEW', items: [] },
+      },
+      ...overrides,
+    }
+  }
+
+  it('sends Core\'s exact field set for interpretation correct', async () => {
+    const user = userEvent.setup()
+    await enter(user, '#/interpretation/int_1', {
+      'GET /v1/projects': { body: { projects: [], count: 0 } },
+      'GET /v1/hosts': { body: HOSTS },
+      'GET /v1/interpretations/int_1': { body: { interpretation: interpretationDetail() } },
+      'POST /v1/interpretations/int_1/correct': { status: 201, body: { replayed: false } },
+    })
+    const panel = await screen.findByRole('region', { name: 'Correct(提出新的解释内容)' })
+    await user.type(within(panel).getByTestId('write-reason'), 'r')
+    await waitFor(() => expect(buttonFor(panel, '提交修正').disabled).toBe(false))
+    await user.click(buttonFor(panel, '提交修正'))
+    await waitFor(() => expect(fake!.callsTo('POST', '/v1/interpretations/int_1/correct')).toHaveLength(1))
+    const sent = fake!.callsTo('POST', '/v1/interpretations/int_1/correct')[0]?.body ?? {}
+    expect(Object.keys(sent).sort()).toEqual(
+      ['expected_revision', 'host_id', 'idempotency_key', 'reason', 'result'].sort(),
+    )
+    expect(sent['result']).toBeTruthy()
+    expect(sent['event_id']).toBeUndefined()
+  })
+
+  it('sends Core\'s exact field set for interpretation rerun', async () => {
+    const user = userEvent.setup()
+    await enter(user, '#/interpretation/int_1', {
+      'GET /v1/projects': { body: { projects: [], count: 0 } },
+      'GET /v1/hosts': { body: HOSTS },
+      'GET /v1/interpretations/int_1': { body: { interpretation: interpretationDetail() } },
+      'POST /v1/interpretations/int_1/rerun': { status: 201, body: { replayed: false } },
+    })
+    const panel = await screen.findByRole('region', { name: 'Re-run(用当前配置重新解释同一来源)' })
+    await user.type(within(panel).getByTestId('write-reason'), 'r')
+    await waitFor(() => expect(buttonFor(panel, '提交重跑').disabled).toBe(false))
+    await user.click(buttonFor(panel, '提交重跑'))
+    await waitFor(() => expect(fake!.callsTo('POST', '/v1/interpretations/int_1/rerun')).toHaveLength(1))
+    const sent = fake!.callsTo('POST', '/v1/interpretations/int_1/rerun')[0]?.body ?? {}
+    expect(Object.keys(sent).sort()).toEqual(
+      ['expected_revision', 'host_id', 'idempotency_key', 'reason'].sort(),
+    )
+  })
+
+  it('sends the server plan back verbatim on review approve', async () => {
+    const user = userEvent.setup()
+    await enter(user, '#/review/rvw_1', {
+      'GET /v1/projects': { body: { projects: [], count: 0 } },
+      'GET /v1/hosts': { body: HOSTS },
+      'GET /v1/reviews/rvw_1': { body: { review: reviewFixture() } },
+      'POST /v1/reviews/rvw_1/approve': { status: 201, body: { replayed: false, result: { disposition: 'APPLIED' } } },
+    })
+    const panel = await screen.findByRole('region', { name: 'Approve(按服务器计划批准)' })
+    await user.type(within(panel).getByTestId('write-reason'), 'r')
+    await waitFor(() => expect(buttonFor(panel, '提交批准').disabled).toBe(false))
+    await user.click(buttonFor(panel, '提交批准'))
+    await waitFor(() => expect(fake!.callsTo('POST', '/v1/reviews/rvw_1/approve')).toHaveLength(1))
+    const sent = fake!.callsTo('POST', '/v1/reviews/rvw_1/approve')[0]?.body ?? {}
+    expect(Object.keys(sent).sort()).toEqual(
+      [
+        'actions',
+        'expected_context_digest',
+        'expected_revision',
+        'expected_revisions',
+        'host_id',
+        'idempotency_key',
+        'reason',
+      ].sort(),
+    )
+    // `expected_revisions` is a LIST of {object_type, object_id, revision}; an object
+    // would be refused by Core's `_validate_revisions`.
+    expect(Array.isArray(sent['expected_revisions'])).toBe(true)
+    expect(sent['expected_revisions']).toEqual([
+      { object_type: 'project', object_id: 'prj_1', revision: 1 },
+    ])
+    expect(sent['expected_context_digest']).toBe('f'.repeat(64))
+    expect(sent['actions']).toEqual([{ candidate_index: 0, action: 'NO_ACTION', payload: {} }])
+  })
+
+  it('sends Core\'s exact field set for review reject', async () => {
+    const user = userEvent.setup()
+    await enter(user, '#/review/rvw_1', {
+      'GET /v1/projects': { body: { projects: [], count: 0 } },
+      'GET /v1/hosts': { body: HOSTS },
+      'GET /v1/reviews/rvw_1': { body: { review: reviewFixture() } },
+      'POST /v1/reviews/rvw_1/reject': { status: 201, body: { replayed: false, result: { disposition: 'REJECTED' } } },
+    })
+    const panel = await screen.findByRole('region', { name: 'Reject(拒绝该计划)' })
+    await user.type(within(panel).getByTestId('write-reason'), 'r')
+    await waitFor(() => expect(buttonFor(panel, '提交拒绝').disabled).toBe(false))
+    await user.click(buttonFor(panel, '提交拒绝'))
+    await waitFor(() => expect(fake!.callsTo('POST', '/v1/reviews/rvw_1/reject')).toHaveLength(1))
+    const sent = fake!.callsTo('POST', '/v1/reviews/rvw_1/reject')[0]?.body ?? {}
+    expect(Object.keys(sent).sort()).toEqual(
+      ['expected_revision', 'host_id', 'idempotency_key', 'reason'].sort(),
+    )
+  })
+
+  it('sends Core\'s exact field set for rule retire and rule supersede', async () => {
+    const user = userEvent.setup()
+    await enter(user, RULES_HASH, {
+      ...rulesRoutes,
+      'POST /v1/rules/rul_1/retire': { status: 200, body: { rule: rule({ status: 'RETIRED' }), replayed: false } },
+      'POST /v1/rules/rul_1/supersede': { status: 200, body: { rule: rule({ version: 3 }), replayed: false } },
+    })
+
+    const retirePanel = await screen.findByRole('region', { name: 'Retire(停用 ACTIVE Rule)' })
+    await user.click(buttonFor(retirePanel, '提交停用'))
+    await waitFor(() => expect(fake!.callsTo('POST', '/v1/rules/rul_1/retire')).toHaveLength(1))
+    const retired = fake!.callsTo('POST', '/v1/rules/rul_1/retire')[0]?.body ?? {}
+    expect(Object.keys(retired).sort()).toEqual(['event_id', 'expected_revision', 'host_id'].sort())
+
+    const supersedePanel = await screen.findByRole('region', { name: 'Supersede(用新版本替换 ACTIVE Rule)' })
+    await user.type(
+      within(supersedePanel).getByLabelText(/origin_event_id\(supersede 必填/),
+      'evt_01M4B63ER9AR3M3V55FHRWZ66X',
+    )
+    await waitFor(() => expect(buttonFor(supersedePanel, '提交替换').disabled).toBe(false))
+    await user.click(buttonFor(supersedePanel, '提交替换'))
+    await waitFor(() => expect(fake!.callsTo('POST', '/v1/rules/rul_1/supersede')).toHaveLength(1))
+    const superseded = fake!.callsTo('POST', '/v1/rules/rul_1/supersede')[0]?.body ?? {}
+    expect(Object.keys(superseded).sort()).toEqual(
+      [
+        'content',
+        'enforcement',
+        'event_id',
+        'expected_revision',
+        'host_id',
+        'kind',
+        'matcher',
+        'origin_event_id',
+        'scope',
+        'severity',
+      ].sort(),
+    )
+    expect(superseded['reason']).toBeUndefined()
+    expect(superseded['idempotency_key']).toBeUndefined()
+  })
+
+  it('does not reuse one replay key for two different targets', async () => {
+    // The defect an independent review reproduced: retire Rule A, then retire Rule B,
+    // and the second command carried A's event_id, which Core refuses as
+    // event_id_conflict. The key must belong to a target, not to a component.
+    const user = userEvent.setup()
+    await enter(user, RULES_HASH, {
+      'GET /v1/projects': { body: { projects: [], count: 0 } },
+      'GET /v1/hosts': { body: HOSTS },
+      'GET /v1/rules/active': { body: { rules: [] } },
+      'GET /v1/events': { body: EVENTS },
+      'GET /v1/rules/rul_1': { body: { rule: rule({ rule_id: 'rul_1' }) } },
+      'GET /v1/rules/rul_1/history': { body: { history: [] } },
+      'GET /v1/rules/rul_2': { body: { rule: rule({ rule_id: 'rul_2' }) } },
+      'GET /v1/rules/rul_2/history': { body: { history: [] } },
+      'POST /v1/rules/rul_1/retire': { status: 200, body: { rule: rule({ status: 'RETIRED' }), replayed: false } },
+      'POST /v1/rules/rul_2/retire': { status: 200, body: { rule: rule({ status: 'RETIRED' }), replayed: false } },
+    })
+
+    const first = await screen.findByRole('region', { name: 'Retire(停用 ACTIVE Rule)' })
+    await user.click(buttonFor(first, '提交停用'))
+    await waitFor(() => expect(fake!.callsTo('POST', '/v1/rules/rul_1/retire')).toHaveLength(1))
+
+    const go = (hash: string): void => {
+      window.location.hash = hash
+      window.dispatchEvent(new HashChangeEvent('hashchange'))
+    }
+    go(`#/rules?project_id=${PROJECT_ID}&task_id=${TASK_ID}&rule_id=rul_2`)
+    await waitFor(() => expect(document.body.textContent).toContain('rul_2'))
+    const second = await screen.findByRole('region', { name: 'Retire(停用 ACTIVE Rule)' })
+    await waitFor(() => expect(buttonFor(second, '提交停用').disabled).toBe(false))
+    await user.click(buttonFor(second, '提交停用'))
+    await waitFor(() => expect(fake!.callsTo('POST', '/v1/rules/rul_2/retire')).toHaveLength(1))
+
+    const firstKey = fake!.callsTo('POST', '/v1/rules/rul_1/retire')[0]?.body?.['event_id']
+    const secondKey = fake!.callsTo('POST', '/v1/rules/rul_2/retire')[0]?.body?.['event_id']
+    expect(typeof firstKey).toBe('string')
+    expect(typeof secondKey).toBe('string')
+    expect(secondKey).not.toBe(firstKey)
+  })
+
+  it('does not carry one interpretation\'s reason into the next', async () => {
+    // Same family as the key reuse: the panel instance can survive a target change,
+    // and A's reason must not become B's.
+    const user = userEvent.setup()
+    await enter(user, '#/interpretation/int_1', {
+      'GET /v1/projects': { body: { projects: [], count: 0 } },
+      'GET /v1/hosts': { body: HOSTS },
+      'GET /v1/interpretations/int_1': { body: { interpretation: interpretationDetail('int_1') } },
+      'GET /v1/interpretations/int_2': { body: { interpretation: interpretationDetail('int_2') } },
+      'POST /v1/interpretations/int_1/reject': { status: 201, body: { replayed: false } },
+      'POST /v1/interpretations/int_2/reject': { status: 201, body: { replayed: false } },
+    })
+    const first = await screen.findByRole('region', { name: 'Reject(判定该解释不可用)' })
+    await user.type(within(first).getByTestId('write-reason'), 'A no good')
+    await waitFor(() => expect(buttonFor(first, '提交拒绝').disabled).toBe(false))
+    await user.click(buttonFor(first, '提交拒绝'))
+    await waitFor(() => expect(fake!.callsTo('POST', '/v1/interpretations/int_1/reject')).toHaveLength(1))
+
+    window.location.hash = '#/interpretation/int_2'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    await waitFor(() => expect(document.body.textContent).toContain('int_2'))
+    const second = await screen.findByRole('region', { name: 'Reject(判定该解释不可用)' })
+    const reasonInput = within(second).getByTestId('write-reason') as HTMLInputElement
+    await waitFor(() => expect(reasonInput.value).toBe(''))
+    expect(reasonInput.value).not.toContain('A no good')
+  })
+})
+
+function buttonFor(panel: HTMLElement, name: string): HTMLButtonElement {
+  return within(panel).getByRole('button', { name }) as HTMLButtonElement
 }

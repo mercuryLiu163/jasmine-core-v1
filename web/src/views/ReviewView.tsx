@@ -187,8 +187,15 @@ function ReviewBody({ item }: { item: Review }): JSX.Element {
  */
 function ReviewWrites({ item, onReadback }: { item: Review; onReadback: () => void }): JSX.Element {
   const { endpoints } = useSession()
-  const approve = useWriteAction((body, signal) => endpoints.approveReview(item.review_id, body, signal))
-  const reject = useWriteAction((body, signal) => endpoints.rejectReview(item.review_id, body, signal))
+  const writeTarget = { targetKey: item.review_id }
+  const approve = useWriteAction(
+    (body, signal) => endpoints.approveReview(item.review_id, body, signal),
+    writeTarget,
+  )
+  const reject = useWriteAction(
+    (body, signal) => endpoints.rejectReview(item.review_id, body, signal),
+    writeTarget,
+  )
 
   const suggested = (item.preview?.plan.items ?? []).map((planItem) => ({
     candidate_index: planItem.candidate_index,
@@ -213,7 +220,8 @@ function ReviewWrites({ item, onReadback }: { item: Review; onReadback: () => vo
         entry !== null &&
         typeof (entry as { candidate_index?: unknown }).candidate_index === 'number' &&
         typeof (entry as { action?: unknown }).action === 'string' &&
-        typeof (entry as { payload?: unknown }).payload === 'object',
+        typeof (entry as { payload?: unknown }).payload === 'object' &&
+        (entry as { payload?: unknown }).payload !== null,
     )
   const actionsError = parsed.error ?? (actionsValid ? undefined : 'actions 必须为每个候选各一条 {candidate_index, action, payload}')
 
@@ -226,6 +234,7 @@ function ReviewWrites({ item, onReadback }: { item: Review; onReadback: () => vo
           title="Approve(按服务器计划批准)"
           basis={basis}
           action={approve}
+          targetKey={item.review_id}
           submitLabel="提交批准"
           ready={item.status === 'PENDING' && actionsValid}
           onSucceeded={onReadback}
@@ -258,7 +267,7 @@ function ReviewWrites({ item, onReadback }: { item: Review; onReadback: () => vo
                   reason,
                   host_id: hostId,
                   expected_revision: item.revision,
-                  expected_revisions: item.preview?.expected_revisions ?? {},
+                  expected_revisions: item.preview?.expected_revisions ?? [],
                   expected_context_digest: item.preview?.expected_context_digest ?? '',
                   actions: parsed.value,
                 }
@@ -280,6 +289,7 @@ function ReviewWrites({ item, onReadback }: { item: Review; onReadback: () => vo
         title="Reject(拒绝该计划)"
         basis={basis}
         action={reject}
+        targetKey={item.review_id}
         submitLabel="提交拒绝"
         ready={item.status === 'PENDING'}
         onSucceeded={onReadback}

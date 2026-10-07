@@ -317,17 +317,21 @@ export function RuleWrites({
   const propose = useWriteAction((body, signal) => endpoints.proposeRule(body, signal), {
     keyKind: 'event_id',
   })
+  // `targetKey` is the Rule these hooks write to. This component stays mounted while
+  // the operator moves between Rules, so without it the retire hook would carry Rule
+  // A's `event_id` to Rule B and Core would refuse it as `event_id_conflict`.
+  const targetKey = rule?.rule_id ?? ''
   const approve = useWriteAction(
     (body, signal) => endpoints.approveRule(rule?.rule_id ?? '', body, signal),
-    { keyKind: 'event_id' },
+    { keyKind: 'event_id', targetKey },
   )
   const supersede = useWriteAction(
     (body, signal) => endpoints.supersedeRule(rule?.rule_id ?? '', body, signal),
-    { keyKind: 'event_id' },
+    { keyKind: 'event_id', targetKey },
   )
   const retire = useWriteAction(
     (body, signal) => endpoints.retireRule(rule?.rule_id ?? '', body, signal),
-    { keyKind: 'event_id' },
+    { keyKind: 'event_id', targetKey },
   )
 
   const [ruleKey, setRuleKey] = useState('')
@@ -337,30 +341,53 @@ export function RuleWrites({
     projectId: projectId ?? '',
     taskId: taskId ?? '',
   })
+
+  // `RuleWrites` stays mounted while the operator moves between projects and tasks,
+  // so the propose scope has to follow the route rather than keep the first one.
+  useEffect(() => {
+    setScope({
+      kind: taskId ? 'task' : projectId ? 'project' : 'global',
+      projectId: projectId ?? '',
+      taskId: taskId ?? '',
+    })
+    setProposeOrigin('')
+  }, [projectId, taskId])
   const [proposeContent, setProposeContent] = useState<ContentDraft>(EMPTY_CONTENT)
 
-  // `AuthorityStore._origin` requires the origin Event's scope to equal the
-  // Rule's, so the candidate list follows the scope being proposed for instead of
-  // the scope being viewed: a task-scoped prompt Event is refused for a project
-  // Rule, and offering it would be offering a guaranteed 400.
-  const candidateQuery = ((): { project_id?: string; task_id?: string } => {
-    if (scope.kind === 'global') return {}
-    const project = scope.projectId.trim()
-    if (scope.kind === 'task' && scope.taskId.trim()) {
-      return { project_id: project, task_id: scope.taskId.trim() }
-    }
-    return project ? { project_id: project } : {}
-  })()
+  // `AuthorityStore._origin` requires the origin Event's scope to equal the Rule's,
+  // so each panel's candidate list follows *its own* scope: offering an Event Core
+  // will refuse is offering a guaranteed 400. Propose follows the scope being
+  // proposed for; Supersede follows the Rule's own locked scope.
+  const scopeQuery = (kind: string, project: string, task: string): { project_id?: string; task_id?: string } => {
+    if (kind === 'global') return {}
+    const trimmed = project.trim()
+    if (kind === 'task' && task.trim()) return { project_id: trimmed, task_id: task.trim() }
+    return trimmed ? { project_id: trimmed } : {}
+  }
+  const candidateQuery = scopeQuery(scope.kind, scope.projectId, scope.taskId)
   const events = useResource(
     (signal) => endpoints.listEvents({ ...candidateQuery, limit: 50 }, signal),
     // The query is derived from the scope draft, so it is the dependency.
     [candidateQuery.project_id, candidateQuery.task_id],
   )
-  const candidates = (events.data?.events ?? []).filter((event) => {
-    if (scope.kind === 'global') return event.project_id === null && event.task_id === null
-    if (scope.kind === 'project') return event.project_id === candidateQuery.project_id && event.task_id === null
-    return true
-  })
+  const inScope = (
+    event: { project_id: string | null; task_id: string | null },
+    kind: string,
+    project: string,
+    task: string,
+  ): boolean => {
+    if (kind === 'global') return event.project_id === null && event.task_id === null
+    if (kind === 'project') return event.project_id === project.trim() && event.task_id === null
+    return event.project_id === project.trim() && event.task_id === task.trim()
+  }
+  const candidates = (events.data?.events ?? []).filter((event) =>
+    inScope(event, scope.kind, scope.projectId, scope.taskId),
+  )
+  // The Supersede panel's own candidates, from the Rule's scope rather than the
+  // propose form's.
+  const ruleScopeCandidates = (events.data?.events ?? []).filter((event) =>
+    rule ? inScope(event, rule.scope.kind, rule.scope.project_id ?? '', rule.scope.task_id ?? '') : false,
+  )
 
   // Supersede keeps its own draft, seeded from the Rule Core returned, so editing
   // the replacement cannot silently change the proposal form's content. The seed
@@ -574,7 +601,7 @@ export function RuleWrites({
                   label="origin_event_id(supersede 必填,scope 须与 Rule 一致)"
                   value={supersedeOrigin}
                   onChange={setSupersedeOrigin}
-                  candidates={candidates}
+                  candidates={ruleScopeCandidates}
                 />
                 <ContentFields draft={supersedeContent} onChange={setSupersedeContent} />
                 {supersedeError ? (

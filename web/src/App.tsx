@@ -1,10 +1,11 @@
 /**
  * Application shell.
  *
- * P6-01 is a read-only window on Core. The header states that, the navigation
- * exposes only routes that exist today (plus clearly-marked placeholders for the
- * domains whose contracts are not frozen), and "退出" clears the in-memory token
- * so no later request carries an Authorization header.
+ * The dashboard is a window on Core that also issues the frozen audited writes.
+ * The header states the posture, the navigation exposes only routes that exist
+ * today (plus clearly-marked placeholders for domains whose contracts are not
+ * frozen), and "退出" clears the in-memory token so no later request carries an
+ * Authorization header.
  */
 
 import { hrefFor, type Route } from './app/router'
@@ -44,7 +45,7 @@ export function App(): JSX.Element {
       </a>
       <header className="app__head">
         <div className="app__brand">
-          <strong>Jasmine Core</strong> <span>Dashboard P6-01(只读)</span>
+          <strong>Jasmine Core</strong> <span>Dashboard P6-02</span>
         </div>
         {signedIn ? (
           <nav className="app__nav" aria-label="主导航">

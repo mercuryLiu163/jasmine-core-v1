@@ -428,14 +428,20 @@ function InterpretationWrites({
   }, [item.interpretation_id, item.raw_result_json])
 
   const parsed = parseJsonField(draft, 'corrected result')
-  const correct = useWriteAction((body, signal) =>
-    endpoints.correctInterpretation(item.interpretation_id, body, signal),
+  // The target is part of the intent: moving to another interpretation must not
+  // carry this one's idempotency key.
+  const writeTarget = { targetKey: item.interpretation_id }
+  const correct = useWriteAction(
+    (body, signal) => endpoints.correctInterpretation(item.interpretation_id, body, signal),
+    writeTarget,
   )
-  const reject = useWriteAction((body, signal) =>
-    endpoints.rejectInterpretation(item.interpretation_id, body, signal),
+  const reject = useWriteAction(
+    (body, signal) => endpoints.rejectInterpretation(item.interpretation_id, body, signal),
+    writeTarget,
   )
-  const rerun = useWriteAction((body, signal) =>
-    endpoints.rerunInterpretation(item.interpretation_id, body, signal),
+  const rerun = useWriteAction(
+    (body, signal) => endpoints.rerunInterpretation(item.interpretation_id, body, signal),
+    writeTarget,
   )
 
   const basis = `interpretation ${item.interpretation_id} · head revision ${revision} · current ${
@@ -459,6 +465,7 @@ function InterpretationWrites({
         title="Correct(提出新的解释内容)"
         basis={basis}
         action={correct}
+        targetKey={item.interpretation_id}
         submitLabel="提交修正"
         ready={isCurrent && parsed.error === undefined}
         onSucceeded={onReadback}
@@ -488,6 +495,7 @@ function InterpretationWrites({
         title="Reject(判定该解释不可用)"
         basis={basis}
         action={reject}
+        targetKey={item.interpretation_id}
         submitLabel="提交拒绝"
         ready={isCurrent}
         onSucceeded={onReadback}
@@ -503,6 +511,7 @@ function InterpretationWrites({
         title="Re-run(用当前配置重新解释同一来源)"
         basis={basis}
         action={rerun}
+        targetKey={item.interpretation_id}
         submitLabel="提交重跑"
         ready={isCurrent}
         onSucceeded={onReadback}
