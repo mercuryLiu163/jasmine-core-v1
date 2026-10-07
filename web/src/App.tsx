@@ -13,6 +13,7 @@ import { useHashRoute } from './app/useHashRoute'
 import { useSession } from './app/session'
 import { SignIn } from './components/SignIn'
 import { Panel } from './components/States'
+import { CheckpointsView, ContextPackView, ResumeView } from './views/ContinuityViews'
 import { ConversationView } from './views/ConversationView'
 import { EventView } from './views/EventView'
 import { EvidenceView } from './views/EvidenceView'
@@ -153,6 +154,20 @@ function renderRoute(route: Route): JSX.Element {
       return <ReviewView reviewId={route.reviewId} />
     case 'resolution':
       return <ResolutionView resolutionId={route.resolutionId} />
+    // P6-03a: P3 continuity reads. These render DEPENDENCY PENDING on a baseline
+    // dashboard, because this Core has no such route; the views say so themselves.
+    case 'checkpoints':
+      return (
+        <CheckpointsView
+          taskId={route.taskId}
+          checkpointId={route.checkpointId}
+          sessionId={route.sessionId}
+        />
+      )
+    case 'context':
+      return <ContextPackView contextPackId={route.contextPackId} />
+    case 'resume':
+      return <ResumeView resumeId={route.resumeId} />
     case 'pending':
       return <PendingView pendingKey={route.key} />
     case 'unknown':

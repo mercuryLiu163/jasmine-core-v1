@@ -66,6 +66,22 @@ export function kindForStatus(status: number): ErrorKind {
 /** Codes the dashboard's own proxy emits when Core is not answering. */
 const PROXY_UNREACHABLE_CODES = new Set(['proxy_core_unreachable', 'proxy_bad_target'])
 
+/** The proxy refuses a path it does not forward (`METHOD path` not in its allowlist). */
+export const PROXY_PATH_REFUSED = 'proxy_path_not_allowed'
+
+/**
+ * True when a read was refused by our own proxy rather than by Core.
+ *
+ * For the P6-03a continuity reads this is the *expected* state on a baseline dashboard:
+ * the four routes exist in P3 and not in this baseline's Core, so they are kept out of
+ * the live allowlist and the proxy answers `proxy_path_not_allowed`. The views use this
+ * to say "dependency pending (P3 not merged)" — which is a different statement from
+ * Core's own `not_found`, and must not be shown as one.
+ */
+export function isDependencyPending(error: CoreApiError): boolean {
+  return error.code === PROXY_PATH_REFUSED
+}
+
 export function kindForEnvelope(status: number, code: string): ErrorKind {
   if (PROXY_UNREACHABLE_CODES.has(code)) return 'unreachable'
   return kindForStatus(status)

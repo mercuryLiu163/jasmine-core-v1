@@ -457,3 +457,141 @@ export interface ReviewPage {
   items: Review[]
   next_after_id: string | null
 }
+
+/* -------------------------------------------------------------------------- *
+ * P6-03a: P3 continuity reads — Checkpoint / Context Pack / Resume
+ *
+ * **DEPENDENCY PENDING.** These routes exist on branch
+ * `p3-checkpoint-context-resume` (P3) and **not** in this baseline (`850fbec`, schema
+ * 8, no `context/`, `continuity.py` or `task_snapshot.py`). The field sets below were
+ * derived from that branch by `scripts/p6/p3_contract.py` and frozen in
+ * `web/contracts/p3-continuity-read.v1.json`, with the source commit recorded; the
+ * drift guard re-derives and diffs them.
+ *
+ * Two habits here, both deliberate:
+ * - scalar identity, scope, digest and revision fields are typed exactly as P3 returns
+ *   them (`/v1/checkpoints/{id}.projection` is a string, `task_revision` a number);
+ * - nested documents (`projection`, `workspace`, `comparison`, `configuration`,
+ *   `memory`, `section_metrics`, …) stay `JsonObject`/`unknown`. Their inner shape is
+ *   P3's to define, and typing it from memory is how an invented contract starts. The
+ *   views render them verbatim through `JsonBlock`.
+ * -------------------------------------------------------------------------- */
+
+/** A checkpoint's note: the DDL constrains `note_json` to an object with a text. */
+export interface CheckpointNote {
+  text: string
+}
+
+/** Where a checkpoint's creation came from (`continuity._persist`). */
+export interface TriggerProvenance {
+  level: string
+  source_event_id: string
+  [key: string]: unknown
+}
+
+/**
+ * `GET /v1/checkpoints/{ckp}` and `GET /v1/tasks/{tsk}/checkpoints/latest`.
+ *
+ * `projection` is an **immutable snapshot of what the Task looked like at
+ * `task_revision`** (`projection_version` `jasmine.task-snapshot.v1`), carried with
+ * three digests. It is a record of a moment, never a claim about current Truth.
+ */
+export interface Checkpoint {
+  checkpoint_id: string
+  command_event_id: string
+  source_event_id: string
+  project_id: string
+  task_id: string
+  host_id: string
+  actor_id: string
+  session_id: string | null
+  reason: string
+  trigger_provenance: TriggerProvenance
+  projection_version: string
+  projection: JsonObject
+  projection_digest: string
+  task_revision: number
+  full_context_digest: string
+  workspace: JsonObject
+  workspace_digest: string
+  note: CheckpointNote | null
+  created_at: string
+}
+
+/**
+ * `GET /v1/resumes/{rms}`.
+ *
+ * A resume is a **comparison, not a restore**: `comparison` and `next_actions` describe
+ * how the checkpoint differs from the current projection, and nothing is applied.
+ * `truth_digest` is the digest of current Truth at build time, not a restore point.
+ * `note` is the resumed-from checkpoint's note, explicitly
+ * `{authority: false, historical: true}` — it must never be presented as Truth.
+ */
+export interface Resume {
+  resume_id: string
+  command_event_id: string
+  source_event_id: string
+  actor_id: string
+  host_id: string
+  project_id: string
+  task_id: string
+  session_id: string | null
+  checkpoint_id: string | null
+  created_at: string
+  projection: JsonObject
+  truth_digest: string
+  workspace: JsonObject
+  sample_window: JsonObject
+  comparison: JsonObject
+  note: HistoricalNote | null
+  next_actions: unknown[]
+}
+
+/** A note that is carried forward with its authority explicitly denied. */
+export interface HistoricalNote {
+  value: CheckpointNote | null
+  authority: false
+  historical: true
+}
+
+/**
+ * `GET /v1/context/{ctx}` — the persisted result of a Context Pack build.
+ *
+ * The pack records what was *actually rendered* (`rendered_content`, its digest, byte
+ * and token counts, per-section metrics and omissions) alongside the projection and
+ * workspace it was built from. `memory` is produced by the P4 provider and is
+ * non-authoritative; P6-03a only displays what Core recorded and runs no experiment.
+ */
+export interface ContextPack {
+  context_pack_id: string
+  command_event_id: string
+  source_event_id: string
+  actor_id: string
+  host_id: string
+  project_id: string
+  task_id: string
+  session_id: string | null
+  current_step_id: string | null
+  reason: string
+  trigger_provenance: TriggerProvenance
+  created_at: string
+  projection: JsonObject
+  truth_digest: string
+  selector: JsonObject
+  resume_comparison: JsonObject
+  workspace: JsonObject
+  workspace_digest: string
+  sample_window: JsonObject
+  configuration: JsonObject
+  config_digest: string
+  tokenizer: JsonObject
+  memory: JsonObject
+  rendered_content: string
+  rendered_sha256: string
+  rendered_utf8_bytes: number
+  renderer_version: string
+  token_count: number
+  section_metrics: unknown
+  omissions: unknown
+  selected_optional_ids: unknown
+}

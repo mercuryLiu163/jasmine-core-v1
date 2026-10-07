@@ -161,5 +161,104 @@ class BaselineDoesNotHaveP3Routes(unittest.TestCase):
                     self.assertFalse(any(pattern.fullmatch(sample) for pattern in live))
 
 
+class DashboardTypesMatchTheContract(unittest.TestCase):
+    """The closed loop: P3 branch -> frozen snapshot -> dashboard types.
+
+    The snapshot guard proves the contract still matches P3. This proves the TypeScript
+    the views render against still matches the snapshot, so an added or renamed P3 field
+    cannot leave the UI quietly rendering a shape it no longer has.
+    """
+
+    INTERFACES = {"Checkpoint": "checkpoint", "Resume": "resume", "ContextPack": "context"}
+
+    def test_typescript_interfaces_carry_exactly_the_contract_fields(self) -> None:
+        source = (ROOT / "web" / "src" / "api" / "types.ts").read_text(encoding="utf-8")
+        snapshot = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        for interface, key in self.INTERFACES.items():
+            with self.subTest(interface=interface):
+                body = re.search(r"export interface " + interface + r" \{(.*?)\n\}",
+                                 source, re.S)
+                self.assertIsNotNone(body, f"{interface} is missing from types.ts")
+                # Field names may contain digits (`rendered_sha256`).
+                declared = set(re.findall(r"^\s+([a-z][a-z0-9_]*)\??:", body.group(1), re.M))
+                expected = set(snapshot["response_fields"][key])
+                self.assertEqual(sorted(expected - declared), [],
+                                 f"{interface} is missing contract fields")
+                self.assertEqual(sorted(declared - expected), [],
+                                 f"{interface} declares fields the contract does not have")
+
+    def test_the_dependency_status_is_written_where_a_reader_will_see_it(self) -> None:
+        source = (ROOT / "web" / "src" / "api" / "types.ts").read_text(encoding="utf-8")
+        self.assertIn("DEPENDENCY PENDING", source)
+        self.assertIn("p3-continuity-read.v1.json", source,
+                      "the types must name the snapshot they came from")
+
+
+class P3ReadsAreGatedNotImplicit(unittest.TestCase):
+    """The pending paths live in their own section, and become live only on request.
+
+    The JSON cannot prove the runtime behaviour — `web/tests/p3Reads.test.ts` does that
+    against the real matcher — but it can prove the *shape* the loader depends on, and
+    that nobody has quietly moved the four patterns into the live list.
+    """
+
+    def setUp(self) -> None:
+        self.allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
+        self.snapshot = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+
+    def test_pending_paths_are_present_and_separate(self) -> None:
+        pending = self.allowlist.get("p3_pending_paths")
+        self.assertIsInstance(pending, list)
+        self.assertEqual(len(pending), 4)
+        for pattern in pending:
+            with self.subTest(pattern=pattern):
+                self.assertNotIn(pattern, self.allowlist["paths"],
+                                 "a pending P3 path must not be in the live read list")
+        self.assertIn("p3_pending_note", self.allowlist)
+
+    def test_pending_patterns_cover_the_snapshot_routes(self) -> None:
+        """Same four paths, deliberately stricter spelling.
+
+        The snapshot keeps P3's own route spelling (`([^/]+)`); the allowlist tightening
+        of `c7c5480` means the live list only ever spells real ids. So equality of strings
+        would be the wrong assertion — what must hold is that both describe the same four
+        paths, which is checked against real id-shaped samples.
+        """
+        body = "01M4B6VGC29ESRDRQR62DX8AK8"
+        samples = [f"/v1/context/ctx_{body}",
+                   f"/v1/tasks/tsk_{body}/checkpoints/latest",
+                   f"/v1/checkpoints/ckp_{body}",
+                   f"/v1/resumes/rms_{body}"]
+        pending = [re.compile(p) for p in self.allowlist["p3_pending_paths"]]
+        routes = [re.compile(r["path_pattern"]) for r in self.snapshot["read_routes"]]
+        # Each sample is matched by exactly one of each, and both sets match all four — so
+        # the gated patterns describe exactly the contracted paths and add none.
+        for sample in samples:
+            with self.subTest(sample=sample):
+                self.assertEqual(sum(1 for p in pending if p.fullmatch(sample)), 1)
+                self.assertEqual(sum(1 for p in routes if p.fullmatch(sample)), 1)
+        self.assertEqual(len(pending), len(routes))
+
+    def test_pending_patterns_match_real_id_shaped_paths(self) -> None:
+        # A pattern that matched nothing would 'gate' nothing, and the views would never
+        # get past the proxy even on a P3 Core.
+        body = "01M4B6VGC29ESRDRQR62DX8AK8"
+        samples = [f"/v1/context/ctx_{body}",
+                   f"/v1/tasks/tsk_{body}/checkpoints/latest",
+                   f"/v1/checkpoints/ckp_{body}",
+                   f"/v1/resumes/rms_{body}"]
+        for sample in samples:
+            with self.subTest(sample=sample):
+                self.assertTrue(any(re.compile(pattern).fullmatch(sample)
+                                    for pattern in self.allowlist["p3_pending_paths"]))
+
+    def test_the_note_says_why_they_are_not_live(self) -> None:
+        note = self.allowlist["p3_pending_note"].lower()
+        self.assertIn("p3", note)
+        self.assertIn("p6_enable_p3_reads", note)
+        # The reason a reader needs: this baseline's Core cannot serve them.
+        self.assertIn("not served by this baseline", note)
+
+
 if __name__ == "__main__":
     unittest.main()

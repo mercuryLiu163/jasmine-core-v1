@@ -70,11 +70,28 @@ export function parseArgs(argv) {
   return args
 }
 
-export function loadAllowlist(directory = HERE) {
+/** Env var that says the Core behind this proxy is a P3 build. */
+export const P3_READS_ENV = 'P6_ENABLE_P3_READS'
+
+export function p3ReadsEnabled(env = process.env) {
+  const raw = (env[P3_READS_ENV] ?? '').trim().toLowerCase()
+  return raw === '1' || raw === 'true' || raw === 'yes'
+}
+
+export function loadAllowlist(directory = HERE, { enableP3Reads = p3ReadsEnabled() } = {}) {
   const raw = JSON.parse(readFileSync(join(directory, 'core-paths.json'), 'utf8'))
+  const baseline = raw.paths.map((pattern) => new RegExp(pattern))
+  // The P3 continuity reads are real paths on a P3 Core and absent from this baseline,
+  // so `paths` never carries them. They are appended only when the operator states that
+  // the Core behind this proxy has P3; a baseline run therefore refuses them by name
+  // (`proxy_path_not_allowed`) instead of forwarding them to a Core that cannot answer.
+  const pending = (raw.p3_pending_paths ?? []).map((pattern) => new RegExp(pattern))
   return {
     methods: new Set(raw.methods.map((method) => method.toUpperCase())),
-    paths: raw.paths.map((pattern) => new RegExp(pattern)),
+    paths: enableP3Reads ? [...baseline, ...pending] : baseline,
+    baseline_paths: baseline,
+    p3_pending_paths: pending,
+    p3_reads_enabled: enableP3Reads,
     write_methods: raw.write_methods ?? [],
     write_paths: raw.write_paths ?? [],
   }

@@ -1,0 +1,612 @@
+/**
+ * P6-03a: the P3 continuity reads — Checkpoint, Context Pack, Resume (read-only).
+ *
+ * **DEPENDENCY PENDING.** The four endpoints these views call exist on branch
+ * `p3-checkpoint-context-resume` and **not** in this baseline: `850fbec` is schema 8 and
+ * has no `context/`, `continuity.py` or `task_snapshot.py`. The contract was derived
+ * from that branch by `scripts/p6/p3_contract.py` and frozen in
+ * `web/contracts/p3-continuity-read.v1.json` (source commit recorded, with a drift
+ * guard), so these views render a *real* P3 shape rather than a plausible one.
+ *
+ * Because the routes are absent here, they are kept out of the proxy's live allowlist:
+ * a baseline dashboard refuses them with `proxy_path_not_allowed`, and the views render
+ * a dependency-pending panel saying so. Core's own `not_found` means something else —
+ * that the object does not exist — and is never conflated with it.
+ *
+ * Three habits the views keep, because each is a way a projection gets mistaken for
+ * Truth:
+ *
+ * 1. a checkpoint's `projection` is an **immutable snapshot at `task_revision`**, shown
+ *    with the three digests that let a reader check it. It is never labelled current
+ *    state;
+ * 2. `checkpoints/latest` answering `null` is an **empty result** ("no checkpoint yet"),
+ *    rendered as empty rather than as an error;
+ * 3. a resume is a **comparison, not a restore**. Its `note` is shown with Core's own
+ *    `authority: false, historical: true` next to it, and nothing here implies an
+ *    application happened.
+ *
+ * Nothing in this file writes, and no P4 experiment runs: `memory` inside a Context Pack
+ * is displayed as what the P4 provider recorded, marked non-authoritative.
+ */
+
+import { useId, useState } from 'react'
+
+import { isDependencyPending, type CoreApiError } from '../api/errors'
+import type { Checkpoint, ContextPack, Resume } from '../api/types'
+import { hrefFor, sourceHref } from '../app/router'
+import { useSession } from '../app/session'
+import { useResource } from '../app/useResource'
+import { JsonBlock } from '../components/JsonBlock'
+import { RawText } from '../components/RawText'
+import { Empty, ErrorPanel, Loading, Panel, StaleBanner } from '../components/States'
+import { KeyValue, SourceLink } from '../components/Trace'
+import { formatTimestamp } from '../lib/text'
+
+/** A resource error is nullable; only a real proxy refusal counts as pending. */
+function pending(error: CoreApiError | null): boolean {
+  return error !== null && isDependencyPending(error)
+}
+
+/** The one place that decides how "P3 is not in this baseline" looks. */
+function DependencyPending({
+  what,
+  method,
+  path,
+  scope,
+}: {
+  what: string
+  method: string
+  path: string
+  scope: string
+}): JSX.Element {
+  return (
+    <div className="state state--pending" role="status" data-testid="dependency-pending">
+      <p className="state__headline">
+        依赖未满足:{what} 需要 P3(Context / Checkpoint / Resume),而 P3 尚未合并
+      </p>
+      <p>
+        本页读取的 <code>{method}</code> <code>{path}</code> 只存在于 P3 分支,本基线
+        (<code>850fbec</code>,schema 8)的 Core 没有这条路由,因此仪表盘的 live 白名单
+        <strong>不会转发它</strong> —— 代理以 <code>proxy_path_not_allowed</code> 拒绝,
+        而不是把请求送给一个必然 404 的 Core。这是刻意的。
+      </p>
+      <ul className="plain">
+        <li>
+          需要的 scope:<code>{scope}</code>(由 Core 校验,前端从不代持)
+        </li>
+        <li>
+          契约来源:分支 <code>p3-checkpoint-context-resume</code>,派生并冻结在
+          <code> web/contracts/p3-continuity-read.v1.json</code>
+        </li>
+        <li>
+          状态:<strong>PARTIAL / DEPENDENCY_PENDING</strong> —— 本页不是已通过的 P6 能力
+        </li>
+      </ul>
+      <p className="state__meta">
+        要在真实 Core 上打开它,需要一个 P3 已合并的 Core,并以显式开关启动代理转发这几条
+        路径(见 <code>web/server/core-paths.json</code> 的 <code>p3_pending_paths</code>)。
+      </p>
+    </div>
+  )
+}
+
+/** Digests are the point of these records, so they render whole, wrapped. */
+function Digest({ label, value }: { label: string; value: string | null | undefined }): JSX.Element {
+  return (
+    <span className="kv__digest">
+      <span className="muted">{label}</span> <code className="wrap">{value ?? '—'}</code>
+    </span>
+  )
+}
+
+/** Shared scope/host/actor rows so the three views cannot drift apart. */
+function identityRows(item: {
+  project_id: string
+  task_id: string
+  session_id: string | null
+  actor_id: string
+  host_id: string
+  created_at: string
+  source_event_id: string
+  command_event_id: string
+}): Array<{ label: string; value: React.ReactNode }> {
+  return [
+    {
+      label: 'scope',
+      value: (
+        <>
+          <a href={sourceHref.project(item.project_id)}>
+            <code>{item.project_id}</code>
+          </a>{' '}
+          ·{' '}
+          <a href={sourceHref.task(item.task_id)}>
+            <code>{item.task_id}</code>
+          </a>
+          {item.session_id ? (
+            <>
+              {' '}
+              · session <code>{item.session_id}</code>
+            </>
+          ) : (
+            ' · 无 session'
+          )}
+        </>
+      ),
+    },
+    { label: 'actor / host', value: <><code>{item.actor_id}</code> · <code>{item.host_id}</code></> },
+    {
+      label: 'source Event',
+      value: <SourceLink kind="event" id={item.source_event_id} label="source Event" />,
+    },
+    {
+      label: 'command Event',
+      value: <SourceLink kind="event" id={item.command_event_id} label="command Event" />,
+    },
+    { label: 'created_at', value: formatTimestamp(item.created_at) },
+  ]
+}
+
+function StatRow({ label, value }: { label: string; value: string }): JSX.Element {
+  return (
+    <p className="state state--meta">
+      <strong>{label}</strong> {value}
+    </p>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+
+function CheckpointBody({
+  checkpoint,
+  onReadback,
+}: {
+  checkpoint: Checkpoint
+  onReadback?: () => void
+}): JSX.Element {
+  return (
+    <>
+      <StatRow
+        label="不可变快照:"
+        value={`这是 task_revision ${checkpoint.task_revision} 时的快照(projection_version ${checkpoint.projection_version}),是记录,不是当前 Truth。`}
+      />
+      <KeyValue
+        rows={[
+          { label: 'checkpoint_id', value: <code>{checkpoint.checkpoint_id}</code> },
+          { label: 'reason', value: <code>{checkpoint.reason}</code> },
+          ...identityRows(checkpoint),
+          {
+            label: 'task_revision',
+            value: <code>r{checkpoint.task_revision}</code>,
+          },
+          {
+            label: 'trigger_provenance',
+            value: <code>{String(checkpoint.trigger_provenance?.level ?? '未知')}</code>,
+          },
+        ]}
+      />
+      <KeyValue
+        rows={[
+          {
+            label: 'digests',
+            value: (
+              <span className="stack">
+                <Digest label="projection_digest" value={checkpoint.projection_digest} />
+                <Digest label="full_context_digest" value={checkpoint.full_context_digest} />
+                <Digest label="workspace_digest" value={checkpoint.workspace_digest} />
+              </span>
+            ),
+          },
+        ]}
+      />
+      {checkpoint.note ? (
+        <RawText
+          value={checkpoint.note.text}
+          label="note(记录在创建时的备注,非权威)"
+          machine={false}
+        />
+      ) : (
+        <p className="muted">没有 note。</p>
+      )}
+      <JsonBlock value={checkpoint.trigger_provenance} label="trigger_provenance" />
+      <JsonBlock value={checkpoint.projection} label={`projection(task_revision ${checkpoint.task_revision})`} />
+      <JsonBlock value={checkpoint.workspace} label="workspace" />
+      {onReadback ? (
+        <button type="button" onClick={onReadback}>
+          从 Core 重新读取
+        </button>
+      ) : null}
+    </>
+  )
+}
+
+/** `latest` is addressed by Task (with an optional session), a specific one by id. */
+export function CheckpointsView({
+  taskId,
+  checkpointId,
+  sessionId,
+}: {
+  taskId: string | null
+  checkpointId: string | null
+  sessionId: string | null
+}): JSX.Element {
+  const { endpoints } = useSession()
+  const taskInputId = useId()
+  const checkpointInputId = useId()
+  const sessionInputId = useId()
+  const [taskDraft, setTaskDraft] = useState(taskId ?? '')
+  const [checkpointDraft, setCheckpointDraft] = useState(checkpointId ?? '')
+  const [sessionDraft, setSessionDraft] = useState(sessionId ?? '')
+
+  const byId =
+    checkpointId === null
+      ? null
+      : (signal: AbortSignal) => endpoints.getCheckpoint(checkpointId, signal)
+  const latest =
+    checkpointId === null && taskId !== null
+      ? (signal: AbortSignal) => endpoints.latestCheckpoint(taskId, sessionId, signal)
+      : null
+
+  const detail = useResource(byId, [checkpointId])
+  const latestResource = useResource(latest, [taskId, sessionId])
+
+  const applyTask = (): void => {
+    globalThis.location.hash = hrefFor({
+      name: 'checkpoints',
+      taskId: taskDraft.trim() || null,
+      checkpointId: null,
+      sessionId: sessionDraft.trim() || null,
+    })
+  }
+  const applyCheckpoint = (): void => {
+    const value = checkpointDraft.trim()
+    if (value) {
+      globalThis.location.hash = hrefFor({
+        name: 'checkpoints',
+        taskId,
+        checkpointId: value,
+        sessionId: null,
+      })
+    }
+  }
+
+  const isPending = pending(detail.error) || pending(latestResource.error)
+
+  return (
+    <div className="stack">
+      <nav className="breadcrumb" aria-label="位置">
+        <span>Checkpoint(P3 只读)</span>
+      </nav>
+
+      <Panel title="读取 Checkpoint(最新 / 按 ID)">
+        <div className="filters">
+          <label htmlFor={taskInputId}>
+            task_id(读最新)
+            <input
+              id={taskInputId}
+              value={taskDraft}
+              onChange={(event) => setTaskDraft(event.target.value)}
+              placeholder="tsk_…"
+              autoComplete="off"
+            />
+          </label>
+          <label htmlFor={sessionInputId}>
+            session_id(可空)
+            <input
+              id={sessionInputId}
+              value={sessionDraft}
+              onChange={(event) => setSessionDraft(event.target.value)}
+              placeholder="ses_…"
+              autoComplete="off"
+            />
+          </label>
+          <button type="button" onClick={applyTask}>
+            读取最新
+          </button>
+          <label htmlFor={checkpointInputId}>
+            checkpoint_id
+            <input
+              id={checkpointInputId}
+              value={checkpointDraft}
+              onChange={(event) => setCheckpointDraft(event.target.value)}
+              placeholder="ckp_…"
+              autoComplete="off"
+            />
+          </label>
+          <button type="button" onClick={applyCheckpoint}>
+            按 ID 读取
+          </button>
+        </div>
+        <p className="state state--meta">
+          <code>GET /v1/tasks/&#123;tsk&#125;/checkpoints/latest</code> 需要一个 Task;
+          <code>GET /v1/checkpoints/&#123;ckp&#125;</code> 按 ID 读。两者都需要 scope{' '}
+          <code>checkpoint:read</code>。「没有 checkpoint」是空集,不是错误,也不是记录不存在。
+        </p>
+
+        {isPending ? (
+          <DependencyPending
+            what="Checkpoint"
+            method="GET"
+            path={checkpointId ? `/v1/checkpoints/${checkpointId}` : `/v1/tasks/${taskId ?? '{tsk}'}/checkpoints/latest`}
+            scope="checkpoint:read"
+          />
+        ) : null}
+
+        {!isPending && (detail.status === 'loading' || latestResource.status === 'loading') &&
+        detail.data === null && latestResource.data === null ? (
+          <Loading what="Checkpoint" />
+        ) : null}
+
+        {!isPending && detail.error ? (
+          <ErrorPanel error={detail.error} what={`Checkpoint ${checkpointId}`} onRetry={detail.reload} />
+        ) : null}
+        {!isPending && latestResource.error ? (
+          <ErrorPanel
+            error={latestResource.error}
+            what={`Task ${taskId} 的最新 Checkpoint`}
+            onRetry={latestResource.reload}
+          />
+        ) : null}
+
+        {!isPending && detail.data ? (
+          <CheckpointBody checkpoint={detail.data.checkpoint} onReadback={detail.reload} />
+        ) : null}
+
+        {!isPending && latestResource.data ? (
+          latestResource.data.checkpoint === null ? (
+            <Empty
+              what="Checkpoint"
+              hint="该 Task 目前没有 checkpoint;这是空集,不是错误,也不代表 Task 不存在。"
+            />
+          ) : (
+            <CheckpointBody checkpoint={latestResource.data.checkpoint} onReadback={latestResource.reload} />
+          )
+        ) : null}
+
+        {checkpointId === null && taskId === null ? (
+          <p className="muted">尚未给出 task_id 或 checkpoint_id。</p>
+        ) : null}
+
+        {detail.loadedAt ? <StaleBanner loadedAt={detail.loadedAt} scope="Checkpoint(按 ID)" /> : null}
+        {latestResource.loadedAt ? (
+          <StaleBanner loadedAt={latestResource.loadedAt} scope="Checkpoint(最新)" />
+        ) : null}
+      </Panel>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+
+function ContextPackBody({
+  pack,
+  onReadback,
+}: {
+  pack: ContextPack
+  onReadback: () => void
+}): JSX.Element {
+  return (
+    <>
+      <StatRow
+        label="这是实际渲染记录:"
+        value={`rendered_content 是当时真正渲染的内容(renderer ${pack.renderer_version}),token ${pack.token_count} / ${pack.rendered_utf8_bytes} 字节。`}
+      />
+      <KeyValue
+        rows={[
+          { label: 'context_pack_id', value: <code>{pack.context_pack_id}</code> },
+          { label: 'reason', value: <code>{pack.reason}</code> },
+          ...identityRows(pack),
+          { label: 'current_step_id', value: <code>{pack.current_step_id ?? '—'}</code> },
+          {
+            label: 'trigger_provenance',
+            value: <code>{String(pack.trigger_provenance?.level ?? '未知')}</code>,
+          },
+          {
+            label: 'digests',
+            value: (
+              <span className="stack">
+                <Digest label="truth_digest" value={pack.truth_digest} />
+                <Digest label="rendered_sha256" value={pack.rendered_sha256} />
+                <Digest label="config_digest" value={pack.config_digest} />
+                <Digest label="workspace_digest" value={pack.workspace_digest} />
+              </span>
+            ),
+          },
+        ]}
+      />
+      <RawText value={pack.rendered_content} label="rendered_content(实际渲染内容)" />
+      <JsonBlock value={pack.section_metrics} label="section_metrics(每段 token)" />
+      <JsonBlock value={pack.omissions} label="omissions(被省略的内容)" />
+      <JsonBlock value={pack.selected_optional_ids} label="selected_optional_ids" />
+      <JsonBlock value={pack.selector} label="selector" />
+      <JsonBlock value={pack.resume_comparison} label="resume_comparison" />
+      <JsonBlock value={pack.configuration} label="configuration" />
+      <JsonBlock value={pack.tokenizer} label="tokenizer" />
+      <p className="state state--meta">
+        <strong>memory 非权威:</strong>下面记录的是 P4 provider 当时返回的内容;它不是 Truth,
+        本页不运行任何 P4 实验,也不据此改变任何状态。
+      </p>
+      <JsonBlock value={pack.memory} label="memory(P4 提供,非权威)" />
+      <JsonBlock value={pack.projection} label="projection" />
+      <JsonBlock value={pack.workspace} label="workspace" />
+      <JsonBlock value={pack.sample_window} label="sample_window" />
+      <button type="button" onClick={onReadback}>
+        从 Core 重新读取
+      </button>
+    </>
+  )
+}
+
+export function ContextPackView({ contextPackId }: { contextPackId: string }): JSX.Element {
+  const { endpoints } = useSession()
+  const inputId = useId()
+  const [draft, setDraft] = useState(contextPackId)
+  const pack = useResource(
+    (signal: AbortSignal) => endpoints.getContextPack(contextPackId, signal),
+    [contextPackId],
+  )
+
+  return (
+    <div className="stack">
+      <nav className="breadcrumb" aria-label="位置">
+        <span>Context Pack(P3 只读)</span>
+      </nav>
+      <Panel title="按 ID 读取 Context Pack">
+        <div className="filters">
+          <label htmlFor={inputId}>
+            context_pack_id
+            <input
+              id={inputId}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="ctx_…"
+              autoComplete="off"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              const value = draft.trim()
+              if (value) globalThis.location.hash = sourceHref.contextPack(value)
+            }}
+          >
+            读取这个 pack
+          </button>
+        </div>
+        <p className="state state--meta">
+          <code>GET /v1/context/&#123;ctx&#125;</code> · scope <code>context:read</code>。上下文包是
+          <strong>构建时</strong>的产物;本页只读它,不会重新构建,也不会把 memory 当作 Truth。
+        </p>
+
+        {pending(pack.error) ? (
+          <DependencyPending
+            what="Context Pack"
+            method="GET"
+            path={`/v1/context/${contextPackId}`}
+            scope="context:read"
+          />
+        ) : null}
+        {!pending(pack.error) && pack.status === 'loading' && pack.data === null ? (
+          <Loading what="Context Pack" />
+        ) : null}
+        {pack.error && !pending(pack.error) ? (
+          <ErrorPanel error={pack.error} what={`Context Pack ${contextPackId}`} onRetry={pack.reload} />
+        ) : null}
+        {pack.data ? <ContextPackBody pack={pack.data.context} onReadback={pack.reload} /> : null}
+        {pack.loadedAt ? <StaleBanner loadedAt={pack.loadedAt} scope="Context Pack" /> : null}
+      </Panel>
+    </div>
+  )
+}
+
+/* -------------------------------------------------------------------------- */
+
+function ResumeBody({ resume, onReadback }: { resume: Resume; onReadback: () => void }): JSX.Element {
+  return (
+    <>
+      <StatRow
+        label="这是比较,不是恢复:"
+        value="comparison / next_actions 描述 checkpoint 与当前投影的差异;本页不会应用任何东西,Truth 未被改动。"
+      />
+      <KeyValue
+        rows={[
+          { label: 'resume_id', value: <code>{resume.resume_id}</code> },
+          ...identityRows(resume),
+          {
+            label: 'checkpoint',
+            value: resume.checkpoint_id ? (
+              <a href={sourceHref.checkpoints(null, resume.checkpoint_id)}>
+                <code>{resume.checkpoint_id}</code>
+              </a>
+            ) : (
+              '—(该 Task 当时没有 checkpoint)'
+            ),
+          },
+          {
+            label: 'digests',
+            value: <Digest label="truth_digest" value={resume.truth_digest} />,
+          },
+        ]}
+      />
+      {resume.note ? (
+        <div className="state state--meta" data-testid="resume-note">
+          <p className="state__headline">
+            note:historical,authority = false(Core 明确否认其权威性)
+          </p>
+          {resume.note.value ? <RawText value={resume.note.value.text} label="note.value" /> : null}
+        </div>
+      ) : (
+        <p className="muted">没有 note。</p>
+      )}
+      <JsonBlock value={resume.comparison} label="comparison(checkpoint 与当前投影的差异)" />
+      <JsonBlock value={resume.next_actions} label="next_actions" />
+      <JsonBlock value={resume.projection} label="projection" />
+      <JsonBlock value={resume.workspace} label="workspace" />
+      <JsonBlock value={resume.sample_window} label="sample_window" />
+      <button type="button" onClick={onReadback}>
+        从 Core 重新读取
+      </button>
+    </>
+  )
+}
+
+export function ResumeView({ resumeId }: { resumeId: string }): JSX.Element {
+  const { endpoints } = useSession()
+  const inputId = useId()
+  const [draft, setDraft] = useState(resumeId)
+  const resume = useResource(
+    (signal: AbortSignal) => endpoints.getResume(resumeId, signal),
+    [resumeId],
+  )
+
+  return (
+    <div className="stack">
+      <nav className="breadcrumb" aria-label="位置">
+        <span>Resume(P3 只读)</span>
+      </nav>
+      <Panel title="按 ID 读取 Resume">
+        <div className="filters">
+          <label htmlFor={inputId}>
+            resume_id
+            <input
+              id={inputId}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="rms_…"
+              autoComplete="off"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              const value = draft.trim()
+              if (value) globalThis.location.hash = sourceHref.resume(value)
+            }}
+          >
+            读取这个 resume
+          </button>
+        </div>
+        <p className="state state--meta">
+          <code>GET /v1/resumes/&#123;rms&#125;</code> · scope <code>resume:read</code> +
+          <code>checkpoint:read</code>。Resume 是<strong>精确的历史 receipts</strong>,不是恢复操作。
+        </p>
+
+        {pending(resume.error) ? (
+          <DependencyPending
+            what="Resume"
+            method="GET"
+            path={`/v1/resumes/${resumeId}`}
+            scope="resume:read + checkpoint:read"
+          />
+        ) : null}
+        {!pending(resume.error) && resume.status === 'loading' && resume.data === null ? (
+          <Loading what="Resume" />
+        ) : null}
+        {resume.error && !pending(resume.error) ? (
+          <ErrorPanel error={resume.error} what={`Resume ${resumeId}`} onRetry={resume.reload} />
+        ) : null}
+        {resume.data ? <ResumeBody resume={resume.data.resume} onReadback={resume.reload} /> : null}
+        {resume.loadedAt ? <StaleBanner loadedAt={resume.loadedAt} scope="Resume" /> : null}
+      </Panel>
+    </div>
+  )
+}

@@ -25,12 +25,22 @@ export interface ParsedArgs {
 export interface Allowlist {
   methods: Set<string>
   paths: RegExp[]
+  /** The live read list before the P3 opt-in is applied. */
+  baseline_paths: RegExp[]
+  /** Real P3 paths, forwarded only when the operator states the Core has P3. */
+  p3_pending_paths: RegExp[]
+  p3_reads_enabled: boolean
   write_methods?: string[]
   write_paths?: string[]
 }
 
+export const P3_READS_ENV: string
+export function p3ReadsEnabled(env?: Record<string, string | undefined>): boolean
 export function parseArgs(argv: string[]): ParsedArgs
-export function loadAllowlist(directory?: string): Allowlist
+export function loadAllowlist(
+  directory?: string,
+  options?: { enableP3Reads?: boolean },
+): Allowlist
 export function resolveCoreOrigin(raw?: string): URL
 export function isAllowed(allowlist: Allowlist, method: string | undefined, pathname: string): boolean
 export function classifyRequestTarget(rawUrl: string | undefined): ClassifiedTarget

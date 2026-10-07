@@ -1,16 +1,24 @@
 /**
  * The frozen P6-01 endpoint surface.
  *
- * Only paths that exist in the baseline Core build appear here. Anything P2/P3/
- * P4/P7 will add (interpretations, checkpoints, context packs, memory jobs,
- * validation runs) is *not* stubbed with a plausible-looking call: those views
- * render an explicit "未接入" panel instead, so a UI bug can never look like a
- * missing backend feature or vice versa.
+ * Only paths that exist in the baseline Core build appear in the baseline sections.
+ * Anything P4/P7 will add (memory jobs, validation runs) is *not* stubbed with a
+ * plausible-looking call: those views render an explicit "未接入" panel instead, so a
+ * UI bug can never look like a missing backend feature or vice versa.
+ *
+ * The P6-03a **P3 continuity reads** are the one exception, and a deliberate one: the
+ * four paths are real (derived from branch `p3-checkpoint-context-resume` and frozen in
+ * `web/contracts/p3-continuity-read.v1.json`), but they do not exist in this baseline's
+ * Core. They are therefore kept out of the proxy allowlist's live section, so a baseline
+ * run cannot forward them to a Core with no such route, and a P3-enabled proxy has to be
+ * started deliberately. Until then the views render `DEPENDENCY PENDING`.
  */
 
 import type { CoreClient, QueryValue } from './client'
 import type {
   Actor,
+  Checkpoint,
+  ContextPack,
   JsonObject,
   Interpretation,
   InterpretationPage,
@@ -26,6 +34,7 @@ import type {
   Resolution,
   ResolutionPreview,
   RawEvent,
+  Resume,
   Review,
   ReviewPage,
   Rule,
@@ -227,6 +236,25 @@ export function makeEndpoints(client: CoreClient) {
       client.post<WriteResult>(`/rules/${id(ruleId)}/supersede`, body, { signal }),
     retireRule: (ruleId: string, body: WriteBody, signal?: AbortSignal) =>
       client.post<WriteResult>(`/rules/${id(ruleId)}/retire`, body, { signal }),
+
+    // --- P6-03a: P3 continuity reads (DEPENDENCY PENDING) ---------------------
+    // Read-only slice: Checkpoint (latest + by id), Context Pack (by id), Resume (by
+    // id). The build/write shapes (`POST /v1/context/build`, `POST /v1/checkpoints`,
+    // `POST /v1/tasks/{id}/resume`) are deliberately absent — this slice reads.
+    //
+    // A response of `{checkpoint: null}` from `checkpoints/latest` is an *empty* result
+    // ("this Task has no checkpoint yet"), not an error, and the view says so.
+    getCheckpoint: (checkpointId: string, signal?: AbortSignal) =>
+      client.get<{ checkpoint: Checkpoint }>(`/checkpoints/${id(checkpointId)}`, { signal }),
+    latestCheckpoint: (taskId: string, sessionId: string | null, signal?: AbortSignal) =>
+      client.get<{ checkpoint: Checkpoint | null }>(`/tasks/${id(taskId)}/checkpoints/latest`, {
+        query: { session_id: sessionId },
+        signal,
+      }),
+    getContextPack: (contextPackId: string, signal?: AbortSignal) =>
+      client.get<{ context: ContextPack }>(`/context/${id(contextPackId)}`, { signal }),
+    getResume: (resumeId: string, signal?: AbortSignal) =>
+      client.get<{ resume: Resume }>(`/resumes/${id(resumeId)}`, { signal }),
 
     listHosts: (signal?: AbortSignal) => client.get<{ hosts: Host[] }>('/hosts', { signal }),
     listActors: (signal?: AbortSignal) => client.get<{ actors: Actor[] }>('/actors', { signal }),

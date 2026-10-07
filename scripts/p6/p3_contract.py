@@ -132,9 +132,16 @@ def derive(ref: str) -> dict[str, Any]:
             "query": (["session_id"] if pattern.endswith("/checkpoints/latest$") else []),
         })
 
-    # Checkpoint fields: the table's columns, with the `_json` ones parsed into the
-    # names the reader exposes (`projection`, `workspace`, `note`, `trigger_provenance`).
-    columns = re.findall(r"^\s{8}([a-z_]+) (?:TEXT|INTEGER)", continuity_migration, re.M)
+    # Checkpoint fields: the *checkpoints* table's columns, with the `_json` ones parsed
+    # into the names the reader exposes (`projection`, `workspace`, `note`,
+    # `trigger_provenance`). Scoped to that one CREATE TABLE on purpose: a loose regex over
+    # the migration also matches `checkpoint_request_keys` and `resume_results`, which
+    # silently added `idempotency_key`, `request_hash` and `resume_id` to the checkpoint
+    # shape — fields the GET does not return.
+    table = re.search(r'CREATE TABLE checkpoints \((.*?)\n\s*\)"""', continuity_migration, re.S)
+    if table is None:
+        raise SystemExit("could not find the checkpoints table in P3's m0009 migration")
+    columns = re.findall(r"^\s+([a-z_]+) (?:TEXT|INTEGER)", table.group(1), re.M)
     parsed = sorted({c[:-5] for c in columns if c.endswith("_json")} - {"result"})
     checkpoint_fields = sorted((set(columns) - {c for c in columns if c.endswith("_json")}) | set(parsed))
 

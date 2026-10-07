@@ -37,6 +37,11 @@ export type Route =
   | { name: 'reviews'; projectId: string | null; taskId: string | null }
   | { name: 'review'; reviewId: string }
   | { name: 'resolution'; resolutionId: string }
+  // P6-03a: P3 continuity reads. The routes exist so a deep link is stable; the views
+  // say DEPENDENCY PENDING until a P3-enabled proxy is running.
+  | { name: 'checkpoints'; taskId: string | null; checkpointId: string | null; sessionId: string | null }
+  | { name: 'context'; contextPackId: string }
+  | { name: 'resume'; resumeId: string }
   | { name: 'event'; eventId: string }
   | { name: 'pending'; key: string }
   | { name: 'unknown'; raw: string }
@@ -112,6 +117,22 @@ export function parseHash(hash: string): Route {
     const resolutionId = segment(parts[1])
     return resolutionId ? { name: 'resolution', resolutionId } : { name: 'unknown', raw }
   }
+  if (head === 'checkpoints') {
+    return {
+      name: 'checkpoints',
+      taskId: query.get('task_id'),
+      checkpointId: query.get('checkpoint_id'),
+      sessionId: query.get('session_id'),
+    }
+  }
+  if (head === 'context') {
+    const contextPackId = segment(parts[1])
+    return contextPackId ? { name: 'context', contextPackId } : { name: 'unknown', raw }
+  }
+  if (head === 'resume') {
+    const resumeId = segment(parts[1])
+    return resumeId ? { name: 'resume', resumeId } : { name: 'unknown', raw }
+  }
   if (head === 'evidence') {
     return { name: 'evidence', evidenceId: query.get('evidence_id'), taskId: query.get('task_id') }
   }
@@ -155,6 +176,16 @@ export function hrefFor(route: Route): string {
         task_id: route.taskId,
         rule_id: route.ruleId,
       })}`
+    case 'checkpoints':
+      return `#/checkpoints${queryString({
+        task_id: route.taskId,
+        checkpoint_id: route.checkpointId,
+        session_id: route.sessionId,
+      })}`
+    case 'context':
+      return `#/context/${encodeURIComponent(route.contextPackId)}`
+    case 'resume':
+      return `#/resume/${encodeURIComponent(route.resumeId)}`
     case 'evidence':
       return `#/evidence${queryString({ evidence_id: route.evidenceId, task_id: route.taskId })}`
     case 'interpretations':
@@ -204,6 +235,15 @@ export const sourceHref = {
   ): string => hrefFor({ name: 'interpretations', projectId, taskId, eventId, status }),
   interpretation: (interpretationId: string): string =>
     hrefFor({ name: 'interpretation', interpretationId }),
+  /** P3 continuity (P6-03a). `latest` is addressed by task, a specific one by id. */
+  checkpoints: (
+    taskId: string | null,
+    checkpointId: string | null = null,
+    sessionId: string | null = null,
+  ): string => hrefFor({ name: 'checkpoints', taskId, checkpointId, sessionId }),
+  contextPack: (contextPackId: string): string =>
+    hrefFor({ name: 'context', contextPackId }),
+  resume: (resumeId: string): string => hrefFor({ name: 'resume', resumeId }),
   review: (reviewId: string): string => hrefFor({ name: 'review', reviewId }),
   reviews: (projectId: string | null, taskId: string | null = null): string =>
     hrefFor({ name: 'reviews', projectId, taskId }),

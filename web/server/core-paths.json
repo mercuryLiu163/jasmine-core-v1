@@ -40,5 +40,12 @@
     "^/v1/rules/proposals$",
     "^/v1/rules/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(approve|supersede|retire)$"
   ],
-  "write_note": "Milestone B writes, frozen per method+path. `manual-reapply`, `resolve/{int}` and `evidence/confirm` are deliberately absent: the first two need an explicit operator decision outside this slice, and a web button cannot produce ADR 0007 human-prompt provenance. Core still enforces scope, actor kind, idempotency and revision per request."
+  "write_note": "Milestone B writes, frozen per method+path. `manual-reapply`, `resolve/{int}` and `evidence/confirm` are deliberately absent: the first two need an explicit operator decision outside this slice, and a web button cannot produce ADR 0007 human-prompt provenance. Core still enforces scope, actor kind, idempotency and revision per request.",
+  "p3_pending_paths": [
+    "^/v1/context/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/checkpoints/latest$",
+    "^/v1/checkpoints/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/resumes/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
+  ],
+  "p3_pending_note": "P6-03a continuity reads. These four paths are real on branch p3-checkpoint-context-resume (schema 10) and are NOT served by this baseline's Core (850fbec, schema 8), so they are deliberately absent from `paths`: forwarding them would send the browser to a Core that cannot answer. They become live only when the operator starts a proxy for a P3 Core with P6_ENABLE_P3_READS=1, and even then Core enforces context:read / checkpoint:read / resume:read itself. `/v1/context/build`, `POST /v1/checkpoints` and `POST /v1/tasks/{id}/resume` are build operations and are not part of this read slice. The contract is derived from the P3 branch by scripts/p6/p3_contract.py and frozen in web/contracts/p3-continuity-read.v1.json."
 }

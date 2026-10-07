@@ -23,7 +23,16 @@ import allowlist from './core-paths.json' with { type: 'json' }
 
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '::1', 'localhost'])
 const ALLOWED_METHODS = new Set(allowlist.methods.map((method) => method.toUpperCase()))
-const ALLOWED_PATHS = allowlist.paths.map((pattern) => new RegExp(pattern))
+
+/** Must match `serve.mjs`: the P3 reads are opt-in for a P3 Core, never implicit. */
+const p3ReadsEnabled = ((): boolean => {
+  const raw = (process.env.P6_ENABLE_P3_READS ?? '').trim().toLowerCase()
+  return raw === '1' || raw === 'true' || raw === 'yes'
+})()
+const ALLOWED_PATHS = [
+  ...allowlist.paths,
+  ...(p3ReadsEnabled ? (allowlist as { p3_pending_paths?: string[] }).p3_pending_paths ?? [] : []),
+].map((pattern) => new RegExp(pattern))
 const WRITE_METHODS = new Set(
   (allowlist.write_methods ?? []).map((method) => method.toUpperCase()),
 )
