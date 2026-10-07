@@ -4,10 +4,17 @@ A browser UI for inspecting the Jasmine Core V1 Truth store. It is a **window on
 Core**, never a source of truth: it reads only the frozen `GET` endpoints of
 `docs/api/core-api-v1.md` and issues only the audited writes of P6-02 milestone B, and it never decides whether a Step is verified.
 
-This is the **P6-02** delivery: the P6-01 shell plus the P2 Interpretation/Resolver
-reads and the P6-02 milestone-B audited writes. Context/Checkpoint (P3), Memory (P4)
-and Validation (P7-01) are **not** wired — those screens say `未接入` and name the
-owning phase instead of showing sample data.
+This is the **P6-02** delivery plus the **P6-03a** read-only continuity views: the P6-01
+shell, the P2 Interpretation/Resolver reads, the P6-02 milestone-B audited writes, and
+read-only Checkpoint / Context Pack / Resume screens built against the P3 contract.
+Memory (P4) and Validation (P7-01) are **not** wired — those screens say `未接入` and name
+the owning phase instead of showing sample data.
+
+**P3 is not merged.** The P6-03a views are therefore built against a contract derived from
+the unmerged branch `p3-checkpoint-context-resume` (`7016dab`), and the dashboard marks the
+missing dependency prominently instead of hiding it. See
+[`P6-03A-COMPLIANCE.md`](P6-03A-COMPLIANCE.md); the status there is
+**PARTIAL / DEPENDENCY_PENDING**, not "P3 verified".
 
 ## What is implemented
 
@@ -27,6 +34,9 @@ owning phase instead of showing sample data.
 | Pending reviews (P6-02 A) | 待审批 Review, Review deep link | `/v1/reviews/pending`, `/v1/reviews/{id}` |
 | Resolution plan/record (P6-02 A) | Interpretation → Resolution 预览, Resolution deep link | `/v1/resolutions/preview?interpretation_id=`, `/v1/resolutions/{id}` |
 | Audited human writes (P6-02 B) | Interpretation → Correct/Reject/Re-run; Review → Approve/Reject; Rules → Propose/Approve/Supersede/Retire | `POST` on the four frozen POST shapes in `server/core-paths.json` `write_paths` (nine endpoints) |
+| Checkpoints (P6-03a, **P3 not merged**) | Task → Checkpoints, Checkpoint deep link | `GET /v1/checkpoints/{id}`, `GET /v1/tasks/{id}/checkpoints/latest` — served only by a P3 Core; the baseline Core has no such route, so the views mark the dependency pending |
+| Context Pack (P6-03a, **P3 not merged**) | Context Pack deep link | `GET /v1/context/{id}` — as above; P4-provided memory inside the pack is shown as non-authoritative |
+| Resume (P6-03a, **P3 not merged**) | Resume deep link | `GET /v1/resumes/{id}` — a comparison, not a restore; only `GET` on a P3 Core |
 
 The board's columns are **Step** statuses (`PLANNED`, `IN_PROGRESS`, `EXECUTED`,
 `VERIFIED`, `ACCEPTED`, `FAILED`, `BLOCKED`, `STALE`, `SKIPPED`). The **Task**
@@ -58,6 +68,11 @@ its own loud column; nothing is folded into "other".
   The allowlist is read **once at start-up** (`createDashboardServer` ->
   `loadAllowlist()`), so editing `server/core-paths.json` requires restarting the
   host: a long-running process keeps the allowlist it booted with.
+  `server/core-paths.json` also carries the four P6-03a continuity reads under
+  `p3_pending_paths`, **not** in `paths`. They are real on the unmerged P3 branch and
+  unknown to this baseline's Core, so forwarding them by default would send the browser to
+  a Core that cannot answer. They join the live allowlist only when
+  `P6_ENABLE_P3_READS=1`, and a contract test asserts they are never in `paths`.
 * **Untrusted text is data.** Event and Evidence content is rendered as React
   text nodes; `web/src` contains no `dangerouslySetInnerHTML` and no `innerHTML`
   assignment (the occurrences in `dist/assets/*.js` are React DOM internals).
@@ -167,8 +182,8 @@ the `reason`/`idempotency_key` fields the interpretation/review writes require.
 | Screen | Owner | Waiting on |
 | --- | --- | --- |
 | Manual reapply (`/v1/resolutions/{id}/manual-reapply`) | P6-02 later | Needs its own frozen payload/permission table and an explicit operator decision; a web button cannot produce the ADR 0007 human-prompt provenance this one records |
-| Checkpoint compare | P3 | checkpoint read API |
-| Context inspector (actual injection) | P3 | persisted pack + injection receipt |
+| Checkpoint compare | P3 | **Read-only delivered in P6-03a** against the P3 contract; the compare write and any restoration remain P3's |
+| Context inspector (actual injection) | P3 | **Read-only pack delivered in P6-03a**; the persisted injection receipt remains P3's |
 | Memory jobs / recall / management | P4 | Memory adapter read + management API |
 | Validation inspector (run list, artifacts) | P7-01 | minimal validation read API + safe artifact contract |
 | online / backup / storage | P5 / P7 | health read contracts |
@@ -192,6 +207,14 @@ reapply and the Task/Step/Evidence writes are not delivered, and no Gate has run
 against the operator's own Core. `P6` as a stage is not complete. Details, evidence
 and the side-effect finding: `P6-02-COMPLIANCE.md`.
 
+`P6-03a (Checkpoint / Context Pack / Resume reads): PARTIAL / DEPENDENCY_PENDING`.
+The four read-only views are implemented and exercised in a real browser — a 12/12
+click-through Gate, three times with identical step sequences — but **P3 is not merged**,
+so the Core behind that Gate was a labelled simulated fixture, not P3 code. Nothing here
+verifies P3, and `P6-03a` is not complete. The contract is derived from the P3 branch and
+frozen; `P6_ENABLE_P3_READS` defaults off, and with it off the proxy refuses the four paths
+by name, leaving baseline behaviour unchanged. Details: `P6-03A-COMPLIANCE.md`.
+
 ## Phase status
 
 `P6-01: T01 PASS, T02 PASS, T07 PASS` on an isolated scratch fixture — the
@@ -202,7 +225,8 @@ pre/post-rebase hash mapping, the post-rebase re-verification on a v8 Core and
 the two caveats the validator recorded). It is **not** `P6` done: P6-02's
 audited human writes are implemented but not yet independently reviewed, P6-02's
 manual reapply and the Task/Step/Evidence writes are not delivered, and
-P6-03a/b/c (P3/P4/P7-01 inspectors) are not delivered,
+P6-03a is delivered only as PARTIAL/DEPENDENCY_PENDING (P3 is not merged, so its views were
+exercised against a simulated fixture) while P6-03b/c (P4/P7-01 inspectors) are not delivered,
 no Gate ran against the operator's own Core or a real captured conversation, and
 throttling plus an automated contrast sweep remain uncovered. See the run
 directories under `validation-runs/p6/` for raw evidence.

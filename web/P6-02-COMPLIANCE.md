@@ -6,6 +6,12 @@ Both are described below, and each says what is *not* delivered. Nothing here
 claims P6, or even P6-02, is finished: manual reapply and the Task/Step/Evidence
 writes are still open.
 
+**P6-03a** (read-only Checkpoint / Context Pack / Resume views) is a separate
+deliverable against the unmerged P3 branch, so it has its own document:
+`P6-03A-COMPLIANCE.md`. Its status is **PARTIAL / DEPENDENCY_PENDING** — P3 is not
+merged, and its Gate ran against a labelled simulated fixture. It does not change
+anything recorded here.
+
 Baseline: `850fbec` (P2-01/02/03 merged, schema v8). The P6-01 product baseline
 `12fd0ba` is untouched and its bound bundle is reproducible: building that commit in
 a clean worktree (with the three `web/src/lib` modules it shipped, which were
