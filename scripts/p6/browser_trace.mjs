@@ -636,8 +636,19 @@ async function main() {
             hasPreviewPanel: sections.some((label) => label.includes('Resolution 预览')),
             sourceEventLink: Boolean(document.querySelector('a[data-kind="event"]')),
             sideEffectNote: text.includes('maintenance.get'),
-            noWriteButtons: !['Correct', 'Approve', 'Reject', 'Re-run'].some((label) =>
-              [...document.querySelectorAll('button')].some((b) => (b.textContent ?? '').includes(label))),
+            // Milestone B delivers the interpretation write panels; what must still
+            // be absent is any control that could fabricate human Evidence provenance.
+            writePanels: ['Correct', 'Reject', 'Re-run'].filter((label) =>
+              [...document.querySelectorAll('section')].some((n) =>
+                (n.getAttribute('aria-label') ?? '').startsWith(label))),
+            noEvidenceConfirm: ![...document.querySelectorAll('button')].some((b) =>
+              /确认|confirm/i.test(b.textContent ?? '')),
+            reasonRequired: [...document.querySelectorAll('section.write-panel')].every((panel) => {
+              const reason = panel.querySelector('input[type=text], input:not([type])')
+              const submit = [...panel.querySelectorAll('button')]
+                .find((b) => /提交/.test(b.textContent ?? ''))
+              return Boolean(reason) && Boolean(submit) && submit.disabled === true
+            }),
           }
         })()`)
         trace.record('interpretation detail shows the record, its candidates and lineage',
@@ -655,8 +666,11 @@ async function main() {
         trace.record('a stale interpretation renders the preview conflict (not an empty plan)',
           previewPanel.conflict === true && previewPanel.emptyPlan === false && previewPanel.code !== '',
           JSON.stringify(previewPanel))
-        trace.record('interpretation detail offers no write action',
-          detailState.noWriteButtons === true)
+        trace.record('interpretation detail offers the three shipped write panels',
+          detailState.writePanels.length === 3, JSON.stringify(detailState.writePanels))
+        trace.record('write panels cannot submit without a reason (and never confirm Evidence)',
+          detailState.reasonRequired === true && detailState.noEvidenceConfirm === true,
+          `reasonRequired=${detailState.reasonRequired} noEvidenceConfirm=${detailState.noEvidenceConfirm}`)
         await trace.screenshot(cdp, '11-interpretation')
       }
 

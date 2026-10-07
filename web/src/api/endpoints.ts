@@ -11,6 +11,7 @@
 import type { CoreClient, QueryValue } from './client'
 import type {
   Actor,
+  JsonObject,
   Interpretation,
   InterpretationPage,
   EventList,
@@ -36,6 +37,25 @@ import type {
   Task,
   TaskPage,
 } from './types'
+
+/**
+ * Every P6-02B command body. Deliberately loose at the type level: Core validates
+ * the exact field set, and inventing per-endpoint shapes here is how guessed
+ * fields creep in. The panels build these objects from values Core returned.
+ */
+export type WriteBody = Record<string, unknown>
+
+/** Core's write responses carry the command Event plus the replayed flag. */
+export interface WriteResult {
+  result?: JsonObject
+  event?: RawEvent
+  rule?: JsonObject
+  interpretation?: JsonObject
+  resolution?: JsonObject
+  review?: JsonObject
+  replayed?: boolean
+  [key: string]: unknown
+}
 
 export const DEFAULT_OBJECT_LIMIT = 50
 export const DEFAULT_EVENT_LIMIT = 100
@@ -184,6 +204,29 @@ export function makeEndpoints(client: CoreClient) {
       }),
     getResolution: (resolutionId: string, signal?: AbortSignal) =>
       client.get<{ resolution: Resolution }>(`/resolutions/${id(resolutionId)}`, { signal }),
+
+    // --- P6-02 milestone B: audited human writes -----------------------
+    // Each call sends the caller's real key; Core enforces scope, actor kind,
+    // idempotency (`idempotency_key`), revision and provenance. The UI never
+    // retries with a fresh key and never computes a disposition itself.
+    correctInterpretation: (interpretationId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/interpretations/${id(interpretationId)}/correct`, body, { signal }),
+    rejectInterpretation: (interpretationId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/interpretations/${id(interpretationId)}/reject`, body, { signal }),
+    rerunInterpretation: (interpretationId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/interpretations/${id(interpretationId)}/rerun`, body, { signal }),
+    approveReview: (reviewId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/reviews/${id(reviewId)}/approve`, body, { signal }),
+    rejectReview: (reviewId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/reviews/${id(reviewId)}/reject`, body, { signal }),
+    proposeRule: (body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>('/rules/proposals', body, { signal }),
+    approveRule: (ruleId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/rules/${id(ruleId)}/approve`, body, { signal }),
+    supersedeRule: (ruleId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/rules/${id(ruleId)}/supersede`, body, { signal }),
+    retireRule: (ruleId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/rules/${id(ruleId)}/retire`, body, { signal }),
 
     listHosts: (signal?: AbortSignal) => client.get<{ hosts: Host[] }>('/hosts', { signal }),
     listActors: (signal?: AbortSignal) => client.get<{ actors: Actor[] }>('/actors', { signal }),

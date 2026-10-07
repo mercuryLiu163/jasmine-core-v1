@@ -719,3 +719,30 @@ label {
   display: flex;
   gap: 12px;
 }
+
+/* P6-02 milestone B: audited write panels. */
+.write-panel {
+  border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
+}
+
+.write-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.write-field textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.write-field .state {
+  padding: 4px 6px;
+}

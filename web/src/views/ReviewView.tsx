@@ -12,10 +12,14 @@
  */
 
 import type { Resolution, Review } from '../api/types'
+import { useEffect, useState } from 'react'
+
 import { sourceHref } from '../app/router'
 import { useSession } from '../app/session'
 import { useResource } from '../app/useResource'
 import { JsonBlock } from '../components/JsonBlock'
+import { WritePanel, parseJsonField } from '../components/WritePanel'
+import { useWriteAction } from '../app/useWriteAction'
 import { StatusBadge } from '../components/StatusBadge'
 import { Empty, ErrorPanel, Loading, Panel, StaleBanner, Unavailable } from '../components/States'
 import { KeyValue, SourceLink } from '../components/Trace'
@@ -54,12 +58,15 @@ export function ReviewView({ reviewId }: { reviewId: string }): JSX.Element {
         </p>
       </Panel>
 
-      <Panel title="本切片未交付">
+      {item ? <ReviewWrites item={item} onReadback={review.reload} /> : null}
+
+      <Panel title="未交付">
         <Unavailable
-          feature="Approve / Reject"
-          owner="P6-02 里程碑 B"
-          pending="reviews:manage 与真实 human actor 校验、expected_revision 与审计读回"
+          feature="网页原生 human 来源 / Evidence confirmation"
+          owner="Core 接口负责人(需新 ADR)"
+          pending="ADR 0007 要求的真实同任务 human prompt;网页按钮无法产生"
           tone="forbidden"
+          note="审批动作本身已接 Core,但确认 Evidence 的来源链不由浏览器伪造。"
         />
       </Panel>
     </div>
@@ -168,6 +175,117 @@ function ReviewBody({ item }: { item: Review }): JSX.Element {
         </ul>
       )}
       <JsonBlock value={item.resolution} label="resolution(完整记录)" />
+    </>
+  )
+}
+
+/**
+ * Approve / Reject. Approve needs the *server's* preview (`expected_revisions`,
+ * `expected_context_digest`) and one action per candidate; when Core cannot
+ * produce a preview the panel refuses to open approve rather than inventing a
+ * plan. The draft survives a `revision_conflict`.
+ */
+function ReviewWrites({ item, onReadback }: { item: Review; onReadback: () => void }): JSX.Element {
+  const { endpoints } = useSession()
+  const approve = useWriteAction((body, signal) => endpoints.approveReview(item.review_id, body, signal))
+  const reject = useWriteAction((body, signal) => endpoints.rejectReview(item.review_id, body, signal))
+
+  const suggested = (item.preview?.plan.items ?? []).map((planItem) => ({
+    candidate_index: planItem.candidate_index,
+    action: planItem.action,
+    payload: {},
+  }))
+  const [draft, setDraft] = useState(() => JSON.stringify(suggested, null, 2))
+  useEffect(() => {
+    setDraft(JSON.stringify(suggested, null, 2))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.review_id, item.revision])
+  const parsed = parseJsonField(draft, 'actions')
+
+  const candidateCount = item.preview?.plan.items.length ?? 0
+  const actionsValid =
+    parsed.error === undefined &&
+    Array.isArray(parsed.value) &&
+    parsed.value.length === candidateCount &&
+    parsed.value.every(
+      (entry) =>
+        typeof entry === 'object' &&
+        entry !== null &&
+        typeof (entry as { candidate_index?: unknown }).candidate_index === 'number' &&
+        typeof (entry as { action?: unknown }).action === 'string' &&
+        typeof (entry as { payload?: unknown }).payload === 'object',
+    )
+  const actionsError = parsed.error ?? (actionsValid ? undefined : 'actions 必须为每个候选各一条 {candidate_index, action, payload}')
+
+  const basis = `review ${item.review_id} · status ${item.status} · revision ${item.revision}`
+
+  return (
+    <>
+      {item.preview ? (
+        <WritePanel
+          title="Approve(按服务器计划批准)"
+          basis={basis}
+          action={approve}
+          submitLabel="提交批准"
+          ready={item.status === 'PENDING' && actionsValid}
+          onSucceeded={onReadback}
+          fields={
+            <>
+              <p className="muted">
+                计划来自 Core 的 preview(policy {item.preview.policy_version}),不是前端推断;
+                <code>expected_revisions</code> 与 <code>expected_context_digest</code> 原样回传。
+              </p>
+              <JsonBlock value={item.preview.expected_revisions} label="expected_revisions(原样回传)" />
+              <label className="write-field">
+                actions(每个候选一条,可改为 NO_ACTION 等 Core 允许的动作)
+                <textarea
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  rows={8}
+                  spellCheck={false}
+                />
+                {actionsError ? <span className="state state--error">{actionsError}</span> : null}
+                <span className="muted">
+                  批准的实际 write 由 Core 执行;若来源已被其它决议应用,Core 会返回
+                  <code> SOURCE_REPLAYED</code> 而不是重复写。
+                </span>
+              </label>
+            </>
+          }
+          build={({ reason, hostId }) =>
+            actionsValid
+              ? {
+                  reason,
+                  host_id: hostId,
+                  expected_revision: item.revision,
+                  expected_revisions: item.preview?.expected_revisions ?? {},
+                  expected_context_digest: item.preview?.expected_context_digest ?? '',
+                  actions: parsed.value,
+                }
+              : 'actions 不合法'
+          }
+        />
+      ) : (
+        <div className="state state--pending" data-testid="approve-unavailable">
+          <p className="state__headline">Approve 不可用:Core 当前给不出可审批的计划</p>
+          <p>
+            该 Review 仍是 PENDING,但 preview 失败(见上),因此没有
+            <code> expected_revisions</code> 与 <code>expected_context_digest</code> 可以回传。
+            本页不会自行拼一个计划;请先处理上面的冲突,或只使用 Reject。
+          </p>
+        </div>
+      )}
+
+      <WritePanel
+        title="Reject(拒绝该计划)"
+        basis={basis}
+        action={reject}
+        submitLabel="提交拒绝"
+        ready={item.status === 'PENDING'}
+        onSucceeded={onReadback}
+        fields={<p className="muted">拒绝不会改动 Truth,也不会删除原解释与来源 Event。</p>}
+        build={({ reason, hostId }) => ({ reason, host_id: hostId, expected_revision: item.revision })}
+      />
     </>
   )
 }

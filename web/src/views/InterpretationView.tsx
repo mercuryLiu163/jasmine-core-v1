@@ -17,13 +17,15 @@
  * hiding it or presenting an empty plan.
  */
 
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import type { Interpretation, PlanItem, ResolutionPreview } from '../api/types'
 import { sourceHref } from '../app/router'
 import { useSession } from '../app/session'
 import { useResource } from '../app/useResource'
 import { JsonBlock } from '../components/JsonBlock'
+import { WritePanel, parseJsonField } from '../components/WritePanel'
+import { useWriteAction } from '../app/useWriteAction'
 import { RawText } from '../components/RawText'
 import { StatusBadge } from '../components/StatusBadge'
 import { Empty, ErrorPanel, Loading, Panel, StaleBanner, Unavailable } from '../components/States'
@@ -98,13 +100,17 @@ export function InterpretationView({ interpretationId }: { interpretationId: str
         </p>
       </Panel>
 
+      {item ? (
+        <InterpretationWrites item={item} onReadback={detail.reload} />
+      ) : null}
+
       <Panel title="本切片未交付">
         <Unavailable
-          feature="Correct / Reject / Re-run 与人工 apply"
-          owner="P6-02 里程碑 B"
-          pending="correct/reject/rerun、review approve/reject 的写入契约与权限审计 Gate"
+          feature="人工 Evidence confirmation 与网页原生 human 来源"
+          owner="Core 接口负责人(需新 ADR)"
+          pending="ADR 0007 要求真实同任务 human prompt;网页点击无法产生该来源"
           tone="forbidden"
-          note="本页不提供任何写按钮,也不会用网页点击冒充 human 来源或冒充自动 apply。"
+          note="本页不提供确认按钮,也不会用网页点击冒充 human Evidence 来源。"
         />
       </Panel>
     </div>
@@ -396,6 +402,129 @@ function PreviewRefusal({
       <button type="button" onClick={onRetry}>用同一个 interpretation_id 重试</button>
     </div>
   )
+}
+
+/**
+ * The three interpretation writes. Each sends the revision Core reported, the
+ * operator's own host, a reason and one idempotency key per intent; the panel
+ * mirrors Core's own "this interpretation must be current" rule in the UI text,
+ * but Core remains the judge and its refusal is what the operator sees.
+ */
+function InterpretationWrites({
+  item,
+  onReadback,
+}: {
+  item: Interpretation
+  onReadback: () => void
+}): JSX.Element {
+  const { endpoints } = useSession()
+  const head = item.maintenance_head ?? null
+  const isCurrent = head === null || head.current_interpretation_id === item.interpretation_id
+  const revision = head?.revision ?? 1
+
+  const [draft, setDraft] = useState(() => prettyJson(item.raw_result_json))
+  useEffect(() => {
+    setDraft(prettyJson(item.raw_result_json))
+  }, [item.interpretation_id, item.raw_result_json])
+
+  const parsed = parseJsonField(draft, 'corrected result')
+  const correct = useWriteAction((body, signal) =>
+    endpoints.correctInterpretation(item.interpretation_id, body, signal),
+  )
+  const reject = useWriteAction((body, signal) =>
+    endpoints.rejectInterpretation(item.interpretation_id, body, signal),
+  )
+  const rerun = useWriteAction((body, signal) =>
+    endpoints.rerunInterpretation(item.interpretation_id, body, signal),
+  )
+
+  const basis = `interpretation ${item.interpretation_id} · head revision ${revision} · current ${
+    head?.current_interpretation_id ?? '—'
+  }`
+
+  return (
+    <>
+      {!isCurrent ? (
+        <p className="state state--meta">
+          该解释<strong>不是当前 head</strong>(当前为{' '}
+          <a href={sourceHref.interpretation(head?.current_interpretation_id ?? '')}>
+            <code>{head?.current_interpretation_id}</code>
+          </a>
+          )。Core 的 <code>interpretation_not_current</code> 会拒绝改动;请在当前解释上操作,
+          或先确认这条历史记录。
+        </p>
+      ) : null}
+
+      <WritePanel
+        title="Correct(提出新的解释内容)"
+        basis={basis}
+        action={correct}
+        submitLabel="提交修正"
+        ready={isCurrent && parsed.error === undefined}
+        onSucceeded={onReadback}
+        fields={
+          <label className="write-field">
+            corrected result(JSON,按当前解释的 schema)
+            <textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              rows={10}
+              spellCheck={false}
+            />
+            {parsed.error ? <span className="state state--error">{parsed.error}</span> : null}
+            <span className="muted">
+              提交后 Core 会生成新的子解释(child),当前 head 前移;它<strong>不会</strong>自动改 Truth。
+            </span>
+          </label>
+        }
+        build={({ reason, hostId }) =>
+          parsed.value === undefined
+            ? 'corrected result 不是合法 JSON'
+            : { result: parsed.value, reason, host_id: hostId, expected_revision: revision }
+        }
+      />
+
+      <WritePanel
+        title="Reject(判定该解释不可用)"
+        basis={basis}
+        action={reject}
+        submitLabel="提交拒绝"
+        ready={isCurrent}
+        onSucceeded={onReadback}
+        fields={
+          <p className="muted">
+            拒绝保留原解释与来源 Event,不删除任何 Raw Event;它不会改动 Truth。
+          </p>
+        }
+        build={({ reason, hostId }) => ({ reason, host_id: hostId, expected_revision: revision })}
+      />
+
+      <WritePanel
+        title="Re-run(用当前配置重新解释同一来源)"
+        basis={basis}
+        action={rerun}
+        submitLabel="提交重跑"
+        ready={isCurrent}
+        onSucceeded={onReadback}
+        fields={
+          <p className="muted">
+            重跑会真正调用 provider(需要 <code>interpretations:process</code>),生成新的子解释;
+            default 不自动 apply,是否采纳由 Resolver/人工审核决定。
+          </p>
+        }
+        build={({ reason, hostId }) => ({ reason, host_id: hostId, expected_revision: revision })}
+      />
+    </>
+  )
+}
+
+function prettyJson(text: string | null): string {
+  if (!text) return ''
+  try {
+    return JSON.stringify(JSON.parse(text), null, 2)
+  } catch {
+    return text
+  }
 }
 
 function safeJson(text: string): unknown {
