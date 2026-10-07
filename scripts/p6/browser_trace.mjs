@@ -60,6 +60,8 @@ function parseArgs(argv) {
       case '--proposed-rule': args.proposedRule = next; index += 1; break
       case '--reject-review': args.rejectReview = next; index += 1; break
       case '--retire-rule': args.retireRule = next; index += 1; break
+      case '--submit-writes': args.submitWrites = true; break
+      case '--descriptor': args.descriptor = next; index += 1; break
       case '--evidence': args.evidence = next; index += 1; break
       case '--interpretation': args.interpretation = next; index += 1; break
       case '--pending-interpretation': args.pendingInterpretation = next; index += 1; break
@@ -203,7 +205,23 @@ async function waitFor(cdp, expression, { timeoutMs = 12000, label = expression 
     }
     await new Promise((r) => setTimeout(r, 120))
   }
-  throw new Error(`timed out waiting for: ${label}`)
+  // Include what the page actually showed: a bare timeout says nothing about whether
+  // the app refused, rendered an error, or was still on the sign-in form.
+  let seen = '(could not read the page)'
+  try {
+    seen = await evaluate(cdp, `(() => {
+      const text = (document.body.textContent ?? '').split(String.fromCharCode(10)).join(' ')
+      return JSON.stringify({
+        hash: location.hash,
+        signIn: document.querySelector('input[type=password]') !== null,
+        alerts: [...document.querySelectorAll('[role=alert]')].map((n) => (n.textContent ?? '').slice(0, 120)),
+        text: text.slice(0, 400),
+      })
+    })()`)
+  } catch {
+    seen = '(page unreachable)'
+  }
+  throw new Error(`timed out waiting for: ${label}\n  page: ${seen}`)
 }
 
 /** Click the first element matching a visible-text predicate, like a user would. */
@@ -245,6 +263,28 @@ async function pressEnter(cdp) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2))
+  // Reading the ids straight from the fixture descriptor removes a whole class of
+  // failure: a re-seeded fixture leaves a stale arguments file behind, and every id
+  // then names an object Core does not have. This is how that was found.
+  if (args.descriptor) {
+    const { readFile } = await import('node:fs/promises')
+    const spec = JSON.parse(await readFile(args.descriptor, 'utf8'))
+    const p2 = spec.p2 ?? {}
+    const seeded = spec.seeded ?? {}
+    args.project = args.project ?? seeded.projects?.[0]
+    args.task = args.task ?? seeded.tasks?.[0]
+    args.rule = args.rule ?? seeded.rules?.active
+    args.proposedRule = args.proposedRule ?? seeded.rules?.proposed
+    args.retireRule = args.retireRule ?? p2.retire_rule_id
+    args.rejectReview = args.rejectReview ?? p2.reject_review_id
+    args.review = args.review ?? p2.pending_review_id
+    args.resolution = args.resolution ?? p2.pending_resolution_id
+    args.interpretation = args.interpretation ?? p2.applied_interpretation_id
+    args.pendingInterpretation = args.pendingInterpretation ?? p2.pending_interpretation_id
+    args.p2Project = args.p2Project ?? p2.project_id
+    args.completionInterpretation = args.completionInterpretation ?? p2.rerun_child_interpretation_id
+    args.completionActions = args.completionActions ?? 'CORRECT,RERUN,RERUN_COMPLETE'
+  }
   const out = resolve(args.out)
   await mkdir(join(out, 'screenshots'), { recursive: true })
 
@@ -987,6 +1027,292 @@ async function main() {
           resolution.hasId && resolution.hasDisposition && resolution.hasReasons &&
             resolution.linksInterpretation, JSON.stringify(resolution))
         await trace.screenshot(cdp, '15-resolution')
+      }
+    }
+
+    // 8c. REAL CLICKS over the write panels (opt-in).
+    //
+    // The read-only walkthrough above renders the panels and never submits, because a
+    // screenshot run must not mutate Truth. That left a gap an independent re-review
+    // named: nothing proved a *click* produces the bodies the HTTP Gate sends. This
+    // mode closes it by driving the panels for real and verifying each write by
+    // re-reading the object, so it must only ever be pointed at a disposable fixture.
+    if (args.submitWrites) {
+      // Self-sufficient: sign in again if the read-only walkthrough left the app on
+      // the sign-in form (the refresh step deliberately clears the in-memory token).
+      // A write section that depends on the earlier walkthrough's session would fail
+      // for a reason that has nothing to do with the write path.
+      const needsSignIn = await evaluate(cdp,
+        `document.querySelector('input[type=password]') !== null`)
+      if (needsSignIn) {
+        await evaluate(cdp, `(() => {
+          const el = document.querySelector('input[type=password]')
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(el, '')
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+          return true
+        })()`)
+        await typeInto(cdp, 'input[type=password]', token)
+        await clickByText(cdp, 'button', '使用此 token')
+        await waitFor(cdp, `document.body.textContent.includes('Core 健康与 Schema')`,
+          { label: 're-sign-in for the write walkthrough' })
+        trace.record('the write walkthrough re-authenticates instead of inheriting a session',
+          true, 'sign-in form was present; token re-entered')
+      }
+
+      const setValue = `(el, value) => {
+        const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
+          : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value').set
+        setter.call(el, value)
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        el.dispatchEvent(new Event('change', { bubbles: true }))
+      }`
+      const panelButton = (prefix, action) => `(() => {
+        const panel = [...document.querySelectorAll('section[data-write-panel]')]
+          .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith(${JSON.stringify(prefix)}))
+        if (!panel) return { ok: false, why: 'no panel' }
+        const button = panel.querySelector('[data-testid="write-submit"]')
+        if (!button) return { ok: false, why: 'no button' }
+        if (button.disabled) return { ok: false, why: 'disabled' }
+        ${action}
+        return { ok: true }
+      })()`
+
+      const setField = async (selector, value) => evaluate(cdp, `(() => {
+        const el = document.querySelector(${JSON.stringify(selector)})
+        if (!el) return { ok: false, why: 'field not found' }
+        const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype
+          : el instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype
+        const setter = Object.getOwnPropertyDescriptor(proto, 'value').set
+        setter.call(el, ${JSON.stringify(value)})
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        el.dispatchEvent(new Event('change', { bubbles: true }))
+        return { ok: true }
+      })()`)
+
+      const waitForSubmitted = async (prefix) => {
+        try {
+        await waitFor(cdp,
+          `(() => {
+             const panel = [...document.querySelectorAll('section[data-write-panel]')]
+               .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith(${JSON.stringify(prefix)}))
+             if (!panel) return false
+             const text = panel.textContent ?? ''
+             return text.includes('已提交') || text.includes('冲突') || text.includes('被拒绝') || text.includes('结果未知')
+           })()`,
+          { label: `${prefix} outcome`, timeoutMs: 20000 })
+        } catch {
+          return { submitted: false, conflict: false, refused: false, unknown: false,
+                   headline: 'no outcome within 20s', text: '' }
+        }
+        return evaluate(cdp, `(() => {
+          const panel = [...document.querySelectorAll('section[data-write-panel]')]
+            .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith(${JSON.stringify(prefix)}))
+          const text = (panel?.textContent ?? '').split(String.fromCharCode(10)).join(' ')
+          return {
+            submitted: text.includes('已提交'),
+            conflict: text.includes('冲突'),
+            refused: text.includes('被拒绝'),
+            unknown: text.includes('结果未知'),
+            // The panel's own note mentions "replayed" in prose, so presence of the
+            // word is not evidence; the headline is.
+            headline: text.includes('已提交(replayed') ? 'replayed' : 'submitted',
+            text: text.slice(0, 200),
+          }
+        })()`)
+      }
+
+      // --- a Rule that is PROPOSED: click Approve, then re-read its status ---
+      if (args.proposedRule) {
+        const url = `${args.ui}/#/rules?rule_id=${encodeURIComponent(args.proposedRule)}`
+        await cdp.send('Page.navigate', { url })
+        await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(args.proposedRule)})`,
+          { label: 'proposed Rule detail' })
+        await waitFor(cdp, `document.querySelector('section[data-write-panel^="Approve"]') !== null`,
+          { label: 'Approve panel' })
+        const clicked = await evaluate(cdp, panelButton('Approve', 'button.click()'))
+        const outcome = await waitForSubmitted('Approve')
+        trace.record('clicking Approve in the browser submits and Core accepts it',
+          clicked.ok === true && outcome.submitted === true && outcome.conflict === false,
+          `clicked=${JSON.stringify(clicked)} outcome=${JSON.stringify(outcome)}`)
+        await cdp.send('Page.navigate', { url })
+        await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(args.proposedRule)})`,
+          { label: 're-read after approve' })
+        const status = await waitFor(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          if (!text.includes('rule_key')) return ''
+          return text.includes('ACTIVE') ? 'ACTIVE' : (text.includes('PROPOSED') ? 'PROPOSED' : '')
+        })()`, { label: 'approved status' })
+        trace.record('and the Rule really is ACTIVE on re-read, not just a success banner',
+          status === 'ACTIVE', String(status))
+        await trace.screenshot(cdp, '17-write-approve')
+      }
+
+      // --- an interpretation: type a reason into Reject and click ---
+      if (args.interpretation) {
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/interpretation/${encodeURIComponent(args.interpretation)}` })
+        await waitFor(cdp, `document.querySelector('section[data-write-panel^="Reject"]') !== null`,
+          { label: 'Reject panel' })
+        // A historical interpretation has its write panels disabled, which is the
+        // product behaving correctly. Follow the page's own pointer to the current head
+        // so the click targets something writable.
+        const currentTarget = await evaluate(cdp, `(() => {
+          // Read the head from the page's own warning ("该解释不是当前 head(当前为 …)").
+          // Taking "the first interpretation link that is not this one" picked a
+          // lineage link instead, and the panels there are correctly disabled — so the
+          // walkthrough would have blamed the product for its own wrong target.
+          // Take the *tightest* container holding the warning: an ancestor div also
+          // contains the phrase, and its first interpretation link is a lineage link
+          // rather than the head, which made this pick flaky.
+          const candidates = [...document.querySelectorAll('p, div, span')]
+            .filter((n) => (n.textContent ?? '').includes('不是当前 head') &&
+                           n.querySelector('a[href^="#/interpretation/"]'))
+          candidates.sort((a, b) => a.querySelectorAll('*').length - b.querySelectorAll('*').length)
+          const link = candidates[0]?.querySelector('a[href^="#/interpretation/"]')
+          return link ? link.getAttribute('href') : null
+        })()`)
+        let writeUrl = `${args.ui}/#/interpretation/${encodeURIComponent(args.interpretation)}`
+        let writeTargetId = args.interpretation
+        if (currentTarget) {
+          trace.record('a historical interpretation disables its write panels and points at the current head',
+            true, currentTarget)
+          writeUrl = `${args.ui}/${currentTarget}`
+          writeTargetId = currentTarget.split('/').pop()
+          await cdp.send('Page.navigate', { url: writeUrl })
+          // Waiting for the *panel* is not enough: a same-document hash change leaves
+          // the previous page's panel in the DOM for a render, so a panel query can
+          // match the target we just left. Wait for the target's own id.
+          await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(writeTargetId)})`,
+            { label: 'current-head page settled' })
+          await waitFor(cdp, `document.querySelector('section[data-write-panel^="Reject"]') !== null`,
+            { label: 'current-head Reject panel' })
+        }
+        const rootUrl = `${args.ui}/#/interpretation/${encodeURIComponent(args.interpretation)}`
+        await cdp.send('Page.navigate', { url: rootUrl })
+        await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(args.interpretation)})`,
+          { label: 'root page settled for the basis read' })
+        const revisionBefore = await waitFor(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          const match = text.match(/head revision ([0-9]+)/)
+          return match ? Number(match[1]) : 0
+        })()`, { label: 'root head revision before' })
+        if (writeTargetId !== args.interpretation) {
+          await cdp.send('Page.navigate', { url: writeUrl })
+          await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(writeTargetId)})`,
+            { label: 'back on the head page' })
+          await waitFor(cdp, `document.querySelector('section[data-write-panel^="Reject"]') !== null`,
+            { label: 'head Reject panel again' })
+        }
+        const typedReason = await setField('section[data-write-panel^="Reject"] [data-testid="write-reason"]',
+          'P6-02 click-through: reject from the browser')
+        if (typedReason.ok !== true) {
+          trace.record('typing a reason and clicking Reject submits in the browser', false,
+            `could not type the reason: ${JSON.stringify(typedReason)}`)
+        }
+        await waitFor(cdp, `(() => {
+          const panel = [...document.querySelectorAll('section[data-write-panel]')]
+            .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith('Reject'))
+          const button = panel?.querySelector('[data-testid="write-submit"]')
+          return button ? !button.disabled : false
+        })()`, { label: 'Reject armed after typing' })
+        const clicked = await evaluate(cdp, panelButton('Reject', 'button.click()'))
+        const outcome = await waitForSubmitted('Reject')
+        trace.record('typing a reason and clicking Reject submits in the browser',
+          clicked.ok === true && outcome.submitted === true,
+          `clicked=${JSON.stringify(clicked)} outcome=${JSON.stringify(outcome)}`)
+        // Back to the root route: a route change (not the same hash) is what makes the
+        // resource refetch, so this reads Core's current head rather than a cache.
+        await cdp.send('Page.navigate', { url: rootUrl })
+        await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(args.interpretation)})`,
+          { label: 'root page settled for the after read' })
+        const revisionAfter = await waitFor(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          const match = text.match(/head revision ([0-9]+)/)
+          return match ? Number(match[1]) : 0
+        })()`, { label: 'root head revision after' })
+        trace.record('and the maintenance head really advanced on re-read',
+          revisionAfter > revisionBefore,
+          `before=${revisionBefore} after=${revisionAfter}`)
+        await trace.screenshot(cdp, '18-write-reject')
+      }
+
+      // --- a PENDING review: click Reject (no plan editing needed) ---
+      if (args.rejectReview) {
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/review/${encodeURIComponent(args.rejectReview)}` })
+        await waitFor(cdp, `document.querySelector('section[data-write-panel^="Reject"]') !== null`,
+          { label: 'review Reject panel' })
+        await setField('section[data-write-panel^="Reject"] [data-testid="write-reason"]',
+          'P6-02 click-through: reject the plan')
+        await waitFor(cdp, `(() => {
+          const panel = [...document.querySelectorAll('section[data-write-panel]')]
+            .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith('Reject'))
+          const button = panel?.querySelector('[data-testid="write-submit"]')
+          return button ? !button.disabled : false
+        })()`, { label: 'review Reject armed after typing' })
+        const clicked = await evaluate(cdp, panelButton('Reject', 'button.click()'))
+        const outcome = await waitForSubmitted('Reject')
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/review/${encodeURIComponent(args.rejectReview)}` })
+        await waitFor(cdp, `document.body.textContent.includes('REJECTED')`,
+          { label: 'rejected review status', timeoutMs: 20000 })
+        trace.record('clicking Reject on a Review really leaves it REJECTED on re-read',
+          clicked.ok === true && outcome.submitted === true, `outcome=${JSON.stringify(outcome)}`)
+        await trace.screenshot(cdp, '19-write-review-reject')
+      }
+
+      // --- Propose a brand-new Rule from the form, then re-read it ---
+      const ruleKey = `ui.clickthrough.${Date.now().toString(36)}`
+      await cdp.send('Page.navigate', {
+        url: `${args.ui}/#/rules${args.project ? `?project_id=${encodeURIComponent(args.project)}` : ''}`,
+      })
+      await waitFor(cdp, `document.querySelector('section[data-write-panel^="Propose"]') !== null`,
+        { label: 'Propose panel' })
+      // The picker is filled by its own `GET /v1/events`, so waiting for the panel is
+      // not enough: wait until a real candidate is on offer, which is also the product
+      // behaviour worth checking (an empty picker would be a finding, not a race).
+      await waitFor(cdp, `(() => {
+        const panel = [...document.querySelectorAll('section[data-write-panel]')]
+          .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith('Propose'))
+        const select = panel ? [...panel.querySelectorAll('label')]
+          .find((l) => (l.textContent ?? '').includes('候选 origin Event'))?.querySelector('select') : null
+        return select ? [...select.options].some((o) => o.value.startsWith('evt_')) : false
+      })()`, { label: 'origin Event candidate offered', timeoutMs: 20000 })
+      const filled = await evaluate(cdp, `(() => {
+        const set = ${setValue}
+        const panel = [...document.querySelectorAll('section[data-write-panel]')]
+          .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith('Propose'))
+        if (!panel) return { ok: false, why: 'no panel' }
+        const labelled = (needle) => [...panel.querySelectorAll('label')]
+          .find((l) => (l.textContent ?? '').includes(needle))
+        const ruleKeyField = labelled('rule_key')?.querySelector('input')
+        const contentField = labelled('content(Core')?.querySelector('textarea')
+        const originSelect = labelled('候选 origin Event')?.querySelector('select')
+        if (!ruleKeyField || !contentField || !originSelect) {
+          return { ok: false, why: 'fields missing' }
+        }
+        set(ruleKeyField, ${JSON.stringify(ruleKey)})
+        set(contentField, 'P6-02 click-through: proposed from the browser.')
+        const option = [...originSelect.options].find((o) => o.value.startsWith('evt_'))
+        if (!option) return { ok: false, why: 'no origin Event candidate for this scope' }
+        set(originSelect, option.value)
+        return { ok: true, origin: option.value }
+      })()`)
+      if (filled.ok === true) {
+        await waitFor(cdp, `(() => {
+          const panel = [...document.querySelectorAll('section[data-write-panel]')]
+            .find((n) => (n.getAttribute('data-write-panel') ?? '').startsWith('Propose'))
+          const button = panel?.querySelector('[data-testid="write-submit"]')
+          return button ? !button.disabled : false
+        })()`, { label: 'Propose ready' })
+        const clicked = await evaluate(cdp, panelButton('Propose', 'button.click()'))
+        const outcome = await waitForSubmitted('Propose')
+        trace.record('the Propose form submits from a real click and creates a PROPOSED Rule',
+          clicked.ok === true && outcome.submitted === true,
+          `rule_key=${ruleKey} filled=${JSON.stringify(filled)} outcome=${JSON.stringify(outcome)}`)
+        await trace.screenshot(cdp, '20-write-propose')
+      } else {
+        trace.record('the Propose form submits from a real click and creates a PROPOSED Rule',
+          false, `could not fill the form: ${JSON.stringify(filled)}`)
       }
     }
 
