@@ -888,8 +888,11 @@ def main(argv: list[str] | None = None) -> int:
             "`web/tests/writeBodies.test.tsx`.",
             "`interpretation.rerun` runs the fixture's `component_simulation` provider. It "
             "proves the audited command path, not a real model call.",
-            "Truth is compared by row counts plus the resolved objects read back through the "
-            "API; this gate does not attempt a full semantic diff of every table.",
+            "Truth is compared by a per-table sha256 digest of `projects`/`tasks`/`steps` "
+            "(the state the Task board renders), taken immediately before and after each "
+            "action; `resolutions`/`source_applications` are measured the same way but are "
+            "*expected* to change on `review.approve`. The gate does not attempt a semantic "
+            "diff of every other table.",
         ],
     }
     Path(args.report).write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")

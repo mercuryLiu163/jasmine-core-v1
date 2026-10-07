@@ -1,8 +1,10 @@
-# P6-02 compliance (milestone A — read slice)
+# P6-02 compliance (milestone A — read slice, milestone B — audited writes)
 
-Scope: the read half of P6-02 as defined by
-`evidence/p6-rebase-handoff-20261007/NEXT-P6-02.md`. Milestone **B** (audited
-human writes) is **not** delivered and nothing here claims it.
+Scope: P6-02 as defined by `evidence/p6-rebase-handoff-20261007/NEXT-P6-02.md`.
+Milestone **A** is the read slice; milestone **B** is the audited human writes.
+Both are described below, and each says what is *not* delivered. Nothing here
+claims P6, or even P6-02, is finished: manual reapply and the Task/Step/Evidence
+writes are still open, and milestone B has not had an independent review.
 
 Baseline: `850fbec` (P2-01/02/03 merged, schema v8). The P6-01 product baseline
 `12fd0ba` is untouched: its bound bundle `index-Bn3SCuxd.js`
@@ -102,10 +104,13 @@ model run), dashboard `:5183` over Core `:8795`, read token `p2_read`:
 * plus the separate lazy-recovery probe above, which deliberately produces the
   one write a read can perform.
 
-Component and contract tests: 80 web tests in 11 files; 7 Python contract tests
+Component and contract tests: web tests in 13 files (107 at the milestone-B tip,
+up from 80 in 11 at the milestone-A verdict because milestone B added
+`writeAction`, `writeBodies` and the Rule surface); 8 Python contract tests
 (`tests/p6`), which also assert that the allowlist never covers `/v1/reviews` or
-`/v1/resolutions` as collections, and that the Conversation event filter matches
-`models.EVENT_TYPES` in both directions.
+`/v1/resolutions` as collections, that it does cover exactly the four write
+shapes, and that the Conversation event filter matches `models.EVENT_TYPES` in
+both directions.
 
 ## Independent review and validation (milestone A)
 
@@ -130,18 +135,98 @@ Component and contract tests: 80 web tests in 11 files; 7 Python contract tests
   digests are reported as `p2_truth_writes` (must be empty) versus
   `p2_bookkeeping_changes` (`audit_log`, `api_keys` — expected).
 
-## Not delivered (milestone B)
+## Milestone B — audited human modification
 
-Correct / Reject / Re-run, review approve/reject, manual reapply, and Rule
-management. Each needs a frozen per-endpoint payload/permission table, a real
-human actor and provenance chain, `expected_revision` conflict handling,
-idempotent command Events with audit readback, and an independent permission Gate.
-No write control exists in the UI today, and the panels that mention these actions
-say they are not delivered.
+Seven writes are shipped. The proxy forward list is what bounds them
+(`web/server/core-paths.json` `write_methods: ["POST"]`), and Core still enforces
+scope, actor kind, revision, idempotency and source per request — the browser can
+only *ask*.
+
+| Action | Method + path | Scope | Replay key | `reason` | `expected_revision` |
+| --- | --- | --- | --- | --- | --- |
+| Correct | `POST /v1/interpretations/{int}/correct` | `interpretations:manage` | `idempotency_key` | required | required |
+| Reject | `POST /v1/interpretations/{int}/reject` | `interpretations:manage` | `idempotency_key` | required | required |
+| Re-run | `POST /v1/interpretations/{int}/rerun` | `interpretations:manage` + `interpretations:process` | `idempotency_key` | required | required |
+| Approve review | `POST /v1/reviews/{rvw}/approve` | `reviews:manage` | `idempotency_key` | required | required |
+| Reject review | `POST /v1/reviews/{rvw}/reject` | `reviews:manage` | `idempotency_key` | required | required |
+| Propose Rule | `POST /v1/rules/proposals` | `authority:propose` | `event_id` | **rejected** | **rejected** |
+| Approve / Supersede / Retire Rule | `POST /v1/rules/{rul}/(approve\|supersede\|retire)` | `authority:manage` | `event_id` | **rejected** | required |
+
+The two families are genuinely different, and Core enforces it with `_fields(body,
+allowed)`: `AuthorityStore.propose`/`transition` answer an extra `reason` with
+`invalid_request: unknown fields`, and their replay key is a client-minted
+`event_id` (`_replay`) — `idempotency_key` is itself an unknown field. Creation
+additionally refuses `expected_revision` (`UnexpectedExpectedRevision`). So
+`useWriteAction` carries the key *kind* and `WritePanel` has a `reasonMode="none"`
+that hides the reason input rather than offering a field Core would refuse.
+`web/tests/writeBodies.test.tsx` asserts the exact key set of every write the UI
+can send, so a blanket "add reason/idempotency_key everywhere" change fails there
+instead of in Core.
+
+`src/lib/ids.ts` mints the `evt_` id in Core's exact shape
+(`<prefix>_<26 Crockford base32>`), which ADR 0001 sanctions for exactly this:
+*"An `evt` body is opaque: clients may derive it deterministically for idempotent
+retries."* The id is minted once per intent and reused on every retry, so a retry
+after a timeout is a replay rather than a second command.
+
+Four things the panels refuse to do:
+
+* **invent a plan.** `Approve` is only offered when Core returns a `preview`; the
+  actions, `expected_revisions` and `expected_context_digest` are read from the
+  server and sent back verbatim. When the preview fails the panel says so
+  (`data-testid="approve-unavailable"`) instead of opening a form;
+* **retry a conflict.** A `409`/`revision_conflict`/`interpretation_not_current`/
+  `idempotency_conflict`/`event_id_conflict` keeps the draft and shows Core's own
+  current value; nothing re-submits with a new revision;
+* **turn an unknown into a success.** A timeout or transport failure is its own
+  state, with the request id and a read-back instruction, never a silent retry;
+* **widen its own authority.** A refusal names the missing scope and offers no
+  alternative credential, and no write panel can reach `/v1/auth/*`, `/v1/audit`
+  or `/v1/evidence/confirm`.
+
+## How milestone B was verified
+
+`scripts/p6/p6_t03_gate.py`, run against the isolated fixture with the dashboard
+proxy as the endpoint under test:
+
+* all seven actions succeed through the proxy with the fixture's real human key,
+  each recorded as method · path · scope · actor kind · host · source Event ·
+  replay key · expected/observed revision · Core's answer · object readback;
+* the negatives: a read-only token is refused `403 forbidden_scope` with no state
+  change, an agent actor is refused, a stale `expected_revision` is `409
+  revision_conflict` with nothing changed, the same replay key with the same body
+  returns `replayed: true` and creates no second Rule, and the same key with a
+  different body is `event_id_conflict`;
+* `reject`, `rerun` and `review.reject` are measured against a per-table sha256
+  digest of `projects`/`tasks`/`steps` (the state the Task board renders) taken
+  before and after, so "leaves Truth alone" is a measurement, not an assertion;
+  `review.approve` is checked the other way round — that it really did bind a plan
+  to its source Event;
+* `audit_log` grew for every attempt, including the refusals, carrying the actor,
+  method, path, decision, status and error code.
+
+Two limits are stated rather than glossed over. The audit readback is a
+read-only SQLite read of the fixture's `audit_log`: no fixture token carries
+`admin` and the proxy has no `/v1/audit` path, so **the browser cannot read audit
+at all**, and the report says so instead of implying the UI displayed it. And the
+`rerun` path exercises the fixture's `component_simulation` provider — it proves
+the audited command path, not a real model call.
+
+## Not delivered (still open in P6-02)
+
+`POST /v1/resolutions/{res}/manual-reapply`, and the Task/Step/Evidence writes.
+The first needs its own frozen payload/permission table and an explicit operator
+decision; the second needs a Gate of its own, and `evidence/confirm` additionally
+needs a human prompt the browser cannot mint (ADR 0007). `browser_trace.mjs`
+asserts the absence of any Evidence-confirm control.
 
 ## Status
 
-`P6-02 milestone A: delivered and verified on an isolated fixture` (implementer
-evidence). `P6-02: PARTIAL` as a whole — milestone B is not started, and an
-independent reviewer/validator has yet to confirm this slice. `P6` as a stage is
-not complete and nothing here releases V1.
+`P6-02 milestone A: delivered, independently reviewed and validated` (the r2
+verdict binds `693afe6`). `P6-02 milestone B: implemented and gated by the
+implementer` — the T03 Gate above passes all seven actions and every negative on
+an isolated fixture, but milestone B **has not** had an independent reviewer or
+validator. `P6-02: PARTIAL` as a whole; manual reapply and the Task/Step/Evidence
+writes are not delivered, and no Gate has run against the operator's own Core or a
+real captured conversation. `P6` as a stage is not complete and nothing here
+releases V1.
