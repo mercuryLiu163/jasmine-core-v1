@@ -355,6 +355,11 @@ async function main() {
         responses.set(message.params.requestId, {
           status: message.params.response.status,
           mimeType: message.params.response.mimeType,
+          // The P3 read fixture stamps every reply so no evidence can present it as
+          // real P3. Recording it here (rather than only asserting it in-process)
+          // puts the label in the frozen traffic, where a reviewer can check it.
+          fixtureLabel:
+            headerValue(message.params.response.headers, 'x-p6-fixture') ?? null,
         })
       }
       if (message.method === 'Log.entryAdded' && message.params.entry.level === 'error') {
@@ -1572,6 +1577,23 @@ async function main() {
         trace.record('a token missing a scope is refused by Core, not reported as the missing dependency',
           false, 'no --p3-limited-token supplied, so the scope refusal was not exercised')
       }
+
+      // --- the simulation is labelled in the frozen traffic, not just asserted here ---
+      // P3 is not merged, so this Core is a fixture. If the label were ever dropped,
+      // the bundle would read as if the real P3 had answered — exactly the confusion
+      // P6-03a exists to prevent — so the label is checked as evidence.
+      const continuityReads = requests.filter((request) =>
+        /^\/v1\/(context|checkpoints|resumes)\//.test(request.path),
+      )
+      const unlabelled = continuityReads.filter(
+        (request) => (responses.get(request.requestId)?.fixtureLabel ?? null) !== 'simulated-p3-reads',
+      )
+      trace.record(
+        'every P3 continuity read in the traffic carries the simulated-fixture label',
+        continuityReads.length >= 4 && unlabelled.length === 0,
+        `${continuityReads.length} continuity reads, ${unlabelled.length} unlabelled` +
+          (unlabelled.length ? ` (${unlabelled.map((r) => r.path).join(', ')})` : ''),
+      )
     }
 
 
@@ -1594,16 +1616,11 @@ async function main() {
     )
     await trace.screenshot(cdp, '09-signed-out')
 
-    // The walkthrough deliberately provokes one 401 (the bogus-token sign-in), and
-    // Chrome logs every failed network response at error level. Those lines are
-    // evidence, not defects; anything else is an unexpected error.
-    // 401 = the deliberate bogus-token probe; 409 = the deliberate stale-preview
-    // probe. Both are provoked on purpose, so Chrome's network log line for them
-    // is evidence, not a defect.
-    // 401 = the deliberate bogus-token probe; 403 = the deliberate scope refusal;
-    // 409 = the deliberate stale-preview probe. The P3 mode additionally requests an
-    // unknown id and a malformed one on purpose, and both answer 404 — so 404 is only
-    // expected there, never as a blanket allowance.
+    // Chrome logs every failed network response at error level, and the walkthrough
+    // provokes several on purpose: 401 the bogus-token sign-in, 403 the scope refusal,
+    // 409 the stale-preview probe. The P3 mode additionally requests an unknown id and
+    // a malformed one, both of which answer 404. So 404 counts as expected only in P3
+    // mode — never as a blanket allowance, or a real 404 would slip through unnoticed.
     const expectedStatuses = args.p3Reads ? /(401|403|404|409)/ : /(401|403|409)/
     const expectedRefusals = consoleErrors.filter((line) => {
       if (!/Failed to load resource/.test(line)) return false
@@ -1624,6 +1641,7 @@ async function main() {
         ...request,
         status: response.status ?? null,
         mimeType: response.mimeType ?? null,
+        fixtureLabel: response.fixtureLabel ?? null,
         authorization: request.authorization === 'absent' ? 'absent' : 'present(redacted)',
       }
     })
