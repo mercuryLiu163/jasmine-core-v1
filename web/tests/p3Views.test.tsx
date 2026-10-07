@@ -214,3 +214,50 @@ describe('a real P3 read renders the record it was given', () => {
     expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
   })
 })
+
+describe('a malformed id is refused with the right reason', () => {
+  it('does not blame the missing P3 for a bad checkpoint id', async () => {
+    // The proxy's allowlist spells ids the same way, so a malformed id is refused by the
+    // proxy — and the dependency-pending panel would then explain it as "P3 is not
+    // merged". A wrong explanation is worse than none, so the view refuses it itself.
+    const user = userEvent.setup()
+    await enter(user, '#/checkpoints?checkpoint_id=ckp_short', SIGNED_IN)
+    const panel = await screen.findByRole('region', { name: /读取 Checkpoint/ })
+    await waitFor(() => expect(within(panel).getByTestId('invalid-id')).toBeTruthy())
+    expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
+    expect(panel.textContent).toContain('请求没有被发出')
+    // Nothing was requested at all.
+    expect(fake!.requests.filter((r) => r.path.startsWith('/v1/checkpoints/'))).toHaveLength(0)
+  })
+
+  it('refuses a malformed context pack id and a malformed resume id', async () => {
+    const user = userEvent.setup()
+    await enter(user, '#/context/not-an-id', SIGNED_IN)
+    const pack = await screen.findByRole('region', { name: /Context Pack/ })
+    await waitFor(() => expect(within(pack).getByTestId('invalid-id')).toBeTruthy())
+    expect(fake!.requests.filter((r) => r.path.startsWith('/v1/context/'))).toHaveLength(0)
+  })
+
+  it('refuses a malformed resume id without requesting it', async () => {
+    const user = userEvent.setup()
+    await enter(user, '#/resume/rms_short', SIGNED_IN)
+    const resume = await screen.findByRole('region', { name: /Resume/ })
+    await waitFor(() => expect(within(resume).getByTestId('invalid-id')).toBeTruthy())
+    expect(fake!.requests.filter((r) => r.path.startsWith('/v1/resumes/'))).toHaveLength(0)
+  })
+})
+
+describe('the resume shows what a reader opens it for', () => {
+  it('lists next_actions instead of hiding them in a collapsed block', async () => {
+    // The slice exists to show this; a collapsed JSON block would render nothing until a
+    // click, and `JsonBlock` only emits its text once open.
+    const user = userEvent.setup()
+    await enter(user, `#/resume/${RESUME}`, {
+      ...SIGNED_IN,
+      ['GET /v1/resumes/' + RESUME]: { body: { resume: resume() } },
+    })
+    const list = await screen.findByTestId('next-actions')
+    expect(list.textContent).toContain('re-read the task')
+    expect(list.textContent).toContain('建议而非已执行')
+  })
+})

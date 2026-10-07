@@ -62,6 +62,8 @@ function parseArgs(argv) {
       case '--retire-rule': args.retireRule = next; index += 1; break
       case '--submit-writes': args.submitWrites = true; break
       case '--descriptor': args.descriptor = next; index += 1; break
+      case '--p3-reads': args.p3Reads = true; break
+      case '--p3-limited-token': args.p3LimitedToken = next; index += 1; break
       case '--evidence': args.evidence = next; index += 1; break
       case '--interpretation': args.interpretation = next; index += 1; break
       case '--pending-interpretation': args.pendingInterpretation = next; index += 1; break
@@ -363,6 +365,7 @@ async function main() {
       }
     })
 
+    if (!args.p3Reads) {
     // 1. sign-in. First prove the negative: a bogus token must be refused, which
     // is only possible because sign-in validates with an *authenticated* read.
     // `GET /v1/health` is public and answers 200 for any token, so a sign-in that
@@ -1397,6 +1400,180 @@ async function main() {
           false, `could not fill the form: ${JSON.stringify(filled)}`)
       }
     }
+    }
+
+    // 8d. P6-03a: the P3 continuity reads, end to end in a real browser.
+    //
+    // The Core behind this proxy is the SIMULATED P3 read fixture
+    // (`scripts/p6/p3_read_fixture.py`), which is why every reply it serves carries
+    // `X-P6-Fixture: simulated-p3-reads`. This proves the views render real P3 shapes and
+    // refuse the right things; it does NOT verify P3 itself, and the evidence says so.
+    if (args.p3Reads) {
+      // The fixture publishes these ids; a stale constant shows up as a 404 read below
+      // rather than as a silently weaker check.
+      const CKP = 'ckp_01M4B6VGC29ESRDRQR62DX8AK8'
+      const CKP2 = 'ckp_01M4B6VGC29ESRDRQR62DX8AKB'
+      const PACK = 'ctx_01M4B6VGC29ESRDRQR62DX8AK8'
+      const RMS = 'rms_01M4B6VGC29ESRDRQR62DX8AK8'
+      const TASK = 'tsk_01M4B6VGC29ESRDRQR62DX8AK8'
+      const TASK_EMPTY = 'tsk_01M4B6VGC29ESRDRQR62DX8AK9'
+      const UNKNOWN = 'ckp_01M4B6VGC29ESRDRQR62DX8AK7'
+
+      // Reads one KeyValue row by its label, so a status/revision assertion reads the
+      // object's own row rather than a substring somewhere on the page.
+      const kv = (label) => `(() => {
+        for (const list of document.querySelectorAll('dl.kv')) {
+          for (const row of list.querySelectorAll(':scope > div')) {
+            const dt = row.querySelector('dt')
+            const dd = row.querySelector('dd')
+            if (dt && dd && (dt.textContent ?? '').trim() === ${JSON.stringify(label)}) {
+              return (dd.textContent ?? '').trim()
+            }
+          }
+        }
+        return null
+      })()`
+
+      const signIn = async (value) => {
+        await evaluate(cdp, `(() => {
+          const el = document.querySelector('input[type=password]')
+          if (!el) return false
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set
+          setter.call(el, '')
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+          return true
+        })()`)
+        await typeInto(cdp, 'input[type=password]', value)
+        await clickByText(cdp, 'button', '使用此 token')
+        await waitFor(cdp, `document.querySelector('input[type=password]') === null`,
+          { label: 'signed in' })
+      }
+      const pageText = () => evaluate(cdp, `document.body.textContent ?? ''`)
+
+      await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
+        { label: 'P3 fixture sign-in form' })
+      await signIn(token)
+
+      // --- a checkpoint, read by id: a record, with its digests -------------------
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/checkpoints?checkpoint_id=${CKP}` })
+      await waitFor(cdp, `document.body.textContent.includes(${JSON.stringify(CKP)})`,
+        { label: 'checkpoint by id' })
+      const cp = {
+        snapshotNote: (await pageText()).includes('不可变快照'),
+        revision: await evaluate(cdp, kv('task_revision')),
+        projectionDigest: (await pageText()).includes('a'.repeat(64)),
+        contextDigest: (await pageText()).includes('b'.repeat(64)),
+        workspaceDigest: (await pageText()).includes('d'.repeat(64)),
+        pending: (await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`)),
+        alerts: await evaluate(cdp, `[...document.querySelectorAll('[role=alert]')].map((n) => (n.textContent ?? '').slice(0, 80))`),
+      }
+      trace.record('a checkpoint renders as an immutable snapshot with its three digests',
+        cp.snapshotNote && cp.revision === 'r7' && cp.projectionDigest && cp.contextDigest &&
+          cp.workspaceDigest && cp.pending === false && cp.alerts.length === 0,
+        JSON.stringify(cp))
+      await trace.screenshot(cdp, '21-checkpoint')
+
+      // --- a Task with no checkpoint: empty, not an error -------------------------
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/checkpoints?task_id=${TASK_EMPTY}` })
+      await waitFor(cdp, `document.body.textContent.includes('该 Task 目前没有 checkpoint')`,
+        { label: 'empty checkpoint state' })
+      const empty = {
+        alerts: await evaluate(cdp, `[...document.querySelectorAll('[role=alert]')].length`),
+        pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+      }
+      trace.record('a Task with no checkpoint renders as empty, not as an error',
+        empty.alerts === 0 && empty.pending === false, JSON.stringify(empty))
+
+      // --- an unknown id: Core's not_found, NOT the missing-dependency panel ------
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/checkpoints?checkpoint_id=${UNKNOWN}` })
+      await waitFor(cdp, `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('not_found'))`,
+        { label: 'not_found alert' })
+      const notFound = {
+        pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+        text: (await pageText()).includes('not_found'),
+      }
+      trace.record("an unknown id is Core's not_found, not the missing-dependency state",
+        notFound.text && notFound.pending === false, JSON.stringify(notFound))
+
+      // --- a malformed id: refused locally, and NOT blamed on the dependency ------
+      const beforeMalformed = requests.length
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/checkpoints?checkpoint_id=ckp_short` })
+      await waitFor(cdp, `document.querySelector('[data-testid="invalid-id"]') !== null`,
+        { label: 'invalid id panel' })
+      const malformed = {
+        pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+        requested: requests.slice(beforeMalformed).filter((r) => r.path.startsWith('/v1/checkpoints')).length,
+      }
+      trace.record('a malformed id is refused locally, with the right reason and no request',
+        malformed.pending === false && malformed.requested === 0, JSON.stringify(malformed))
+
+      // --- a context pack: what was actually rendered, memory marked non-authoritative
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/context/${PACK}` })
+      await waitFor(cdp, `document.body.textContent.includes('实际渲染记录')`,
+        { label: 'context pack' })
+      const pack = {
+        rendered: (await pageText()).includes('fixture task'),
+        memoryNote: (await pageText()).includes('memory 非权威'),
+        pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+      }
+      trace.record('a context pack shows what was rendered and marks memory non-authoritative',
+        pack.rendered && pack.memoryNote && pack.pending === false, JSON.stringify(pack))
+      await trace.screenshot(cdp, '22-context-pack')
+
+      // --- a resume: a comparison, with a note that denies its own authority ------
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/resume/${RMS}` })
+      await waitFor(cdp, `document.body.textContent.includes('这是比较,不是恢复')`,
+        { label: 'resume' })
+      const res = {
+        historical: (await evaluate(cdp, `(() => {
+          const note = document.querySelector('[data-testid="resume-note"]')
+          return note ? (note.textContent ?? '') : ''
+        })()`)),
+        nextActions: (await pageText()).includes('re-read the task before continuing'),
+        pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+      }
+      trace.record('a resume is a comparison, and its note is historical and non-authoritative',
+        res.historical.includes('historical') && res.historical.includes('authority = false') &&
+          res.nextActions && res.pending === false, JSON.stringify(res))
+      await trace.screenshot(cdp, '23-resume')
+
+      // --- switching scope must not leave the previous record on screen -----------
+      await cdp.send('Page.navigate', { url: `${args.ui}/#/checkpoints?checkpoint_id=${CKP2}` })
+      await waitFor(cdp, `(() => {
+        const text = document.body.textContent ?? ''
+        return text.includes(${JSON.stringify(CKP2)}) && text.includes('r11')
+      })()`, { label: 'second checkpoint' })
+      const swapped = {
+        secondNote: (await pageText()).includes('stop here for today'),
+        secondRevision: (await pageText()).includes('r11'),
+        firstId: (await pageText()).includes(CKP),
+      }
+      trace.record("switching checkpoint does not leave the previous one's content behind",
+        swapped.secondRevision && swapped.secondNote === false && swapped.firstId === false,
+        JSON.stringify(swapped))
+
+      // --- an unauthorised scope is Core's refusal, not the missing dependency ----
+      if (args.p3LimitedToken) {
+        await clickByText(cdp, 'button', '退出')
+        await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
+          { label: 'sign-in after 退出' })
+        await signIn(args.p3LimitedToken)
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/context/${PACK}` })
+        await waitFor(cdp, `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('forbidden_scope'))`,
+          { label: 'forbidden_scope alert' })
+        const refused = {
+          forbidden: (await pageText()).includes('forbidden_scope'),
+          pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+        }
+        trace.record('a token missing a scope is refused by Core, not reported as the missing dependency',
+          refused.forbidden && refused.pending === false, JSON.stringify(refused))
+        await trace.screenshot(cdp, '24-scope-refusal')
+      } else {
+        trace.record('a token missing a scope is refused by Core, not reported as the missing dependency',
+          false, 'no --p3-limited-token supplied, so the scope refusal was not exercised')
+      }
+    }
+
 
     // 9. negative: an unknown route is not silently the Overview
     await cdp.send('Page.navigate', { url: `${args.ui}/#/nonsense/route` })
@@ -1423,7 +1600,15 @@ async function main() {
     // 401 = the deliberate bogus-token probe; 409 = the deliberate stale-preview
     // probe. Both are provoked on purpose, so Chrome's network log line for them
     // is evidence, not a defect.
-    const expectedRefusals = consoleErrors.filter((line) => /Failed to load resource.*(401|403|409)/.test(line))
+    // 401 = the deliberate bogus-token probe; 403 = the deliberate scope refusal;
+    // 409 = the deliberate stale-preview probe. The P3 mode additionally requests an
+    // unknown id and a malformed one on purpose, and both answer 404 — so 404 is only
+    // expected there, never as a blanket allowance.
+    const expectedStatuses = args.p3Reads ? /(401|403|404|409)/ : /(401|403|409)/
+    const expectedRefusals = consoleErrors.filter((line) => {
+      if (!/Failed to load resource/.test(line)) return false
+      return expectedStatuses.test(line)
+    })
     const unexpectedErrors = consoleErrors.filter((line) => !expectedRefusals.includes(line))
     trace.record(
       'no unexpected console errors during the walkthrough',

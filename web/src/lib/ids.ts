@@ -47,3 +47,16 @@ export function newEventId(): string {
 export function isEventId(value: string): boolean {
   return new RegExp(`^evt_[${CROCKFORD}]{${EVT_BODY_CHARS}}$`).test(value)
 }
+
+/**
+ * True when `value` is a well-formed id for `prefix` (ADR 0001: `<prefix>_` + 26
+ * Crockford base32 characters).
+ *
+ * The proxy's read allowlist spells ids the same way, so a malformed id never reaches
+ * Core. That makes client-side validation necessary rather than decorative: without it a
+ * typo is refused by the *proxy*, and the P6-03a views would report "P3 is not merged"
+ * for what is actually a bad id — a wrong explanation is worse than none.
+ */
+export function isCoreId(value: string, prefix: string): boolean {
+  return new RegExp(`^${prefix}_[${CROCKFORD}]{26}$`).test(value)
+}

@@ -40,7 +40,22 @@ import { JsonBlock } from '../components/JsonBlock'
 import { RawText } from '../components/RawText'
 import { Empty, ErrorPanel, Loading, Panel, StaleBanner } from '../components/States'
 import { KeyValue, SourceLink } from '../components/Trace'
+import { isCoreId } from '../lib/ids'
 import { formatTimestamp } from '../lib/text'
+
+/** A malformed id is refused here, with the right reason, before any request is made. */
+function InvalidId({ prefix, value, field }: { prefix: string; value: string; field: string }): JSX.Element {
+  return (
+    <div className="state state--error" role="alert" data-testid="invalid-id">
+      <p className="state__headline">非法 id:{field}</p>
+      <p>
+        <code>{value}</code> 不是 Core 的 id 形状(<code>{prefix}_</code> + 26 位 Crockford
+        base32)。请求没有被发出 —— 否则代理会以 <code>proxy_path_not_allowed</code> 拒绝它,
+        那会被误报成「P3 未合并」。
+      </p>
+    </div>
+  )
+}
 
 /** A resource error is nullable; only a real proxy refusal counts as pending. */
 function pending(error: CoreApiError | null): boolean {
@@ -237,12 +252,15 @@ export function CheckpointsView({
   const [checkpointDraft, setCheckpointDraft] = useState(checkpointId ?? '')
   const [sessionDraft, setSessionDraft] = useState(sessionId ?? '')
 
+  const checkpointIdValid = checkpointId === null || isCoreId(checkpointId, 'ckp')
+  const taskIdValid = taskId === null || isCoreId(taskId, 'tsk')
+  const sessionIdValid = sessionId === null || isCoreId(sessionId, 'ses')
   const byId =
-    checkpointId === null
+    checkpointId === null || !checkpointIdValid || !sessionIdValid
       ? null
       : (signal: AbortSignal) => endpoints.getCheckpoint(checkpointId, signal)
   const latest =
-    checkpointId === null && taskId !== null
+    checkpointId === null && taskId !== null && taskIdValid && sessionIdValid
       ? (signal: AbortSignal) => endpoints.latestCheckpoint(taskId, sessionId, signal)
       : null
 
@@ -270,6 +288,14 @@ export function CheckpointsView({
   }
 
   const isPending = pending(detail.error) || pending(latestResource.error)
+  const badId =
+    checkpointId !== null && !checkpointIdValid
+      ? { prefix: 'ckp', field: 'checkpoint_id', value: checkpointId }
+      : taskId !== null && checkpointId === null && !taskIdValid
+        ? { prefix: 'tsk', field: 'task_id', value: taskId }
+        : sessionId !== null && !sessionIdValid
+          ? { prefix: 'ses', field: 'session_id', value: sessionId }
+          : null
 
   return (
     <div className="stack">
@@ -322,7 +348,9 @@ export function CheckpointsView({
           <code>checkpoint:read</code>。「没有 checkpoint」是空集,不是错误,也不是记录不存在。
         </p>
 
-        {isPending ? (
+        {badId ? <InvalidId {...badId} /> : null}
+
+        {!badId && isPending ? (
           <DependencyPending
             what="Checkpoint"
             method="GET"
@@ -331,15 +359,15 @@ export function CheckpointsView({
           />
         ) : null}
 
-        {!isPending && (detail.status === 'loading' || latestResource.status === 'loading') &&
+        {!badId && !isPending && (detail.status === 'loading' || latestResource.status === 'loading') &&
         detail.data === null && latestResource.data === null ? (
           <Loading what="Checkpoint" />
         ) : null}
 
-        {!isPending && detail.error ? (
+        {!badId && !isPending && detail.error ? (
           <ErrorPanel error={detail.error} what={`Checkpoint ${checkpointId}`} onRetry={detail.reload} />
         ) : null}
-        {!isPending && latestResource.error ? (
+        {!badId && !isPending && latestResource.error ? (
           <ErrorPanel
             error={latestResource.error}
             what={`Task ${taskId} 的最新 Checkpoint`}
@@ -347,11 +375,11 @@ export function CheckpointsView({
           />
         ) : null}
 
-        {!isPending && detail.data ? (
+        {!badId && !isPending && detail.data ? (
           <CheckpointBody checkpoint={detail.data.checkpoint} onReadback={detail.reload} />
         ) : null}
 
-        {!isPending && latestResource.data ? (
+        {!badId && !isPending && latestResource.data ? (
           latestResource.data.checkpoint === null ? (
             <Empty
               what="Checkpoint"
@@ -440,8 +468,9 @@ export function ContextPackView({ contextPackId }: { contextPackId: string }): J
   const { endpoints } = useSession()
   const inputId = useId()
   const [draft, setDraft] = useState(contextPackId)
+  const idValid = isCoreId(contextPackId, 'ctx')
   const pack = useResource(
-    (signal: AbortSignal) => endpoints.getContextPack(contextPackId, signal),
+    idValid ? (signal: AbortSignal) => endpoints.getContextPack(contextPackId, signal) : null,
     [contextPackId],
   )
 
@@ -477,7 +506,10 @@ export function ContextPackView({ contextPackId }: { contextPackId: string }): J
           <strong>构建时</strong>的产物;本页只读它,不会重新构建,也不会把 memory 当作 Truth。
         </p>
 
-        {pending(pack.error) ? (
+        {!idValid ? (
+          <InvalidId prefix="ctx" field="context_pack_id" value={contextPackId} />
+        ) : null}
+        {idValid && pending(pack.error) ? (
           <DependencyPending
             what="Context Pack"
             method="GET"
@@ -485,13 +517,13 @@ export function ContextPackView({ contextPackId }: { contextPackId: string }): J
             scope="context:read"
           />
         ) : null}
-        {!pending(pack.error) && pack.status === 'loading' && pack.data === null ? (
+        {idValid && !pending(pack.error) && pack.status === 'loading' && pack.data === null ? (
           <Loading what="Context Pack" />
         ) : null}
-        {pack.error && !pending(pack.error) ? (
+        {idValid && pack.error && !pending(pack.error) ? (
           <ErrorPanel error={pack.error} what={`Context Pack ${contextPackId}`} onRetry={pack.reload} />
         ) : null}
-        {pack.data ? <ContextPackBody pack={pack.data.context} onReadback={pack.reload} /> : null}
+        {idValid && pack.data ? <ContextPackBody pack={pack.data.context} onReadback={pack.reload} /> : null}
         {pack.loadedAt ? <StaleBanner loadedAt={pack.loadedAt} scope="Context Pack" /> : null}
       </Panel>
     </div>
@@ -538,7 +570,21 @@ function ResumeBody({ resume, onReadback }: { resume: Resume; onReadback: () => 
         <p className="muted">没有 note。</p>
       )}
       <JsonBlock value={resume.comparison} label="comparison(checkpoint 与当前投影的差异)" />
-      <JsonBlock value={resume.next_actions} label="next_actions" />
+      {/* `next_actions` is a short list of operator-facing strings, and the slice exists to
+          show it — a collapsed JSON block would hide the one thing a reader opens the page
+          for. It renders as a list when Core sent strings, and falls back to the block. */}
+      {Array.isArray(resume.next_actions) && resume.next_actions.every((a) => typeof a === 'string') ? (
+        <div className="stack" data-testid="next-actions">
+          <span className="muted">next_actions({resume.next_actions.length} 条,建议而非已执行)</span>
+          <ul className="plain">
+            {resume.next_actions.map((action, index) => (
+              <li key={`${index}:${action}`}>{String(action)}</li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <JsonBlock value={resume.next_actions} label="next_actions" startsOpen />
+      )}
       <JsonBlock value={resume.projection} label="projection" />
       <JsonBlock value={resume.workspace} label="workspace" />
       <JsonBlock value={resume.sample_window} label="sample_window" />
@@ -553,8 +599,9 @@ export function ResumeView({ resumeId }: { resumeId: string }): JSX.Element {
   const { endpoints } = useSession()
   const inputId = useId()
   const [draft, setDraft] = useState(resumeId)
+  const idValid = isCoreId(resumeId, 'rms')
   const resume = useResource(
-    (signal: AbortSignal) => endpoints.getResume(resumeId, signal),
+    idValid ? (signal: AbortSignal) => endpoints.getResume(resumeId, signal) : null,
     [resumeId],
   )
 
@@ -590,7 +637,8 @@ export function ResumeView({ resumeId }: { resumeId: string }): JSX.Element {
           <code>checkpoint:read</code>。Resume 是<strong>精确的历史 receipts</strong>,不是恢复操作。
         </p>
 
-        {pending(resume.error) ? (
+        {!idValid ? <InvalidId prefix="rms" field="resume_id" value={resumeId} /> : null}
+        {idValid && pending(resume.error) ? (
           <DependencyPending
             what="Resume"
             method="GET"
@@ -598,13 +646,13 @@ export function ResumeView({ resumeId }: { resumeId: string }): JSX.Element {
             scope="resume:read + checkpoint:read"
           />
         ) : null}
-        {!pending(resume.error) && resume.status === 'loading' && resume.data === null ? (
+        {idValid && !pending(resume.error) && resume.status === 'loading' && resume.data === null ? (
           <Loading what="Resume" />
         ) : null}
-        {resume.error && !pending(resume.error) ? (
+        {idValid && resume.error && !pending(resume.error) ? (
           <ErrorPanel error={resume.error} what={`Resume ${resumeId}`} onRetry={resume.reload} />
         ) : null}
-        {resume.data ? <ResumeBody resume={resume.data.resume} onReadback={resume.reload} /> : null}
+        {idValid && resume.data ? <ResumeBody resume={resume.data.resume} onReadback={resume.reload} /> : null}
         {resume.loadedAt ? <StaleBanner loadedAt={resume.loadedAt} scope="Resume" /> : null}
       </Panel>
     </div>
