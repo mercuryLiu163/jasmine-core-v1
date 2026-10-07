@@ -257,7 +257,24 @@ function InterpretationBody({ item }: { item: Interpretation }): JSX.Element {
               {(item.maintenance_history ?? []).map((change) => (
                 <li key={`${change.operation_event_id}:${change.to_revision}`}>
                   r{change.from_revision}→r{change.to_revision} <strong>{change.action}</strong> ·{' '}
-                  {change.reason ?? '—'} · <SourceLink kind="event" id={change.operation_event_id} label="command" />
+                  {change.reason} · actor <code>{change.actor_id}</code> ·{' '}
+                  {change.parent_interpretation_id ? (
+                    <>
+                      parent{' '}
+                      <a href={sourceHref.interpretation(change.parent_interpretation_id)}>
+                        <code>{change.parent_interpretation_id}</code>
+                      </a>
+                    </>
+                  ) : null}
+                  {change.child_interpretation_id ? (
+                    <>
+                      {' '}child{' '}
+                      <a href={sourceHref.interpretation(change.child_interpretation_id)}>
+                        <code>{change.child_interpretation_id}</code>
+                      </a>
+                    </>
+                  ) : null}{' '}
+                  · <SourceLink kind="event" id={change.operation_event_id} label="command" />
                 </li>
               ))}
             </ul>
@@ -265,13 +282,20 @@ function InterpretationBody({ item }: { item: Interpretation }): JSX.Element {
             <p className="muted">没有人工维护历史。</p>
           )}
           {(item.operation_completions ?? []).length > 0 ? (
-            <details>
+            <details open>
               <summary>operation completions({(item.operation_completions ?? []).length})</summary>
               <ul className="plain">
                 {(item.operation_completions ?? []).map((completion) => (
-                  <li key={completion.operation_event_id}>
-                    <code>{completion.operation_event_id}</code> → child {completion.child_status} ·
-                    applied {completion.applied === 1 ? 'yes' : 'no'} · expected r{completion.expected_revision}
+                  <li key={completion.operation_event_id} data-testid="operation-completion">
+                    child{' '}
+                    <a href={sourceHref.interpretation(completion.child_interpretation_id)}>
+                      <code>{completion.child_interpretation_id}</code>
+                    </a>{' '}
+                    · <StatusBadge kind="interpretation" status={completion.processing_status} /> ·
+                    head applied {completion.head_applied === 1 ? 'yes' : 'no'} · expected head r
+                    {completion.expected_head_revision} · observed r{completion.observed_head_revision} ·
+                    completed {formatTimestamp(completion.completed_at)} · operation{' '}
+                    <SourceLink kind="event" id={completion.operation_event_id} label="operation" />
                   </li>
                 ))}
               </ul>

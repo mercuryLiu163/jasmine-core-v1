@@ -5,8 +5,9 @@
  * forwards a fixed allowlist. This test calls *every* endpoint the UI has and
  * asserts that each resulting request is one the proxy would forward, with the
  * read-only method set. It fails if someone adds a client call the proxy does
- * not cover (which would look like a mysterious 404 in the browser) or if the
- * allowlist gains a path nothing uses.
+ * not cover (which would look like a mysterious 404 in the browser). The reverse
+ * direction — an allowlist entry no client uses — is not checked here; the Python
+ * contract test covers allowlist ⊆ Core routes instead.
  */
 
 import { afterEach, describe, expect, it } from 'vitest'

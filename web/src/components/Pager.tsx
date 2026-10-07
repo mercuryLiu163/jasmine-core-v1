@@ -13,17 +13,24 @@ export function Pager({
   paged,
   noun,
   limit,
+  cursorKind = 'offset',
 }: {
   paged: Paged<unknown>
   noun: string
   limit: number
+  /** `offset`/`after_seq` prove completion by a short page; `after_id` by Core's null cursor. */
+  cursorKind?: 'offset' | 'after_seq' | 'after_id'
 }): JSX.Element {
+  const completeReason =
+    cursorKind === 'after_id'
+      ? 'Core 对 after_id 返回了 null 游标(next_after_id 为空)。'
+      : '最后一页短于 limit。'
   return (
     <div className="pager">
       <p className="pager__meta">
         已载入 {paged.items.length} 条{noun} · {paged.pages} 页(每页 {limit};
         <code>count</code> 是本页长度,不是总数)。
-        {paged.complete ? ' 最后一页短于 limit,可判定已到末尾。' : ' 是否还有更多由 Core 决定。'}
+        {paged.complete ? ` ${completeReason}` : ' 是否还有更多由 Core 决定。'}
       </p>
       {paged.error && paged.items.length > 0 ? (
         // Only a failure that happened *after* rows were already shown belongs

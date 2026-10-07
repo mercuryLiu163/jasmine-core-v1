@@ -317,11 +317,14 @@ export interface MaintenanceHead {
 export interface MaintenanceChange {
   operation_event_id: string
   root_interpretation_id: string
-  from_interpretation_id: string | null
-  to_interpretation_id: string
+  /** The interpretation the change applied to (nullable on RERUN_COMPLETE). */
+  parent_interpretation_id: string
+  /** The child a `correct`/`rerun` produced; null for `reject`. */
+  child_interpretation_id: string | null
+  /** `CORRECT` | `REJECT` | `RERUN` | `RERUN_COMPLETE`. */
   action: string
   actor_id: string
-  reason: string | null
+  reason: string
   from_revision: number
   to_revision: number
   created_at: string
@@ -330,12 +333,15 @@ export interface MaintenanceChange {
 export interface OperationCompletion {
   operation_event_id: string
   child_interpretation_id: string
-  child_status: string
-  applied: number
-  expected_revision: number
-  head_revision: number
+  /** `EXTRACTED` | `FAILED` | `INTERRUPTED` — column `processing_status`. */
+  processing_status: string
+  /** 0/1 column `head_applied`: whether this completion advanced the head. */
+  head_applied: number
+  expected_head_revision: number
+  observed_head_revision: number
   completed_at: string
-  detail: string
+  /** Column `result_json` is returned as the stored JSON **string**. */
+  result_json: string
 }
 
 export interface InterpretationPage {
@@ -344,9 +350,17 @@ export interface InterpretationPage {
 }
 
 export interface ResolutionAction {
-  kind?: string
-  target_kind?: string
-  target_id?: string
+  /** `CREATE_RULE` | `ATTACH_TASK` | `CREATE_TASK` | `NO_ACTION` | unknown. */
+  action: string
+  candidate_index: number
+  target_id: string | null
+  /** `rule` | `task` | unknown. */
+  target_type: string | null
+  before_revision: number | null
+  after_revision: number | null
+  rule_version: number | null
+  binding_event_id: string | null
+  change_event_ids: string[]
   [key: string]: unknown
 }
 

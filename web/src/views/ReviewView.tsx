@@ -125,6 +125,9 @@ function ReviewBody({ item }: { item: Review }): JSX.Element {
             <StatusBadge kind="disposition" status={item.preview.plan.disposition} /> ·{' '}
             {item.preview.plan.items.length} 项 · policy {item.preview.policy_version}
           </p>
+          {item.preview.plan.items.length === 0 ? (
+            <Empty what="计划项" hint="Core 返回了空计划;这不是「无需审批」的证明。" />
+          ) : (
           <ul className="plain">
             {item.preview.plan.items.map((planItem) => (
               <li key={`${planItem.candidate_index}:${planItem.action}`}>
@@ -135,6 +138,7 @@ function ReviewBody({ item }: { item: Review }): JSX.Element {
               </li>
             ))}
           </ul>
+          )}
           <JsonBlock value={item.preview.expected_revisions} label="expected_revisions" />
         </>
       ) : item.preview_error ? (

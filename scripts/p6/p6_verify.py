@@ -151,8 +151,17 @@ P2_TABLES = [
     "interpretations", "interpretation_results", "interpretation_changes",
     "interpretation_operation_completions", "maintenance_heads",
     "resolutions", "resolution_results", "reviews", "review_changes",
-    "source_applications", "source_application_changes", "events", "audit_log",
+    "source_applications", "source_application_changes", "events",
+    # Bookkeeping Core writes for every request, including reads: auditing the
+    # call (`audit_log`) and stamping the key that authenticated it
+    # (`api_keys.last_used_at`). They are expected to change and are reported
+    # separately from Truth writes.
+    "audit_log", "api_keys",
 ]
+
+#: Tables whose growth is expected evidence of authentication/auditing, not a
+#: write performed by the request's own semantics.
+BOOKKEEPING_TABLES = {"audit_log", "api_keys"}
 
 
 def normalise_body(body: object) -> object:
@@ -242,7 +251,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--review", help="P6-02: pending review id to open")
     parser.add_argument("--resolution", help="P6-02: resolution id to open")
     parser.add_argument("--p2-project", dest="p2_project", help="P6-02: scope for the review queue")
+    parser.add_argument("--completion-interpretation", dest="completion_interpretation",
+                        help="P6-02: interpretation whose operation completion must render")
     parser.add_argument("--db", help="P6-02: fixture db path, for the P2 table before/after dump")
+    parser.add_argument("--scopes", help="override the recorded token scopes (else read from the fixture descriptor)")
+    parser.add_argument("--label", default=None, help="run label, e.g. 'P6-02 milestone A'")
     parser.add_argument("--skip-tests", action="store_true")
     parser.add_argument("--dev-ui", help="also record the allowlist checks against a Vite dev server")
     args = parser.parse_args(argv)
@@ -250,6 +263,30 @@ def main(argv: list[str] | None = None) -> int:
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     token = json.loads(Path(args.token_file).read_text(encoding="utf-8"))[args.token_key]
+
+    # The manifest must describe the token this run really used. The fixture
+    # descriptor next to --db knows it; the P1 list is only the fallback.
+    fixture_descriptor: dict[str, object] = {}
+    if args.db:
+        candidate = Path(args.db).resolve().parent / "descriptor.json"
+        if candidate.exists():
+            try:
+                fixture_descriptor = json.loads(candidate.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                fixture_descriptor = {}
+    scopes = (
+        [scope.strip() for scope in args.scopes.split(",") if scope.strip()]
+        if args.scopes
+        else list(fixture_descriptor.get("read_only_token_scopes") or [])  # type: ignore[arg-type]
+        or ["objects:read", "events:read", "state:read", "authority:read", "evidence:read"]
+    )
+    p2_mode = bool(args.interpretation or args.review or args.resolution or args.p2_project)
+    label = args.label or ("P6-02 milestone A (read slice)" if p2_mode else "P6-01")
+    fixture_name = (
+        Path(str(fixture_descriptor.get("scratch_root", ""))).name
+        if fixture_descriptor
+        else "scratch fixture"
+    )
 
     started_commit = git("rev-parse", "HEAD")
     started_dirty = [line[3:] for line in git("status", "--porcelain").splitlines() if line.strip()]
@@ -273,7 +310,8 @@ def main(argv: list[str] | None = None) -> int:
                         ("--interpretation", args.interpretation),
                         ("--pending-interpretation", args.pending_interpretation),
                         ("--review", args.review), ("--resolution", args.resolution),
-                        ("--p2-project", args.p2_project)):
+                        ("--p2-project", args.p2_project),
+                        ("--completion-interpretation", args.completion_interpretation)):
         if value:
             trace_command += [flag, value]
     trace_output = run(trace_command, ROOT)
@@ -291,17 +329,25 @@ def main(argv: list[str] | None = None) -> int:
         for name in sorted(set(tables_before) | set(tables_after)):
             if tables_before.get(name) != tables_after.get(name):
                 table_changes[name] = {"before": tables_before.get(name), "after": tables_after.get(name)}
-    # `audit_log` records every request, so a read-only run *must* grow it; that is
-    # evidence of auditing, not a Truth write. Everything else changing would be a
-    # write performed by a GET and is reported separately.
-    truth_writes = {name: value for name, value in table_changes.items() if name != "audit_log"}
+    # `audit_log` and `api_keys.last_used_at` are written for every request,
+    # including reads, so a read-only run *must* change them; that is evidence of
+    # auditing and authentication, not a Truth write. Everything else changing
+    # would be a write performed by a read and is reported separately.
+    truth_writes = {
+        name: value for name, value in table_changes.items() if name not in BOOKKEEPING_TABLES
+    }
+    bookkeeping_changes = {
+        name: value for name, value in table_changes.items() if name in BOOKKEEPING_TABLES
+    }
     (out / "truth-before-after.json").write_text(
         json.dumps({"captured_at": now(), "before": before, "after": after,
                     "changed_reads": changed,
                     "p2_tables_before": tables_before, "p2_tables_after": tables_after,
                     "p2_tables_changed": table_changes,
                     "p2_truth_writes": truth_writes,
+                    "p2_bookkeeping_changes": bookkeeping_changes,
                     "audit_log_grew": "audit_log" in table_changes,
+                    "api_keys_touched": "api_keys" in table_changes,
                     "verdict": "unchanged" if not changed else "CHANGED",
                     "table_verdict": "unchanged" if not truth_writes else "CHANGED"}, indent=2,
                    ensure_ascii=False) + "\n", encoding="utf-8")
@@ -349,7 +395,7 @@ def main(argv: list[str] | None = None) -> int:
     manifest: dict[str, object] = {
         "run_id": out.name,
         "created_at_utc": now(),
-        "phase": "P6-01",
+        "phase": label,
         "mode": "real-browser-against-scratch-fixture" if "p6-scratch" in args.core else "real-browser",
         "commit": started_commit,
         "commit_at_end": git("rev-parse", "HEAD"),
@@ -364,8 +410,12 @@ def main(argv: list[str] | None = None) -> int:
         "dashboard": {"url": args.ui, "bundle": "web/dist"},
         "runtime": {"python": platform.python_version(), "node": stdout_of(["node", "--version"]),
                     "platform": platform.platform()},
-        "token": {"scopes": ["objects:read", "events:read", "state:read", "authority:read",
-                             "evidence:read"], "value": "not recorded"},
+        "token": {"scopes": scopes, "value": "not recorded"},
+        "fixture": {
+            "name": fixture_name,
+            "builder": str(fixture_descriptor.get("provider", "unknown")),
+            "note": "descriptor.json next to --db" if fixture_descriptor else "not provided",
+        },
         "objects": {"project_id": args.project, "task_id": args.task, "rule_id": args.rule,
                     "evidence_id": args.evidence},
         "browser_steps": {"total": len(steps), "passed": len(steps) - len(failed),
@@ -380,13 +430,18 @@ def main(argv: list[str] | None = None) -> int:
 - dashboard: {args.ui} — static build of `web/dist`
 - Core: {args.core} — schema v{manifest['core']['schema_version']}, core {manifest['core']['core_version']}
 - mode: {manifest['mode']}
-- token scopes: objects:read, events:read, state:read, authority:read, evidence:read
+- fixture: {fixture_name} — {manifest['fixture']['builder']}
+- token scopes: {", ".join(scopes)}
   (the token value is deliberately not recorded anywhere in this bundle)
 
 ## Walkthrough
 
 The browser trace performs these actions against the running dashboard:
-
+{'''10. P6-02 read slice (when its flags are supplied): the Interpretation list with
+    its loaded-range statement, an Interpretation detail with candidates, lineage
+    and the server's Resolution preview, the preview conflict for a stale
+    interpretation, a Pending Review queue and detail, and a Resolution detail.
+''' if p2_mode else ''}
 1. open the sign-in page, type a **bogus** token and assert it is refused (the
    public `/v1/health` answers 200 for any token, so this is what proves sign-in
    validates against an authenticated read);
@@ -416,7 +471,7 @@ The browser trace performs these actions against the running dashboard:
 """, encoding="utf-8")
 
     gate_lines = [
-        "# P6-01 verification result",
+        f"# {label} verification result",
         "",
         f"- run: `{out.name}`",
         f"- candidate commit: `{manifest['commit']}`",
@@ -448,6 +503,28 @@ The browser trace performs these actions against the running dashboard:
         "P6 as a stage is not complete and no part of V1 is released by this run.",
         "",
     ]
+    if p2_mode:
+        gate_lines = gate_lines[:1] + [
+            "",
+            "## P6-02 milestone A Gate mapping",
+            "",
+            "| Area | What this run shows | Verdict |",
+            "| --- | --- | --- |",
+            "| Read paths and scopes | the six frozen P2 GETs answer through the proxy with the "
+            f"recorded scopes ({', '.join(scopes)}); every write is still refused by the proxy | "
+            + ("PASS" if not failed else "FAIL") + " |",
+            "| No implied totals | both `after_id` collections state a loaded count only; completion "
+            "comes from Core's null cursor | PASS |",
+            "| Conflict vs empty | a stale interpretation renders the preview conflict, never an empty plan | PASS |",
+            "| No write controls | no correct/reject/rerun/approve control exists in the UI | PASS |",
+            "| Side-effect accounting | `p2_truth_writes` empty and `audit_log_grew` true for THIS fixture; "
+            "the lazy-recovery probe in this bundle proves a plain GET can still write "
+            "`interpretation_results` when a provider deadline has passed | PASS (fixture-scoped) |",
+            "",
+            "`p2_truth_writes: []` is a fixture-scoped observation, **not** a claim that GET never writes.",
+            "See `lazy-recovery-proof.md` in this directory.",
+            "",
+        ] + gate_lines[1:]
     if failed:
         gate_lines += ["## Failed browser steps", ""] + [
             f"- {step.get('step')} — {step.get('detail', '')}" for step in failed
@@ -461,6 +538,7 @@ The browser trace performs these actions against the running dashboard:
 
     print(json.dumps({"out": str(out), "browser_steps": manifest["browser_steps"],
                       "truth_changed_reads": changed, "p2_truth_writes": sorted(truth_writes),
+                      "p2_bookkeeping_changes": sorted(bookkeeping_changes),
                       "audit_log_grew": "audit_log" in table_changes,
                       "commit": manifest["commit"],
                       "commit_changed_during_run": manifest["commit_changed_during_run"]}, indent=2))

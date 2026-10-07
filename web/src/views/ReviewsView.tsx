@@ -142,7 +142,7 @@ export function ReviewsView({
           </ul>
         ) : null}
 
-        <Pager paged={reviews} noun="Review" limit={LIMIT} />
+        <Pager paged={reviews} noun="Review" limit={LIMIT} cursorKind="after_id" />
         {reviews.loadedAt ? (
           <StaleBanner loadedAt={reviews.loadedAt} scope={`Pending Reviews(${scope})`} />
         ) : null}

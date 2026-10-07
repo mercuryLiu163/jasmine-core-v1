@@ -225,6 +225,18 @@ class Fixture:
             )["candidates"]},
         }, actor_id=self.human)["result"]["child_interpretation_id"]
 
+        # 3b. rerun the corrected child so the fixture contains a REAL
+        # `interpretation_operation_completions` row (the dashboard renders that
+        # row, and a schema-only guess about its columns is not acceptable).
+        # `change(rerun)` reserves the operation, runs the provider through
+        # `process`, then finishes it, which is what writes the completion.
+        head_after_correct = resolver.maintenance.head(child)["revision"]
+        rerun = resolver.maintenance.change(child, "rerun", {
+            "idempotency_key": "fixture-rerun", "host_id": self.host,
+            "reason": "fixture rerun for the operation-completion row",
+            "expected_revision": head_after_correct,
+        }, actor_id=self.human)
+
         # 4. rejected interpretation, to show a non-current state.
         rejected_event = prompt(TEXT + " (rejected case)")
         rejected = interpret(rejected_event, "fixture-rejected")
@@ -244,6 +256,8 @@ class Fixture:
             "pending_resolution_id": pending_resolution["resolution_id"],
             "pending_review_id": review_id,
             "child_interpretation_id": child,
+            "rerun_child_interpretation_id": rerun["result"]["child_interpretation_id"],
+            "rerun_completion": (resolver.maintenance.get(child).get("operation_completions") or [None])[0],
             "rejected_interpretation_id": rejected,
             "extra_interpretation_ids": extra,
             "event_ids": {"applied": applied_event, "pending": review_event,

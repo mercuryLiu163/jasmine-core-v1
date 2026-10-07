@@ -83,7 +83,9 @@ interpretation `PROCESSING|EXTRACTED|FAILED|INTERRUPTED`; disposition
 
 ## Verification of this slice
 
-`validation-runs/p6/20261007T123430Z-p6-02-read/` — isolated P2 fixture
+`validation-runs/p6/` — the newest `*-p6-02a-read/` run (its `manifest.json` names
+the commit it binds; earlier `*-p6-02-read/` directories were taken before the
+commit and are superseded). Isolated P2 fixture
 (`scripts/p6/p6_p2_fixture.py`: the P1 scenario plus real P2 rows produced by the
 real pipeline with a component-simulation provider, clearly labelled as not a
 model run), dashboard `:5183` over Core `:8795`, read token `p2_read`:
@@ -100,9 +102,33 @@ model run), dashboard `:5183` over Core `:8795`, read token `p2_read`:
 * plus the separate lazy-recovery probe above, which deliberately produces the
   one write a read can perform.
 
-Component and contract tests: 65 web tests in 10 files; 7 Python contract tests
+Component and contract tests: 80 web tests in 11 files; 7 Python contract tests
 (`tests/p6`), which also assert that the allowlist never covers `/v1/reviews` or
-`/v1/resolutions` as collections.
+`/v1/resolutions` as collections, and that the Conversation event filter matches
+`models.EVENT_TYPES` in both directions.
+
+## Independent review and validation (milestone A)
+
+- Review of `cef1cdd` raised two blockers, both fixed before this note: the
+  `OperationCompletion` type (and two sibling sets) named fields that do not exist
+  — the real columns are `processing_status`, `head_applied`,
+  `expected_head_revision`, `observed_head_revision`, `result_json`, and
+  `MaintenanceChange`/`ResolutionAction` use
+  `parent_interpretation_id`/`child_interpretation_id` and `action`/`target_type`.
+  The fixture now performs a **real rerun** so a genuine completion row exists to
+  render and test, and `p6Views`-level tests pin it. The second blocker was this
+  evidence generator's own metadata (P1 scopes, P6-01 templates, a citation to a
+  pre-commit run); `scripts/p6/p6_verify.py` now derives the scopes and fixture
+  name from the fixture descriptor and emits a P6-02 walkthrough and Gate mapping.
+- Validation of `cef1cdd`/`daa618a` returned PASS on build/tests, the six read
+  paths, under-scoped-token refusal (403 shown as `forbidden`, no fallback), the
+  32-step browser trace, and the no-claim-falsified checks; it independently
+  reproduced the lazy-recovery write on its own DB copy and re-verified the
+  target-refusal fix on servers it started itself.
+- Its one broader observation is now in this bundle's accounting: a plain
+  authenticated GET also advances `api_keys.last_used_at`, so the read-slice
+  digests are reported as `p2_truth_writes` (must be empty) versus
+  `p2_bookkeeping_changes` (`audit_log`, `api_keys` — expected).
 
 ## Not delivered (milestone B)
 

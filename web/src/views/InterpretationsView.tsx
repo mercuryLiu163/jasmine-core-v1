@@ -12,7 +12,7 @@
  * still rendered verbatim on the row itself.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { DEFAULT_OBJECT_LIMIT } from '../api/endpoints'
 import type { Interpretation } from '../api/types'
@@ -42,6 +42,12 @@ export function InterpretationsView({
 }): JSX.Element {
   const { endpoints } = useSession()
   const [draftEvent, setDraftEvent] = useState(eventId ?? '')
+
+  // The box is a draft of the *current* filter: when the route changes the
+  // scope, it must follow, otherwise it shows an id that is no longer applied.
+  useEffect(() => {
+    setDraftEvent(eventId ?? '')
+  }, [eventId])
 
   const interpretations = usePagedResource(
     afterIdLoader<Interpretation>({
@@ -203,7 +209,7 @@ export function InterpretationsView({
           </table>
         ) : null}
 
-        <Pager paged={interpretations} noun="Interpretation" limit={LIMIT} />
+        <Pager paged={interpretations} noun="Interpretation" limit={LIMIT} cursorKind="after_id" />
         {interpretations.loadedAt ? (
           <StaleBanner loadedAt={interpretations.loadedAt} scope={`Interpretation 列表(${scope})`} />
         ) : null}

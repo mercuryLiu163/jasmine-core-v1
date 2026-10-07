@@ -122,7 +122,7 @@ export function Unavailable({
           <dd>{owner}</dd>
         </div>
         <div>
-          <dt>等待冻结</dt>
+          <dt>尚未交付</dt>
           <dd>{pending}</dd>
         </div>
       </dl>

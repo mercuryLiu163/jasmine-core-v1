@@ -203,7 +203,10 @@ def main(argv: list[str] | None = None) -> int:
             "- It is nevertheless a Core-side write performed by a read, so P6-02 does not",
             "  describe these endpoints as strictly read-only.",
             "- On an intact fixture (`/private/tmp/p6-p2`) the before/after digests of every",
-            "  P2 table are identical; the write needs the crashed-provider precondition above.",
+            "  P2 table EXCEPT the authentication bookkeeping (`audit_log`, and",
+            "  `api_keys.last_used_at`) are identical: Core audits every request and stamps the",
+            "  key that authenticated it, so those always change even for reads. The recovery",
+            "  write above needs the crashed-provider precondition.",
             "",
         ]
     finally:

@@ -63,6 +63,7 @@ function parseArgs(argv) {
       case '--review': args.review = next; index += 1; break
       case '--resolution': args.resolution = next; index += 1; break
       case '--p2-project': args.p2Project = next; index += 1; break
+      case '--completion-interpretation': args.completionInterpretation = next; index += 1; break
       case '--out': args.out = next; index += 1; break
       case '--headful': args.headful = true; break
       default: throw new Error(`unknown argument ${flag}`)
@@ -688,6 +689,37 @@ async function main() {
           previewState.isPlanNotApplied === true)
         await trace.screenshot(cdp, '12-resolution-preview')
         void preview
+      }
+
+      if (args.completionInterpretation) {
+        // The reviewer caught that this panel read invented field names and
+        // printed "child undefined · applied no · expected rundefined". The
+        // fixture now performs a real rerun so a genuine completion row exists.
+        await cdp.send('Page.navigate', {
+          url: `${args.ui}/#/interpretation/${encodeURIComponent(args.completionInterpretation)}`,
+        })
+        await waitFor(cdp, `document.querySelector('[data-testid=operation-completion]') !== null`,
+          { label: 'operation completion row' })
+        const completion = await evaluate(cdp, `(() => {
+          const row = document.querySelector('[data-testid=operation-completion]')
+          const text = (row?.textContent ?? '').replace(/\s+/g, ' ').trim()
+          const page = document.body.textContent ?? ''
+          return {
+            text,
+            hasStatus: /EXTRACTED|FAILED|INTERRUPTED/.test(text),
+            hasHeadApplied: text.includes('head applied yes') || text.includes('head applied no'),
+            hasRevisions: /expected head r\d+/.test(text) && /observed r\d+/.test(text),
+            undefinedLeak: text.includes('undefined'),
+            history: ['CORRECT', 'RERUN'].filter((action) => page.includes(action)),
+          }
+        })()`)
+        trace.record('operation completion renders the real columns (no invented fields)',
+          completion.hasStatus && completion.hasHeadApplied && completion.hasRevisions &&
+          completion.undefinedLeak === false,
+          completion.text.slice(0, 160))
+        trace.record('maintenance history names the real actions',
+          completion.history.length > 0, JSON.stringify(completion.history))
+        await trace.screenshot(cdp, '16-operation-completion')
       }
 
       if (args.review) {
