@@ -83,6 +83,54 @@ Legend: **D** = delivered, **P** = partially delivered (the gap is named),
   `44cd6b6` and `7464b83` (product paths and built bundle byte-identical):
   P6-T01 PASS, P6-T02 PASS, P6-T07 PASS.** P6-T03/T04/T05/T06 remain out of scope.
 
+## Rebase onto `main` after P2 merged (branch rewritten)
+
+`main` advanced from the P1 baseline `9059625` to `850fbec` (P2-01 interpretation,
+P2-02 resolver/review, P2-03 admission all merged; **schema v6 -> v8**, migrations
+`m0007_interpretations` and `m0008_resolutions`). The P6 branch was rebased onto
+`850fbec`, so the pre-rebase commits above were rewritten:
+
+| pre-rebase | post-rebase |
+| --- | --- |
+| `4a4ee17` | `61ead22` |
+| `121bc07` | `5203671` |
+| `a5a92ca` | `b7c3265` |
+| `f7addbf` (code verdict) | `8060546` |
+| `44cd6b6` | `07ddb95` |
+| `7464b83` | `9072d44` |
+| `37cc68a` | `a43f452` |
+
+Evidence that the rebase did not change the dashboard:
+`git diff 37cc68a a43f452 -- web scripts/p6 tests/p6` is **empty**, and
+`web/dist/assets/index-Bn3SCuxd.js` still hashes to `1047915010c1e2…9d6e58`.
+
+Re-verification after the rebase, by the implementer, on the new base (isolated
+v8 fixture, `validation-runs/p6/20261007T105630Z-p6-01-rebased-v8/`): tsc 0;
+56 web tests in 9 files; the standard browser trace **20/20 against a schema-v8
+P2-era Core**; the `未接入` walk 10/10; the repository Core suite **350 tests OK**.
+The independent r3 verdict binds the pre-rebase code and the v6 base; a fresh
+independent confirmation on the rebased tip is a follow-up, not something this
+document claims.
+
+### Post-rebase findings (not fixed here, to keep the verified bundle intact)
+
+1. **Event-type filter is incomplete.** Core now has 30 event types; the
+   Conversation filter dropdown (`web/src/views/ConversationView.tsx`) still lists
+   the 23 P1 ones, so `interpretation.bound`, `interpretation.corrected`,
+   `interpretation.rejected`, `interpretation.rerun`, `resolution.command`,
+   `review.approved` and `review.rejected` cannot be selected. They still *render*
+   when present (unknown types are never dropped), and the `source_system` filter
+   is a free-text field, so this is a usability gap rather than a truth gap.
+2. **The Interpretation `未接入` copy is now stale in its reason.** It says the
+   contract is not frozen, but P2 is merged and `/v1/interpretations`,
+   `/v1/reviews`, `/v1/resolutions` exist. The correct status is now "P6-02 has
+   not delivered this view yet", not "waiting for P2". The proxy allowlist
+   (`web/server/core-paths.json`) also has to grow those read paths, together with
+   the `tests/p6` contract test, before any of them can be used from the browser.
+
+Both belong to the next P6 PR (P6-02/P6-03a), which is now unblocked because the
+P2 contracts exist.
+
 ## Status
 
 `P6-01: T01 PASS, T02 PASS, T07 PASS` on an isolated scratch fixture — the r3

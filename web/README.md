@@ -138,7 +138,7 @@ explicitly *not* delivered.
 
 | Screen | Owner | Waiting on |
 | --- | --- | --- |
-| Interpretation / Review, Correct / Reject / Re-run | P2 | `/interpret`, interpretation and review contracts |
+| Interpretation / Review, Correct / Reject / Re-run | P6-02 | P2 contracts are merged (`/v1/interpretations`, `/v1/reviews`, `/v1/resolutions`); the P6-02 view, the proxy read paths and the contract test are not delivered |
 | Checkpoint compare | P3 | checkpoint read API |
 | Context inspector (actual injection) | P3 | persisted pack + injection receipt |
 | Memory jobs / recall / management | P4 | Memory adapter read + management API |
@@ -149,9 +149,11 @@ explicitly *not* delivered.
 ## Phase status
 
 `P6-01: T01 PASS, T02 PASS, T07 PASS` on an isolated scratch fixture — the
-independent r3 verdict on `f7addbf`, whose product code and built bundle are
-byte-identical to the tip (see `P6-01-COMPLIANCE.md` for the commit binding and
-for the two caveats the validator recorded). It is **not** `P6` done: P6-02
+independent r3 verdict on the pre-rebase commit `f7addbf`, whose product code and
+built bundle are byte-identical to the current tip after the branch was rebased
+onto `main` (now including P2, schema v8; see `P6-01-COMPLIANCE.md` for the
+pre/post-rebase hash mapping, the post-rebase re-verification on a v8 Core and
+the two caveats the validator recorded). It is **not** `P6` done: P6-02
 (audited human writes) and P6-03a/b/c (P3/P4/P7-01 inspectors) are not delivered,
 no Gate ran against the operator's own Core or a real captured conversation, and
 throttling plus an automated contrast sweep remain uncovered. See the run
