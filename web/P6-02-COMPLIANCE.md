@@ -293,6 +293,15 @@ packaging fix and found that the gate did *not* falsely pass on a consumed fixtu
 3. `p6_verify.py` ran `vitest` before `vite build`; it now builds first;
 4. the GET allowlist admitted two paths that are not real GET routes (see above).
 
+A **delta re-validation** then returned **PASS**: nothing regressed, and each of the
+four fixes was verified from the outside — the nine per-action audit checks were shown
+to be falsifiable (absent rows, a request-id mismatch, an extra row, and a wrong
+actor/decision/status each yield `ok=False`; only a true match yields `ok=True`), the
+suite passed 108/108 with `web/dist` absent, the tightened allowlist survived an attack
+(26 legitimate GETs forwarded, 25 non-GET-route GETs refused, malformed ids never
+reaching Core, real-shaped POSTs on all four write families still arrived), and the
+frozen bundle verified 44/44 hash-exact.
+
 Milestone B is therefore validated by a second party, with those caveats closed in
 the recorded commit. It has had no separate *code review* of the UI panels: two
 review attempts were stopped — the first when the packaging defect was found, the

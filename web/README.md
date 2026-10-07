@@ -182,7 +182,8 @@ independently validated, PASS-WITH-CAVEATS` — the T03 Gate drives all seven sh
 writes through the dashboard proxy with a real human key and records the frozen
 tuple per action (method/path/scope/actor/host/source/replay-key/revision/audit
 readback) plus the refusal/conflict/replay negatives; a second party rebuilt the
-fixture, the checkout and the servers and reproduced it. Its four findings are fixed
+fixture, the checkout and the servers and reproduced it, then re-validated the fixes
+and returned **PASS** on the delta with nothing regressed. Its four findings are fixed
 in `c7c5480`. Two earlier "frozen commits" were incomplete (the dashboard's
 `web/src/lib/` was gitignored and untracked); that is fixed and the tip is built and
 tested from a clean checkout. A separate code review of the write panels is still
