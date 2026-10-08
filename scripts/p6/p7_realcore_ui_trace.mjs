@@ -483,7 +483,11 @@ async function main() {
     const aclGranted = await listState()
     observed.acl.granted = aclGranted
     trace.record(`A/acl: with validation:unattributed the grant-filtered list shows all ${expectedIds.length} and says visibility=grant_filtered`,
-      aclGranted.present === true && aclGranted.rows.length === expectedIds.length
+      // Set equality, like the list check: a count alone passes when a different record is
+      // substituted for an expected one.
+      aclGranted.present === true
+        && JSON.stringify((aclGranted.rows ?? []).map((row) => row.runId).sort())
+           === JSON.stringify([...expectedIds].sort())
         && (aclGranted.summary ?? '').includes('grant_filtered'),
       `rows=${aclGranted.rows.length} summary=${aclGranted.summary}`)
 

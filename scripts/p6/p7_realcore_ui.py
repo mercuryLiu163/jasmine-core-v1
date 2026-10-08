@@ -62,6 +62,7 @@ from p7_realcore_env import (  # noqa: E402 - path setup must precede the import
     DEFAULT_REAL_RUNS,
     compare_real_tree,
     criterion1_finding,
+    read_real_records,
     snapshot_real_tree,
 )
 
@@ -240,12 +241,11 @@ def trace_expectations(real_runs: Path) -> dict[str, Any]:
     of any size asserts the same *shape* against the data. `ids` are the run ids the Core will
     surface; the PASS/BLOCKED/FAIL lists are grouped by the run-level verdict on disk.
     """
+    # One reader for the population: the env builder's `read_real_records` (which refuses an
+    # unusable tree with a path-bearing message) rather than a second, weaker rglob here.
     ids: list[str] = []
     by_verdict: dict[str, list[str]] = {"PASS": [], "BLOCKED": [], "FAIL": []}
-    for path in sorted(real_runs.rglob("run-*.json"), key=lambda item: item.as_posix()):
-        if not path.is_file():
-            continue
-        data = json.loads(path.read_text(encoding="utf-8"))
+    for path, data in read_real_records(real_runs):
         run_id = data["run_id"]
         ids.append(run_id)
         by_verdict.setdefault(data.get("verdict", "FAIL"), []).append(run_id)
@@ -945,8 +945,17 @@ def main(argv: list[str] | None = None) -> int:
             "mode": {
                 "core": "real-p7-01 (extracted with git archive from the P7-01 worktree)",
                 "engine": "none — the Validation slice is read-only",
-                "validation_root": "operator tree (read-only) for Pass A and the acl pass; a "
-                                   "labelled synthetic fixture root for the Pass B negatives",
+                # The root this run actually read, not a claim that it was the operator's: an
+                # overridden --real-runs (the ten-record and census probes) must not be described
+                # as the operator tree.
+                "validation_root": (
+                    "operator tree (read-only) for Pass A and the acl pass; a labelled synthetic "
+                    "fixture root for the Pass B negatives"
+                    if Path(descriptor["real_runs_root"]).resolve()
+                    == Path(DEFAULT_REAL_RUNS).resolve() else
+                    f"an OVERRIDDEN records root, read-only ({descriptor['real_runs_root']}), not "
+                    f"the operator tree; a labelled synthetic fixture root for the Pass B "
+                    f"negatives"),
                 "phase_acceptance": (
                     "NOT claimed: P7-01 criterion 1 is BLOCKED (no real FAIL run exists on the "
                     "real records tree), so this drill-down does not make the P6 or P7 phase PASS"
@@ -961,9 +970,13 @@ def main(argv: list[str] | None = None) -> int:
                 "worktree": str(REPO_ROOT),
                 "git_head": git_head,
                 "git_status_porcelain": git_status,
-                "dirty_note": "built with `npm run build` in web/ from the working tree, because "
-                              "the P6-03c views are uncommitted; a git archive of HEAD would not "
-                              "contain them",
+                # Only a claim when it is true: the views were uncommitted when this note was
+                # first written, and are committed now.
+                "dirty_note": ("built with `npm run build` in web/ from a working tree with "
+                               "uncommitted changes, so a git archive of HEAD would not reproduce "
+                               "it" if git_status else
+                               "built with `npm run build` in web/ from the committed tree "
+                               "(git status is clean)"),
                 "dist_files": dist_files,
             },
             "p7_worktree_head": p7_head,

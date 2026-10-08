@@ -224,7 +224,10 @@ def criterion1_finding(real_runs: Path) -> dict[str, Any]:
 def criterion1_sentence(finding: dict[str, Any]) -> str:
     """The one derived sentence the banner and the descriptor note both print."""
     if finding["criterion_1"] == "BLOCKED":
-        return "criterion 1 (a real FAIL run) is BLOCKED: no real FAIL record exists on this tree"
+        # The predicate keys on FAIL cases and classified failures, not only on a FAIL run
+        # verdict, so the sentence says what was actually looked for.
+        return ("criterion 1 (a real FAIL run) is BLOCKED: no FAIL case, failure_class or "
+                "failure_output exists on this tree")
     return ("criterion 1 (a real FAIL run) is demonstrated: the census reads "
             f"{finding['fail_cases']} FAIL case(s), "
             f"{finding['failure_class_non_null']} non-null failure_class and "
