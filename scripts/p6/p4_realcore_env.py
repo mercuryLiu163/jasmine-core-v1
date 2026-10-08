@@ -109,7 +109,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     p4 = out / "p4"
     if not (p4 / "src" / "jasmine_core").is_dir():
-        extract_core(args.ref, p4)
+        extract_core(args.ref, p4, args.repo)
     workspace = out / "workspace"
     workspace.mkdir(exist_ok=True)
     (workspace / "source.txt").write_text("initial\n", encoding="utf-8")
@@ -315,6 +315,8 @@ def main(argv: list[str] | None = None) -> int:
     build_parser.add_argument("--out", type=Path, required=True,
                               help="the isolated directory; created if missing")
     build_parser.add_argument("--ref", default=DEFAULT_REF, help="the pinned P4 commit")
+    build_parser.add_argument("--repo", type=Path, default=None,
+                              help="repository to extract --ref from (default: this worktree)")
     build_parser.add_argument("--port", type=int, default=8791, help="loopback port for the Core")
     build_parser.add_argument("--max-ticks", type=int, default=20,
                               help="worker ticks to run while seeding")
