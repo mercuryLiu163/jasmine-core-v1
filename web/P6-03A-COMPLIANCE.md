@@ -159,7 +159,7 @@ live allowlist, so enabling them cannot happen by drift or by a careless edit to
   `web/tests/p3ReadsCoreProxy.test.ts` (9) — the last covers the Vite-plugin host, which had
   no test until review pointed out that only `serve.mjs` was gated by one.
 * Contract tests: `tests/p6/test_p3_contract_snapshot.py` (15),
-  `tests/p6/test_p3_read_fixture.py` (13).
+  `tests/p6/test_p3_read_fixture.py` (14).
 
 ## What independent review changed
 
@@ -171,6 +171,13 @@ four things worth recording rather than quietly fixing:
   full set is now derived from each handler's own `principal.require(...)` calls, and
   reverting it fails three independent tests. This was a real defect in the deliverable, not
   a documentation slip.
+* **Then the order was wrong too.** A second pass found the derivation collected a helper's
+  own literals *before* descending into the helpers it calls, which reversed Core's
+  execution order for `_context_read` (it runs `_continuity_read` first, then requires
+  `checkpoint:read`). The scope *sets* were right and the *reported* scope was not: a token
+  missing several scopes was told to grant `checkpoint:read` where Core names
+  `objects:read`. The traversal now descends into a helper where the call appears, two tests
+  pin the order, and reverting the traversal fails three of them.
 * **A guard that could not fail.** Widening `isDependencyPending` to treat Core's `not_found`
   as the missing dependency passed the entire suite. Per-view 404 tests plus a direct
   unit test now fail it.
@@ -179,8 +186,12 @@ four things worth recording rather than quietly fixing:
   `CREATE TABLE`, not from a dict literal. Both statements are corrected above.
 * **The fixture invented nested shapes.** `next_actions` was served as strings where P3
   returns objects, so the "lists next_actions" evidence exercised a branch real P3 never
-  reaches. The fixture and the view now use P3's real shape, and a nested shape this build
-  does not recognise renders rather than being dropped.
+  reaches. `section_metrics` and `omissions` were invented too. The fixture and the view now
+  use P3's real key sets for everything the UI renders, and a test pins each mirrored key set
+  to P3's source (`continuity.next_actions`, `continuity._comparison`,
+  `context.renderer.render`). A nested shape this build does not recognise renders as JSON
+  rather than being dropped. Values remain the fixture's — it has no Truth store, and this
+  document says so rather than letting the distinction blur.
 
 ## Deliverables
 

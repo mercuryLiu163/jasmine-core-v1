@@ -20,12 +20,12 @@
       "handler": "get_context",
       "response_key": "context",
       "extra_scopes": [
-        "checkpoint:read",
         "objects:read",
         "state:read",
         "authority:read",
         "evidence:read",
-        "events:read"
+        "events:read",
+        "checkpoint:read"
       ],
       "query": []
     },
@@ -68,12 +68,12 @@
       "handler": "get_resume",
       "response_key": "resume",
       "extra_scopes": [
-        "checkpoint:read",
         "objects:read",
         "state:read",
         "authority:read",
         "evidence:read",
-        "events:read"
+        "events:read",
+        "checkpoint:read"
       ],
       "query": []
     }

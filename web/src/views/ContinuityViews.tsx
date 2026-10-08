@@ -79,12 +79,12 @@ const CHECKPOINT_READ_SCOPES = [
 ] as const
 const CONTEXT_READ_SCOPES = [
   'context:read',
-  'checkpoint:read',
   'objects:read',
   'state:read',
   'authority:read',
   'evidence:read',
   'events:read',
+  'checkpoint:read',
 ] as const
 const RESUME_READ_SCOPES = [
   'resume:read',

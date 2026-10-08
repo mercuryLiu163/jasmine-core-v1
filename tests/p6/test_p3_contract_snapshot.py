@@ -106,6 +106,30 @@ class P3ContractSnapshot(unittest.TestCase):
                 self.assertEqual(len(full), len([route["scope"], *route["extra_scopes"]]),
                                  "a scope is listed twice, once in scope and once in extra_scopes")
 
+    def test_each_route_records_its_scopes_in_the_order_core_checks_them(self) -> None:
+        """Order is observable, because Core names the *first* requirement it fails.
+
+        P3's dispatch requires the route scope, then runs the handler. `_context_read`
+        calls `_continuity_read` and only **then** requires `checkpoint:read`, so for a
+        token missing both `checkpoint:read` and `objects:read`, real P3 names
+        `objects:read`. Recording a function's own literals before descending into the
+        helpers it calls would reverse that and name the wrong scope.
+        """
+        shared = ["objects:read", "state:read", "authority:read", "evidence:read", "events:read"]
+        expected = {
+            r"^/v1/context/([^/]+)$": ["context:read", *shared, "checkpoint:read"],
+            r"^/v1/tasks/([^/]+)/checkpoints/latest$": ["checkpoint:read", *shared],
+            r"^/v1/checkpoints/([^/]+)$": ["checkpoint:read", *shared],
+            r"^/v1/resumes/([^/]+)$": ["resume:read", *shared, "checkpoint:read"],
+        }
+        contract = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        self.assertEqual({route["path_pattern"] for route in contract["read_routes"]},
+                         set(expected))
+        for route in contract["read_routes"]:
+            with self.subTest(pattern=route["path_pattern"]):
+                self.assertEqual([route["scope"], *route["extra_scopes"]],
+                                 expected[route["path_pattern"]])
+
     def test_response_field_sets_are_not_empty(self) -> None:
         # A view cannot be honest about a shape nobody recorded, so an empty field set is
         # a failure rather than a pass with fewer assertions.

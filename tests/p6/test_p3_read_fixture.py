@@ -125,6 +125,10 @@ class OverHttp(unittest.TestCase):
             # fixture must too.
             "route-scope-only": {"context:read", "objects:read", "state:read",
                                  "authority:read", "evidence:read", "events:read"},
+            # Carries ONLY the route scope, so it is missing both `checkpoint:read` and the
+            # five `_continuity_read` scopes. P3 checks the five first and names
+            # `objects:read`; this pins the order, not just the set.
+            "context-only": {"context:read"},
         }
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), fixture.Handler)
         cls.port = cls.server.server_address[1]
@@ -197,6 +201,20 @@ class OverHttp(unittest.TestCase):
         self.assertEqual(status, 403, body)
         self.assertEqual(body["error"]["code"], "forbidden_scope")
         self.assertEqual(body["error"]["details"]["required"], "checkpoint:read")
+
+    def test_the_refusal_names_the_scope_core_would_name_first(self) -> None:
+        """Order, not just membership: P3 checks the shared scopes before `checkpoint:read`.
+
+        A token with only `context:read` is missing six scopes. Real P3 runs
+        `_context_read` -> `_continuity_read` first, so it refuses with `objects:read`; a
+        fixture that named `checkpoint:read` would be reporting a different requirement
+        than Core, and an operator following the message would grant the wrong scope first.
+        """
+        status, body, _ = call(self.port, self.SAMPLE_PATHS[r"^/v1/context/([^/]+)$"],
+                               "context-only")
+        self.assertEqual(status, 403, body)
+        self.assertEqual(body["error"]["code"], "forbidden_scope")
+        self.assertEqual(body["error"]["details"]["required"], "objects:read")
 
     def test_every_route_enforces_the_full_contract_scope_set(self) -> None:
         """Drop each required scope in turn; the route must refuse, naming that scope.

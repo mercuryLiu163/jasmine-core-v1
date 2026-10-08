@@ -100,68 +100,71 @@ def _returns_dict_keys(source: str, func_name: str) -> list[str]:
 
 
 def _handler_scopes(source: str, handler: str) -> list[str]:
-    """Every scope `handler` requires, following the helpers it calls.
+    """Every scope `handler` requires, in the order Core would check them.
 
     The route table names one scope per route, but that is not the whole requirement: P3's
     handlers also call `_continuity_read`, which requires five more, and `_context_read`,
     which adds `checkpoint:read`. Reading only the route table would under-report the
     contract — and a token the contract calls sufficient would be refused by real P3.
 
-    So the scopes are collected from the handler's own `principal.require(...)` calls,
-    including those reached through local helpers, and including the `for scope in (...)`
-    loop `_continuity_read` uses. Ordered by first appearance so the output is stable.
+    Order matters too, because Core reports the *first* requirement it fails. So the scopes
+    are collected by walking each function's statements in source order and descending into
+    a helper **where the call appears**, not before it: `_context_read` calls
+    `_continuity_read` and only then requires `checkpoint:read`, so Core names one of the
+    five first. Collecting a function's own literals ahead of its callees would reverse
+    that and name a different scope than Core would for the same token.
     """
     tree = ast.parse(source)
     funcs = {node.name: node for node in ast.walk(tree)
              if isinstance(node, ast.FunctionDef)}
 
-    def direct(node: ast.AST) -> tuple[list[str], set[str]]:
-        """(literal scopes in order, local helper names called) for one function body."""
-        scopes: list[str] = []
-        called: set[str] = set()
-        for inner in ast.walk(node):
-            if not isinstance(inner, ast.Call):
-                continue
-            func = inner.func
-            if isinstance(func, ast.Name) and func.id in funcs:
-                called.add(func.id)
-            if not (isinstance(func, ast.Attribute) and func.attr == "require"
-                    and isinstance(func.value, ast.Name) and func.value.id == "principal"):
-                continue
-            if not inner.args:
-                continue
-            arg = inner.args[0]
-            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
-                scopes.append(arg.value)
-            elif isinstance(arg, ast.Name):
-                # `for scope in ('a', 'b'): principal.require(scope)` — resolve the loop
-                # variable to the literal tuple it iterates over.
-                for loop in ast.walk(node):
-                    if not isinstance(loop, ast.For) or not isinstance(loop.target, ast.Name):
-                        continue
-                    if loop.target.id != arg.id:
-                        continue
-                    if isinstance(loop.iter, (ast.Tuple, ast.List, ast.Set)):
+    def events_of(node: ast.FunctionDef) -> list[tuple[str, str]]:
+        """('call', helper) and ('require', scope) events, in source order."""
+        out: list[tuple[str, str]] = []
+        for stmt in node.body:
+            for inner in ast.walk(stmt):
+                if not isinstance(inner, ast.Call):
+                    continue
+                func = inner.func
+                if isinstance(func, ast.Name) and func.id in funcs:
+                    out.append(("call", func.id))
+                    continue
+                if not (isinstance(func, ast.Attribute) and func.attr == "require"
+                        and isinstance(func.value, ast.Name)
+                        and func.value.id == "principal" and inner.args):
+                    continue
+                arg = inner.args[0]
+                if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                    out.append(("require", arg.value))
+                elif isinstance(arg, ast.Name):
+                    # `for scope in (...): principal.require(scope)` — resolve the loop
+                    # variable to the literal tuple it iterates over.
+                    for loop in ast.walk(node):
+                        if not (isinstance(loop, ast.For)
+                                and isinstance(loop.target, ast.Name)
+                                and loop.target.id == arg.id
+                                and isinstance(loop.iter, (ast.Tuple, ast.List, ast.Set))):
+                            continue
                         for element in loop.iter.elts:
                             if isinstance(element, ast.Constant) and isinstance(element.value, str):
-                                scopes.append(element.value)
-        return scopes, called
+                                out.append(("require", element.value))
+        return out
 
     ordered: list[str] = []
     seen: set[str] = set()
-    visited: set[str] = set()
-    stack = [handler]
-    while stack:
-        name = stack.pop(0)
-        if name in visited or name not in funcs:
-            continue
-        visited.add(name)
-        scopes, called = direct(funcs[name])
-        for scope in scopes:
-            if scope not in seen:
-                seen.add(scope)
-                ordered.append(scope)
-        stack.extend(sorted(called))
+
+    def visit(name: str, stack: frozenset[str]) -> None:
+        if name not in funcs or name in stack:
+            return
+        for kind, value in events_of(funcs[name]):
+            if kind == "require":
+                if value not in seen:
+                    seen.add(value)
+                    ordered.append(value)
+            else:
+                visit(value, stack | {name})
+
+    visit(handler, frozenset())
     return ordered
 
 
