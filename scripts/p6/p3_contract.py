@@ -26,6 +26,10 @@ So this script derives the contract from the P3 ref rather than from anyone's me
 absent it **skips** and exits 0 — a skip is reported, not a failure, so a checkout without
 the branch still passes; the field-set/type tests that need no ref still run.
 `--write` regenerates the snapshot.
+
+`--derived-at <ref>` re-derives at that ref as well and records the integration provenance
+stamp (`source.derived_at_*`) alongside this dependency's `source.ref`/`source.commit`. Without
+it the stamp is absent, so the frozen snapshot and every existing invocation stay byte-identical.
 """
 
 from __future__ import annotations
@@ -38,6 +42,13 @@ import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from contract_provenance import (  # noqa: E402
+    apply_derived_at,
+    resolve_commit,
+    without_derived_at,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 SNAPSHOT = ROOT / "web" / "contracts" / "p3-continuity-read.v1.json"
@@ -304,6 +315,9 @@ def derive(ref: str) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="p3_contract")
     parser.add_argument("--ref", default="p3-checkpoint-context-resume")
+    parser.add_argument("--derived-at", default=None, metavar="REF",
+                        help="also derive at this git ref (normally the integration commit) and "
+                             "record the provenance stamp in `source`")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--write", action="store_true")
     group.add_argument("--check", action="store_true")
@@ -315,6 +329,19 @@ def main(argv: list[str] | None = None) -> int:
     except subprocess.CalledProcessError as error:
         print(f"cannot read ref {args.ref!r}: {error}", file=sys.stderr)
         return 2 if args.write else 0  # absent ref: nothing to compare, not a failure
+
+    if args.derived_at:
+        try:
+            resolved_at = resolve_commit(args.derived_at)
+            integration = derive(resolved_at)
+        except subprocess.CalledProcessError as error:
+            print(f"cannot read --derived-at {args.derived_at!r}: {error}", file=sys.stderr)
+            return 2
+        except ValueError as error:
+            print(f"--derived-at {args.derived_at!r} is not a full commit SHA: {error}",
+                  file=sys.stderr)
+            return 2
+        apply_derived_at(derived, resolved_at, integration)
 
     if args.show_only:
         print(json.dumps(derived, indent=2, ensure_ascii=False))
@@ -330,14 +357,21 @@ def main(argv: list[str] | None = None) -> int:
         print(f"missing {SNAPSHOT.relative_to(ROOT)}; run with --write", file=sys.stderr)
         return 1
     checked_in = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
-    if checked_in == derived:
+    # The stamp records where the content was re-derived, not what it is: strip only the stamp,
+    # so `source.ref`/`source.commit` are still compared and a wrong pin fails.
+    checked_in_content = without_derived_at(checked_in)
+    derived_content = without_derived_at(derived)
+    if checked_in_content == derived_content:
         print(f"P3 contract snapshot matches {args.ref} @ {derived['source']['commit'][:12]}")
         return 0
-    fields = [k for k in derived if checked_in.get(k) != derived.get(k)]
+    fields = [k for k in derived_content
+              if checked_in_content.get(k) != derived_content.get(k)]
     print(f"P3 contract snapshot DRIFTED from {args.ref}: {fields}", file=sys.stderr)
     for key in fields:
-        print(f"  {key}:\n    snapshot: {json.dumps(checked_in.get(key), sort_keys=True)[:400]}\n"
-              f"    branch:   {json.dumps(derived.get(key), sort_keys=True)[:400]}", file=sys.stderr)
+        print(f"  {key}:\n    snapshot: "
+              f"{json.dumps(checked_in_content.get(key), sort_keys=True)[:400]}\n"
+              f"    branch:   {json.dumps(derived_content.get(key), sort_keys=True)[:400]}",
+              file=sys.stderr)
     return 1
 
 

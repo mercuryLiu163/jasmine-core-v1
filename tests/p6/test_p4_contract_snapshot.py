@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "tests"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from jasmine_core.api.handlers import ROUTES  # noqa: E402
+from test_contract_provenance_stamp import assert_derived_at_stamp  # noqa: E402
 
 SNAPSHOT_PATH = ROOT / "web" / "contracts" / "p4-memory-read.v1.json"
 ALLOWLIST_PATH = ROOT / "web" / "server" / "core-paths.json"
@@ -77,6 +78,17 @@ class P4ContractSnapshot(unittest.TestCase):
         self.assertNotEqual(SNAPSHOT["source"]["ref"], "p4-integration",
                             "pinning to the branch name is what this guard exists to prevent")
         self.assertIn("pinned commit", SNAPSHOT["source"]["kind"])
+
+    def test_the_integration_stamp_is_absent_or_consistent(self) -> None:
+        """The stamp adds provenance without replacing the pinned dependency.
+
+        It is absent until the integration worktree regenerates the contract; once present it
+        must be complete, name only a full SHA, and its `identical` flag must agree with its own
+        difference list.
+        """
+        assert_derived_at_stamp(
+            self, SNAPSHOT["source"],
+            dependency_ref="0c4f8f0e2118711ac9aa2a7006fddc6982962248")
 
     def test_snapshot_says_the_dependency_is_missing_and_acceptance_unpassed(self) -> None:
         self.assertIs(SNAPSHOT["baseline"]["these_routes_exist"], False)
