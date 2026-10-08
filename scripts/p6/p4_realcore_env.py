@@ -198,6 +198,10 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     # would look like a fixture bug.
     failure_task_id = seed.task(project_id, title="failure path")
     failed_step = seed.failed_step(project_id=project_id, task_id=failure_task_id)
+    # In the `unavailable` state the failed step is replaced by a genuinely unreachable engine; the
+    # task itself is still created (the P1 views need rows), but nothing claims a failure path.
+    if args.engine_state == "unavailable":
+        failed_step = None
 
     # The engine, and the real worker over a real socket.
     engine = memory_support.StubHindsightServer()
@@ -216,25 +220,33 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     # one, the withholding rule is unobservable: a healthy item's `safe_error_summary` is None for
     # the human too, and "the agent saw nothing" would prove nothing. The engine is armed to be
     # unreachable for one bounded worker pass with a single attempt, so the job settles FAILED.
-    failure_task = seed.task(project_id, title="retain failure")
-    seed.verified_step(project_id=project_id, task_id=failure_task)
-    # The engine's own `unreachable` knob only covers recall, so the failure is produced the way a
-    # real outage produces it: a transport pointed at a port nothing is listening on.
-    import socket
+    failure_task = None
+    if args.engine_state == "unavailable":
+        # The T05 slice needs the *other* state: an engine that is configured but unavailable, with
+        # no failed job to take precedence in the health order, so the report reads `unreachable`
+        # rather than `failing`. The failing pass is skipped and, further down, the engine is stopped
+        # and P4's own probe records the refusal.
+        log("engine-state unavailable: skipping the deliberate retain failure")
+    else:
+        failure_task = seed.task(project_id, title="retain failure")
+        failed_step = seed.verified_step(project_id=project_id, task_id=failure_task)
+        # The engine's own `unreachable` knob only covers recall, so the failure is produced the way a
+        # real outage produces it: a transport pointed at a port nothing is listening on.
+        import socket
 
-    probe = socket.socket()
-    probe.bind(("127.0.0.1", 0))
-    dead_port = probe.getsockname()[1]
-    probe.close()
-    dead_url = f"http://127.0.0.1:{dead_port}"
-    dead_transport = hindsight_module.HindsightTransport(
-        hindsight_module.HindsightConfig(dead_url))
-    log(f"failure pass: engine transport at {dead_url} (nothing listening)")
-    jobs_module.JobStore(conn, store).enqueue_from_sources(SourceRegistry(), limit=100,
-                                                           max_attempts=1)
-    failing_worker = MemoryWorker(conn, store, dead_transport, max_attempts=1, log=log)
-    for report in failing_worker.run(max_ticks=args.max_ticks, log=log):
-        log(f"failing-pass tick: {report.as_dict()}")
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        dead_port = probe.getsockname()[1]
+        probe.close()
+        dead_url = f"http://127.0.0.1:{dead_port}"
+        dead_transport = hindsight_module.HindsightTransport(
+            hindsight_module.HindsightConfig(dead_url))
+        log(f"failure pass: engine transport at {dead_url} (nothing listening)")
+        jobs_module.JobStore(conn, store).enqueue_from_sources(SourceRegistry(), limit=100,
+                                                               max_attempts=1)
+        failing_worker = MemoryWorker(conn, store, dead_transport, max_attempts=1, log=log)
+        for report in failing_worker.run(max_ticks=args.max_ticks, log=log):
+            log(f"failing-pass tick: {report.as_dict()}")
 
     # Two more sources are enqueued and deliberately not worked: one stays PENDING, one is claimed
     # to RUNNING through P4's own claim path (a real lease, not a fabricated status), so the retry
@@ -261,21 +273,60 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     traces = conn.execute("SELECT trace_id, mode, status, project_id FROM memory_query_traces"
                           ).fetchall() if _has_table(conn, "memory_query_traces") else []
 
+    # --- the unavailable state: a real outage, recorded by P4's own probe ------------------------
+    # Stopping the wire double leaves a genuine connection refusal behind, and P4's own
+    # `record_engine_probe` writes what it saw into the engine row the health endpoint reports. No
+    # status is edited into the database: the `unreachable` report is produced by the same code path
+    # a real outage uses. Serving continues with the engine down, so a memory operation attempted
+    # from the browser fails honestly too.
+    engine_state = "wire-double (engine up)"
+    health_at_build: dict[str, Any] | None = None
+    engine_url = engine.base_url
+    if args.engine_state == "unavailable":
+        import socket as socket_module
+
+        from jasmine_core.memory import health as health_module
+        from jasmine_core.memory.worker import record_engine_probe
+
+        engine.stop()
+        probe_socket = socket_module.socket()
+        probe_socket.bind(("127.0.0.1", 0))
+        dead_port = probe_socket.getsockname()[1]
+        probe_socket.close()
+        engine_url = f"http://127.0.0.1:{dead_port}"
+        os.environ["JASMINE_HINDSIGHT_URL"] = engine_url
+        dead_transport = hindsight_module.HindsightTransport(
+            hindsight_module.HindsightConfig(engine_url))
+        probed = record_engine_probe(conn, store, dead_transport)
+        health_at_build = health_module.report(
+            conn, store, dead_transport, jobs_module.JobStore(conn, store), probe=False)
+        engine_state = (f"unavailable (wire double stopped and probe failed: "
+                        f"{probed.get('error_code')})")
+        log(f"engine stopped; probe recorded {probed.get('error_code')}; health status "
+            f"{health_at_build['status']}, degraded={health_at_build['degraded']}, "
+            f"core_impact={health_at_build['core_impact']}")
+        # The engine object is stopped; the caller must not try to stop it again.
+        engine = None
+
     descriptor = {
         "environment": "isolated real P4 Core with a wire-double engine",
         "mode": {
             "core": "real-p4",
             "engine": "boundary-fake",
+            "engine_state": engine_state,
             "engine_note": "tests/memory_support.StubHindsightServer over a real socket; P4's "
                            "own Gate requires mode: real and a real deployment, so this is not a "
-                           "P4 Gate verdict and P4 phase acceptance is not claimed",
+                           "P4 Gate verdict and P4 phase acceptance is not claimed. In the "
+                           "`unavailable` state the wire double is stopped and the failure is the "
+                           "engine row P4's own probe recorded, not an edited status.",
         },
         "ref": args.ref,
         "schema_version": SCHEMA_VERSION,
         "out": str(out),
         "db": str(db_path),
         "workspace": str(workspace),
-        "engine_url": engine.base_url,
+        "engine_url": engine_url,
+        "health_at_build": health_at_build,
         "core_origin": f"http://127.0.0.1:{args.port}",
         "host_id": host_id,
         "actors": {"human": human_id, "system": system_id, "agent": agent_id},
@@ -324,6 +375,13 @@ def main(argv: list[str] | None = None) -> int:
                               help="stop after building, before serving")
     build_parser.add_argument("--reuse", action="store_true",
                               help="build inside a non-empty --out")
+    build_parser.add_argument("--engine-state", choices=("wire-double", "unavailable"),
+                              default="wire-double",
+                              help="wire-double (default): the stub engine serves and a real "
+                                   "retain failure is seeded. unavailable: skip that failure, stop "
+                                   "the stub before serving and let P4's own probe record the "
+                                   "refusal, so the health report reads unreachable — the T05 "
+                                   "degraded slice")
     args = parser.parse_args(argv)
 
     if args.command != "build":
@@ -341,19 +399,21 @@ def main(argv: list[str] | None = None) -> int:
         log("NO MEMORY ITEM WAS RETAINED — the write checks would be BLOCKED, not passed")
     if args.seed_only:
         log(f"seed-only: descriptor at {args.out / 'descriptor.json'}; engine stopped")
-        built["engine"].stop()
+        if built["engine"] is not None:
+            built["engine"].stop()
         return 0
 
     from jasmine_core.api.server import serve
     log(f"serving the real P4 Core on http://127.0.0.1:{args.port} "
-        f"(engine wire double at {descriptor['engine_url']})")
+        f"(engine {descriptor['mode']['engine_state']}, url {descriptor['engine_url']})")
     try:
         serve(descriptor["db"], host="127.0.0.1", port=args.port,
               log=lambda line: log(line))
     except KeyboardInterrupt:
         pass
     finally:
-        built["engine"].stop()
+        if built["engine"] is not None:
+            built["engine"].stop()
     return 0
 
 
