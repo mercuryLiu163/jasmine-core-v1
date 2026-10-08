@@ -74,7 +74,7 @@ they are re-asserted in every bundle by the credential check.
 | Context Inspector (P6-03a) | **P** | persisted pack, exact rendered content, section/token metrics, rule versions, memory ids, state revision all verified. **Injection attempt/receipt is not available**, so “built ≠ injected” is stated and the receipt half cannot PASS | same |
 | Memory Jobs/Recall (P6-03b1) | **P** | jobs/detail/retry, bank mapping, source Event/Evidence, query/result trace verified against real P4 code; **engine-dependent behaviour and the “engine unavailable ⇒ degraded, P1 views unaffected” negative are not covered** | real `20261008T075258Z-p6-03-realcore/` (35/35) + `...-ui/` (10/10); simulated `20261008T075355Z-p6-03b1-clickthrough/` (11/11) |
 | Memory Inspector 管理 (P6-03b2) | **P** | the five commands + `reflect` delivered behind a default-off switch, exercised through the real P4 Core and through the browser; soft-delete/provenance/idempotency verified; **“historical Memory conflicting with current Authority is conspicuous” is not exercised**, and engine-dependent `reflect` content is unproven | real Core 35/35 + UI 10/10; fixture `20261008T075346Z-p6-03b2-clickthrough/` (16/16 twice + 4/4 off); `P6-03B2-COMPLIANCE.md` criterion 9b |
-| Validation Inspector (P6-03c) | **N + B** | the screen is an explicit `未接入` panel; a fixture shell is *permitted* by §6, but acceptance needs the **P7-01 minimal run list/detail + safe artifact read contract**, which is not frozen. Building a fixture against inventing shapes would repeat the mistake the P3/P4 slices avoided | `web/README.md` status; §6 dependency note |
+| Validation Inspector (P6-03c) | **P + B** | **delivered** behind `P6_ENABLE_P7_READS`: the proxy allowlist (`p7_pending_paths`, five routes), the Inspector (run list with Core's filters, detail with the eight T06 chain links and their verbatim `missing_reason`, seven-section `present_kind`, manifest with the unauthenticated warning, artifact metadata and text-only content with separate masked/original digests) and the real-browser drill-down harness. **What is not PASS**: P7-01 acceptance criterion 1 — no real FAIL run exists on disk, so the FAIL display path is exercised only by a clearly-labelled synthetic fixture; and the drill-down's artifact half necessarily runs on a labelled fixture root, because the nine real records carry no manifest and no artifacts. `web/P6-03C-COMPLIANCE.md` | real records + labelled fixture: browser `20261008T181740Z-p6-03c-exit-code-positive/` (24 PASS / 0 FAIL, 5 PASS / 0 FAIL / 1 BLOCKED python), earlier `20261008T174844Z-p6-03c-validation-drilldown/`; independent review `REVIEW-p6-03c-*` and validation `VALIDATE-p6-03c-*` |
 | online / backup / storage | **N + B** | needs the P5/P7 readable contracts and real health stamps; today the UI does not fake health | same |
 
 ## 4. §7 Gates and negative cases
@@ -86,7 +86,7 @@ they are re-asserted in every bundle by the credential check.
 | P6-T03 audited manual maintenance | **B** (real chain) | nine writes + audit readback gated against fixtures and real P4; real P2 conversation chain not run |
 | P6-T04 actual Context (incl. injection receipt) | **B** (receipt) | real P3 pack/rendered content verified; no receipt exists to match |
 | P6-T05 Memory degradation | **P** | three quarters now have evidence: real P4 jobs/retry/withholding in the real-Core matrix; the outage (`Hindsight unavailable ⇒ degraded, P1 unaffected`) **and the same-environment recovery** in `20261008T130315Z-p6-t05-degraded/` (**19/19** — 9 Core checks + 10 browser records across two phases — frozen at `31d738f…`). Still **P**, not PASS: the engine is a labelled wire double stopped and restarted on the same pinned port, so no real Hindsight outage is claimed |
-| P6-T06 Validation drill-down | **B** | blocked on P7-01 |
+| P6-T06 Validation drill-down | **P** (criterion 1 BLOCKED) | run against the real P7-01 Core over the nine real P0 records through the dashboard's own proxy in a real browser: list/paging, recorded verdicts unchanged, the eight chain links with verbatim missing reasons (Context absent in all nine across its three recorded forms; Agent absent in the six BLOCKED runs), `manifest_status: absent` for a manifestless record, `acl` grant-filtering and the one-code `404`, in-browser `403 forbidden_scope`, and `503 validation_not_configured` on an unset root. **Not PASS**, and the reason is data, not code: criterion 1 needs a real FAIL run, and the artifact/masking negatives can only run on a labelled fixture root because the real records have no manifest. Unblock: the P7 owner records one genuinely failing scenario with `recorder.py` into the configured run root | browser `20261008T181740Z-p6-03c-exit-code-positive/` + `20261008T174844Z-p6-03c-validation-drilldown/`; `NEGATIVE-*` bundles are the exit-code failure negatives and are **not** acceptance runs |
 | P6-T07 maintainability | **D** (PASS) | P6-01 r3 |
 
 Negative cases (§7), which ones are actually covered:
@@ -98,9 +98,9 @@ Negative cases (§7), which ones are actually covered:
 | agent-proposed Rule, tentative “先研究”, cross-scope supersede | **covered** — milestone-B tests + real P4 issuance refusal |
 | project A slow response arriving after switching to B; same id, different revision | **covered** — T07 (the rapid-switch phase was falsified and fixed) + `revision_conflict` |
 | API 404/401/403/422/503, disconnection, unknown enum, truncated paging | **covered** across the P1/P6-01/P6-02/P6-03 Gates |
-| secret-looking raw text, HTML/script, artifact path traversal, external links | **covered for text/protocol** (T02, proxy allowlist); artifact traversal is N/A until P6-03c |
+| secret-looking raw text, HTML/script, artifact path traversal, external links | **covered for text/protocol** (T02, proxy allowlist), and now for artifacts: the Inspector refuses `../`, absolute, `C:`, UNC, URL and symlinked declared paths, renders artifact content as text only (a browser probe confirms nothing from an HTML artifact is parsed and the global it sets stays undefined), masks by default and withholds the original with Core's own reason. Exercised on a **labelled fixture root**, since the real records have no manifest | `20261008T174844Z-p6-03c-validation-drilldown/`; `web/P6-03C-COMPLIANCE.md` |
 | **Memory unavailable / stale Memory vs Authority conflict / old Checkpoint / Context over budget** | **partly covered now**: the outage *and the same-environment recovery* are covered by `20261008T130315Z-p6-t05-degraded/` — the engine is stopped (P4's own probe records `unreachable`, Core stays `ok`, the P1 reads and views are unaffected, and a 200-with-`degraded`-payload `reflect` is recorded as a degradation, not a success), then restarted on the **same address** without restarting the Core, after which health reports `degraded: false` / `core_impact: none` and a real `reflect` reaches the engine. **Still not covered**: stale Memory vs current Authority, an old/atypical Checkpoint, and an over-budget Context |
-| Validation missing Context or Agent transcript / mocked response | N/A until P6-03c |
+| Validation missing Context or Agent transcript / mocked response | **covered for the real data**: every one of the 63 real cases shows the Context link missing with its own `missing_reason` (27 reason-only, 30 recorded-but-no-pack, 6 sentinel, 0 packs), `agent_response` is missing in all 42 cases of the six BLOCKED runs, the recorded verdict is served unchanged, and a record marked `synthetic: true` is graded `simulated` and never `real`. An **unmarked** mock under a `mode: real` manifest remains undetectable by a read-only contract, and the API says so rather than claiming otherwise | `20261008T174844Z-p6-03c-validation-drilldown/`; ADR 0015 §4.2 in the P7-01 worktree |
 
 ## 5. §8 bundle format and merge gate
 
@@ -143,11 +143,27 @@ wire double — no real deployment, no operator service. First step is a 10-minu
 P4's isolated environment can express “engine unavailable” without a real Hindsight; if it cannot,
 the row stays dependency-blocked and this drops off the list.
 
-**Dependency actions to open now (no P6 work can substitute):** ask the P7 owner to freeze and
-deliver the **P7-01 minimal Validation read + safe artifact contract** (unblocks P6-03c and T06, and
-is explicitly allowed to be delivered in parallel), and record the P6-03a **injection-receipt**
+**Dependency actions to open now (no P6 work can substitute):** the P7-01 request is **delivered** —
+the contract is frozen in the P7-01 worktree and copied here, the read slice is implemented and
+independently validated, and the dashboard proxy is open behind `P6_ENABLE_P7_READS`. What remains
+is a **data** action, not a dependency: to close P7-01 criterion 1, the P7 owner records one
+genuinely failing scenario with `recorder.py` into the configured run root, after which the T06
+drill-down is re-run and the criterion re-validated. Record the P6-03a **injection-receipt**
 question with the Agent/Context owner (unblocks T04's second half). Ask the P4 owner for the
 interpreter-symlink fix task (`TASK-p4-interpreter-symlink.md`, registered separately).
+
+**Harness follow-ups that must precede that re-run** (found while validating the exit-code gate;
+all non-blocking today but they would misrecord a real-FAIL bundle, so fix them before criterion 1
+can be validated):
+1. `p7_realcore_ui_trace.mjs`'s `detailState()` takes the **last** row labelled `verdict(按记录)`, and
+   every case card renders that same label, so for a run whose run-level verdict differs from its
+   last case the DOM verdict recorded is the *case's*. Real records hide this because their run
+   verdict equals the worst case; a real FAIL run need not.
+2. `render_result()` hardcodes the "0 FAIL cases … BLOCKED" prose and the "criterion 1 —
+   independently confirmed BLOCKED" heading instead of deriving them from `census["criterion_1"]`,
+   so a real FAIL run would produce a `result.md` that contradicts its own machine-readable fields.
+3. `fixture-census.json`'s `measurement` sentence is a static string that asserts disjointness; it is
+   false in the shipped `NEGATIVE-*` bundle even though the computed fields are right.
 
 ## 7. 明确不做
 
