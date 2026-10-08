@@ -161,11 +161,17 @@ def main(argv: list[str] | None = None) -> int:
             log(f"{ref} tip suite: {tip_suites[ref]['verdict']}")
         git(clone, "checkout", "-q", "rehearsal")
 
+        # The dashboard build needs dependencies, and both the Core acceptances and the web suite
+        # build it — so the link is created once, before either runs. (An earlier version created it
+        # inside the web branch, which left the P3 acceptance's `vite build` without modules.)
+        modules = clone / "web" / "node_modules"
+        if args.node_modules.is_dir() and not modules.exists():
+            os.symlink(args.node_modules, modules)
+
         core_runs = run_core_acceptances(clone)
 
         web: dict[str, Any] = {"skipped": True}
-        if not args.skip_web and args.node_modules.is_dir():
-            os.symlink(args.node_modules, clone / "web" / "node_modules")
+        if not args.skip_web and modules.is_dir():
             tsc = subprocess.run(["npx", "tsc", "--noEmit"], cwd=clone / "web",
                                  capture_output=True, text=True)
             vitest = subprocess.run(["npx", "vitest", "run", "--reporter=dot"], cwd=clone / "web",
