@@ -1,7 +1,15 @@
 # P6-03b — scope, dependency check, and acceptance criteria
 
-**Status: NOT IMPLEMENTED. Nothing in this document has been built.** It is the task
-breakdown and dependency check the operator asked for *before* implementation.
+**Status: P6-03b1 DELIVERED as PARTIAL / DEPENDENCY_PENDING; P6-03b2 NOT STARTED.**
+
+This began as the task breakdown and dependency check the operator asked for before
+implementation. The operator then authorised b1, and E1–E5 below are built, tested and
+evidenced: contract pinned by full SHA, pending paths behind a default-off switch, a labelled
+simulated fixture, the seven read views, and 89 guards across three layers. The Gate bundle is
+`validation-runs/p6/20261008T020743Z-p6-03b1-clickthrough/`.
+
+**P4 phase acceptance still has NOT passed**, and the live proxy entry is still closed: nothing
+here was validated against a real P4 Core. Section §6 records what remains open.
 
 **Contract source: pinned.** `p4-integration` @
 `0c4f8f0e2118711ac9aa2a7006fddc6982962248` — the full SHA, not the branch name, so the
@@ -129,13 +137,13 @@ routes, scopes and shapes:
 **Executable now — P6-03b1 scaffolding**, all of it dependency-marked. None of it makes the
 feature available:
 
-| # | Item | Notes |
+| # | Item | Status |
 | --- | --- | --- |
-| E1 | `scripts/p6/p4_contract.py` pinned to the full SHA above, deriving the seven read routes' scopes, response field sets **and** the semantics in §2, frozen as `web/contracts/p4-memory-read.v1.json` with the source commit | `p3_contract.py` is the template; the drift check re-derives from the pinned commit and fails on any change, and skips loudly where the commit is absent |
-| E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | the existing test that pending paths never enter the live allowlist extends to these |
-| E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | values are the fixture's; shapes and semantics are the pinned commit's |
-| E4 | Types, endpoints and views behind the dependency-pending panel; the `未接入` row becomes a P4-dependency row | **no action buttons** — every write is b2 |
-| E5 | Component tests plus a Gate section with the negatives in §4 | same shape as P6-03a's record set |
+| E1 | `scripts/p6/p4_contract.py` pinned to the full SHA above, deriving the seven read routes' scopes, response field sets **and** the semantics in §2, frozen as `web/contracts/p4-memory-read.v1.json` | **built.** The drift check re-derives from the pinned commit and **exits 2** where it is absent — P6-03a skipped to 0, and review was right that this passes for the wrong reason |
+| E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts share one `flagEnabled` spelling; tests assert they agree, that P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
+| E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | **built.** `X-P6-Fixture: simulated-p4-reads`; the fixture also serves the shell routes in their documented shapes after an earlier version crashed the overview |
+| E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
+| E5 | Component tests plus a Gate section | **built, 89 guards.** Gate: 10/10 full twice, 4/4 scope |
 
 **Blocked until P4 is merged and independently validated:**
 
@@ -208,11 +216,23 @@ Settled by the operator:
 
 Still open:
 
-* **Q3 — the placeholder.** Should `未接入` stay until P4 merges, or should P6-03b1's
-  dependency-pending views land first, as P6-03a did for P3? Landing them earlier makes the
-  pending state demonstrable but adds a second set of pending paths to maintain.
-* **Q4 — is any of E1–E5 wanted now?** The instruction was to plan before implementing. This
-  document assumes **nothing** is built until that is confirmed.
+Both are settled: **Q3** — the dependency-pending views land now, with simulation labelled,
+the pending paths isolated from the live allowlist and forwarding off by default. **Q4** —
+E1–E5 are authorised and built; everything in P6-03b2 remains plan-only.
+
+Still open, for the operator:
+
+* **P6-03b2** is not started and needs its own frozen payload/permission table and an
+  audited-write Gate before any of it ships.
+* **Independent review of the b1 implementation** has not run at the time of writing; the
+  bundle is frozen and the slices are green, but no third party has yet reviewed the b1 code
+  or reproduced the Gate.
+* **One unexplained behaviour.** Signing out and back in mid-Gate left the app rendering the
+  previous route while the URL already carried the target hash; assigning the hash and
+  dispatching `hashchange` did not fix it, so the scope check moved to its own run. The root
+  cause was not established. It is not recorded as a product defect because the component
+  tests drive the same transition through `render` and pass — but it is unexplained, and that
+  is stated rather than buried.
 
 ## 7. Standing status
 
