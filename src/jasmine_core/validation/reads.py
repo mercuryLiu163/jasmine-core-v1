@@ -104,9 +104,11 @@ EXECUTOR_RE = re.compile(r"(?i)(fixture|mock|simulat|synthetic)")
 
 _MISSING = object()
 
-#: Root resolution is cached against the raw configured string, so a test or a
-#: restarted deployment can point at a different root without a stale cache while
-#: a request can never name or extend the path. A failed resolution is not cached.
+#: Root resolution is deliberately **not** cached. The root is re-validated on
+#: every use, and every record, manifest and artifact read re-opens it with
+#: `O_NOFOLLOW`, because a cached path made the check a one-time event: a root
+#: replaced by a symlink after the first request was then followed and an outside
+#: directory was served. A request can never name or extend the path either.
 # -- services -----------------------------------------------------------------
 
 
@@ -784,7 +786,11 @@ def _open_regular_under(root: Path, relative: str, cap: int) -> tuple[int | None
 
     Returns `(descriptor, None)` or `(None, reason)` with a reason in
     `invalid_path`, `symlink_refused`, `missing`, `not_regular_file`,
-    `too_large`, `unreadable`.
+    `too_large`, `unreadable`, or `root_unreadable` when the root itself could
+    not be opened (a root that is now a symlink is reported `symlink_refused`
+    where the platform raises `ELOOP`, and `root_unreadable` on platforms that
+    raise `ENOTDIR` for the same state — either way it is refused, and the
+    request-level classification comes from `_resolve_root`, not from here).
 
     The root is (re-)opened `O_DIRECTORY|O_NOFOLLOW` on **every** call rather than
     trusting a cached path, so a root that has been replaced by a symlink is

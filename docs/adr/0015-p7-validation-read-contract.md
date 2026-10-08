@@ -209,8 +209,8 @@ a real directory an operator (or anything else on the host) can change while the
 Core is serving.
 
 1. **One manifest read per request.** `_locate` returns both the record and the
-   manifest it read, and the manifest routes and both artifact routes use that
-   object. Re-reading the manifest in the handler let a manifest swapped between
+   manifest it read, and the run-detail, manifest and both artifact routes all
+   use that one object. Re-reading the manifest in the handler let a manifest swapped between
    the two reads decide the **permissions** while a different manifest decided the
    **bytes**. The grant check and the payload now provably come from one read.
 2. **One rooted, bounded read path.** Records, manifests and artifacts are read
