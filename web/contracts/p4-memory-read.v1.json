@@ -5,7 +5,10 @@
     "kind": "pinned commit (full SHA, not a branch)",
     "schema_version_in_p4": 11,
     "derived_by": "scripts/p6/p4_contract.py",
-    "acceptance": "P4 phase acceptance NOT passed: nothing here was validated against a real P4 Core"
+    "acceptance": "P4 phase acceptance NOT passed: nothing here was validated against a real P4 Core",
+    "derived_at_ref": "d3231259e53ef85531affc2ff0f58e71847fe19b",
+    "derived_at_identical": true,
+    "derived_at_differences": []
   },
   "baseline": {
     "commit": "850fbec",

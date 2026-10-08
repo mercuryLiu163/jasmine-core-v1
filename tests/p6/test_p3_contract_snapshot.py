@@ -29,6 +29,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "p6"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from jasmine_core.api.handlers import ROUTES  # noqa: E402
+from contract_provenance import without_derived_at  # noqa: E402
 from test_contract_provenance_stamp import assert_derived_at_stamp  # noqa: E402
 
 SNAPSHOT_PATH = ROOT / "web" / "contracts" / "p3-continuity-read.v1.json"
@@ -185,8 +186,15 @@ class P3ContractSnapshot(unittest.TestCase):
     def test_snapshot_still_matches_the_branch(self) -> None:
         from p3_contract import derive
 
-        derived = derive(P3_REF)
-        differing = [key for key in derived if self.snapshot.get(key) != derived.get(key)]
+        # Compare *content*, not provenance. The frozen file may carry the integration stamp
+        # (`source.derived_at_*`, naming where the contract was re-derived); comparing the raw
+        # dicts meant a stamped snapshot could never pass this test, even though the CLI's
+        # `--check` — which the P4 snapshot tests use — strips exactly those fields. `source.ref`
+        # and `source.commit` are still compared, so a wrong pin still fails here.
+        derived = without_derived_at(derive(P3_REF))
+        frozen = without_derived_at(self.snapshot)
+        differing = sorted(key for key in set(frozen) | set(derived)
+                           if frozen.get(key) != derived.get(key))
         self.assertEqual(differing, [], f"P3 contract drifted: {differing}")
 
 

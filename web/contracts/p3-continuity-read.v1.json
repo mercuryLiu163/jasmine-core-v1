@@ -4,7 +4,10 @@
     "ref": "p3-checkpoint-context-resume",
     "commit": "7016dabb8926d6bd6599f1f56b8f39cbda253ebf",
     "derived_by": "scripts/p6/p3_contract.py",
-    "schema_version_in_p3": 10
+    "schema_version_in_p3": 10,
+    "derived_at_ref": "d3231259e53ef85531affc2ff0f58e71847fe19b",
+    "derived_at_identical": true,
+    "derived_at_differences": []
   },
   "baseline": {
     "commit": "850fbec",
