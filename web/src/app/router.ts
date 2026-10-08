@@ -51,6 +51,10 @@ export type Route =
   | { name: 'memoryItem'; memoryId: string }
   | { name: 'memoryTraces'; traceId: string | null }
   | { name: 'memoryTrace'; traceId: string }
+  // P6-03b2: the generator. Its own route because it is the one write that needs
+  // `memory:reflect` rather than `memory:manage`, and because it is an explicit user request
+  // rather than an action on a row. Deep link only, like the rest of Memory.
+  | { name: 'memoryReflect' }
   | { name: 'event'; eventId: string }
   | { name: 'pending'; key: string }
   | { name: 'unknown'; raw: string }
@@ -152,6 +156,7 @@ export function parseHash(hash: string): Route {
     if (section === 'traces') {
       return ident === null ? { name: 'memoryTraces', traceId: null } : { name: 'memoryTrace', traceId: ident }
     }
+    if (section === 'reflect') return ident === null ? { name: 'memoryReflect' } : { name: 'unknown', raw }
     return { name: 'unknown', raw }
   }
   if (head === 'resume') {
@@ -225,6 +230,8 @@ export function hrefFor(route: Route): string {
       return '#/memory/traces'
     case 'memoryTrace':
       return `#/memory/traces/${encodeURIComponent(route.traceId)}`
+    case 'memoryReflect':
+      return '#/memory/reflect'
     case 'evidence':
       return `#/evidence${queryString({ evidence_id: route.evidenceId, task_id: route.taskId })}`
     case 'interpretations':
@@ -290,6 +297,7 @@ export const sourceHref = {
   memoryItem: (memoryId: string): string => hrefFor({ name: 'memoryItem', memoryId }),
   memoryTraces: (): string => hrefFor({ name: 'memoryTraces', traceId: null }),
   memoryTrace: (traceId: string): string => hrefFor({ name: 'memoryTrace', traceId }),
+  memoryReflect: (): string => hrefFor({ name: 'memoryReflect' }),
   review: (reviewId: string): string => hrefFor({ name: 'review', reviewId }),
   reviews: (projectId: string | null, taskId: string | null = null): string =>
     hrefFor({ name: 'reviews', projectId, taskId }),

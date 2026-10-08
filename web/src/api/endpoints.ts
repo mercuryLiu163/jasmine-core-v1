@@ -35,8 +35,11 @@ import type {
   MemoryJobAttempt,
   MemoryJobCounts,
   MemoryLifecycle,
+  MemoryLifecycleCommand,
+  MemoryReflectResult,
   MemoryTrace,
   MemoryTraceDetail,
+  MemoryWriteResult,
   MetaSchema,
   Project,
   ProjectPage,
@@ -312,6 +315,24 @@ export function makeEndpoints(client: CoreClient) {
       }),
     getMemoryTrace: (traceId: string, signal?: AbortSignal) =>
       client.get<{ trace: MemoryTraceDetail }>(`/memory/traces/${id(traceId)}`, { signal }),
+
+    // P6-03b2: the six memory writes. These are P4 routes on the same unmerged commit as the
+    // reads, and they are gated by their own default-off switch (`P6_ENABLE_P4_WRITES`), not
+    // by `P6_ENABLE_P4_READS`: reading Memory and changing it are different decisions with
+    // different scopes. Bodies are built by `api/memoryWrites.ts`, which cannot emit a field
+    // the frozen contract does not list. `event_id` is added by `useWriteAction` so a retry
+    // reuses the same replay key.
+    retryMemoryJob: (jobId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<MemoryWriteResult>(`/memory/jobs/${id(jobId)}/retry`, body, { signal }),
+    memoryLifecycle: (
+      memoryId: string,
+      command: MemoryLifecycleCommand,
+      body: WriteBody,
+      signal?: AbortSignal,
+    ) =>
+      client.post<MemoryWriteResult>(`/memory/items/${id(memoryId)}/${command}`, body, { signal }),
+    reflectMemory: (body: WriteBody, signal?: AbortSignal) =>
+      client.post<MemoryReflectResult>('/memory/reflect', body, { signal }),
 
     listHosts: (signal?: AbortSignal) => client.get<{ hosts: Host[] }>('/hosts', { signal }),
     listActors: (signal?: AbortSignal) => client.get<{ actors: Actor[] }>('/actors', { signal }),

@@ -1,6 +1,6 @@
 {
   "contract": "p4-memory-write.v1",
-  "status": "SPECIFICATION ONLY — nothing here is implemented",
+  "status": "FROZEN CONTRACT — the six writes P4 offers, derived from the pinned SHA. Implementation and validation status is tracked separately in web/P6-03B2-COMPLIANCE.md; nothing here is a claim that the surface works.",
   "source": {
     "ref": "0c4f8f0e2118711ac9aa2a7006fddc6982962248",
     "kind": "pinned commit (full SHA, not a branch)",
@@ -220,7 +220,7 @@
     "recorded": [
       {
         "key": "human_or_system_only",
-        "statement": "`request_retry` and the lifecycle commands refuse any actor that is not human or system with `ForbiddenActorKind`; `reflect` requires `memory:reflect`, which key issuance will not grant to an agent. Sources: memory/jobs.py, memory/lifecycle.py, memory/api.py."
+        "statement": "`request_retry` and the lifecycle commands refuse any actor that is not human or system with `forbidden_actor_kind` at 403 (the class is `errors.ForbiddenActorKind`); `reflect` requires `memory:reflect`, which key issuance will not grant to an agent. Sources: memory/jobs.py, memory/lifecycle.py, memory/api.py, errors.py."
       },
       {
         "key": "reflect_needs_an_explicit_user_request",
@@ -228,15 +228,15 @@
       },
       {
         "key": "lifecycle_needs_expected_revision",
-        "statement": "A lifecycle command without `expected_revision` is refused with `MissingExpectedRevision`, and a stale one with `RevisionConflict`; the state is checked before the revision so that 'you cannot obsolete a tombstone' is answered as such, and an illegal command appends no Event at all. Source: memory/lifecycle.py."
+        "statement": "A lifecycle command without `expected_revision` is refused with `missing_expected_revision` at 400 (the class is `errors.MissingExpectedRevision`), and a stale one with `revision_conflict` at 409; the state is checked before the revision, so 'you cannot obsolete a tombstone' is answered as `invalid_state_transition` rather than as a stale revision, and an illegal command appends no Event at all. Source: memory/lifecycle.py, errors.py."
       },
       {
         "key": "retry_never_changes_what_is_retained",
-        "statement": "A retry may not change the job's `document_id`, `content_sha256` or `bank_id`, and a `DONE` job is refused rather than retained twice — a second retain would replace the document. A `RUNNING` job is refused rather than stolen from its worker. Source: memory/jobs.py."
+        "statement": "A retry may not change the job's `document_id`, `content_sha256` or `bank_id`: those columns are immutable by trigger and the command touches none of them. A `DONE` job is refused rather than retained twice, a `RUNNING` job is refused rather than stolen from its worker, and a `PENDING` job is refused because it is already queued — accepting it would append an audit Event for a transition that did not happen. All three answer `invalid_state_transition` at 409, and only a `FAILED` job is retried, with `retry_count` **reset to 0** rather than incremented. Source: memory/jobs.py, errors.py."
       },
       {
         "key": "replay_returns_the_original",
-        "statement": "Both the retry and the lifecycle commands are idempotent on `event_id`: a repeat returns the original command Event and writes no second transition. Source: memory/jobs.py, memory/lifecycle.py."
+        "statement": "Both the retry and the lifecycle commands are idempotent on `event_id`: a repeat returns the original command Event and writes no second transition. The retry hashes the command payload (excluding `previous_status`/`previous_retry_count`), so the same request re-sent after it already succeeded is recognised as the same command. Source: memory/jobs.py, memory/lifecycle.py."
       },
       {
         "key": "memory_is_never_authority",
@@ -245,10 +245,6 @@
       {
         "key": "write_responses_are_actor_scoped",
         "statement": "P4 withholds engine free text from any actor that is not human or system, inside `_respond`, so it applies to every write response too. Source: memory/api.py."
-      },
-      {
-        "key": "not_implemented_yet",
-        "statement": "Nothing in this specification is built. There is no b2 route in the dashboard, no b2 path in the proxy allowlist, and no b2 endpoint in the client. Until a permission and audit Gate has run, the write surface must not appear in the product at all."
       }
     ],
     "recorded_note": "Prose semantics are recorded from reading the pinned commit, each naming its source file. They are not auto-derived."

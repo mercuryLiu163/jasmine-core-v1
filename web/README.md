@@ -187,7 +187,7 @@ the `reason`/`idempotency_key` fields the interpretation/review writes require.
 | Checkpoint compare | P3 | **Read-only delivered in P6-03a** against the P3 contract; the compare write and any restoration remain P3's |
 | Context inspector (actual injection) | P3 | **Read-only pack delivered in P6-03a**; the persisted injection receipt remains P3's |
 | Memory health / jobs / items / traces (P6-03b1 reads) | P4 | **Delivered, PARTIAL / DEPENDENCY_PENDING.** Contract pinned to commit `0c4f8f0e2118711ac9aa2a7006fddc6982962248` (schema 11), which is not in `main`; the baseline serves none of the 13 routes and `P6_ENABLE_P4_READS` defaults off. P4 phase acceptance has **not** passed. Scope, dependency check and acceptance criteria: [`P6-03B-PLAN.md`](P6-03B-PLAN.md) |
-| Memory lifecycle / retry / reflect (P6-03b2 writes) | P4 | **Specification frozen, not implemented.** Payloads, permissions and the acceptance criteria a future audited-write Gate must meet: [`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md), snapshot `contracts/p4-memory-write.v1.json`. None of the six writes is reachable today. Plan: [`P6-03B-PLAN.md`](P6-03B-PLAN.md) |
+| Memory lifecycle / retry / reflect (P6-03b2 writes) | P4 | **Implemented behind a default-off switch; not verified against real P4.** Six writes (`memory:manage` + `memory:reflect`), gated by `P6_ENABLE_P4_WRITES` — separate from the reads' switch — and absent from the live allowlist. Exercised only against a labelled simulated fixture; P4 phase acceptance has **not** passed. Specification: [`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md); per-criterion state: [`P6-03B2-COMPLIANCE.md`](P6-03B2-COMPLIANCE.md) |
 | Validation inspector (run list, artifacts) | P7-01 | minimal validation read API + safe artifact contract |
 | online / backup / storage | P5 / P7 | health read contracts |
 | Task / Step / Evidence-confirmation writes | P6-02 later | Still gated on an independent permission Gate; `evidence/confirm` additionally needs a human prompt the browser cannot mint |
@@ -230,8 +230,9 @@ audited human writes are implemented but not yet independently reviewed, P6-02's
 manual reapply and the Task/Step/Evidence writes are not delivered, and
 P6-03a is delivered only as PARTIAL/DEPENDENCY_PENDING (P3 is not merged, so its views were
 exercised against a simulated fixture), P6-03b1 (the P4 read slice) is likewise delivered only as
-PARTIAL/DEPENDENCY_PENDING against an unmerged P4, while P6-03b2 (the P4 writes) is frozen as a
-specification only — nothing of it is implemented — and P6-03c (P7-01) is not delivered,
+PARTIAL/DEPENDENCY_PENDING against an unmerged P4; P6-03b2's six writes are implemented but also
+PARTIAL / DEPENDENCY_PENDING — default-off, deep-link only, and exercised only against a simulated
+P4 fixture, never a real one — and P6-03c (P7-01) is not delivered,
 no Gate ran against the operator's own Core or a real captured conversation, and
 throttling plus an automated contrast sweep remain uncovered. See the run
 directories under `validation-runs/p6/` for raw evidence.

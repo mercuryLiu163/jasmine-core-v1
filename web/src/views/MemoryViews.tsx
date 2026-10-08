@@ -8,10 +8,11 @@
  *
  * Four things this file is careful about, each because the alternative is a lie:
  *
- * 1. **Nothing here writes.** There is no retry, no obsolete/delete/pin/unpin, and no
- *    reflect control: those are `memory:manage` / `memory:reflect` and belong to P6-03b2,
- *    which needs its own permission and audit Gate. The views are read-only by
- *    construction, not by hiding a button.
+ * 1. **The reads stay reads.** The write controls of P6-03b2 live in `MemoryWrites.tsx` and
+ *    appear only on the item and job *detail* views, where the revision and status they need
+ *    are in hand. Before b2 this file said "nothing here writes"; that claim is now false in
+ *    the product and is replaced rather than left standing — the reads still issue only GETs,
+ *    and every write goes through its own default-off switch with Core deciding.
  * 2. **Memory is marked NON_AUTHORITATIVE** by reading Core's own `non_authoritative`
  *    field, not by printing a claim that would survive Core stopping sending it.
  * 3. **Empty, not-found, refused and pending are four different states.** An actor with no
@@ -53,6 +54,7 @@ import {
   NonAuthoritative,
   isMemoryPending,
 } from './MemoryDependency'
+import { MemoryLifecyclePanel, MemoryRetryPanel } from './MemoryWrites'
 
 /** Every route in this slice requires exactly this scope; P4 adds no helper scopes. */
 const READ_SCOPES = ['memory:read'] as const
@@ -330,6 +332,7 @@ export function MemoryJobsView({ jobId }: { jobId: string | null }): JSX.Element
         {({ job, attempts }) => (
           <>
             <MemoryJobBody job={job} />
+            <MemoryRetryPanel job={job} loadedAt={detail.loadedAt} onWritten={detail.reload} />
             <h3>attempts({attempts.length})</h3>
             {attempts.length === 0 ? (
               <p className="muted">没有 attempt 记录。</p>
@@ -522,6 +525,11 @@ export function MemoryItemsView({ memoryId }: { memoryId: string | null }): JSX.
                 },
                 { label: 'engine_claim', value: payload.engine_claim },
               ]}
+            />
+            <MemoryLifecyclePanel
+              item={payload.memory}
+              loadedAt={detail.loadedAt}
+              onWritten={detail.reload}
             />
             <JsonBlock value={payload.sources} label={`sources(${String((payload.sources as unknown[]).length)})`} />
             <JsonBlock value={payload.jobs} label={`jobs(${String(payload.jobs.length)})`} />

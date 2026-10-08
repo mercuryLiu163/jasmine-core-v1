@@ -67,6 +67,21 @@ function parseArgs(argv) {
       case '--p3-route-scope-token': args.p3RouteScopeToken = next; index += 1; break
       case '--p4-reads': args.p4Reads = true; break
       case '--p4-limited-token': args.p4LimitedToken = next; index += 1; break
+      case '--p4-writes': args.p4Writes = true; break
+      // P6-03b2 needs three tokens because the refusals it must prove are per-scope and
+      // per-actor-kind, and one token cannot be three things at once:
+      //   * `--token-file/--token-key`  the human memory:manage + memory:reflect key
+      //   * `--p4-readonly-token`       memory:read only  -> Core answers forbidden_scope
+      //   * `--p4-agent-token`          an ARTIFICIAL agent key that also carries
+      //                                 memory:reflect, so the withholding rule is observable
+      //                                 on a write reply (real P4 would not issue it)
+      case '--p4-readonly-token': args.p4ReadOnlyToken = next; index += 1; break
+      case '--p4-agent-token': args.p4AgentToken = next; index += 1; break
+      // The fixture's own origin, called directly (never through the dashboard proxy) for the
+      // control routes and the simulation's command log.
+      case '--fixture': args.fixture = next; index += 1; break
+      case '--p4-write-contract': args.p4WriteContract = next; index += 1; break
+      case '--p4-writes-off': args.p4WritesOff = true; break
       case '--evidence': args.evidence = next; index += 1; break
       case '--interpretation': args.interpretation = next; index += 1; break
       case '--pending-interpretation': args.pendingInterpretation = next; index += 1; break
@@ -260,6 +275,28 @@ async function typeInto(cdp, selector, value) {
   await cdp.send('Input.insertText', { text: value })
 }
 
+/**
+ * Read one response body over CDP.
+ *
+ * P6-03b2's redaction rule cannot be evidenced by `browser-requests.jsonl` alone: that file
+ * records method, path and status, not fields. The Gate therefore asks Chrome for the body it
+ * actually received and asserts on *that* — the field is present and null for the withholding
+ * case, present and non-null for the human one — and records it in the bundle.
+ */
+async function responseBody(cdp, requestId) {
+  try {
+    const { body, base64Encoded } = await cdp.send('Network.getResponseBody', { requestId })
+    const text = base64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body
+    try {
+      return JSON.parse(text)
+    } catch {
+      return { __unparsed: text.slice(0, 2000) }
+    }
+  } catch (error) {
+    return { __unavailable: String(error.message ?? error) }
+  }
+}
+
 async function pressEnter(cdp) {
   for (const type of ['keyDown', 'keyUp']) {
     await cdp.send('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 })
@@ -352,6 +389,11 @@ async function main() {
             ? 'present(redacted)'
             : 'absent',
           xRequestId: headerValue(request.headers, 'x-request-id') ?? null,
+          // The write *body* is the product evidence for P6-03b2: the payload is frozen, so
+          // the Gate asserts the exact key set Core was sent. `postData` is only present for
+          // requests Chrome chose to inline; a missing body is recorded as null rather than
+          // guessed, and the payload check fails loudly rather than passing vacuously.
+          postData: typeof request.postData === 'string' ? request.postData : null,
         })
       }
       if (message.method === 'Network.responseReceived') {
@@ -1936,6 +1978,611 @@ async function main() {
       }
     }
 
+
+    // 8f. P6-03b2: the six P4 memory writes, end to end in a real browser.
+    //
+    // The Core behind this proxy is the SIMULATED P4 **write** fixture
+    // (`scripts/p6/p4_write_fixture.py`, replies stamped `X-P6-Fixture: simulated-p4-writes`).
+    // It proves the write surface sends the frozen payloads, that every refusal is Core's own,
+    // that a conflict is not auto-retried, that a replay is a replay with no second transition,
+    // and that each write is read back. It does NOT verify P4, and the evidence says so.
+    //
+    // Two invocations of this section make the bundle: this one with the write switch ON, and
+    // `--p4-writes-off` for the default-closed evidence.
+    if (args.p4Writes || args.p4WritesOff) {
+      const { readFile } = await import('node:fs/promises')
+      const writeContract = JSON.parse(await readFile(
+        args.p4WriteContract ?? 'web/contracts/p4-memory-write.v1.json', 'utf8'))
+      const MID = '01M4B6VGC29ESRDRQR62DX8AK8'
+      const MITEM = `mem_${MID}`
+      const MJOB = `mjb_${MID}`
+      const MTRACE = `mtr_${MID}`
+
+      // One literal path per frozen write route, built from the contract's own id_prefix so a
+      // seventh route in the contract cannot silently escape this section.
+      const literalPath = (write) => write.path_pattern
+        .replace(/^\^/, '').replace(/\$$/, '')
+        .replace(/\(\[\^\/\]\+\)/g, write.id_prefix ? `${write.id_prefix}_${MID}` : MID)
+      const ROUTES = writeContract.writes.map((write) => ({ ...write, literal: literalPath(write) }))
+      const routeFor = (suffix) => ROUTES.find((route) => route.literal.endsWith(suffix))
+
+      if (!args.fixture) throw new Error('--fixture is required for a P6-03b2 run')
+      // The fixture's control routes are called **directly on the fixture port**, never through
+      // the dashboard proxy: they are the simulation's own knobs (drift the revision, drop the
+      // next reply, set a job's status) and must not be mistaken for product surface.
+      const fixtureGet = (path) => httpJson(`${args.fixture}${path}`, 'GET')
+      const fixturePost = (path) => httpJson(`${args.fixture}${path}`, 'POST')
+      const simState = () => fixtureGet('/v1/_p6_fixture/state')
+      const writeEvidence = []
+      const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+      const signInWith = async (value) => {
+        await evaluate(cdp, `(() => {
+          const el = document.querySelector('input[type=password]')
+          if (!el) return false
+          const setter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value').set
+          setter.call(el, '')
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+          return true
+        })()`)
+        await typeInto(cdp, 'input[type=password]', value)
+        await clickByText(cdp, 'button', '使用此 token')
+        await waitFor(cdp, `document.querySelector('input[type=password]') === null`,
+          { label: 'signed in for the P6-03b2 section' })
+      }
+      const signOut = async () => {
+        await clickByText(cdp, 'button', '退出')
+        await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
+          { label: 'sign-in after 退出 (P6-03b2)' })
+      }
+      const pageText = () => evaluate(cdp, `document.body.textContent ?? ''`)
+      const goto = async (hash, label, waitForExpression) => {
+        await evaluate(cdp, `(() => {
+          const next = '#/' + ${JSON.stringify(hash)}
+          if (location.hash !== next) location.hash = next
+          dispatchEvent(new HashChangeEvent('hashchange'))
+          return location.hash
+        })()`)
+        await waitFor(cdp, `location.hash === ${JSON.stringify('#/' + hash)}`, { label: `${label} hash` })
+        await waitFor(cdp, waitForExpression, { label })
+      }
+      /** Set a React-controlled input/select/textarea the way a user would. */
+      const setControl = async (selector, value, prototype) => evaluate(cdp, `(() => {
+        const el = document.querySelector(${JSON.stringify(selector)})
+        if (!el) return null
+        const setter = Object.getOwnPropertyDescriptor(window.${prototype}.prototype, 'value').set
+        setter.call(el, ${JSON.stringify(value)})
+        el.dispatchEvent(new Event('input', { bubbles: true }))
+        el.dispatchEvent(new Event('change', { bubbles: true }))
+        return el.value
+      })()`)
+      const clickSubmit = (panelTitle) => clickByText(
+        cdp, `[data-write-panel=${JSON.stringify(panelTitle)}] [data-testid="write-submit"]`, '')
+      const panelText = (panelTitle) => evaluate(cdp, `(() => {
+        const panel = document.querySelector('[data-write-panel=' + ${JSON.stringify(JSON.stringify(panelTitle))} + ']')
+        return panel ? (panel.textContent ?? '') : ''
+      })()`)
+      const waitForWriteResult = (panelTitle, needle) => waitFor(cdp, `(() => {
+        const panel = document.querySelector('[data-write-panel=' + ${JSON.stringify(JSON.stringify(panelTitle))} + ']')
+        return panel ? (panel.textContent ?? '').includes(${JSON.stringify(needle)}) : false
+      })()`, { label: `write result ${needle}` })
+      /** The write requests the page issued, newest last, with their recorded bodies. */
+      const writeRequests = (suffix) => requests.filter(
+        (request) => request.method === 'POST' && request.path.endsWith(suffix))
+      const postDataOf = (request) => {
+        if (request.postData === null) return null
+        try { return JSON.parse(request.postData) } catch { return { __unparsed: request.postData } }
+      }
+      const evidenceFor = async (suffix) => {
+        const posts = writeRequests(suffix)
+        const last = posts[posts.length - 1]
+        if (!last) return null
+        const entry = {
+          method: 'POST',
+          path: last.path,
+          status: responses.get(last.requestId)?.status ?? null,
+          fixtureLabel: responses.get(last.requestId)?.fixtureLabel ?? null,
+          requestBody: postDataOf(last),
+          responseBody: await responseBody(cdp, last.requestId),
+        }
+        writeEvidence.push(entry)
+        return entry
+      }
+      /**
+       * Wait until a write route has been hit at least `expected` times.
+       *
+       * The panels keep their previous outcome rendered, so "the panel says 已提交" is true
+       * *before* the next submit's response arrives. Counting the requests is what keeps this
+       * section from asserting a stale render and calling it a second write.
+       */
+      const waitForPost = async (suffix, expected) => {
+        for (let attempt = 0; attempt < 120; attempt += 1) {
+          if (writeRequests(suffix).length >= expected) return
+          await sleep(100)
+        }
+        throw new Error(`timed out waiting for POST ${suffix} #${expected}`)
+      }
+      /** Every key set a frozen write allows, plus the replay key the hook adds. */
+      const assertPayload = (suffix, requestBody, route) => {
+        if (requestBody === null) return { ok: false, detail: 'no POST body was recorded' }
+        const keys = Object.keys(requestBody).sort()
+        const allowed = [...route.allowed_body_fields].sort()
+        const extra = keys.filter((key) => !allowed.includes(key))
+        const missing = route.required_body_fields.filter((key) => !(key in requestBody))
+        const hasEventId = typeof requestBody.event_id === 'string' && /^evt_/.test(requestBody.event_id)
+        return {
+          ok: extra.length === 0 && missing.length === 0 && hasEventId &&
+            !('idempotency_key' in requestBody),
+          detail: JSON.stringify({ keys, allowed, extra, missing, hasEventId }),
+        }
+      }
+
+      await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
+        { label: 'P6-03b2 sign-in form' })
+      await signInWith(token)
+
+      // --- the payload and readback of each write route the operator can reach ----------
+      if (!args.p4WritesOff) {
+        // 1. lifecycle: pin. Payload exact, Core accepts, the object is read back.
+        await goto(`memory/items/${MITEM}`, 'memory item detail (b2)',
+          `document.querySelector('[data-write-panel="Memory 生命周期写入 (memory:manage)"]') !== null`)
+        const before = await simState()
+        const beforeItem = (before.items ?? []).find((entry) => entry.memory_id === MITEM) ?? {}
+        const expectedRevision = (beforeItem.revision ?? 0) + 1
+        const readsBefore = requests.filter(
+          (request) => request.method === 'GET' && request.path === `/v1/memory/items/${MITEM}`).length
+        await setControl('[data-testid="lifecycle-command"]', 'pin', 'HTMLSelectElement')
+        await setControl('[data-testid="write-reason"]', 'gate: pin through the panel', 'HTMLInputElement')
+        await clickSubmit('Memory 生命周期写入 (memory:manage)')
+        await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '已提交')
+        const pinRoute = routeFor('/pin')
+        const pinEvidence = await evidenceFor('/pin')
+        const pinPayload = assertPayload('/pin', pinEvidence?.requestBody ?? null, pinRoute)
+        const pinReadback = {
+          block: await evaluate(cdp, `document.querySelector('[data-write-readback]') !== null`),
+          revision: (await pageText()).includes(`r${expectedRevision}`),
+          commandEvent: (await pageText()).includes('command Event'),
+          readsAfter: requests.filter(
+            (request) => request.method === 'GET' && request.path === `/v1/memory/items/${MITEM}`).length,
+        }
+        const after = await simState()
+        const pinState = (after.items ?? []).find((entry) => entry.memory_id === MITEM) ?? {}
+        trace.record(
+          'lifecycle write: the frozen payload is sent, Core accepts, and the item is read back',
+          pinPayload.ok && pinEvidence?.status === 200 &&
+            pinEvidence?.fixtureLabel === 'simulated-p4-writes' &&
+            pinEvidence?.responseBody?.replayed === false &&
+            Array.isArray(pinEvidence?.responseBody?.before) === false &&
+            pinReadback.block && pinReadback.commandEvent &&
+            pinReadback.readsAfter > readsBefore && pinState.pinned === true &&
+            pinState.revision === expectedRevision,
+          JSON.stringify({ payload: pinPayload, status: pinEvidence?.status,
+            expectedRevision, pinReadback, pinState }))
+        await trace.screenshot(cdp, '30-memory-pin-write')
+
+        // 2. unpin: the same shape, and it puts the item back to a state the conflict and
+        //    replay checks below need. `obsolete`/`delete` come later, because a tombstone
+        //    makes every later command answer `invalid_state` before it ever compares a
+        //    revision — which is P4's documented order and would hide the conflict case.
+        for (const command of ['unpin']) {
+          const route = routeFor(`/${command}`)
+          const reads = requests.filter(
+            (request) => request.method === 'GET' && request.path === `/v1/memory/items/${MITEM}`).length
+          await goto(`memory/items/${MITEM}`, `memory item detail before ${command}`,
+            `document.querySelector('[data-testid="lifecycle-command"]') !== null`)
+          const postsBefore = writeRequests(`/${command}`).length
+          await setControl('[data-testid="lifecycle-command"]', command, 'HTMLSelectElement')
+          await clickSubmit('Memory 生命周期写入 (memory:manage)')
+          await waitForPost(`/${command}`, postsBefore + 1)
+          await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '已提交')
+          const evidence = await evidenceFor(`/${command}`)
+          const payload = assertPayload(`/${command}`, evidence?.requestBody ?? null, route)
+          trace.record(
+            `${command}: the frozen lifecycle payload is sent and Core accepts it`,
+            payload.ok && evidence?.status === 200 && evidence?.responseBody?.replayed === false &&
+              requests.filter((request) => request.method === 'GET' &&
+                request.path === `/v1/memory/items/${MITEM}`).length > reads,
+            JSON.stringify({ payload, status: evidence?.status }))
+        }
+
+        // 3. retry: FAILED -> accepted; DONE -> Core's invalid_state, not a UI pretence.
+        // The write fixture starts the job at whatever the read fixture's row says; the Gate
+        // states the precondition it needs (a retryable FAILED job) instead of assuming it.
+        await fixturePost(`/v1/_p6_fixture/set-job-status?job=${MJOB}&status=FAILED`)
+        await goto(`memory/jobs/${MJOB}`, 'memory job detail (b2)',
+          `document.querySelector('[data-write-panel="Memory retry (memory:manage)"]') !== null`)
+        const jobReads = requests.filter(
+          (request) => request.method === 'GET' && request.path === `/v1/memory/jobs/${MJOB}`).length
+        await clickSubmit('Memory retry (memory:manage)')
+        await waitForPost('/retry', 1)
+        await waitForWriteResult('Memory retry (memory:manage)', '已提交')
+        const retryRoute = routeFor('/retry')
+        const retryEvidence = await evidenceFor('/retry')
+        const retryPayload = assertPayload('/retry', retryEvidence?.requestBody ?? null, retryRoute)
+        const retryBody = retryEvidence?.responseBody ?? {}
+        const retryInvariants = {
+          status: retryBody.job?.status,
+          retryCount: retryBody.job?.retry_count,
+          documentId: retryBody.job?.document_id,
+          contentSha256: retryBody.job?.content_sha256,
+          bankId: retryBody.job?.bank_id,
+          readback: (await pageText()).includes('写后读回'),
+          reRead: requests.filter((request) => request.method === 'GET' &&
+            request.path === `/v1/memory/jobs/${MJOB}`).length > jobReads,
+        }
+        trace.record(
+          'retry: accepted for a FAILED job, with the retained document unchanged and the job read back',
+          retryPayload.ok && retryEvidence?.status === 200 &&
+            // P4 resets the retry budget to 0 on an accepted retry; it does not increment it.
+          retryInvariants.status === 'PENDING' && retryInvariants.retryCount === 0 &&
+            retryInvariants.contentSha256 === 'a'.repeat(64) &&
+            retryInvariants.documentId === `doc_${MID}` && retryInvariants.bankId === `bank_${MID}` &&
+            retryInvariants.readback && retryInvariants.reRead,
+          JSON.stringify({ payload: retryPayload, ...retryInvariants }))
+        await trace.screenshot(cdp, '31-memory-retry-write')
+
+        // 4. a DONE (and a RUNNING) job is refused by Core rather than retained twice or
+        //    stolen from its worker. The status is set on the fixture directly, then the retry
+        //    is submitted through the panel: the refusal has to be Core's answer to a real
+        //    click, not a UI-side guess about which states are legal.
+        const invariantRefusals = []
+        for (const status of ['DONE', 'RUNNING', 'PENDING']) {
+          await fixturePost(`/v1/_p6_fixture/set-job-status?job=${MJOB}&status=${status}`)
+          await goto(`memory/jobs/${MJOB}`, `job detail with a ${status} job`,
+            `document.querySelector('[data-testid="write-reason"]') === null && document.querySelector('[data-testid="retry-note"]') !== null`)
+          const postsBefore = writeRequests('/retry').length
+          const submit = `[data-write-panel="Memory retry (memory:manage)"] [data-testid="write-submit"]`
+          const state = await evaluate(cdp, `(() => {
+            const button = document.querySelector(${JSON.stringify(submit)})
+            return button ? button.disabled : null
+          })()`)
+          await clickSubmit('Memory retry (memory:manage)')
+          await waitForPost('/retry', postsBefore + 1)
+          await waitForWriteResult('Memory retry (memory:manage)', '被拒绝')
+          const evidence = await evidenceFor('/retry')
+          invariantRefusals.push({
+            status,
+            buttonEnabled: state === false,
+            http: evidence?.status ?? null,
+            code: evidence?.responseBody?.error?.code ?? null,
+            requestEventId: evidence?.requestBody?.event_id ?? null,
+          })
+        }
+        trace.record(
+          'retry invariants: Core refuses DONE, RUNNING and already-PENDING jobs with invalid_state_transition, and the UI offers the button rather than deciding for Core',
+          invariantRefusals.length === 3 && invariantRefusals.every((entry) =>
+            entry.buttonEnabled && entry.http === 409 &&
+            entry.code === 'invalid_state_transition'),
+          JSON.stringify(invariantRefusals))
+        // And a second retry after the refusal is a NEW command, not a replay of the last one.
+        await fixturePost(`/v1/_p6_fixture/set-job-status?job=${MJOB}&status=FAILED`)
+        const beforeNew = writeRequests('/retry').length
+        await clickSubmit('Memory retry (memory:manage)')
+        await waitForPost('/retry', beforeNew + 1)
+        const thirdRetry = await evidenceFor('/retry')
+        trace.record(
+          'retry: a further retry after a refusal carries a new event_id (a new command, not a replay of the refused one)',
+          thirdRetry?.status === 200 &&
+            thirdRetry?.requestBody?.event_id !== retryEvidence?.requestBody?.event_id &&
+            !invariantRefusals.some((entry) =>
+              entry.requestEventId === thirdRetry?.requestBody?.event_id),
+          JSON.stringify({ status: thirdRetry?.status,
+            newEventId: thirdRetry?.requestBody?.event_id,
+            firstEventId: retryEvidence?.requestBody?.event_id }))
+      }
+
+      // --- default-closed: with the switch off the proxy refuses and names the switch -----
+      if (args.p4WritesOff) {
+        await goto(`memory/items/${MITEM}`, 'memory item detail with writes off',
+          `document.querySelector('[data-testid="lifecycle-command"]') !== null`)
+        const beforeOff = requests.length
+        await clickSubmit('Memory 生命周期写入 (memory:manage)')
+        await waitFor(cdp,
+          `document.querySelector('[data-testid="write-dependency-pending"]') !== null`,
+          { label: 'write dependency pending' })
+        const off = {
+          pending: await evaluate(cdp,
+            `document.querySelector('[data-testid="write-dependency-pending"]') !== null`),
+          namesSwitch: (await pageText()).includes('P6_ENABLE_P4_WRITES'),
+          genericScopeBanner: (await pageText()).includes('不会换更高权限的凭据重试'),
+          refused: requests.slice(beforeOff)
+            .filter((request) => request.method === 'POST').length,
+        }
+        const offState = await simState()
+        trace.record(
+          'with P6_ENABLE_P4_WRITES unset the proxy refuses the write, names the switch, and no command reaches Core',
+          off.pending && off.namesSwitch && off.genericScopeBanner === false &&
+            off.refused === 1 && (offState.commands ?? []).length === 0,
+          JSON.stringify({ ...off, commands: (offState.commands ?? []).length }))
+        await trace.screenshot(cdp, '32-memory-write-switch-off')
+      }
+
+      // --- permission: every route refused for the right reason, by Core ------------------
+      if (!args.p4WritesOff) {
+        const permissionMatrix = []
+        if (args.p4ReadOnlyToken) {
+          await signOut()
+          await signInWith(args.p4ReadOnlyToken)
+          for (const route of ROUTES) {
+            if (route.literal === '/v1/memory/reflect') {
+              await goto('memory/reflect', 'reflect with a read-only token',
+                `document.querySelector('[data-write-panel="reflect 写入 (memory:reflect)"]') !== null`)
+              await setControl('[data-testid="reflect-query"]', 'gate: reflect without the scope', 'HTMLTextAreaElement')
+              await clickSubmit('reflect 写入 (memory:reflect)')
+              await waitForWriteResult('reflect 写入 (memory:reflect)', '被拒绝')
+              const evidence = await evidenceFor('/reflect')
+              permissionMatrix.push({
+                route: route.literal, status: evidence?.status,
+                code: evidence?.responseBody?.error?.code,
+                namesScope: JSON.stringify(evidence?.responseBody ?? {}).includes('memory:reflect'),
+              })
+              continue
+            }
+            if (route.literal.endsWith('/retry')) {
+              await goto(`memory/jobs/${MJOB}`, 'job detail with a read-only token',
+                `document.querySelector('[data-write-panel="Memory retry (memory:manage)"]') !== null`)
+              await clickSubmit('Memory retry (memory:manage)')
+              await waitForWriteResult('Memory retry (memory:manage)', '被拒绝')
+            } else {
+              await goto(`memory/items/${MITEM}`, 'item detail with a read-only token',
+                `document.querySelector('[data-testid="lifecycle-command"]') !== null`)
+              const command = route.literal.split('/').pop()
+              await setControl('[data-testid="lifecycle-command"]', command, 'HTMLSelectElement')
+              await clickSubmit('Memory 生命周期写入 (memory:manage)')
+              await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '被拒绝')
+            }
+            const evidence = await evidenceFor(route.literal.replace(/^\/v1\/memory/, ''))
+            permissionMatrix.push({
+              route: route.literal, status: evidence?.status,
+              code: evidence?.responseBody?.error?.code,
+              namesScope: JSON.stringify(evidence?.responseBody ?? {}).includes(route.scope),
+            })
+          }
+        }
+        const refusedAll = permissionMatrix.length === ROUTES.length &&
+          permissionMatrix.every((entry) => entry.status === 403 &&
+            entry.code === 'forbidden_scope' && entry.namesScope)
+        trace.record(
+          'permission: a token without the scope is refused by Core on every one of the six routes, naming the scope',
+          refusedAll, JSON.stringify(permissionMatrix))
+
+        // A non-human actor is refused on the five `memory:manage` writes by Core's own rule.
+        if (args.p4AgentToken) {
+          await signOut()
+          await signInWith(args.p4AgentToken)
+          await goto(`memory/items/${MITEM}`, 'item detail as a non-human actor',
+            `document.querySelector('[data-testid="lifecycle-command"]') !== null`)
+          await setControl('[data-testid="lifecycle-command"]', 'pin', 'HTMLSelectElement')
+          await clickSubmit('Memory 生命周期写入 (memory:manage)')
+          await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '被拒绝')
+          const agentEvidence = await evidenceFor('/pin')
+          trace.record(
+            'permission: a non-human actor is refused with ForbiddenActorKind, not a UI pretence',
+            agentEvidence?.status === 403 && agentEvidence?.responseBody?.error?.code === 'forbidden_actor_kind' &&
+              JSON.stringify(agentEvidence?.responseBody ?? {}).includes('human'),
+            JSON.stringify({ status: agentEvidence?.status, code: agentEvidence?.responseBody?.error?.code }))
+          await trace.screenshot(cdp, '33-memory-forbidden-actor-kind')
+        }
+      }
+
+      // --- conflict, replay, redaction, reflect: the human token back in charge ----------
+      if (!args.p4WritesOff) {
+        if (args.p4ReadOnlyToken || args.p4AgentToken) {
+          await signOut()
+          await signInWith(token)
+        }
+        // drift the item behind the UI's back, then submit every lifecycle command: each must
+        // be Core's 409, keep the draft, and never auto-retry.
+        const conflictMatrix = []
+        // The panel must read the item FIRST, then the item moves behind its back: drifting
+        // before the read would just hand it the new revision and there would be no conflict.
+        await goto(`memory/items/${MITEM}`, 'item detail before the conflict checks',
+          `document.querySelector('[data-testid="lifecycle-command"]') !== null`)
+        for (const command of ['pin', 'unpin', 'obsolete', 'delete']) {
+          await fixturePost(`/v1/_p6_fixture/drift?item=${MITEM}`)
+          const beforeConflict = writeRequests(`/${command}`).length
+          await setControl('[data-testid="lifecycle-command"]', command, 'HTMLSelectElement')
+          await setControl('[data-testid="write-reason"]', `gate: ${command} with a stale revision`, 'HTMLInputElement')
+          await clickSubmit('Memory 生命周期写入 (memory:manage)')
+          await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '冲突,已保留草稿')
+          const evidence = await evidenceFor(`/${command}`)
+          const draftKept = await evaluate(cdp,
+            `(document.querySelector('[data-testid="write-reason"]')?.value ?? '') !== ''`)
+          const page = await pageText()
+          await new Promise((resolve) => setTimeout(resolve, 300))
+          conflictMatrix.push({
+            command,
+            status: evidence?.status,
+            code: evidence?.responseBody?.error?.code,
+            current: evidence?.responseBody?.error?.details?.current_revision ?? null,
+            shownOnPage: page.includes('current_revision') || page.includes('Core 当前值'),
+            draftKept,
+            posts: writeRequests(`/${command}`).length - beforeConflict,
+            noAutoRetry: writeRequests(`/${command}`).length - beforeConflict === 1,
+          })
+        }
+        const conflictsOk = conflictMatrix.length === 4 && conflictMatrix.every((entry) =>
+          entry.status === 409 && entry.code === 'revision_conflict' && entry.shownOnPage &&
+          entry.draftKept && entry.noAutoRetry)
+        trace.record(
+          'conflict: all four lifecycle commands answer Core 409 RevisionConflict, keep the draft, show Core current revision, and never auto-retry',
+          conflictsOk, JSON.stringify(conflictMatrix))
+        await trace.screenshot(cdp, '34-memory-revision-conflict')
+
+        // replay: arm the drop, submit, resubmit the SAME intent, and prove Core replays.
+        await fixtureJson('/v1/_p6_fixture/drop-next')
+        await goto(`memory/items/${MITEM}`, 'item detail before the dropped write',
+          `document.querySelector('[data-testid="lifecycle-command"]') !== null`)
+        await setControl('[data-testid="lifecycle-command"]', 'pin', 'HTMLSelectElement')
+        const beforeReplay = (await simState()).commands?.length ?? 0
+        await clickSubmit('Memory 生命周期写入 (memory:manage)')
+        await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '结果未知')
+        const dropped = await evidenceFor('/pin')
+        const keyAfterDrop = await evaluate(cdp, `(() => {
+          const panel = document.querySelector('[data-write-panel="Memory 生命周期写入 (memory:manage)"]')
+          return panel ? (panel.textContent ?? '').slice(0, 400) : ''
+        })()`)
+        await clickSubmit('Memory 生命周期写入 (memory:manage)')
+        await waitForWriteResult('Memory 生命周期写入 (memory:manage)', 'replayed')
+        const replayEvidence = await evidenceFor('/pin')
+        const afterReplay = await simState()
+        const replayCheck = {
+          dropStatus: dropped?.status ?? null,
+          replayStatus: replayEvidence?.status ?? null,
+          replayedFlag: replayEvidence?.responseBody?.replayed ?? null,
+          replayKeys: Object.keys(replayEvidence?.responseBody ?? {}).sort(),
+          sameEventId: dropped?.requestBody?.event_id === replayEvidence?.requestBody?.event_id,
+          commandsAdded: (afterReplay.commands?.length ?? 0) - beforeReplay,
+          unknownShown: keyAfterDrop.includes('结果未知'),
+        }
+        trace.record(
+          'replay: a dropped reply keeps the same event_id, the resubmit is answered with Core 5-key replayed shape, and no second transition is applied',
+          replayCheck.sameEventId === true && replayCheck.replayedFlag === true &&
+            replayCheck.replayKeys.length === 5 && replayCheck.commandsAdded === 1 &&
+            replayCheck.unknownShown &&
+            (dropped?.status === 502 || dropped?.status === 504 || dropped?.status === null),
+          JSON.stringify(replayCheck))
+        await trace.screenshot(cdp, '35-memory-write-replay')
+
+        // 5. the destructive pair, and the state-before-revision rule they expose.
+        const destructive = []
+        for (const command of ['obsolete', 'delete']) {
+          const postsBefore = writeRequests(`/${command}`).length
+          await setControl('[data-testid="lifecycle-command"]', command, 'HTMLSelectElement')
+          await clickSubmit('Memory 生命周期写入 (memory:manage)')
+          await waitForPost(`/${command}`, postsBefore + 1)
+          await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '已提交')
+          const evidence = await evidenceFor(`/${command}`)
+          destructive.push({
+            command,
+            status: evidence?.status ?? null,
+            replayed: evidence?.responseBody?.replayed ?? null,
+            hasBeforeAfter: 'before' in (evidence?.responseBody ?? {}) && 'after' in (evidence?.responseBody ?? {}),
+            engineState: evidence?.responseBody?.memory?.engine_state ?? null,
+            itemStatus: evidence?.responseBody?.memory?.status ?? null,
+          })
+        }
+        // The item is a tombstone now. P4 checks the STATE before the revision, so an obsolete
+        // on a deleted item is answered as "you cannot obsolete a tombstone" rather than as a
+        // revision conflict — and the panel must show exactly that, from Core.
+        const tombstoneBefore = writeRequests('/obsolete').length
+        await setControl('[data-testid="lifecycle-command"]', 'obsolete', 'HTMLSelectElement')
+        await clickSubmit('Memory 生命周期写入 (memory:manage)')
+        await waitForPost('/obsolete', tombstoneBefore + 1)
+        await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '被拒绝')
+        const tombstone = await evidenceFor('/obsolete')
+        trace.record(
+          'lifecycle: obsolete and delete are accepted with a fresh 7-key transition, and a tombstone is refused as invalid_state (the state is checked before the revision)',
+          destructive.length === 2 && destructive.every((entry) =>
+            entry.status === 200 && entry.replayed === false && entry.hasBeforeAfter) &&
+            destructive[1].engineState !== destructive[0].engineState &&
+            tombstone?.responseBody?.error?.code === 'invalid_state_transition',
+          JSON.stringify({ destructive, tombstoneCode: tombstone?.responseBody?.error?.code ?? null }))
+
+        // --- reflect: explicit request, Core's marker, trace audit, and the withholding pair
+        await goto('memory/reflect', 'reflect view',
+          `document.querySelector('[data-write-panel="reflect 写入 (memory:reflect)"]') !== null`)
+        const reflectGuards = {
+          explicit: (await pageText()).includes('显式的用户请求'),
+          disabledWithoutQuery: await evaluate(cdp,
+            `document.querySelector('[data-write-panel="reflect 写入 (memory:reflect)"] [data-testid="write-submit"]').disabled === true`),
+        }
+        await setControl('[data-testid="reflect-query"]', 'gate: reflect through the panel', 'HTMLTextAreaElement')
+        await setControl('[data-testid="reflect-max-tokens"]', '256', 'HTMLInputElement')
+        const traceReadsBefore = requests.filter((request) =>
+          request.method === 'GET' && request.path.startsWith('/v1/memory/traces/')).length
+        await clickSubmit('reflect 写入 (memory:reflect)')
+        await waitFor(cdp, `document.querySelector('[data-testid="reflect-outcome"]') !== null`,
+          { label: 'reflect outcome' })
+        const reflectEvidence = await evidenceFor('/reflect')
+        const humanBody = reflectEvidence?.responseBody ?? {}
+        const humanPage = await evaluate(cdp, `(() => {
+          const node = document.querySelector('[data-testid="reflect-outcome"]')
+          return node ? (node.textContent ?? '') : ''
+        })()`)
+        const reflectPayload = assertPayload('/reflect', reflectEvidence?.requestBody ?? null, routeFor('/reflect'))
+        await clickByText(cdp, 'a', MTRACE)
+        await waitFor(cdp, `location.hash === ${JSON.stringify(`#/memory/traces/${MTRACE}`)}`,
+          { label: 'trace audit readback' })
+        await waitFor(cdp, `document.body.textContent.includes('query_sha256')`, { label: 'trace detail' })
+        trace.record(
+          'reflect: an explicit request only, the payload is the frozen one, the marker is Core own, and the trace is read back as its audit record',
+          reflectGuards.explicit && reflectGuards.disabledWithoutQuery && reflectPayload.ok &&
+            reflectEvidence?.status === 200 && humanBody.non_authoritative === true &&
+            typeof humanBody.safe_error_summary === 'string' && typeof humanBody.text === 'string' &&
+            humanPage.includes(String(humanBody.text)) && humanPage.includes(MTRACE) &&
+            requests.filter((request) => request.method === 'GET' &&
+              request.path.startsWith('/v1/memory/traces/')).length > traceReadsBefore,
+          JSON.stringify({ ...reflectGuards, payload: reflectPayload, status: reflectEvidence?.status,
+            humanHasText: typeof humanBody.text === 'string',
+            humanHasSummary: typeof humanBody.safe_error_summary === 'string' }))
+        await trace.screenshot(cdp, '36-memory-reflect')
+
+        // The withholding pair: same route, same body, the only difference is the actor kind.
+        // The response bodies are the evidence; the pages are the second half of it.
+        if (args.p4AgentToken) {
+          await signOut()
+          await signInWith(args.p4AgentToken)
+          await goto('memory/reflect', 'reflect as the artificial agent key',
+            `document.querySelector('[data-testid="reflect-query"]') !== null`)
+          await setControl('[data-testid="reflect-query"]', 'gate: reflect as a non-human actor', 'HTMLTextAreaElement')
+          await clickSubmit('reflect 写入 (memory:reflect)')
+          await waitFor(cdp, `document.querySelector('[data-testid="reflect-outcome"]') !== null`,
+            { label: 'agent reflect outcome' })
+          const agentEvidence = await evidenceFor('/reflect')
+          const agentBody = agentEvidence?.responseBody ?? {}
+          const agentPage = await pageText()
+          const reflectPanelText = await panelText('reflect 写入 (memory:reflect)')
+          trace.record(
+            'redaction on a write reply: P4 nulls safe_error_summary for a non-human actor while keeping the key, and the page shows the withheld state instead of the text',
+            agentEvidence?.status === 200 && 'safe_error_summary' in agentBody &&
+              agentBody.safe_error_summary === null &&
+              typeof humanBody.safe_error_summary === 'string' &&
+              (await evaluate(cdp,
+                `document.querySelector('[data-testid="reflect-withheld"]') !== null`)) === true &&
+              !agentPage.includes(String(humanBody.safe_error_summary)),
+            JSON.stringify({
+              status: agentEvidence?.status,
+              agentKeys: Object.keys(agentBody).sort(),
+              agentSummary: agentBody.safe_error_summary,
+              humanSummaryIsString: typeof humanBody.safe_error_summary === 'string',
+              panelHasWithheld: reflectPanelText.includes('safe_error_summary'),
+            }))
+          await trace.screenshot(cdp, '37-memory-write-redaction')
+          await signOut()
+          await signInWith(token)
+        }
+
+        // AUDIT: every write's command Event is in Core's audit, and the row is read back.
+        // Read through the *read* routes (the same origin), not from the write responses, so
+        // the check is "the record Core kept", not "the copy Core returned".
+        const audit = []
+        for (const route of ROUTES) {
+          if (route.is_generator) continue
+          const evidence = writeEvidence.filter((entry) => entry.path === route.literal).pop()
+          const eventId = evidence?.responseBody?.event?.event_id ?? null
+          if (!eventId) { audit.push({ route: route.literal, eventId: null }); continue }
+          const event = await httpJson(`${args.ui}/v1/events/${eventId}`, 'GET')
+            .catch((error) => ({ __error: String(error.message ?? error) }))
+          audit.push({
+            route: route.literal,
+            eventId,
+            readBackEventId: event?.event?.event_id ?? null,
+            eventType: event?.event?.event_type ?? null,
+          })
+        }
+        trace.record(
+          'audit: every lifecycle/retry command Event Core returned can be read back by id from the audit surface',
+          audit.length === 5 && audit.every((entry) => entry.eventId && entry.eventId === entry.readBackEventId),
+          JSON.stringify(audit))
+      }
+
+      if (!args.p4WritesOff) {
+        await writeFile(join(out, 'browser-write-responses.jsonl'),
+          writeEvidence.map((entry) => JSON.stringify(entry)).join('\n') + '\n')
+      }
+    }
 
     // 9. negative: an unknown route is not silently the Overview
     await cdp.send('Page.navigate', { url: `${args.ui}/#/nonsense/route` })

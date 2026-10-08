@@ -260,25 +260,53 @@ class DashboardTypesMatchTheP4Contract(unittest.TestCase):
                 self.assertEqual(set(re.findall(r"^\s{2}([a-z][a-z0-9_]*)\??:",
                                                 body.group(1), re.M)), extra)
 
-    def test_the_memory_endpoint_layer_issues_get_only(self) -> None:
-        """A `POST` among the memory endpoints would be a b2 write in a b1 slice.
+    def test_the_memory_read_section_issues_get_only(self) -> None:
+        """The seven reads stay GETs, and the six writes are a separate section.
 
-        Scoped to the memory section on purpose: `endpoints.ts` also carries P6-02's audited
-        writes, so a whole-file check would either fail for the wrong reason or have to be
-        weakened until it proved nothing.
+        This used to assert that no `client.post<` appeared anywhere between `memoryHealth:`
+        and `listHosts:`. P6-03b2 put the writes in that same region, so the guard was rewritten
+        rather than deleted: what it was really protecting is that a *read* view can only fetch,
+        and that a write cannot be reached without going through the gated section — both of
+        which are still checkable.
+
+        A whole-file check would prove nothing (P6-02's audited writes are in this file too), so
+        the assertion is scoped to each section by name.
         """
         source = (ROOT / "web" / "src" / "api" / "endpoints.ts").read_text(encoding="utf-8")
-        start = source.index("memoryHealth:")
-        end = source.index("listHosts:")
-        section = source[start:end]
-        self.assertIn("memoryHealth", section)
-        self.assertEqual(set(re.findall(r"client\.(get|post|put|delete)<", section)), {"get"},
-                         "the P4 endpoint layer issues GET only; writes are P6-03b2")
-        for forbidden in ("/memory/reflect", "/retry", "/obsolete", "expected_revision"):
+        reads_start = source.index("// P6-03b1: P4 memory reads.")
+        writes_start = source.index("// P6-03b2: the six memory writes.")
+        reads = source[reads_start:writes_start]
+        writes = source[writes_start:source.index("listHosts:")]
+
+        # The read slice is still read-only, and still knows nothing about the writes.
+        self.assertEqual(set(re.findall(r"client\.(get|post|put|delete)<", reads)), {"get"},
+                         "the P4 read layer issues GET only")
+        for forbidden in ("/memory/reflect", "/retry", "/obsolete", "expected_revision",
+                          "lifecycleBody", "reflectBody"):
             with self.subTest(forbidden=forbidden):
-                self.assertNotIn(forbidden, section,
+                self.assertNotIn(forbidden, reads,
                                  f"{forbidden!r} is a P6-03b2 write and must not appear in the "
-                                 f"b1 endpoint layer")
+                                 f"b1 read layer")
+
+        # The write section is write-only, and every one of its calls is a POST on a memory path.
+        self.assertEqual(set(re.findall(r"client\.(get|post|put|delete)<", writes)), {"post"},
+                         "the P4 write layer issues POST only")
+        # The three write helpers, and the memory paths only: a POST to anything else in this
+        # section would be a write the frozen contract does not describe.
+        self.assertEqual(len(re.findall(r"client\.post<", writes)), 3)
+        self.assertEqual(sorted(re.findall(r"[`'](/memory/[^`']*)[`']", writes)), sorted([
+            "/memory/jobs/${id(jobId)}/retry",
+            "/memory/items/${id(memoryId)}/${command}",
+            "/memory/reflect",
+        ]))
+        for required in ("MemoryWriteResult", "MemoryReflectResult"):
+            with self.subTest(interface=required):
+                self.assertIn(required, writes)
+        # The read interface must not be reused for a write answer: reflect has no command Event,
+        # which is why it gets `MemoryReflectResult` rather than the generic `WriteResult`.
+        # The lookbehind matters: a bare `assertNotIn("WriteResult", …)` also matches the
+        # `MemoryWriteResult` that *should* be there, so it would have failed for the wrong reason.
+        self.assertIsNone(re.search(r"(?<![A-Za-z])WriteResult", writes))
 
 
 if __name__ == "__main__":

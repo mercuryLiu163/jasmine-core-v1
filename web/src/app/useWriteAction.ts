@@ -46,10 +46,10 @@ export type WriteState = 'idle' | 'submitting' | 'succeeded' | 'conflict' | 'ref
 /** The body field Core replays on: its name is fixed per endpoint family. */
 export type WriteKeyKind = 'idempotency_key' | 'event_id'
 
-export interface WriteAction {
+export interface WriteAction<T = WriteResult> {
   state: WriteState
   /** Core's response on success; null otherwise. */
-  result: WriteResult | null
+  result: T | null
   /** The refusal or failure, with kind/code/details; null when none. */
   error: CoreApiError | null
   /** The request id of the last attempt, for correlation and readback. */
@@ -110,14 +110,17 @@ export interface WriteActionOptions {
   targetKey?: string
 }
 
-export function useWriteAction(
-  send: (body: Record<string, unknown>, signal: AbortSignal) => Promise<WriteResult>,
+// The result type is a parameter because not every family's response is shaped like an
+// Authority write: P4's reflect answers eight named keys and no command Event. Typing it here
+// keeps each panel's `result` exact instead of forcing a cast that would hide a mismatch.
+export function useWriteAction<T = WriteResult>(
+  send: (body: Record<string, unknown>, signal: AbortSignal) => Promise<T>,
   options: WriteActionOptions = {},
-): WriteAction {
+): WriteAction<T> {
   const keyKind = options.keyKind ?? 'idempotency_key'
   const targetKey = options.targetKey ?? ''
   const [state, setState] = useState<WriteState>('idle')
-  const [result, setResult] = useState<WriteResult | null>(null)
+  const [result, setResult] = useState<T | null>(null)
   const [error, setError] = useState<CoreApiError | null>(null)
   const [requestId, setRequestId] = useState<string | null>(null)
   // The key is state, not a ref: the panel displays it, and a ref mutated without a

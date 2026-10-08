@@ -24,17 +24,19 @@ import { useEffect, useId, useState } from 'react'
 import type { ReactNode } from 'react'
 
 import type { WriteAction, WriteKeyKind } from '../app/useWriteAction'
+import type { WriteResult } from '../api/endpoints'
+import { isDependencyPending } from '../api/errors'
 import { useSession } from '../app/session'
 import { useResource } from '../app/useResource'
 import { JsonBlock } from './JsonBlock'
 import { SourceLink } from './Trace'
 import { ErrorPanel, Loading } from './States'
 
-export interface WritePanelProps {
+export interface WritePanelProps<T = WriteResult> {
   title: string
   /** What this action is about, e.g. `interpretation int_… @ revision 4`. */
   basis: string
-  action: WriteAction
+  action: WriteAction<T>
   submitLabel: string
   /** Endpoint-specific fields; `reason` and `host_id` are added by the panel. */
   fields: ReactNode
@@ -51,10 +53,19 @@ export interface WritePanelProps {
   ready: boolean
   /**
    * `'required'` (default) shows and requires the `reason` input.
+   * `'optional'` shows it and sends it only when non-empty — for endpoints whose
+   * contract *allows* `reason` without requiring it (P4's lifecycle commands).
    * `'none'` hides it, because this endpoint's Core contract rejects `reason`
    * as an unknown field — the panel must not offer a field that cannot be sent.
    */
-  reasonMode?: 'required' | 'none'
+  reasonMode?: 'required' | 'optional' | 'none'
+  /**
+   * Rendered instead of the generic refusal when Core was never reached because the
+   * dashboard's own proxy does not forward this path. The P6-03b2 Memory writes are
+   * default-off, so their refusal is "this dependency is not switched on", which is a
+   * different statement from "你的 key 缺 scope" — and the generic block asserts the latter.
+   */
+  dependencyNote?: ReactNode
   onSucceeded?: () => void
 }
 
@@ -72,7 +83,7 @@ const KEY_LABELS: Record<WriteKeyKind, { label: string; note: string }> = {
   },
 }
 
-export function WritePanel({
+export function WritePanel<T = WriteResult>({
   title,
   basis,
   action,
@@ -82,8 +93,9 @@ export function WritePanel({
   ready,
   targetKey,
   reasonMode = 'required',
+  dependencyNote,
   onSucceeded,
-}: WritePanelProps): JSX.Element {
+}: WritePanelProps<T>): JSX.Element {
   const { endpoints } = useSession()
   const hosts = useResource((signal) => endpoints.listHosts(signal), [])
   const [hostId, setHostId] = useState('')
@@ -101,6 +113,7 @@ export function WritePanel({
 
   const effectiveHost = hostId || hosts.data?.hosts[0]?.host_id || ''
   const needsReason = reasonMode === 'required'
+  const offersReason = reasonMode !== 'none'
   const canSubmit =
     ready && effectiveHost !== '' && (!needsReason || reason.trim() !== '') && !action.busy
   const keyLabel = KEY_LABELS[action.keyKind]
@@ -142,9 +155,9 @@ export function WritePanel({
               ))}
             </select>
           </label>
-          {needsReason ? (
+          {offersReason ? (
             <label htmlFor={reasonId}>
-              reason(Core 必填)
+              {needsReason ? 'reason(Core 必填)' : 'reason(Core 可选,留空则不发送)'}
               <input
                 id={reasonId}
                 value={reason}
@@ -213,7 +226,18 @@ export function WritePanel({
           </div>
         ) : null}
 
-        {action.state === 'refused' && action.error ? (
+        {action.state === 'refused' && action.error && isDependencyPending(action.error) &&
+        dependencyNote ? (
+          <div className="state state--pending" role="status" data-testid="write-dependency-pending">
+            <p className="state__headline">
+              写入未接入 — <code>{action.error.code}</code>
+            </p>
+            {dependencyNote}
+          </div>
+        ) : null}
+
+        {action.state === 'refused' && action.error &&
+        !(isDependencyPending(action.error) && dependencyNote) ? (
           <div className="state state--error" role="alert">
             <p className="state__headline">
               被拒绝 — <code>{action.error.code}</code>
@@ -245,13 +269,17 @@ export function WritePanel({
         {action.state === 'succeeded' && action.result ? (
           <div className="state state--meta">
             <p className="state__headline">
-              已提交{action.result.replayed ? '(replayed: Core 返回了原命令结果,未重复写入)' : ''}
+              已提交{replayedFlag(action.result) ? '(replayed: Core 返回了原命令结果,未重复写入)' : ''}
             </p>
             <JsonBlock value={action.result} label="Core 响应(原文)" startsOpen />
-            {commandEventId(action.result) ? (
+            {commandEventId(action.result as Record<string, unknown>) ? (
               <p>
                 command Event:{' '}
-                <SourceLink kind="event" id={commandEventId(action.result)!} label="command" />
+                <SourceLink
+                  kind="event"
+                  id={commandEventId(action.result as Record<string, unknown>)!}
+                  label="command"
+                />
               </p>
             ) : null}
             {onSucceeded ? (
@@ -263,6 +291,21 @@ export function WritePanel({
         ) : null}
       </div>
     </section>
+  )
+}
+
+/**
+ * Core's `replayed` flag, when the family has one.
+ *
+ * Every milestone B and P4 lifecycle/retry response carries it; P4's reflect answers eight
+ * named keys and does not. Read defensively so a family without the field cannot make the
+ * panel claim a replay that never happened.
+ */
+function replayedFlag(result: unknown): boolean {
+  return (
+    typeof result === 'object' &&
+    result !== null &&
+    (result as { replayed?: unknown }).replayed === true
   )
 }
 

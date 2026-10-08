@@ -74,6 +74,14 @@ export function parseArgs(argv) {
 export const P3_READS_ENV = 'P6_ENABLE_P3_READS'
 /** Env var that says the Core behind this proxy is a P4 build. */
 export const P4_READS_ENV = 'P6_ENABLE_P4_READS'
+/**
+ * Env var that says the Core behind this proxy accepts the P6-03b2 memory writes.
+ *
+ * Separate from the reads switch on purpose: reading Memory and changing it carry different
+ * scopes and different consequences, so an operator who has the P4 reads does not thereby
+ * get the writes.
+ */
+export const P4_WRITES_ENV = 'P6_ENABLE_P4_WRITES'
 
 /** One spelling of "the operator says yes" for every opt-in, so the hosts cannot diverge. */
 function flagEnabled(env, name) {
@@ -89,9 +97,14 @@ export function p4ReadsEnabled(env = process.env) {
   return flagEnabled(env, P4_READS_ENV)
 }
 
+export function p4WritesEnabled(env = process.env) {
+  return flagEnabled(env, P4_WRITES_ENV)
+}
+
 export function loadAllowlist(directory = HERE, {
   enableP3Reads = p3ReadsEnabled(),
   enableP4Reads = p4ReadsEnabled(),
+  enableP4Writes = p4WritesEnabled(),
 } = {}) {
   const raw = JSON.parse(readFileSync(join(directory, 'core-paths.json'), 'utf8'))
   const baseline = raw.paths.map((pattern) => new RegExp(pattern))
@@ -103,6 +116,10 @@ export function loadAllowlist(directory = HERE, {
   // The P4 memory reads are the same arrangement for a different unmerged dependency: real
   // on a P4 Core, absent here, and appended only on the operator's say-so.
   const pendingP4 = (raw.p4_pending_paths ?? []).map((pattern) => new RegExp(pattern))
+  // The P6-03b2 memory writes are the same arrangement again, but they are POSTs and they are
+  // gated by their own switch. They are appendable to `write_paths` only, never to the read
+  // list: `isAllowed` picks one list by method, so a P4 write can never be reached with GET.
+  const pendingP4Writes = (raw.p4_write_paths ?? []).map((pattern) => new RegExp(pattern))
   return {
     methods: new Set(raw.methods.map((method) => method.toUpperCase())),
     paths: [
@@ -116,7 +133,13 @@ export function loadAllowlist(directory = HERE, {
     p4_pending_paths: pendingP4,
     p4_reads_enabled: enableP4Reads,
     write_methods: raw.write_methods ?? [],
-    write_paths: raw.write_paths ?? [],
+    write_paths: [
+      ...(raw.write_paths ?? []),
+      ...(enableP4Writes ? raw.p4_write_paths ?? [] : []),
+    ],
+    baseline_write_paths: raw.write_paths ?? [],
+    p4_write_paths: pendingP4Writes,
+    p4_writes_enabled: enableP4Writes,
   }
 }
 

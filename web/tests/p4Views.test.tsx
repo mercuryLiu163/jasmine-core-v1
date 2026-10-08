@@ -523,7 +523,7 @@ describe('the test fixtures match the contract they exercise', () => {
   })
 })
 
-describe('this slice has no write affordance', () => {
+describe('the read views stay read-only, and the write controls are gated', () => {
   /**
    * The only interactive controls a read-only Memory view may offer, each named so a new
    * one fails this test: the reload button, the by-id form submit, a `JsonBlock` expander
@@ -536,23 +536,27 @@ describe('this slice has no write affordance', () => {
     ['RawText copy', (name) => name.startsWith('复制')],
   ]
 
-  it.each(VIEWS)('%s offers only read controls, never a write action', async (
+  /** The views that read and never write. The two details are covered below. */
+  const READ_ONLY_VIEWS = VIEWS.filter(([name]) => name !== 'job detail' && name !== 'item detail')
+
+  const BODIES = (): Record<string, unknown> => ({
+    '/v1/memory/health': health(),
+    '/v1/memory/jobs': { jobs: [job()], count: 1, counts: withKeys(contract.nested_fields.job_counts, {}) },
+    [`/v1/memory/jobs/${JOB}`]: { job: job(), attempts: [] },
+    '/v1/memory/items': { items: [{ ...item(), lifecycle: lifecycle() }], count: 1, non_authoritative: true },
+    [`/v1/memory/items/${ITEM}`]: {
+      memory: item(), sources: [], jobs: [], recallable: true, lifecycle: lifecycle(),
+      engine_claim: 'x', non_authoritative: true,
+    },
+    '/v1/memory/traces': { traces: [trace()], count: 1 },
+    [`/v1/memory/traces/${TRACE}`]: { trace: traceDetail() },
+  })
+
+  it.each(READ_ONLY_VIEWS)('%s offers only read controls, never a write action', async (
     _name, hash, region, route,
   ) => {
-    const bodies: Record<string, unknown> = {
-      '/v1/memory/health': health(),
-      '/v1/memory/jobs': { jobs: [job()], count: 1, counts: withKeys(contract.nested_fields.job_counts, {}) },
-      [`/v1/memory/jobs/${JOB}`]: { job: job(), attempts: [] },
-      '/v1/memory/items': { items: [{ ...item(), lifecycle: lifecycle() }], count: 1, non_authoritative: true },
-      [`/v1/memory/items/${ITEM}`]: {
-        memory: item(), sources: [], jobs: [], recallable: true, lifecycle: lifecycle(),
-        engine_claim: 'x', non_authoritative: true,
-      },
-      '/v1/memory/traces': { traces: [trace()], count: 1 },
-      [`/v1/memory/traces/${TRACE}`]: { trace: traceDetail() },
-    }
     const user = userEvent.setup()
-    await enter(user, hash, { ...SIGNED_IN, ['GET ' + route]: { body: bodies[route] } })
+    await enter(user, hash, { ...SIGNED_IN, ['GET ' + route]: { body: BODIES()[route] } })
     const panel = await screen.findByRole('region', { name: region })
     await waitFor(() => expect(panel.textContent).not.toContain('读取失败'))
 
@@ -568,4 +572,35 @@ describe('this slice has no write affordance', () => {
     // And no request left the page that was not a read.
     expect(fake!.requests.every((request) => request.method === 'GET')).toBe(true)
   })
+
+  /**
+   * P6-03b2 changed this file's old claim. The item and job details now carry the write
+   * controls, so the invariant is no longer "no write affordance anywhere" — it is:
+   *
+   * * the write surface appears **only** on the two detail views, where the revision and
+   *   status it must send are in hand;
+   * * rendering it issues no write: it takes an explicit submit, which is what makes
+   *   reflect an "explicit user request" rather than a side effect;
+   * * it states which switch and which scope it needs, so a refusal cannot be read as a
+   *   successful integration.
+   */
+  it.each([['job detail', `#/memory/jobs/${JOB}`, /Memory Job/, `/v1/memory/jobs/${JOB}`],
+           ['item detail', `#/memory/items/${ITEM}`, /Memory Item/, `/v1/memory/items/${ITEM}`]] as const)(
+    '%s carries the gated write panel and still sends no write on render', async (
+      _name, hash, region, route,
+    ) => {
+      const user = userEvent.setup()
+      await enter(user, hash, { ...SIGNED_IN, ['GET ' + route]: { body: BODIES()[route] } })
+      const panel = await screen.findByRole('region', { name: region })
+      await waitFor(() => expect(panel.textContent).not.toContain('读取失败'))
+
+      // The write section is present, and it names the dependency rather than pretending.
+      expect(panel.textContent).toContain('P6_ENABLE_P4_WRITES')
+      expect(panel.textContent).toContain('P4 阶段验收未通过')
+      expect(panel.textContent).toMatch(/memory:(manage|reflect)/)
+
+      // Nothing was written by rendering the page.
+      expect(fake!.requests.every((request) => request.method === 'GET')).toBe(true)
+      expect(fake!.requests.some((request) => request.path === '/v1/memory/reflect')).toBe(false)
+    })
 })

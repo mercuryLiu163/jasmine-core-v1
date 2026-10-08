@@ -20,6 +20,7 @@ import {
   MemoryJobsView,
   MemoryTracesView,
 } from './views/MemoryViews'
+import { MemoryReflectView } from './views/MemoryWrites'
 import { ConversationView } from './views/ConversationView'
 import { EventView } from './views/EventView'
 import { EvidenceView } from './views/EvidenceView'
@@ -174,8 +175,10 @@ function renderRoute(route: Route): JSX.Element {
       return <ContextPackView contextPackId={route.contextPackId} />
     case 'resume':
       return <ResumeView resumeId={route.resumeId} />
-    // P6-03b1: P4 memory reads. Read-only by construction — the retry, lifecycle and
-    // reflect actions are P6-03b2 writes and have no route here at all.
+    // P6-03b1 reads, plus P6-03b2's reflect route. The read views issue only GETs; the write
+    // controls live on the item and job details, and reflect has its own route because it is
+    // an explicit user request rather than an action on a row. Everything Memory is a deep
+    // link: nothing here is in the navigation.
     case 'memoryHealth':
       return <MemoryHealthView />
     case 'memoryJobs':
@@ -190,6 +193,8 @@ function renderRoute(route: Route): JSX.Element {
       return <MemoryTracesView traceId={route.traceId} />
     case 'memoryTrace':
       return <MemoryTracesView traceId={route.traceId} />
+    case 'memoryReflect':
+      return <MemoryReflectView />
     case 'pending':
       return <PendingView pendingKey={route.key} />
     case 'unknown':

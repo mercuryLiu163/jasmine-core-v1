@@ -20,6 +20,10 @@ import { installFakeCore, type FakeCore } from './helpers/fakeCore'
 const ALLOWED_METHODS = new Set(allowlist.methods.map((method) => method.toUpperCase()))
 const ALLOWED_PATHS = allowlist.paths.map((pattern) => new RegExp(pattern))
 const ALLOWED_WRITE_PATHS = (allowlist.write_paths ?? []).map((pattern) => new RegExp(pattern))
+// The P6-03b2 memory writes are a *gated* list, off by default, so they are checked against
+// their own patterns rather than against the always-on milestone B list. A memory write
+// appearing in `write_paths` would be forwarded to a baseline Core that cannot answer it.
+const ALLOWED_P4_WRITE_PATHS = (allowlist.p4_write_paths ?? []).map((pattern) => new RegExp(pattern))
 const ID_BODY = '01M4B6VGC29ESRDRQR62DX8AK8'
 
 let fake: FakeCore | null = null
@@ -52,14 +56,29 @@ describe('every dashboard endpoint call is forwarded by the proxy', () => {
       ['/v1/rules/rul_' + ID_BODY + '/approve', endpoints.approveRule('rul_' + ID_BODY, body, signal)],
       ['/v1/rules/rul_' + ID_BODY + '/supersede', endpoints.supersedeRule('rul_' + ID_BODY, body, signal)],
       ['/v1/rules/rul_' + ID_BODY + '/retire', endpoints.retireRule('rul_' + ID_BODY, body, signal)],
+      // P6-03b2. Every one of these is in the gated `p4_write_paths` list, never in
+      // `write_paths`: an unmerged dependency must not ride along in the always-on surface.
+      [`/v1/memory/jobs/mjb_${ID_BODY}/retry`, endpoints.retryMemoryJob(`mjb_${ID_BODY}`, body, signal)],
+      [`/v1/memory/items/mem_${ID_BODY}/obsolete`, endpoints.memoryLifecycle(`mem_${ID_BODY}`, 'obsolete', body, signal)],
+      [`/v1/memory/items/mem_${ID_BODY}/delete`, endpoints.memoryLifecycle(`mem_${ID_BODY}`, 'delete', body, signal)],
+      [`/v1/memory/items/mem_${ID_BODY}/pin`, endpoints.memoryLifecycle(`mem_${ID_BODY}`, 'pin', body, signal)],
+      [`/v1/memory/items/mem_${ID_BODY}/unpin`, endpoints.memoryLifecycle(`mem_${ID_BODY}`, 'unpin', body, signal)],
+      ['/v1/memory/reflect', endpoints.reflectMemory(body, signal)],
     ]
     await Promise.allSettled(writes.map(([, promise]) => promise))
-    const notForwarded = fake!.requests
-      .filter((request) => request.method === 'POST')
-      .filter((request) => !ALLOWED_WRITE_PATHS.some((pattern) => pattern.test(request.path)))
+    const posts = fake!.requests.filter((request) => request.method === 'POST')
+    const notForwarded = posts
+      .filter((request) =>
+        !ALLOWED_WRITE_PATHS.some((pattern) => pattern.test(request.path)) &&
+        !ALLOWED_P4_WRITE_PATHS.some((pattern) => pattern.test(request.path)))
       .map((request) => `POST ${request.path}`)
     expect(notForwarded).toEqual([])
-    expect(fake!.requests.filter((r) => r.method === 'POST')).toHaveLength(writes.length)
+    expect(posts).toHaveLength(writes.length)
+    // The two lists must stay disjoint, or "gated" and "always on" stop meaning anything.
+    const alwaysOn = ALLOWED_WRITE_PATHS.map((pattern) => pattern.source)
+    for (const pattern of ALLOWED_P4_WRITE_PATHS.map((p) => p.source)) {
+      expect(alwaysOn).not.toContain(pattern)
+    }
   })
 
 

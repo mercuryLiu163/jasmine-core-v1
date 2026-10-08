@@ -42,12 +42,26 @@ class P4WriteSpecIsStillP4s(unittest.TestCase):
                          "the write spec and the read contract must pin the same commit, or the "
                          "two halves describe different P4s")
 
-    def test_the_spec_says_nothing_is_implemented_and_acceptance_is_unpassed(self) -> None:
-        self.assertIn("SPECIFICATION ONLY", SPEC["status"])
+    def test_the_contract_keeps_p4_acceptance_unpassed_and_points_at_the_status_doc(self) -> None:
+        """The contract records P4's facts; our implementation status lives elsewhere.
+
+        It used to carry "nothing here is implemented" among the recorded semantics. That entry
+        was never P4's behaviour — it described *this dashboard* — and once the write surface was
+        built it became a false statement inside a frozen artefact. It is now excluded by a rule
+        rather than by memory: every recorded semantic must cite a P4 source file.
+        """
         self.assertIn("NOT passed", SPEC["source"]["acceptance"])
-        recorded = " ".join(s["statement"] for s in SPEC["semantics"]["recorded"])
-        self.assertIn("Nothing in this specification is built", recorded,
-                      "the spec must say in its own recorded semantics that none of it exists yet")
+        self.assertIn("P6-03B2-COMPLIANCE.md", SPEC["status"],
+                      "the contract must point at where implementation status is actually tracked")
+        for entry in SPEC["semantics"]["recorded"]:
+            with self.subTest(key=entry["key"]):
+                self.assertRegex(entry["statement"], r"Sources?: .*\.py",
+                                 "a recorded semantic without a P4 source is not P4's behaviour")
+
+    def test_no_implementation_status_is_recorded_among_p4_semantics(self) -> None:
+        keys = {entry["key"] for entry in SPEC["semantics"]["recorded"]}
+        self.assertNotIn("not_implemented_yet", keys)
+        self.assertEqual(len(keys), 7)
 
     def test_it_is_the_six_writes_the_read_slice_excluded(self) -> None:
         """A write moving into the read slice, or a read into this spec, fails here."""
@@ -127,27 +141,55 @@ class P4WriteSpecIsStillP4s(unittest.TestCase):
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
 
 
-class NoneOfItIsReachableYet(unittest.TestCase):
-    """"Specification only" has to mean something a test can check."""
+class ImplementedButClosedByDefault(unittest.TestCase):
+    """"Built behind a default-off switch" has to mean something a test can check.
 
-    def test_no_write_path_is_in_the_live_allowlist(self) -> None:
+    The three properties that make the write surface acceptable to ship while P4 is unmerged
+    are each checked against the artefact that enforces them, not asserted in prose:
+
+    1. the six paths are reachable **only** through the gated `p4_write_paths` list, and are in
+       neither the live read list nor the always-on milestone B write list;
+    2. the client issues exactly the six writes and nothing else — no retain, no bank selector,
+       no `idempotency_key`;
+    3. the specification document says what is built, what is not verified against a real Core,
+       and still carries the acceptance criteria a real P4 Gate must meet.
+    """
+
+    def test_no_write_path_is_in_the_live_allowlist_or_the_always_on_write_list(self) -> None:
         allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
         live = [re.compile(pattern) for pattern in allowlist["paths"]]
+        always_on = [re.compile(pattern) for pattern in allowlist["write_paths"]]
+        gated = [re.compile(pattern) for pattern in allowlist["p4_write_paths"]]
         for write in SPEC["writes"]:
             compiled = re.compile(write["path_pattern"])
             with self.subTest(pattern=write["path_pattern"]):
-                self.assertFalse(any(compiled.pattern == pattern.pattern for pattern in live))
-        # And behaviourally, with the literals those patterns match.
-        samples = ["/v1/memory/jobs/mjb_01M4B6VGC29ESRDRQR62DX8AK8/retry",
-                   "/v1/memory/items/mem_01M4B6VGC29ESRDRQR62DX8AK8/obsolete",
-                   "/v1/memory/items/mem_01M4B6VGC29ESRDRQR62DX8AK8/delete",
-                   "/v1/memory/items/mem_01M4B6VGC29ESRDRQR62DX8AK8/pin",
-                   "/v1/memory/items/mem_01M4B6VGC29ESRDRQR62DX8AK8/unpin",
-                   "/v1/memory/reflect"]
-        for sample in samples:
-            with self.subTest(sample=sample):
+                # Behaviourally, with the literals those patterns match.
+                sample = sample_path(write)
                 self.assertFalse(any(pattern.fullmatch(sample) for pattern in live),
-                                 f"{sample} would be forwarded by the baseline proxy")
+                                 f"{sample} would be forwarded as a read")
+                self.assertFalse(any(pattern.fullmatch(sample) for pattern in always_on),
+                                 f"{sample} would be forwarded with the milestone B writes")
+                self.assertTrue(any(pattern.fullmatch(sample) for pattern in gated),
+                                f"{sample} has no gated proxy pattern, so it could never be "
+                                f"reached even by an operator who enabled the writes")
+
+    def test_the_gated_list_covers_exactly_the_six_contract_routes(self) -> None:
+        """Three proxy patterns for six routes: the four lifecycle commands share one.
+
+        The count is not the invariant — coverage is. Every contract route must match exactly one
+        gated pattern (so a route with no pattern could never be reached, and a route matched by
+        two would mean the list had been edited incoherently), and the number of patterns must
+        stay small enough that the six routes are still readable.
+        """
+        allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
+        gated = [re.compile(pattern) for pattern in allowlist["p4_write_paths"]]
+        self.assertEqual(len(gated), 3, "four lifecycle commands should share one pattern")
+        for write in SPEC["writes"]:
+            with self.subTest(pattern=write["path_pattern"]):
+                self.assertEqual(write["method"], "POST")
+                sample = sample_path(write)
+                matches = [pattern.pattern for pattern in gated if pattern.fullmatch(sample)]
+                self.assertEqual(len(matches), 1, f"{sample} matched by {matches}")
 
     def test_no_write_path_is_among_the_pending_reads(self) -> None:
         """The pending list is for reads. A write joining it would be a quiet scope expansion."""
@@ -158,27 +200,47 @@ class NoneOfItIsReachableYet(unittest.TestCase):
             with self.subTest(pattern=write["path_pattern"]):
                 self.assertFalse(any(compiled.pattern == pattern.pattern for pattern in pending))
 
-    def test_the_client_has_no_memory_write(self) -> None:
+    def test_the_client_issues_exactly_the_six_writes(self) -> None:
         source = ENDPOINTS.read_text(encoding="utf-8")
-        start = source.index("memoryHealth:")
+        start = source.index("// P6-03b2: the six memory writes.")
         section = source[start:source.index("listHosts:")]
-        self.assertEqual(set(re.findall(r"client\.(get|post|put|delete)<", section)), {"get"},
-                         "the client must not be able to issue a b2 write yet")
-        for forbidden in ("/memory/reflect", "/retry", "/obsolete", "/pin", "/unpin",
-                          "expected_revision"):
+        calls = re.findall(r"client\.(get|post|put|delete)<", section)
+        self.assertEqual(set(calls), {"post"}, "the b2 section is write-only")
+        self.assertEqual(len(calls), 3, "three helpers: retry, lifecycle, reflect")
+        # The lifecycle helper takes the command as a parameter, so the six routes appear as
+        # one pattern plus the four command literals in the router/panels.
+        self.assertIn("/memory/jobs/${id(jobId)}/retry", section)
+        self.assertIn("/memory/items/${id(memoryId)}/${command}", section)
+        self.assertIn("'/memory/reflect'", section)
+        # And nothing outside the frozen surface.
+        for forbidden in ("/memory/retain", "bankSelector", "idempotency_key", "memory/obsolete'"):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, section)
 
-    def test_the_spec_document_says_specification_only(self) -> None:
+    def test_the_spec_document_records_what_is_built_and_what_is_not(self) -> None:
         doc = SPEC_DOC.read_text(encoding="utf-8")
-        self.assertIn("SPECIFICATION ONLY", doc)
+        # It must not still claim to be unimplemented, and it must not imply P4 was verified.
+        self.assertNotIn("SPECIFICATION ONLY. Nothing here is implemented", doc)
+        self.assertIn("P6_ENABLE_P4_WRITES", doc)
         self.assertIn("P4 phase acceptance has not passed", doc)
+        self.assertIn("P6-03B2-COMPLIANCE.md", doc)
         # The acceptance criteria have to actually be there, or the document is decoration.
         for marker in ("Acceptance criteria, before any of it ships", "replayed", "expected_revision",
-                       "ForbiddenActorKind"):
+                       "forbidden_actor_kind"):
             with self.subTest(marker=marker):
                 self.assertIn(marker, doc)
 
 
-if __name__ == "__main__":
-    unittest.main()
+def sample_path(write: dict) -> str:
+    """A literal path for a contract pattern, using the route's own id prefix."""
+    prefix = write["id_prefix"] or ""
+    body = "01M4B6VGC29ESRDRQR62DX8AK8"
+    # Strip only the anchors: `replace("^", "")` also ate the negation caret inside `([^/]+)`,
+    # which left the sample matching nothing and the assertion failing for the wrong reason.
+    path = write["path_pattern"]
+    if path.startswith("^"):
+        path = path[1:]
+    if path.endswith("$"):
+        path = path[:-1]
+    path = re.sub(r"\(\[\^/\]\+\)", f"{prefix}_{body}" if prefix else body, path)
+    return path

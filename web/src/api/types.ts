@@ -782,3 +782,48 @@ export interface MemoryHealth {
   checked_at: string
   non_authoritative: boolean
 }
+
+/* --- P6-03b2 writes (frozen in web/contracts/p4-memory-write.v1.json) ---------------- */
+
+/** The four lifecycle commands. Each is its own POST route on P4. */
+export type MemoryLifecycleCommand = 'obsolete' | 'delete' | 'pin' | 'unpin'
+
+/**
+ * A lifecycle or retry reply.
+ *
+ * **A lifecycle command has two shapes and the client must handle both.** A fresh transition
+ * carries `before`/`after` (7 keys); a replay of the same `event_id` does not (5 keys). `job`
+ * is present because a lifecycle command enqueues a job, retry obviously does too. Everything
+ * is optional here because which keys arrive depends on the shape — the view decides what to
+ * render, and `replayed` is Core's own flag rather than something the UI infers.
+ */
+export interface MemoryWriteResult {
+  memory?: MemoryItem
+  event?: RawEvent
+  job?: MemoryJob
+  replayed?: boolean
+  before?: JsonObject
+  after?: JsonObject
+  non_authoritative?: boolean
+  [key: string]: unknown
+}
+
+/**
+ * A reflect reply: the eight keys P4 records.
+ *
+ * `text` is the generator's output and is present for a human or system actor; P4 withholds
+ * engine free text from anyone else by nulling `safe_error_summary` (the key stays). A
+ * failure inside the engine is reported as `status` + `error_code`, not as a broken
+ * connection, so the view must render it rather than treating it as unreachable.
+ */
+export interface MemoryReflectResult {
+  banks: unknown[]
+  based_on_memory_ids: unknown[]
+  error_code: string | null
+  non_authoritative: boolean
+  safe_error_summary: string | null
+  status: string
+  text: string | null
+  trace_id: string | null
+}
+

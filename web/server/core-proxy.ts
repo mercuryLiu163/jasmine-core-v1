@@ -28,7 +28,8 @@ const ALLOWED_METHODS = new Set(allowlist.methods.map((method) => method.toUpper
  * Must match `serve.mjs`: the P3 and P4 reads are opt-in for a Core that has them, never
  * implicit, and both hosts spell "the operator says yes" the same way. The environment is
  * read once at module load, which is why the tests reset the module registry rather than
- * passing an option.
+ * passing an option. The P4 *writes* have their own switch, so an operator who has the reads
+ * has not thereby agreed to let the browser change Memory.
  */
 function flagEnabled(name: string): boolean {
   const raw = (process.env[name] ?? '').trim().toLowerCase()
@@ -36,6 +37,7 @@ function flagEnabled(name: string): boolean {
 }
 const p3ReadsEnabled = flagEnabled('P6_ENABLE_P3_READS')
 const p4ReadsEnabled = flagEnabled('P6_ENABLE_P4_READS')
+const p4WritesEnabled = flagEnabled('P6_ENABLE_P4_WRITES')
 const pendingPaths = allowlist as {
   p3_pending_paths?: string[]
   p4_pending_paths?: string[]
@@ -48,7 +50,12 @@ const ALLOWED_PATHS = [
 const WRITE_METHODS = new Set(
   (allowlist.write_methods ?? []).map((method) => method.toUpperCase()),
 )
-const WRITE_PATHS = (allowlist.write_paths ?? []).map((pattern) => new RegExp(pattern))
+const WRITE_PATHS = [
+  ...(allowlist.write_paths ?? []),
+  // Only ever appended to the POST list: `isAllowedCoreRequest` selects a list by method, so
+  // a b2 write cannot be reached with GET even when the switch is on.
+  ...(p4WritesEnabled ? (allowlist as { p4_write_paths?: string[] }).p4_write_paths ?? [] : []),
+].map((pattern) => new RegExp(pattern))
 /** Headers worth forwarding. Anything else (cookies, origin, host) is dropped. */
 const FORWARDED_HEADERS = [
   'authorization',
