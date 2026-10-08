@@ -132,10 +132,11 @@ routes, scopes and shapes:
   both normal states, not failures.
 * **Hindsight credentials never enter the browser.** The engine lives behind Core.
 
-## 3. Executable before P4 merges, and blocked until it does
+## 3. What was built before P4 merges, and what stays blocked
 
-**Executable now — P6-03b1 scaffolding**, all of it dependency-marked. None of it makes the
-feature available:
+**Built — P6-03b1**, every piece of it dependency-marked. None of it makes the feature
+available: the paths are refused by default, the only Core that has answered them is the
+labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
 
 | # | Item | Status |
 | --- | --- | --- |
@@ -145,7 +146,7 @@ feature available:
 | E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
 | E5 | Component tests plus a Gate section | **built, 89 guards.** Gate: 10/10 full twice, 4/4 scope |
 
-**Blocked until P4 is merged and independently validated:**
+**Still blocked until P4 is merged and independently validated:**
 
 * acceptance against a real Core with a real `memory:read` token;
 * anything in P6-03b2. The five lifecycle/retry writes and `reflect` are state-changing, and
