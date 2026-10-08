@@ -1,0 +1,33 @@
+{
+  "run_id": "run-20261008T000001Z",
+  "stage": "P7",
+  "created_at": "2026-10-08T00:00:01.000000Z",
+  "commit": "0000000000000000000000000000000000000000",
+  "schema_version": 11,
+  "core_version": "0.1.0",
+  "environment": {"python": "3.11", "platform": "fixture"},
+  "executor": "fixture",
+  "reviewer": "fixture",
+  "verifier": "fixture",
+  "verdict": "PASS",
+  "cases": [
+    {
+      "case_id": "T-1",
+      "name": "a passing case with a context pack",
+      "verdict": "PASS",
+      "user_raw": "hello",
+      "agent_response": "world",
+      "tools": [{"name": "read", "response": {"project_id": "prj_00000000000000000000000000"}}],
+      "state_before": {"revision": 1},
+      "state_after": {"revision": 2},
+      "interpretation": "N/A (P0 not implemented)",
+      "context": {"context_id": "ctx_1", "pack": {"sections": []}},
+      "evidence": ["/absolute/host/path/stdout.txt", "prose evidence"],
+      "reproduction": [],
+      "not_applied_reason": null
+    }
+  ],
+  "notes": ["a syntactically complete fixture record"],
+  "not_implemented": [],
+  "extra_record_key": "not interpreted by this contract"
+}

@@ -19,6 +19,7 @@ from .. import (SCHEMA_VERSION, __version__, audit, auth, authority, db, errors,
                 evidence, ids, interpretations, objects, registry, resolver, reviews,
                 state)
 from ..memory import api as memory_api
+from ..validation import reads as validation_api
 from ..migrations import applied_migrations, check_version, current_version
 from ..models import NewEvent, NewObject
 from ..continuity import ContinuityStore
@@ -812,11 +813,12 @@ def adapter_evidence(request,core,principal,match):
 """Assigned at the bottom of the module: the route table names the handlers,
 so it can only be built once they exist.
 
-P4 appends its own route tuple from `memory.api` rather than editing this
-function, and P3's continuity/Context handlers sit in `_base_routes()`. The
+P4 appends its own route tuple from `memory.api` and P7-01 its read surface
+from `validation.reads` rather than editing this function, and P3's
+continuity/Context handlers sit in `_base_routes()`. The
 alternative — a second dispatch table — would leave `resolve()` incomplete, and a
 route that `resolve()` cannot find is a route whose 404 is indistinguishable from
 a typo. Both extensions are shared-file changes and are listed as such in
 ADR 0014 §12."""
 ROUTES = (tuple(_base_routes()) + tuple(_collection_routes())
-          + memory_api.routes(Route))
+          + memory_api.routes(Route) + validation_api.routes(Route))

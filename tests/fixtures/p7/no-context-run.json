@@ -1,0 +1,62 @@
+{
+  "run_id": "run-20261008T000003Z",
+  "stage": "P7",
+  "created_at": "2026-10-08T00:00:03.000000Z",
+  "commit": "0000000000000000000000000000000000000000",
+  "schema_version": 11,
+  "core_version": "0.1.0",
+  "environment": {},
+  "executor": "fixture",
+  "reviewer": "fixture",
+  "verifier": "fixture",
+  "verdict": "BLOCKED",
+  "cases": [
+    {
+      "case_id": "S-1",
+      "name": "context is the sentinel",
+      "verdict": "BLOCKED",
+      "user_raw": "raw",
+      "agent_response": "N/A (P0 not implemented)",
+      "tools": [],
+      "state_before": {"revision": 1},
+      "state_after": {"revision": 1},
+      "interpretation": "N/A (P0 not implemented)",
+      "context": "N/A (P0 not implemented)",
+      "evidence": ["recorded evidence"],
+      "reproduction": [],
+      "not_applied_reason": "the scenario did not run"
+    },
+    {
+      "case_id": "S-2",
+      "name": "context is reason-only",
+      "verdict": "PASS",
+      "user_raw": "raw",
+      "agent_response": "answered",
+      "tools": [],
+      "state_before": {"revision": 1},
+      "state_after": {"revision": 1},
+      "interpretation": "N/A (P0 not implemented)",
+      "context": {"reason": "no context pack was built for this case"},
+      "evidence": ["recorded evidence"],
+      "reproduction": [],
+      "not_applied_reason": null
+    },
+    {
+      "case_id": "S-3",
+      "name": "context holds run details but no pack",
+      "verdict": "PASS",
+      "user_raw": "raw",
+      "agent_response": "answered",
+      "tools": [],
+      "state_before": {"revision": 1},
+      "state_after": {"revision": 1},
+      "interpretation": "N/A (P0 not implemented)",
+      "context": {"db_path": "/tmp/core.db", "processes": ["core"], "reason": "run details"},
+      "evidence": ["recorded evidence"],
+      "reproduction": [],
+      "not_applied_reason": null
+    }
+  ],
+  "notes": [],
+  "not_implemented": []
+}
