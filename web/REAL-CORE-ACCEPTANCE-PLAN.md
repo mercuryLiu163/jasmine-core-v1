@@ -300,15 +300,21 @@ untouched, and nothing was pushed, no PR was opened and no CI was run.
   integration itself required (workspace-scan/tokenizer fix; integration-baseline fixes; the two
   fixture-value browser records made Core-relative; the provenance stamp; the tokenizer identity
   row; the re-derived contracts; the P4 UI runner fix).
-* **Acceptance commit** `e7f322ae61ea6d95ef7d2057b31ad56c0cc93e6e`.
+* **First acceptance commit** `e7f322ae61ea6d95ef7d2057b31ad56c0cc93e6e`; after the two
+  independent reviews below, the hardening commit `f323c779bc91893b5908218d8c5c148619159180`
+  re-ran the same battery with the same results and is the **current acceptance commit**.
 
 **Contracts re-derived at that commit, with the original source kept.** `source.ref` /
 `source.commit` still name the dependency each contract came from (the P4 SHA; P3's branch and commit),
 and `source.derived_at_ref` / `derived_at_identical` / `derived_at_differences` record where the
-re-derivation ran and whether it changed anything. At the tip all three are content-identical to
-their dependency: `identical: true`, `differences: []`; `--check` passes with and without
-`--derived-at`. The stamp names the commit *before* the stamp commit because a commit cannot contain
-its own SHA; the tip differs from it only by those three stamp lines.
+re-derivation ran and whether it changed anything. At the acceptance commit all three are
+content-identical to their dependency. That is shown by `--print --derived-at <commit>`
+(`identical: true`, `differences: []`, non-stamp content equal) — **not** by
+`--check --derived-at <ref>`, which strips the stamp from both sides before comparing and so takes
+no account of `<ref>`; an independent review caught that the first wording counted those exit-0
+commands as evidence about the ref, and this text no longer does. Plain `--check` (exit 0) is a
+dependency-content check. The stamp names the commit *before* the stamp commit because a commit
+cannot contain its own SHA; the acceptance commit differs from it only by those three stamp lines.
 
 **Results at that commit**, each frozen in a bundle with `BUNDLE-FROZEN.json` bound to the full SHA:
 
@@ -332,18 +338,42 @@ is claimed. No Hindsight deployment was added. Restarting P4 phase acceptance is
 and a real Hindsight deployment alone would not reopen it: the G01 benefit-verification line was
 stopped for its own reasons.
 
-**The nine Python failures are listed, not summarised away**, with each test's name and message and
-the P4-tip comparison, in `validation-runs/p6/20261008T074301Z-p6-03-failure-attribution/`. The
-comparison is not a clone's word for it: the same nine were then reproduced by running P4's **own**
-suite in P4's **own** worktree at `0c4f8f0e…` — `Ran 1155 tests`, 5 failures + 4 errors, set
-differences empty in both directions —
-`validation-runs/p6/20261008T074622Z-p6-03-failure-attribution-p4-tip/`. They are environmental
-(native-hook install and pair-preparation tests that fail with `canonical venv launcher parent
-required` without the original repository's launcher layout) and they remain **unfixed and not
-passing**; "0 integration-only failures" is a statement about attribution, not about a green suite.
-See `validation-runs/p6/P6-03-INTEGRATION-REPORT.md` for the full list.
+**The nine Python failures are listed, not summarised away**, with each test's name, kind and
+message, in
+`validation-runs/p6/20261008T075553Z-p6-03-failure-attribution-post-review/` (the earlier
+`20261008T074301Z-…` and `20261008T074622Z-…` bundles stay as written). The comparison is not a
+clone's word for it: the same nine — compared **class-qualified**, which is stronger than the
+method-name comparison the first bundle recorded — were reproduced by running P4's **own** suite in
+P4's **own** worktree at `0c4f8f0e…` (`Ran 1155 tests`, 5 failures + 4 errors; set differences empty
+in both directions). The cause is how the interpreter is invoked here, not the repository layout:
+`scripts/p4-codex-hook-install.py` refuses when the interpreter's parent is not its resolved self,
+and `sys.executable` resolves through `/opt/homebrew/opt/python@3.13/bin`. They remain **unfixed and
+not passing**; "0 integration-only failures" is a statement about attribution, not a green suite.
+See `validation-runs/p6/P6-03-INTEGRATION-REPORT.md`.
+
+**Independent reviews and what they changed.** Two independent subagents reviewed the candidate
+after the first battery: evidence binding (bundle manifests, contract provenance, the failure set)
+and the harness fixes plus the failure attribution. Their findings and the point-by-point
+dispositions are frozen in
+`validation-runs/p6/20261008T075620Z-p6-03-independent-review/`. What was acted on in `caeb947`:
+
+* the Context Pack record's marker now prefers the `task_id` slice of the rendered header JSON, so it
+  identifies *this* pack rather than any pack from the same renderer (the old rule could degenerate
+  to the renderer's constant header), and the rule that ran is recorded;
+* the Resume record now asserts the rendered action **count** against the Core's own number, requires
+  the JSON block's `<pre>` body to be exactly `[]` for the empty case, records no action kind when
+  none is asserted, and requires the Core's own note text on the page;
+* the generated evidence no longer contradicts itself: the environment banner describes the
+  procedure while a log line and the descriptor state the outcome, the README's BLOCKED branch quotes
+  the run's own refusal instead of asserting the tokenizer, and the manifest's dependency sentence is
+  derived from the run;
+* `freeze_bundle.py` no longer writes a boilerplate `ran_from` that was false for runs made in a
+  worktree.
+
+Recorded as open follow-ups rather than fixed here: no unit test covers the P4 UI runner's
+`build_dashboard` or encodes the out-of-scope-`args` sweep; no unit test covers the marker
+derivation, and its `480`-character window is still a hand-copied duplicate of `RawText.tsx`.
 
 **Documentation sync.** The status text in this file and in `web/P6-03A-COMPLIANCE.md` was updated in
-a documentation-only commit on top of the acceptance commit; `git diff --name-only
-e7f322ae… <sync tip>` lists those two Markdown files and nothing else, so the results above still bind
-the same code.
+documentation-only commits; `git diff --name-only e7f322ae… <sync tip>` lists those two Markdown
+files and nothing else, so the results above still bind the same code.

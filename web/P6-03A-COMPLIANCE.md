@@ -336,7 +336,7 @@ needs a real deployment of the native lifecycle), and P4 phase acceptance — th
 commit merges the pinned P4 code, but the engine behind the P4 Core in those runs is a wire double
 (`mode: boundary-fake`, i.e. real Core, simulated engine boundary), so no real extraction or
 reflection is claimed. The integration re-derivation of the contracts has since been executed; see
-`web/REAL-CORE-ACCEPTANCE-PLAN.md` §11 and `validation-runs/p6/P6-03-INTEGRATION-REPORT.md`.
+`web/REAL-CORE-ACCEPTANCE-PLAN.md` §12 and `validation-runs/p6/P6-03-INTEGRATION-REPORT.md`.
 
 ## Standing status
 
