@@ -64,6 +64,43 @@ def log(message: str) -> None:
 RAW_TEXT_COLLAPSED = 480
 
 
+def tokenizer_check(pack: dict[str, Any] | None) -> dict[str, Any]:
+    """Check the installed tokenizer against the constants P3's own `context/tokens.py` fixes.
+
+    The isolated toolchain installs `tiktoken` and fetches one BPE asset; this asks whether what is
+    installed is what P3 *requires*, rather than reporting that a build happened. P3's `Tokenizer`
+    enforces the same two constants, so this is a second, independently readable observation of the
+    same fact — a version string, the asset's cache name, its byte size and its SHA-256 beside the
+    pinned SHA-256. Nothing here is inferred from the pack succeeding.
+    """
+    result: dict[str, Any] = {"available": False, "reason": None}
+    try:
+        from jasmine_core.context import tokens as pinned  # the extracted P3 tree
+        import hashlib
+        import importlib.metadata
+        installed_version = importlib.metadata.version("tiktoken")
+        cache_dir = os.environ.get("TIKTOKEN_CACHE_DIR")
+        if not cache_dir:
+            raise RuntimeError("TIKTOKEN_CACHE_DIR is not set")
+        asset = Path(cache_dir) / pinned.ASSET_CACHE_NAME
+        raw = asset.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        result = {
+            "available": True,
+            "library": {"pinned": pinned.LIBRARY_VERSION, "installed": installed_version,
+                        "matches": installed_version == pinned.LIBRARY_VERSION},
+            "asset": {"cache_name": pinned.ASSET_CACHE_NAME, "bytes": len(raw),
+                      "sha256": digest, "pinned_sha256": pinned.ASSET_SHA256,
+                      "matches": digest == pinned.ASSET_SHA256},
+            "encoding": {"pinned": pinned.ENCODING, "target_model": pinned.TARGET_MODEL,
+                         "from_pack": (pack or {}).get("tokenizer", {}).get("encoding")},
+            "cache_dir": cache_dir,
+        }
+    except Exception as error:  # noqa: BLE001 - the refusal is the observation
+        result["reason"] = f"{error.__class__.__name__}: {error}"
+    return result
+
+
 def rendered_content_marker(rendered: str, sections: list[str]) -> str:
     """A literal slice of `rendered` that the Context Pack page shows without expanding it.
 
@@ -293,6 +330,8 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
 
     descriptor = {
         "environment": "isolated real P3 Core",
+        # The installed tokenizer beside the constants P3 pins, whether or not the pack built.
+        "tokenizer": tokenizer_check(context),
         "mode": {
             "core": "real-p3",
             "workspace_scan": scan_mode,

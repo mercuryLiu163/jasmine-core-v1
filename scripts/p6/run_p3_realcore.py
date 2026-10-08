@@ -218,6 +218,17 @@ def main(argv: list[str] | None = None) -> int:
                    status == 200 and got == sorted(fields["context"]),
                    {"status": status, "got": got})
 
+        # --- the tokenizer the operator authorised, against P3's own pinned constants ------------
+        tokenizer = descriptor["tokenizer"]
+        if tokenizer.get("available"):
+            record("C9.tokenizer_identity",
+                   "the isolated tokenizer is the version and BPE asset P3's tokens.py pins",
+                   tokenizer["library"]["matches"] and tokenizer["asset"]["matches"], tokenizer)
+        else:
+            record("C9.tokenizer_identity",
+                   "the isolated tokenizer is the version and BPE asset P3's tokens.py pins", None,
+                   tokenizer, note="BLOCKED: " + str(tokenizer.get("reason")))
+
         # --- the dashboard against the same Core -------------------------------------------------
         web_work.mkdir(parents=True, exist_ok=True)
         archive = subprocess.run(["git", "-C", str(args.repo or REPO_ROOT), "archive",
@@ -333,11 +344,12 @@ def write_readme(out: Path, evidence: dict[str, Any]) -> None:
         ]
     else:
         pack_bullets = [
-            "* **The Context Pack is real too.** P3's own `ContextBuilder` built it here, with the",
-            "  pinned tokenizer installed in the isolated toolchain and checked against",
-            "  `context/tokens.py`'s `tiktoken` version and asset SHA-256, and P3's own",
-            "  `scan_workspace` walking an isolated git workspace. The browser record asserts a literal",
-            "  slice of *this* Core's `rendered_content` is on screen — not the fixture's title.",
+            "* **The Context Pack is real too.** P3's own `ContextBuilder` built it here, and P3's own",
+            "  `scan_workspace` walked an isolated git workspace. Row `C9.tokenizer_identity` records",
+            "  what the isolated toolchain installed beside what `context/tokens.py` pins — the",
+            "  `tiktoken` version and the BPE asset's cache name, byte size and SHA-256 — and the",
+            "  browser record asserts a literal slice of *this* Core's `rendered_content` is on screen,",
+            "  not the fixture's title.",
         ]
     if scan_mode.startswith("real"):
         scan_bullets = [
