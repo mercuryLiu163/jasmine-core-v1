@@ -1714,8 +1714,19 @@ async function main() {
       await signInMemory(token)
 
       const pageText = () => evaluate(cdp, `document.body.textContent ?? ''`)
+      // Drive the route by setting `location.hash` and letting the app's own `hashchange`
+      // listener react, rather than by CDP `Page.navigate`. Both usually work, but
+      // `Page.navigate` to a fragment that only *shortens* the current one left the app
+      // rendering the previous route while the URL had already changed — so the check waited
+      // on a panel that was never going to render.
       const gotoMemory = async (hash, label, waitForText) => {
-        await cdp.send('Page.navigate', { url: `${args.ui}/#/${hash}` })
+        await evaluate(cdp, `(() => {
+          const next = '#/' + ${JSON.stringify(hash)}
+          if (location.hash !== next) location.hash = next
+          return location.hash
+        })()`)
+        await waitFor(cdp, `(() => { const h = ${JSON.stringify('#/' + hash)}; return location.hash === h })()`,
+          { label: `${label} hash` })
         await waitFor(cdp, waitForText, { label })
       }
 
