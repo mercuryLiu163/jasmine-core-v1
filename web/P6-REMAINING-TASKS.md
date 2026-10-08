@@ -175,7 +175,13 @@ documentation and harness tooling:
   half-written output (a fresh output now appears by one atomic rename, and a failed refresh restores
   the previous derivation), and non-empty request bodies plus nested sub-run records were dropped
   without a note (every field of every record is now carried, with
-  `manifest.json.field_accounting.not_carried` proving it). No verdict and no Gate result changes.
+  `manifest.json.field_accounting.not_carried` proving it). A second reproduction by the operator
+  then found that the first fix introduced two destructive paths — "refreshing" an existing output
+  directory could delete a source bundle that lived inside it, or one that occupied the fixed backup
+  path — and both are closed by construction: **only a new output directory is written to** (an
+  existing one is compared with `--check`), containment is refused in both directions, and there is
+  no backup path and no deletion other than the tool's own staging directory. 23 hermetic tests. No
+  verdict and no Gate result changes.
 
 The exact diff list against the acceptance commit is
 `git diff --name-only f323c779… HEAD`: those six paths and nothing else, with **no `src/`, schema or
