@@ -276,11 +276,70 @@ is an improvement rather than a failure. The re-run's result is in the newer reh
 acceptances from inside the clone — P4's Core matrix, and P3's Core matrix plus browser pass — with
 the Core extracted from the merged commit and the dashboard built from the same tree. Results:
 P4 **35/35, 0 failed, 0 blocked**; P3 **23 passed, 0 failed, 3 blocked** (the Context Pack, for the
-pinned-tokenizer reason above). So at a synthetic integration baseline every claim this plan makes
-about behaviour holds, not only the suites.
+pinned-tokenizer reason above — that figure is the rehearsal's, before the isolated tokenizer was
+installed; §12 has the current 26/26). So at a synthetic integration baseline every claim this plan
+makes about behaviour holds, not only the suites.
 
 A wording correction, recorded rather than silently amended: the commit that added the rehearsal
 said "12 appear only when merged", conflating failing *assertions* with unique tests. The precise
 figures are the ones above and the ones in the bundle's `README.md` and `evidence.json`, which are
 generated from the run. The earlier commit is left as written because amending it would change a
 ref.
+
+## 12. The real integration branch (step 3, executed)
+
+§11 rehearsed step 3. It has since been executed, on the operator's authorisation, in the branch's
+own worktree — the source repository's `main` was never committed to, the original branches are
+untouched, and nothing was pushed, no PR was opened and no CI was run.
+
+* **Branch** `integration/p6-03-realcore`, worktree `_worktrees/p6-03-integration`, created from the
+  local `main` at `b9985e21f7971079e1a0b3d4efa87ee9b1aede3d` (schema 8).
+* **`git merge-base --is-ancestor` confirms P3 is an ancestor of the pinned P4 commit**
+  `0c4f8f0e2118711ac9aa2a7006fddc6982962248`, so P3 was not merged a second time.
+* **Merged, all conflict-free**: the pinned P4 commit, the P6 tip, and the harness fixes the
+  integration itself required (workspace-scan/tokenizer fix; integration-baseline fixes; the two
+  fixture-value browser records made Core-relative; the provenance stamp; the tokenizer identity
+  row; the re-derived contracts; the P4 UI runner fix).
+* **Acceptance commit** `e7f322ae61ea6d95ef7d2057b31ad56c0cc93e6e`.
+
+**Contracts re-derived at that commit, with the original source kept.** `source.ref` /
+`source.commit` still name the dependency each contract came from (the P4 SHA; P3's branch and commit),
+and `source.derived_at_ref` / `derived_at_identical` / `derived_at_differences` record where the
+re-derivation ran and whether it changed anything. At the tip all three are content-identical to
+their dependency: `identical: true`, `differences: []`; `--check` passes with and without
+`--derived-at`. The stamp names the commit *before* the stamp commit because a commit cannot contain
+its own SHA; the tip differs from it only by those three stamp lines.
+
+**Results at that commit**, each frozen in a bundle with `BUNDLE-FROZEN.json` bound to the full SHA:
+
+| Run | Result |
+| --- | --- |
+| P4 Core matrix (real Core) | **35/35** — the seven reads and the six writes |
+| P4 UI pass (same real Core) | **10/10** browser records |
+| P3 Core + browser (real Core) | **26/26** (11 Core rows + 15 records), Context Pack built |
+| P3 continuity reads vs. the simulated fixture | **15/15** |
+| P4 memory reads vs. the simulated fixture (b1) | **11/11** |
+| P4 memory writes vs. the simulated fixture (b2) | **16/16** twice, identical steps, plus **4/4** with the switch off |
+| Python suite | `Ran 1338 tests` — **not green**: 5 failures + 4 errors, all nine also failing at P4's own tip inside a clone; **0 integration-only** |
+| Dashboard | `tsc --noEmit` exit 0; vitest **328/328** |
+
+**`mode: boundary-fake` means real Core, simulated engine boundary.** The Core in the two real-Core
+acceptances is real P4 and real P3 code; the engine behind the P4 Core is P4's own
+`tests/memory_support.StubHindsightServer`, a wire double on loopback. P4's own Gate requires
+`mode: real` **and a real deployment**, so **P4 phase acceptance is not passed**, engine-dependent
+facts (extraction quality, `reflect` content) remain unverified, and no real extraction or reflection
+is claimed. No Hindsight deployment was added. Restarting P4 phase acceptance is a separate decision,
+and a real Hindsight deployment alone would not reopen it: the G01 benefit-verification line was
+stopped for its own reasons.
+
+**The nine Python failures are listed, not summarised away**, with each test's name and message and
+the rehearsal's P4-tip comparison, in
+`validation-runs/p6/20261008T074301Z-p6-03-failure-attribution/` (see
+`validation-runs/p6/P6-03-INTEGRATION-REPORT.md`). They are environmental (native-hook install and
+pair-preparation tests that need the original repository layout) and they remain **not passed**;
+"0 integration-only failures" is a statement about attribution, not about a green suite.
+
+**Documentation sync.** The status text in this file and in `web/P6-03A-COMPLIANCE.md` was updated in
+a documentation-only commit on top of the acceptance commit; `git diff --name-only
+e7f322ae… <sync tip>` lists those two Markdown files and nothing else, so the results above still bind
+the same code.
