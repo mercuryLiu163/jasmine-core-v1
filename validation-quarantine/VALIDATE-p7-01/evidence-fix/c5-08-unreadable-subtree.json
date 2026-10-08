@@ -1,0 +1,23 @@
+{
+  "error": {
+    "code": "validation_not_configured",
+    "details": {
+      "counts": {
+        "ignored_entries": 0,
+        "run_shaped_files": 1,
+        "scanned_dirs": 3,
+        "scanned_files": 1,
+        "unreadable_entries": 1
+      },
+      "reason": "index_incomplete",
+      "samples": [
+        {
+          "error": "PermissionError",
+          "path": "/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-ma09wni5/c5-broken/locked"
+        }
+      ]
+    },
+    "message": "the Validation run root is not usable",
+    "request_id": "aud_01M4E6VCZ08JP80P2ZJ8QH6BMM"
+  }
+}

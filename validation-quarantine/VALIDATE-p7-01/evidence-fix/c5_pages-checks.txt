@@ -1,0 +1,213 @@
+[timing] #1 GET /v1/validation/runs?limit=2&offset=0 0.013s status=200
+[timing] #2 GET /v1/validation/runs?limit=2&offset=2 0.006s status=200
+[timing] #3 GET /v1/validation/runs?limit=2&offset=4 0.006s status=200
+[timing] #4 GET /v1/validation/runs?limit=2&offset=6 0.006s status=200
+[timing] #5 GET /v1/validation/runs?limit=2&offset=8 0.006s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-01-real-root-pages.json
+[ok] real root page walk with limit=2 covers all nine
+[ok] real root page walk has no repeats
+[ok] real root total is stable at 9 across pages
+[ok] real root corrupt_count is 0 on every page
+[ok] real root duplicate_count is 0 on every page
+[ok] page 0 count == len(runs)
+[ok] page 0 has_more arithmetic
+[ok] page 0 offset is n*limit
+[ok] page 1 count == len(runs)
+[ok] page 1 has_more arithmetic
+[ok] page 1 offset is n*limit
+[ok] page 2 count == len(runs)
+[ok] page 2 has_more arithmetic
+[ok] page 2 offset is n*limit
+[ok] page 3 count == len(runs)
+[ok] page 3 has_more arithmetic
+[ok] page 3 offset is n*limit
+[ok] page 4 count == len(runs)
+[ok] page 4 has_more arithmetic
+[ok] page 4 offset is n*limit
+[ok] the union equals the 9 files by run_id, exactly once each
+[timing] #6 GET /v1/validation/runs?limit=100 0.005s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-02-fixture-full-list.json
+[ok] fixture full list is 200
+[ok] fixture total is 12 (9 real + 1 corrupt + 2 duplicate rows)
+[ok] fixture count is 12
+[ok] corrupt_count is 1
+[ok] duplicate_count is 2
+[ok] one corrupt row is listed
+[ok] two duplicate rows are listed
+[ok] corrupt row serves verdict null
+[ok] corrupt row names a corrupt_reason
+[ok] corrupt row is never disguised as an empty list
+[ok] duplicate rows name a duplicate_reason
+[ok] the two duplicate rows are distinguishable by record_sha256
+[timing] #7 GET /v1/validation/runs?limit=4&offset=0 0.004s status=200
+[timing] #8 GET /v1/validation/runs?limit=4&offset=4 0.005s status=200
+[timing] #9 GET /v1/validation/runs?limit=4&offset=8 0.004s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-03-fixture-pages.json
+[ok] fixture page walk covers all 12 rows exactly once
+[ok] fixture page walk union equals the single 100-limit page
+[ok] fixture page 0 has_more arithmetic
+[ok] fixture page 0 count == len(runs)
+[ok] fixture page 1 has_more arithmetic
+[ok] fixture page 1 count == len(runs)
+[ok] fixture page 2 has_more arithmetic
+[ok] fixture page 2 count == len(runs)
+[timing] #10 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-12-depth-boundary.json
+[ok] depth root list is 200
+[ok] a record 3 directory levels below the root is found
+[ok] a record whose directory is 4 levels below the root is found
+[ok] a record 5 directory levels below the root is pruned
+[ok] exactly the two inside-cap records are served
+[ok] the pruned directory is counted once as depth_cap
+[ok] an ignored sample names the depth_cap reason
+[ok] the depth_cap sample names the pruned directory (d4)
+[ok] discovery.max_depth is 4
+[ok] validator's non-regular entry is a real FIFO on disk
+[timing] #11 GET /v1/validation/runs?limit=100 0.002s status=200
+[timing] #12 GET /v1/validation/runs/run-20261008T000402Z 0.001s status=404
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-20-fifo-not-regular-file.json
+[ok] a FIFO named run-*.json does NOT hang the list reader
+[ok] the FIFO is not served as a run row
+[ok] the one regular sibling record is still served
+[ok] the FIFO is counted in ignored_entries
+[ok] exactly one ignored sample carries reason not_regular_file
+[ok] the not_regular_file sample names the FIFO
+[ok] a by-id read of the FIFO stem does NOT hang and is 404 validation_run_not_found
+[ok] validator's second non-regular entry is a real socket on disk
+[timing] #13 GET /v1/validation/runs?limit=100 0.001s status=200
+[ok] a Unix socket named run-*.json does NOT hang the list reader
+[ok] the socket is counted with reason not_regular_file
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-23-non-regular-socket.json
+[timing] #14 GET /v1/validation/runs?limit=100 0.003s status=200
+[ok] single_user: combo list is 200
+[ok] single_user: total == count == 7
+[ok] single_user: the list's corrupt_count is 3
+[ok] single_user: the list's duplicate_count is 2
+[ok] single_user run-20261008T000101Z: list row statuses are ['corrupt', 'ok']
+[timing] #15 GET /v1/validation/runs/run-20261008T000101Z 0.002s status=200
+[ok] single_user run-20261008T000101Z: detail status is 200
+[ok] single_user run-20261008T000101Z: detail serves run_id run-20261008T000101Z
+[ok] single_user run-20261008T000101Z: an ok list row implies detail 200
+[ok] single_user run-20261008T000101Z: an ok row carries the parseable digest
+[ok] single_user run-20261008T000101Z: a corrupt row carries the corrupt digest
+[ok] single_user run-20261008T000102Z: list row statuses are ['duplicate', 'duplicate']
+[timing] #16 GET /v1/validation/runs/run-20261008T000102Z 0.002s status=409
+[ok] single_user run-20261008T000102Z: detail status is 409
+[ok] single_user run-20261008T000102Z: detail code is validation_run_ambiguous
+[ok] single_user run-20261008T000102Z: duplicate rows imply 409 ambiguous
+[ok] single_user run-20261008T000103Z: list row statuses are ['corrupt', 'corrupt']
+[timing] #17 GET /v1/validation/runs/run-20261008T000103Z 0.002s status=409
+[ok] single_user run-20261008T000103Z: detail status is 409
+[ok] single_user run-20261008T000103Z: detail code is validation_run_corrupt
+[ok] single_user run-20261008T000103Z: corrupt-only rows imply 409 corrupt
+[ok] single_user run-20261008T000104Z: list row statuses are ['ok']
+[timing] #18 GET /v1/validation/runs/run-20261008T000104Z 0.002s status=200
+[ok] single_user run-20261008T000104Z: detail status is 200
+[ok] single_user run-20261008T000104Z: detail serves run_id run-20261008T000104Z
+[ok] single_user run-20261008T000104Z: an ok list row implies detail 200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-13-duplicate-combos-single-user.json
+[timing] #19 GET /v1/validation/runs?verdict=PASS 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-14-counters-verdict-pass.json
+[ok] verdict=PASS list is 200
+[ok] verdict=PASS serves only parseable rows
+[ok] verdict=PASS total/count/rows agree at 4
+[ok] verdict=PASS corrupt_count is 0 on the served set
+[ok] verdict=PASS duplicate_count counts only served duplicates
+[ok] verdict=PASS corrupt_count matches the rows actually present
+[timing] #20 GET /v1/validation/runs?verdict=BLOCKED 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-15-counters-filtered-empty.json
+[ok] a filter matching nothing is 200 with total 0
+[ok] a filter matching nothing reports corrupt_count 0
+[ok] a filter matching nothing reports duplicate_count 0
+[ok] a filter matching nothing reports all_filtered_out
+[timing] #21 GET /v1/validation/runs?stage=P7 0.002s status=200
+[ok] stage=P7 serves four parseable rows and counts 0 corrupt
+[timing] #22 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] acl read-only key sees no unattributed combo row
+[timing] #23 GET /v1/validation/runs/run-20261008T000101Z 0.002s status=404
+[ok] acl read-only key gets 404 for the S1 parseable record
+[timing] #24 GET /v1/validation/runs/run-20261008T000103Z 0.002s status=404
+[ok] acl read-only key gets 404 for the corrupt S3 record
+[timing] #25 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] acl unattributed key sees all 7 combo rows
+[ok] acl unattributed list counts the visible corrupt rows
+[ok] acl unattributed list counts the visible duplicate rows
+[timing] #26 GET /v1/validation/runs/run-20261008T000101Z 0.002s status=200
+[ok] acl+unattributed S1 detail is 200 (parseable sibling wins)
+[timing] #27 GET /v1/validation/runs/run-20261008T000102Z 0.004s status=409
+[ok] acl+unattributed S2 detail is 409 ambiguous
+[timing] #28 GET /v1/validation/runs/run-20261008T000103Z 0.002s status=409
+[ok] acl+unattributed S3 detail is 409 corrupt
+[timing] #29 GET /v1/validation/runs?limit=2&offset=0 0.006s status=200
+[timing] #30 GET /v1/validation/runs?limit=2&offset=2 0.006s status=200
+[timing] #31 GET /v1/validation/runs?limit=2&offset=4 0.006s status=200
+[timing] #32 GET /v1/validation/runs?limit=2&offset=6 0.006s status=200
+[timing] #33 GET /v1/validation/runs?limit=2&offset=8 0.006s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-24-acl-real-root-pages.json
+[ok] acl real-root page walk with limit=2 covers all nine
+[ok] acl real-root page walk has no repeats
+[ok] acl real-root total is stable at 9
+[ok] acl real-root every page arithmetic holds
+[timing] #34 GET /v1/validation/runs?limit=100 0.006s status=200
+[ok] acl read-only key sees no unattributed real record
+[timing] #35 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-21-acl-fifo-not-regular-file.json
+[ok] acl: a FIFO named run-*.json does NOT hang the list reader
+[ok] acl: the FIFO is counted in ignored_entries
+[ok] acl: ignored_samples[] is empty by design (AD2), so the reason is withheld and only the count is reported
+[ok] acl: the FIFO is not served as a run row
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-16-acl-combos.json
+[ok] validator's oversize manifest is over 1 MiB on disk
+[ok] validator's oversize record is over 16 MiB on disk
+[timing] #36 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-17-bounded-reads-list.json
+[ok] oversize bundle root list is 200
+[ok] the oversize manifest is reported corrupt on the list row
+[ok] the oversize record is reported corrupt on the list row
+[ok] the oversize record reports no digest (it was not read)
+[ok] the oversize record's reason names the size bound
+[ok] the oversize record counts as corrupt
+[timing] #37 GET /v1/validation/runs/run-20261008T000302Z 0.001s status=409
+[ok] oversize record detail is 409 validation_run_corrupt
+[timing] #38 GET /v1/validation/runs/run-20261008T000301Z/manifest 0.002s status=409
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-18-oversize-manifest.json
+[ok] oversize manifest is refused with 409 validation_manifest_corrupt
+[ok] oversize manifest rule names the size bound
+[ok] no digest is reported for a manifest that was never read
+[timing] #39 GET /v1/validation/runs/run-20261008T000301Z/artifacts/art_missing 0.001s status=404
+[ok] an oversize manifest makes its artifacts unaddressable (404)
+[timing] #40 GET /v1/validation/runs 0.001s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-05-corrupt-only-list.json
+[ok] a corrupt-only root still lists the corrupt row
+[ok] a corrupt-only root is not reported as 'no_run_shaped_files'
+[timing] #41 GET /v1/validation/runs/run-20261008T000004Z 0.001s status=409
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-07-corrupt-detail.json
+[ok] a corrupt record refuses detail with 409 validation_run_corrupt
+[timing] #42 GET /v1/validation/runs 0.001s status=200
+[ok] a truly empty root reports no_run_shaped_files
+[timing] #43 GET /v1/validation/runs 0.001s status=503
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-08-unreadable-subtree.json
+[ok] an unreadable subtree refuses the list (503)
+[ok] the refusal code is validation_not_configured
+[ok] the refusal reason is index_incomplete
+[ok] the refusal counts the unreadable entry
+[ok] the refusal names at most 20 samples
+[ok] the refusal names the unreadable path
+[timing] #44 GET /v1/validation/runs/run-20261008T000001Z 0.002s status=200
+[ok] a by-id read of a known sibling still works while a sibling subtree is unreadable
+[timing] #45 GET /v1/validation/runs/run-20261008T999999Z 0.001s status=503
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-19-byid-unknown-under-unreadable.json
+[ok] by-id of an id that cannot be ruled out refuses 503 index_incomplete rather than asserting 404 (F5/ADR 5.0)
+[timing] #46 GET /v1/validation/runs?limit=100 0.007s status=200
+[ok] real root still lists exactly nine
+[ok] real root corrupt_count is still 0
+[ok] real root duplicate_count is still 0
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-22-request-timings.json
+[timing-summary] {"max_seconds": 0.0128, "over_10s": [], "over_5s": [], "requests": 46, "requests_without_status": [], "total_seconds": 0.1499, "transport_retries": 0}
+[ok] criterion 5 issued a non-trivial number of requests
+[ok] every criterion 5 request completed inside its client timeout (no request hung)
+[ok] no criterion 5 request exceeded 10 s
+[ok] no transport-level retry was needed in the recorded run
+[ok] the FIFO list request was answered in well under the client timeout
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-09-criterion5-report.json
+[timing-summary] {"max_seconds": 0.0128, "over_10s": [], "over_5s": [], "requests": 46, "requests_without_status": [], "total_seconds": 0.1499, "transport_retries": 0}

@@ -1,0 +1,54 @@
+{
+  "after_restore": {
+    "list_status": 200,
+    "run_ids": [
+      "run-20261008T000701Z"
+    ]
+  },
+  "before_swap": {
+    "list_status": 200,
+    "run_ids": [
+      "run-20261008T000701Z"
+    ]
+  },
+  "inside_run": "run-20261008T000701Z",
+  "outside_run": "run-20261008T000702Z",
+  "outside_text": "OUTSIDE-SECRET-CONTENT",
+  "while_symlinked": {
+    "inside detail": {
+      "code": "validation_not_configured",
+      "reason": "symlinked_root",
+      "seconds": 0.0011,
+      "served_outside": false,
+      "status": 503
+    },
+    "list": {
+      "code": "validation_not_configured",
+      "reason": "symlinked_root",
+      "seconds": 0.0011,
+      "served_outside": false,
+      "status": 503
+    },
+    "outside artifact": {
+      "code": "validation_not_configured",
+      "reason": "symlinked_root",
+      "seconds": 0.0011,
+      "served_outside": false,
+      "status": 503
+    },
+    "outside detail": {
+      "code": "validation_not_configured",
+      "reason": "symlinked_root",
+      "seconds": 0.0013,
+      "served_outside": false,
+      "status": 503
+    },
+    "outside manifest": {
+      "code": "validation_not_configured",
+      "reason": "symlinked_root",
+      "seconds": 0.0011,
+      "served_outside": false,
+      "status": 503
+    }
+  }
+}

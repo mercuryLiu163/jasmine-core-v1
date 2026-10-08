@@ -1,0 +1,75 @@
+{
+  "grow_during_read_race": {
+    "distributions": [
+      "corrupt:record exceeds 16777216 bytes",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "corrupt:record exceeds 16777216 bytes",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "ok",
+      "corrupt:record exceeds 16777216 bytes",
+      "corrupt:record exceeds 16777216 bytes",
+      "ok",
+      "ok",
+      "ok",
+      "ok"
+    ],
+    "iterations": 18,
+    "max_seconds": 0.0177,
+    "violations": []
+  },
+  "grown_manifest": {
+    "code": "validation_manifest_corrupt",
+    "rule": "manifest exceeds 1048576 bytes",
+    "seconds": 0.0013,
+    "status": 409
+  },
+  "grown_record_detail": {
+    "code": "validation_run_corrupt",
+    "seconds": 0.0013,
+    "status": 409
+  },
+  "grown_record_list_row": {
+    "attribution": null,
+    "case_counts": {
+      "blocked": 0,
+      "fail": 0,
+      "pass": 0,
+      "total": 0
+    },
+    "commit": null,
+    "core_version": null,
+    "corrupt_reason": "record exceeds 16777216 bytes",
+    "created_at": null,
+    "evidence_grade": null,
+    "grade_downgraded_by": [],
+    "manifest_status": null,
+    "mode": null,
+    "mode_basis": null,
+    "record_sha256": "",
+    "record_status": "corrupt",
+    "run_id": "run-20261008T000601Z",
+    "schema_version": null,
+    "stage": null,
+    "synthetic": false,
+    "verdict": null,
+    "verdict_consistent": null
+  },
+  "in_loop_cap": {
+    "at_cap": {
+      "bytes": 64,
+      "error": null
+    },
+    "grown_descriptor": {
+      "error": "too_large"
+    }
+  },
+  "max_manifest_bytes": 1048576,
+  "max_record_bytes": 16777216
+}

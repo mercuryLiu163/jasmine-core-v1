@@ -1,0 +1,12 @@
+{
+  "error": {
+    "code": "artifact_not_found",
+    "details": {
+      "id": "art_missing",
+      "kind": "artifact",
+      "reason": "missing"
+    },
+    "message": "artifact art_missing not found",
+    "request_id": "aud_01M4E6VCJNTX9F3XGANVTJHDY6"
+  }
+}

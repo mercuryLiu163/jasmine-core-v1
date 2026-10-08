@@ -1,0 +1,957 @@
+{
+  "all": [
+    {
+      "actual": [
+        null,
+        200,
+        0.0018
+      ],
+      "name": "A granted content (manifest A): answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        {
+          "artifact_id": "art_good",
+          "bytes": 34,
+          "content": "AAA-CONTENT-SERVED-FROM-MANIFEST-A",
+          "content_is_original": false,
+          "form": "masked",
+          "mask_algorithm": "canonical.redact_text",
+          "mask_version": "1",
+          "masked_sha256": "2437b4746b0426651424ec0816c9675e4db6708a579b54c3b1aa53208555d227",
+          "media_type": "text/plain",
+          "original_sha256": "2437b4746b0426651424ec0816c9675e4db6708a579b54c3b1aa53208555d227",
+          "served_sha256": "2437b4746b0426651424ec0816c9675e4db6708a579b54c3b1aa53208555d227"
+        }
+      ],
+      "name": "A (manifest A): granted content is 200 and serves A's bytes",
+      "ok": true
+    },
+    {
+      "actual": "2437b4746b0426651424ec0816c9675e4db6708a579b54c3b1aa53208555d227",
+      "name": "A (manifest A): served digest is A's, header agrees",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        0.0016
+      ],
+      "name": "A granted manifest (manifest A): answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "b84957e1661da50bc338780a17097d500cc86a7184566d18e60ef41b8326b0ae",
+        [
+          {
+            "artifact_id": "art_good",
+            "bytes": 34,
+            "bytes_agree": true,
+            "credential_shaped": false,
+            "integrity": "match",
+            "media_type": "text/plain",
+            "path": "artifacts/a.txt",
+            "sha256": "2437b4746b0426651424ec0816c9675e4db6708a579b54c3b1aa53208555d227"
+          }
+        ]
+      ],
+      "name": "A (manifest A): manifest route serves A (sha + path agree)",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        404,
+        0.0015
+      ],
+      "name": "A content after swap to B: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        404,
+        "validation_run_not_found"
+      ],
+      "name": "A after swap to B: content is refused 404 validation_run_not_found",
+      "ok": true
+    },
+    {
+      "actual": {
+        "bytes": 200,
+        "preview": "{\"error\": {\"code\": \"validation_run_not_found\", \"message\": \"valid"
+      },
+      "name": "A after swap to B: the refusal serves nothing from manifest B",
+      "ok": true
+    },
+    {
+      "actual": [
+        404,
+        "validation_run_not_found"
+      ],
+      "name": "A after swap to B: manifest route is refused 404 too",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "AAA-CONTENT-SERVED-FROM-MANIFEST-A"
+      ],
+      "name": "A after swapping back to A: granted content is 200 with A's bytes",
+      "ok": true
+    },
+    {
+      "actual": [],
+      "name": "A rapid swap race: no response ever mixes A's permission with B's payload (or B's with A's)",
+      "ok": true
+    },
+    {
+      "actual": [
+        28,
+        32,
+        36,
+        24
+      ],
+      "name": "A rapid swap race: both the granted (200) and refused (404) branches were exercised",
+      "ok": true
+    },
+    {
+      "actual": [
+        0.005,
+        0.219
+      ],
+      "name": "A rapid swap race: every request answered well inside the timeout",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "AAA-CONTENT-SERVED-FROM-MANIFEST-A"
+      ],
+      "name": "A after the race: manifest A restored and content is 200 with A",
+      "ok": true
+    },
+    {
+      "actual": "0o10644",
+      "name": "B: the record-path entry is a real FIFO on disk",
+      "ok": true
+    },
+    {
+      "actual": "0o10644",
+      "name": "B: the manifest.json entry is a real FIFO on disk",
+      "ok": true
+    },
+    {
+      "actual": "0o10644",
+      "name": "B: the artifact entry is a real FIFO on disk",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        0.0017
+      ],
+      "name": "B list over a root with a FIFO record: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000404Z",
+        "run-20261008T000403Z",
+        "run-20261008T000401Z"
+      ],
+      "name": "B list: the FIFO record is not served as a run row",
+      "ok": true
+    },
+    {
+      "actual": 3,
+      "name": "B list: the three regular records are still served",
+      "ok": true
+    },
+    {
+      "actual": [
+        {
+          "reason": "not_run_shaped",
+          "relative_path": "man/manifest.json"
+        },
+        {
+          "reason": "not_run_shaped",
+          "relative_path": "art/manifest.json"
+        },
+        {
+          "reason": "not_run_shaped",
+          "relative_path": "art/artifacts/pipe.txt"
+        },
+        {
+          "reason": "not_regular_file",
+          "relative_path": "fifo-rec/run-20261008T000402Z.json"
+        }
+      ],
+      "name": "B list: the FIFO record is counted not_regular_file",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        404,
+        0.0013
+      ],
+      "name": "B detail of the FIFO record stem: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        404,
+        "validation_run_not_found"
+      ],
+      "name": "B detail of the FIFO record stem: 404 validation_run_not_found",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        409,
+        0.0015
+      ],
+      "name": "B manifest route with a FIFO manifest.json: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        "validation_manifest_corrupt",
+        "manifest.json is not a regular readable file: not_regular_file"
+      ],
+      "name": "B manifest route with a FIFO manifest.json: 409 manifest_corrupt naming not_regular_file",
+      "ok": true
+    },
+    {
+      "actual": "corrupt",
+      "name": "B list: the FIFO manifest is reported manifest_status corrupt",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        503,
+        0.0017
+      ],
+      "name": "B artifact metadata with a FIFO artifact path: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        503,
+        "validation_not_configured",
+        {
+          "reason": "artifact_unreadable"
+        }
+      ],
+      "name": "B artifact metadata with a FIFO artifact path: refused 503 artifact_unreadable (never blocked)",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        503,
+        0.0015
+      ],
+      "name": "B artifact content with a FIFO artifact path: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        503,
+        "validation_not_configured",
+        {
+          "reason": "artifact_unreadable"
+        }
+      ],
+      "name": "B artifact content with a FIFO artifact path: refused 503 artifact_unreadable (never blocked)",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        0.0014
+      ],
+      "name": "B manifest route listing a FIFO artifact: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        [
+          {
+            "artifact_id": "art_fifo",
+            "bytes": 0,
+            "bytes_agree": false,
+            "credential_shaped": false,
+            "integrity": "unreadable",
+            "media_type": "text/plain",
+            "path": "artifacts/pipe.txt",
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+          }
+        ]
+      ],
+      "name": "B manifest route: the FIFO artifact is listed integrity unreadable",
+      "ok": true
+    },
+    {
+      "actual": [
+        {
+          "row_reason": null,
+          "row_status": null,
+          "seconds": 0.0012,
+          "status": 200
+        },
+        {
+          "row_reason": null,
+          "row_status": null,
+          "seconds": 0.0012,
+          "status": 200
+        },
+        {
+          "row_reason": null,
+          "row_status": null,
+          "seconds": 0.0013,
+          "status": 200
+        }
+      ],
+      "name": "B regular<->FIFO record swap race: no request blocked (all answered)",
+      "ok": true
+    },
+    {
+      "actual": 0.0033,
+      "name": "B regular<->FIFO record swap race: every response was inside the hang threshold",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "not a regular file",
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "name": "B swap race: a swapped-in FIFO is refused as not a regular file, never read",
+      "ok": true
+    },
+    {
+      "actual": {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 0,
+          "fail": 0,
+          "pass": 1,
+          "total": 1
+        },
+        "commit": "0000000000000000000000000000000000000000",
+        "core_version": "0.1.0",
+        "created_at": "2026-10-08T00:00:01.000000Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "08cd2929fe4ffa8b96b011ffe8e106d3683df1e96076f3cd889b19fc4566b24c",
+        "record_status": "ok",
+        "run_id": "run-20261008T000601Z",
+        "schema_version": 11,
+        "stage": "P7",
+        "synthetic": false,
+        "verdict": "PASS",
+        "verdict_consistent": true
+      },
+      "name": "C before growth: the record is a normal ok row",
+      "ok": true
+    },
+    {
+      "actual": 16781312,
+      "name": "C the record on disk is now over MAX_RECORD_BYTES",
+      "ok": true
+    },
+    {
+      "actual": {
+        "attribution": null,
+        "case_counts": {
+          "blocked": 0,
+          "fail": 0,
+          "pass": 0,
+          "total": 0
+        },
+        "commit": null,
+        "core_version": null,
+        "corrupt_reason": "record exceeds 16777216 bytes",
+        "created_at": null,
+        "evidence_grade": null,
+        "grade_downgraded_by": [],
+        "manifest_status": null,
+        "mode": null,
+        "mode_basis": null,
+        "record_sha256": "",
+        "record_status": "corrupt",
+        "run_id": "run-20261008T000601Z",
+        "schema_version": null,
+        "stage": null,
+        "synthetic": false,
+        "verdict": null,
+        "verdict_consistent": null
+      },
+      "name": "C grown record: listed corrupt, not served",
+      "ok": true
+    },
+    {
+      "actual": "",
+      "name": "C grown record: reports no digest because it was never read whole",
+      "ok": true
+    },
+    {
+      "actual": "record exceeds 16777216 bytes",
+      "name": "C grown record: the reason names the size bound",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        409,
+        0.0013
+      ],
+      "name": "C grown record detail: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        "validation_run_corrupt"
+      ],
+      "name": "C grown record: detail is 409 validation_run_corrupt",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "frozen"
+      ],
+      "name": "C before growth: the manifest is frozen and served",
+      "ok": true
+    },
+    {
+      "actual": 1052672,
+      "name": "C the manifest on disk is now over MAX_MANIFEST_BYTES",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        409,
+        0.0013
+      ],
+      "name": "C grown manifest route: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        "validation_manifest_corrupt",
+        "manifest exceeds 1048576 bytes"
+      ],
+      "name": "C grown manifest: 409 validation_manifest_corrupt naming the bound",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "manifest exceeds 1048576 bytes",
+        "run_id": "run-20261008T000602Z"
+      },
+      "name": "C grown manifest: no digest is reported (never read whole)",
+      "ok": true
+    },
+    {
+      "actual": "corrupt",
+      "name": "C grown manifest: the list row is manifest_status corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 0,
+          "fail": 0,
+          "pass": 1,
+          "total": 1
+        },
+        "commit": "0000000000000000000000000000000000000000",
+        "core_version": "0.1.0",
+        "created_at": "2026-10-08T00:00:01.000000Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "08cd2929fe4ffa8b96b011ffe8e106d3683df1e96076f3cd889b19fc4566b24c",
+        "record_status": "ok",
+        "run_id": "run-20261008T000601Z",
+        "schema_version": 11,
+        "stage": "P7",
+        "synthetic": false,
+        "verdict": "PASS",
+        "verdict_consistent": true
+      },
+      "name": "C after restoring: the record is a normal ok row again",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "frozen"
+      ],
+      "name": "C after restoring: the manifest is frozen again",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        "too_large"
+      ],
+      "name": "C in-loop primitive: a descriptor grown past the cap is refused too_large, not read whole",
+      "ok": true
+    },
+    {
+      "actual": [
+        64,
+        null
+      ],
+      "name": "C in-loop primitive: a file exactly at the cap is still read normally",
+      "ok": true
+    },
+    {
+      "actual": [],
+      "name": "C grow-during-read race: no request ever served a grown record (an ok row always carries the pre-growth digest; an over-cap row carries no digest and names the bound)",
+      "ok": true
+    },
+    {
+      "actual": 0.0177,
+      "name": "C grow-during-read race: every request answered inside the hang threshold",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        [
+          "run-20261008T000701Z"
+        ]
+      ],
+      "name": "D before swap: the inside run is served from the real root",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "D before swap: inside detail is 200 (grant check exercised)",
+      "ok": true
+    },
+    {
+      "actual": [
+        true,
+        "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-z66uvg3g/D-outside",
+        "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-z66uvg3g/D-outside"
+      ],
+      "name": "D the configured root is now a symlink to the outside directory",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        503,
+        0.0011
+      ],
+      "name": "D symlinked root, list: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        503,
+        "validation_not_configured",
+        "symlinked_root",
+        false
+      ],
+      "name": "D symlinked root, list: refused 503 symlinked_root and serves nothing from outside",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        503,
+        0.0011
+      ],
+      "name": "D symlinked root, inside detail: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        503,
+        "validation_not_configured",
+        "symlinked_root",
+        false
+      ],
+      "name": "D symlinked root, inside detail: refused 503 symlinked_root and serves nothing from outside",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        503,
+        0.0013
+      ],
+      "name": "D symlinked root, outside detail: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        503,
+        "validation_not_configured",
+        "symlinked_root",
+        false
+      ],
+      "name": "D symlinked root, outside detail: refused 503 symlinked_root and serves nothing from outside",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        503,
+        0.0011
+      ],
+      "name": "D symlinked root, outside manifest: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        503,
+        "validation_not_configured",
+        "symlinked_root",
+        false
+      ],
+      "name": "D symlinked root, outside manifest: refused 503 symlinked_root and serves nothing from outside",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        503,
+        0.0011
+      ],
+      "name": "D symlinked root, outside artifact: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        503,
+        "validation_not_configured",
+        "symlinked_root",
+        false
+      ],
+      "name": "D symlinked root, outside artifact: refused 503 symlinked_root and serves nothing from outside",
+      "ok": true
+    },
+    {
+      "name": "D the root is a real directory again",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        [
+          "run-20261008T000701Z"
+        ]
+      ],
+      "name": "D after restore: the list serves the inside run again and nothing from outside",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "run-20261008T000701Z"
+      ],
+      "name": "D after restore: inside detail is 200 with the inside record",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "INSIDE-ROOT-CONTENT"
+      ],
+      "name": "D after restore: the inside artifact content is 200 and correct",
+      "ok": true
+    },
+    {
+      "actual": 4800000,
+      "name": "E the validator's raw artifact is under MAX_ARTIFACT_BYTES",
+      "ok": true
+    },
+    {
+      "actual": 10200000,
+      "name": "E the validator's masked artifact is over MAX_ARTIFACT_BYTES",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        1.7246
+      ],
+      "name": "E artifact metadata for the expanding artifact: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "match",
+        4800000
+      ],
+      "name": "E artifact metadata: 200 integrity match, declared bytes agree",
+      "ok": true
+    },
+    {
+      "actual": "5277f541ce0a56bee2389f2280d49143096066ded08ae1dd1b0603e984796d61",
+      "name": "E artifact metadata: digests.masked is our recomputed masked digest",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        413,
+        1.053
+      ],
+      "name": "E content route for the expanding artifact: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        413,
+        "payload_too_large"
+      ],
+      "name": "E masked content: refused 413 payload_too_large",
+      "ok": true
+    },
+    {
+      "actual": {
+        "form": "masked",
+        "limit": 8388608,
+        "original_bytes": 4800000
+      },
+      "name": "E masked content: details name the masked form, the limit and the original size",
+      "ok": true
+    },
+    {
+      "actual": [
+        216,
+        [
+          "error"
+        ]
+      ],
+      "name": "E masked content: the over-cap masked text was NOT returned",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        403,
+        1.053
+      ],
+      "name": "E original form for the expanding artifact: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        403,
+        "original_withheld"
+      ],
+      "name": "E original form: withheld 403 original_withheld (mask not a no-op)",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        0.002
+      ],
+      "name": "E control small expanding artifact: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "masked"
+      ],
+      "name": "E control: a masked artifact under the cap is still served 200",
+      "ok": true
+    },
+    {
+      "actual": "token=[REDACTED] token=[REDACTED] token=",
+      "name": "E control: the served content is the masked text and its digest agrees",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        [
+          "run-20261008T000902Z",
+          "run-20261008T000901Z"
+        ]
+      ],
+      "name": "F a record three directory levels below the root is served",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000902Z",
+        "run-20261008T000901Z"
+      ],
+      "name": "F a record one directory level below the root is served",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "F deep record detail is 200",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        [
+          {
+            "artifact_id": "art_deep",
+            "bytes": 30,
+            "bytes_agree": true,
+            "credential_shaped": false,
+            "integrity": "match",
+            "media_type": "text/plain",
+            "path": "artifacts/sub/name.txt",
+            "sha256": "bd43bf75c69e8bbc89ba1dd6aaebbc2902a9bfc6e88550a6cd4e73180d4625a7"
+          }
+        ]
+      ],
+      "name": "F deep manifest serves the nested declared path",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        0.0018
+      ],
+      "name": "F deep nested artifact content: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "DEEP-ARTIFACT-SUB-NAME-CONTENT"
+      ],
+      "name": "F deep nested artifact content is 200 with the exact bytes",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "F shallow record detail is 200",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        [
+          {
+            "artifact_id": "art_deep",
+            "bytes": 30,
+            "bytes_agree": true,
+            "credential_shaped": false,
+            "integrity": "match",
+            "media_type": "text/plain",
+            "path": "artifacts/sub/name.txt",
+            "sha256": "bd43bf75c69e8bbc89ba1dd6aaebbc2902a9bfc6e88550a6cd4e73180d4625a7"
+          }
+        ]
+      ],
+      "name": "F shallow manifest serves the nested declared path",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        0.0016
+      ],
+      "name": "F shallow nested artifact content: answered inside 3.0s with an HTTP status (no hang)",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "DEEP-ARTIFACT-SUB-NAME-CONTENT"
+      ],
+      "name": "F shallow nested artifact content is 200 with the exact bytes",
+      "ok": true
+    },
+    {
+      "name": "F the nested artifact path is genuinely two directories deep on disk",
+      "ok": true
+    },
+    {
+      "actual": {
+        "max_seconds": 1.7246,
+        "over_10s": [],
+        "over_5s": [],
+        "requests": 195,
+        "requests_without_status": [],
+        "total_seconds": 4.378,
+        "transport_retries": 0
+      },
+      "name": "all defect probes: every request completed inside its client timeout (no request hung)",
+      "ok": true
+    },
+    {
+      "actual": 1.7246,
+      "name": "all defect probes: no request exceeded 10 s",
+      "ok": true
+    },
+    {
+      "actual": 1.7246,
+      "name": "all defect probes: no request exceeded 5 s",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "all defect probes: no transport-level retry was needed",
+      "ok": true
+    }
+  ],
+  "checks": 100,
+  "failed": 0,
+  "failures": [],
+  "label": "fix-defects (four defect classes)"
+}

@@ -1,0 +1,54 @@
+{
+  "after_restore": {
+    "list_status": 200,
+    "run_ids": [
+      "run-20261008T000701Z"
+    ]
+  },
+  "before_swap": {
+    "list_status": 200,
+    "run_ids": [
+      "run-20261008T000701Z"
+    ]
+  },
+  "inside_run": "run-20261008T000701Z",
+  "outside_run": "run-20261008T000702Z",
+  "outside_text": "OUTSIDE-SECRET-CONTENT",
+  "while_symlinked": {
+    "inside detail": {
+      "code": "validation_run_not_found",
+      "reason": null,
+      "seconds": 0.0013,
+      "served_outside": false,
+      "status": 404
+    },
+    "list": {
+      "code": null,
+      "reason": null,
+      "seconds": 0.0016,
+      "served_outside": true,
+      "status": 200
+    },
+    "outside artifact": {
+      "code": null,
+      "reason": null,
+      "seconds": 0.0019,
+      "served_outside": true,
+      "status": 200
+    },
+    "outside detail": {
+      "code": null,
+      "reason": null,
+      "seconds": 0.0016,
+      "served_outside": true,
+      "status": 200
+    },
+    "outside manifest": {
+      "code": null,
+      "reason": null,
+      "seconds": 0.0021,
+      "served_outside": true,
+      "status": 200
+    }
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "artifact_id": "art_assign",
+  "bytes": 59,
+  "content_scan": {
+    "credential_shaped": false,
+    "mask_is_noop": false,
+    "performed": true
+  },
+  "credential_shaped": false,
+  "declared_bytes": 59,
+  "declared_sha256": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+  "digests": {
+    "masked": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+    "original": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5"
+  },
+  "forms": [
+    "masked"
+  ],
+  "integrity": "match",
+  "media_type": "text/plain",
+  "path": "artifacts/assign.log"
+}

@@ -1,0 +1,13 @@
+{
+  "artifact_id": "art_html",
+  "bytes": 56,
+  "content": "<html><body><script>alert('x')</script>pwn</body></html>",
+  "content_is_original": false,
+  "form": "masked",
+  "mask_algorithm": "canonical.redact_text",
+  "mask_version": "1",
+  "masked_sha256": "c18d47f34bfbbca69491fa2e7cc9cbc8081677ba4002ecd5a0fec71b6b3e6ce6",
+  "media_type": "text/html",
+  "original_sha256": "c18d47f34bfbbca69491fa2e7cc9cbc8081677ba4002ecd5a0fec71b6b3e6ce6",
+  "served_sha256": "c18d47f34bfbbca69491fa2e7cc9cbc8081677ba4002ecd5a0fec71b6b3e6ce6"
+}

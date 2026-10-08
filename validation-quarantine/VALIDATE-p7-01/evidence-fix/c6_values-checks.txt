@@ -1,0 +1,426 @@
+[timing] #1 GET /v1/validation/runs?limit=100 0.011s status=200
+[ok] real list is 200
+[ok] real list has the nine rows
+[ok] run-20260929T162925Z: list.run_id matches
+[ok] run-20260929T162925Z: list.stage matches
+[ok] run-20260929T162925Z: list.created_at matches
+[ok] run-20260929T162925Z: list.commit matches
+[ok] run-20260929T162925Z: list.schema_version matches
+[ok] run-20260929T162925Z: list.core_version matches
+[ok] run-20260929T162925Z: list.verdict matches
+[ok] run-20260929T162925Z: list.case_counts matches
+[ok] run-20260929T162925Z: list.record_sha256 matches
+[ok] run-20260929T162925Z: list.synthetic matches
+[ok] run-20260929T162925Z: list.manifest_status matches
+[ok] run-20260929T162925Z: no manifest.json exists on disk
+[timing] #2 GET /v1/validation/runs/run-20260929T162925Z 0.005s status=200
+[ok] run-20260929T162925Z: detail is 200
+[ok] run-20260929T162925Z: detail.run_id matches
+[ok] run-20260929T162925Z: detail.stage matches
+[ok] run-20260929T162925Z: detail.created_at matches
+[ok] run-20260929T162925Z: detail.commit matches
+[ok] run-20260929T162925Z: detail.schema_version matches
+[ok] run-20260929T162925Z: detail.core_version matches
+[ok] run-20260929T162925Z: detail.verdict matches
+[ok] run-20260929T162925Z/P0-T01: verdict matches
+[ok] run-20260929T162925Z/P0-T01: failure_class matches
+[ok] run-20260929T162925Z/P0-T01: failure_output matches
+[ok] run-20260929T162925Z/P0-T02: verdict matches
+[ok] run-20260929T162925Z/P0-T02: failure_class matches
+[ok] run-20260929T162925Z/P0-T02: failure_output matches
+[ok] run-20260929T162925Z/P0-T03: verdict matches
+[ok] run-20260929T162925Z/P0-T03: failure_class matches
+[ok] run-20260929T162925Z/P0-T03: failure_output matches
+[ok] run-20260929T162925Z/P0-T04: verdict matches
+[ok] run-20260929T162925Z/P0-T04: failure_class matches
+[ok] run-20260929T162925Z/P0-T04: failure_output matches
+[ok] run-20260929T162925Z/P0-T05: verdict matches
+[ok] run-20260929T162925Z/P0-T05: failure_class matches
+[ok] run-20260929T162925Z/P0-T05: failure_output matches
+[ok] run-20260929T162925Z/P0-T06: verdict matches
+[ok] run-20260929T162925Z/P0-T06: failure_class matches
+[ok] run-20260929T162925Z/P0-T06: failure_output matches
+[ok] run-20260929T162925Z/P0-T07: verdict matches
+[ok] run-20260929T162925Z/P0-T07: failure_class matches
+[ok] run-20260929T162925Z/P0-T07: failure_output matches
+[ok] run-20260929T162307Z: list.run_id matches
+[ok] run-20260929T162307Z: list.stage matches
+[ok] run-20260929T162307Z: list.created_at matches
+[ok] run-20260929T162307Z: list.commit matches
+[ok] run-20260929T162307Z: list.schema_version matches
+[ok] run-20260929T162307Z: list.core_version matches
+[ok] run-20260929T162307Z: list.verdict matches
+[ok] run-20260929T162307Z: list.case_counts matches
+[ok] run-20260929T162307Z: list.record_sha256 matches
+[ok] run-20260929T162307Z: list.synthetic matches
+[ok] run-20260929T162307Z: list.manifest_status matches
+[ok] run-20260929T162307Z: no manifest.json exists on disk
+[timing] #3 GET /v1/validation/runs/run-20260929T162307Z 0.004s status=200
+[ok] run-20260929T162307Z: detail is 200
+[ok] run-20260929T162307Z: detail.run_id matches
+[ok] run-20260929T162307Z: detail.stage matches
+[ok] run-20260929T162307Z: detail.created_at matches
+[ok] run-20260929T162307Z: detail.commit matches
+[ok] run-20260929T162307Z: detail.schema_version matches
+[ok] run-20260929T162307Z: detail.core_version matches
+[ok] run-20260929T162307Z: detail.verdict matches
+[ok] run-20260929T162307Z/P0-T01: verdict matches
+[ok] run-20260929T162307Z/P0-T01: failure_class matches
+[ok] run-20260929T162307Z/P0-T01: failure_output matches
+[ok] run-20260929T162307Z/P0-T02: verdict matches
+[ok] run-20260929T162307Z/P0-T02: failure_class matches
+[ok] run-20260929T162307Z/P0-T02: failure_output matches
+[ok] run-20260929T162307Z/P0-T03: verdict matches
+[ok] run-20260929T162307Z/P0-T03: failure_class matches
+[ok] run-20260929T162307Z/P0-T03: failure_output matches
+[ok] run-20260929T162307Z/P0-T04: verdict matches
+[ok] run-20260929T162307Z/P0-T04: failure_class matches
+[ok] run-20260929T162307Z/P0-T04: failure_output matches
+[ok] run-20260929T162307Z/P0-T05: verdict matches
+[ok] run-20260929T162307Z/P0-T05: failure_class matches
+[ok] run-20260929T162307Z/P0-T05: failure_output matches
+[ok] run-20260929T162307Z/P0-T06: verdict matches
+[ok] run-20260929T162307Z/P0-T06: failure_class matches
+[ok] run-20260929T162307Z/P0-T06: failure_output matches
+[ok] run-20260929T162307Z/P0-T07: verdict matches
+[ok] run-20260929T162307Z/P0-T07: failure_class matches
+[ok] run-20260929T162307Z/P0-T07: failure_output matches
+[ok] run-20260929T145257Z: list.run_id matches
+[ok] run-20260929T145257Z: list.stage matches
+[ok] run-20260929T145257Z: list.created_at matches
+[ok] run-20260929T145257Z: list.commit matches
+[ok] run-20260929T145257Z: list.schema_version matches
+[ok] run-20260929T145257Z: list.core_version matches
+[ok] run-20260929T145257Z: list.verdict matches
+[ok] run-20260929T145257Z: list.case_counts matches
+[ok] run-20260929T145257Z: list.record_sha256 matches
+[ok] run-20260929T145257Z: list.synthetic matches
+[ok] run-20260929T145257Z: list.manifest_status matches
+[ok] run-20260929T145257Z: no manifest.json exists on disk
+[timing] #4 GET /v1/validation/runs/run-20260929T145257Z 0.005s status=200
+[ok] run-20260929T145257Z: detail is 200
+[ok] run-20260929T145257Z: detail.run_id matches
+[ok] run-20260929T145257Z: detail.stage matches
+[ok] run-20260929T145257Z: detail.created_at matches
+[ok] run-20260929T145257Z: detail.commit matches
+[ok] run-20260929T145257Z: detail.schema_version matches
+[ok] run-20260929T145257Z: detail.core_version matches
+[ok] run-20260929T145257Z: detail.verdict matches
+[ok] run-20260929T145257Z/P0-T01: verdict matches
+[ok] run-20260929T145257Z/P0-T01: failure_class matches
+[ok] run-20260929T145257Z/P0-T01: failure_output matches
+[ok] run-20260929T145257Z/P0-T02: verdict matches
+[ok] run-20260929T145257Z/P0-T02: failure_class matches
+[ok] run-20260929T145257Z/P0-T02: failure_output matches
+[ok] run-20260929T145257Z/P0-T03: verdict matches
+[ok] run-20260929T145257Z/P0-T03: failure_class matches
+[ok] run-20260929T145257Z/P0-T03: failure_output matches
+[ok] run-20260929T145257Z/P0-T04: verdict matches
+[ok] run-20260929T145257Z/P0-T04: failure_class matches
+[ok] run-20260929T145257Z/P0-T04: failure_output matches
+[ok] run-20260929T145257Z/P0-T05: verdict matches
+[ok] run-20260929T145257Z/P0-T05: failure_class matches
+[ok] run-20260929T145257Z/P0-T05: failure_output matches
+[ok] run-20260929T145257Z/P0-T06: verdict matches
+[ok] run-20260929T145257Z/P0-T06: failure_class matches
+[ok] run-20260929T145257Z/P0-T06: failure_output matches
+[ok] run-20260929T145257Z/P0-T07: verdict matches
+[ok] run-20260929T145257Z/P0-T07: failure_class matches
+[ok] run-20260929T145257Z/P0-T07: failure_output matches
+[ok] run-20260929T161915Z: list.run_id matches
+[ok] run-20260929T161915Z: list.stage matches
+[ok] run-20260929T161915Z: list.created_at matches
+[ok] run-20260929T161915Z: list.commit matches
+[ok] run-20260929T161915Z: list.schema_version matches
+[ok] run-20260929T161915Z: list.core_version matches
+[ok] run-20260929T161915Z: list.verdict matches
+[ok] run-20260929T161915Z: list.case_counts matches
+[ok] run-20260929T161915Z: list.record_sha256 matches
+[ok] run-20260929T161915Z: list.synthetic matches
+[ok] run-20260929T161915Z: list.manifest_status matches
+[ok] run-20260929T161915Z: no manifest.json exists on disk
+[timing] #5 GET /v1/validation/runs/run-20260929T161915Z 0.004s status=200
+[ok] run-20260929T161915Z: detail is 200
+[ok] run-20260929T161915Z: detail.run_id matches
+[ok] run-20260929T161915Z: detail.stage matches
+[ok] run-20260929T161915Z: detail.created_at matches
+[ok] run-20260929T161915Z: detail.commit matches
+[ok] run-20260929T161915Z: detail.schema_version matches
+[ok] run-20260929T161915Z: detail.core_version matches
+[ok] run-20260929T161915Z: detail.verdict matches
+[ok] run-20260929T161915Z/P0-T01: verdict matches
+[ok] run-20260929T161915Z/P0-T01: failure_class matches
+[ok] run-20260929T161915Z/P0-T01: failure_output matches
+[ok] run-20260929T161915Z/P0-T02: verdict matches
+[ok] run-20260929T161915Z/P0-T02: failure_class matches
+[ok] run-20260929T161915Z/P0-T02: failure_output matches
+[ok] run-20260929T161915Z/P0-T03: verdict matches
+[ok] run-20260929T161915Z/P0-T03: failure_class matches
+[ok] run-20260929T161915Z/P0-T03: failure_output matches
+[ok] run-20260929T161915Z/P0-T04: verdict matches
+[ok] run-20260929T161915Z/P0-T04: failure_class matches
+[ok] run-20260929T161915Z/P0-T04: failure_output matches
+[ok] run-20260929T161915Z/P0-T05: verdict matches
+[ok] run-20260929T161915Z/P0-T05: failure_class matches
+[ok] run-20260929T161915Z/P0-T05: failure_output matches
+[ok] run-20260929T161915Z/P0-T06: verdict matches
+[ok] run-20260929T161915Z/P0-T06: failure_class matches
+[ok] run-20260929T161915Z/P0-T06: failure_output matches
+[ok] run-20260929T161915Z/P0-T07: verdict matches
+[ok] run-20260929T161915Z/P0-T07: failure_class matches
+[ok] run-20260929T161915Z/P0-T07: failure_output matches
+[ok] run-20260929T144539Z: list.run_id matches
+[ok] run-20260929T144539Z: list.stage matches
+[ok] run-20260929T144539Z: list.created_at matches
+[ok] run-20260929T144539Z: list.commit matches
+[ok] run-20260929T144539Z: list.schema_version matches
+[ok] run-20260929T144539Z: list.core_version matches
+[ok] run-20260929T144539Z: list.verdict matches
+[ok] run-20260929T144539Z: list.case_counts matches
+[ok] run-20260929T144539Z: list.record_sha256 matches
+[ok] run-20260929T144539Z: list.synthetic matches
+[ok] run-20260929T144539Z: list.manifest_status matches
+[ok] run-20260929T144539Z: no manifest.json exists on disk
+[timing] #6 GET /v1/validation/runs/run-20260929T144539Z 0.004s status=200
+[ok] run-20260929T144539Z: detail is 200
+[ok] run-20260929T144539Z: detail.run_id matches
+[ok] run-20260929T144539Z: detail.stage matches
+[ok] run-20260929T144539Z: detail.created_at matches
+[ok] run-20260929T144539Z: detail.commit matches
+[ok] run-20260929T144539Z: detail.schema_version matches
+[ok] run-20260929T144539Z: detail.core_version matches
+[ok] run-20260929T144539Z: detail.verdict matches
+[ok] run-20260929T144539Z/P0-T01: verdict matches
+[ok] run-20260929T144539Z/P0-T01: failure_class matches
+[ok] run-20260929T144539Z/P0-T01: failure_output matches
+[ok] run-20260929T144539Z/P0-T02: verdict matches
+[ok] run-20260929T144539Z/P0-T02: failure_class matches
+[ok] run-20260929T144539Z/P0-T02: failure_output matches
+[ok] run-20260929T144539Z/P0-T03: verdict matches
+[ok] run-20260929T144539Z/P0-T03: failure_class matches
+[ok] run-20260929T144539Z/P0-T03: failure_output matches
+[ok] run-20260929T144539Z/P0-T04: verdict matches
+[ok] run-20260929T144539Z/P0-T04: failure_class matches
+[ok] run-20260929T144539Z/P0-T04: failure_output matches
+[ok] run-20260929T144539Z/P0-T05: verdict matches
+[ok] run-20260929T144539Z/P0-T05: failure_class matches
+[ok] run-20260929T144539Z/P0-T05: failure_output matches
+[ok] run-20260929T144539Z/P0-T06: verdict matches
+[ok] run-20260929T144539Z/P0-T06: failure_class matches
+[ok] run-20260929T144539Z/P0-T06: failure_output matches
+[ok] run-20260929T144539Z/P0-T07: verdict matches
+[ok] run-20260929T144539Z/P0-T07: failure_class matches
+[ok] run-20260929T144539Z/P0-T07: failure_output matches
+[ok] run-20260929T143845Z: list.run_id matches
+[ok] run-20260929T143845Z: list.stage matches
+[ok] run-20260929T143845Z: list.created_at matches
+[ok] run-20260929T143845Z: list.commit matches
+[ok] run-20260929T143845Z: list.schema_version matches
+[ok] run-20260929T143845Z: list.core_version matches
+[ok] run-20260929T143845Z: list.verdict matches
+[ok] run-20260929T143845Z: list.case_counts matches
+[ok] run-20260929T143845Z: list.record_sha256 matches
+[ok] run-20260929T143845Z: list.synthetic matches
+[ok] run-20260929T143845Z: list.manifest_status matches
+[ok] run-20260929T143845Z: no manifest.json exists on disk
+[timing] #7 GET /v1/validation/runs/run-20260929T143845Z 0.005s status=200
+[ok] run-20260929T143845Z: detail is 200
+[ok] run-20260929T143845Z: detail.run_id matches
+[ok] run-20260929T143845Z: detail.stage matches
+[ok] run-20260929T143845Z: detail.created_at matches
+[ok] run-20260929T143845Z: detail.commit matches
+[ok] run-20260929T143845Z: detail.schema_version matches
+[ok] run-20260929T143845Z: detail.core_version matches
+[ok] run-20260929T143845Z: detail.verdict matches
+[ok] run-20260929T143845Z/P0-T01: verdict matches
+[ok] run-20260929T143845Z/P0-T01: failure_class matches
+[ok] run-20260929T143845Z/P0-T01: failure_output matches
+[ok] run-20260929T143845Z/P0-T02: verdict matches
+[ok] run-20260929T143845Z/P0-T02: failure_class matches
+[ok] run-20260929T143845Z/P0-T02: failure_output matches
+[ok] run-20260929T143845Z/P0-T03: verdict matches
+[ok] run-20260929T143845Z/P0-T03: failure_class matches
+[ok] run-20260929T143845Z/P0-T03: failure_output matches
+[ok] run-20260929T143845Z/P0-T04: verdict matches
+[ok] run-20260929T143845Z/P0-T04: failure_class matches
+[ok] run-20260929T143845Z/P0-T04: failure_output matches
+[ok] run-20260929T143845Z/P0-T05: verdict matches
+[ok] run-20260929T143845Z/P0-T05: failure_class matches
+[ok] run-20260929T143845Z/P0-T05: failure_output matches
+[ok] run-20260929T143845Z/P0-T06: verdict matches
+[ok] run-20260929T143845Z/P0-T06: failure_class matches
+[ok] run-20260929T143845Z/P0-T06: failure_output matches
+[ok] run-20260929T143845Z/P0-T07: verdict matches
+[ok] run-20260929T143845Z/P0-T07: failure_class matches
+[ok] run-20260929T143845Z/P0-T07: failure_output matches
+[ok] run-20260929T142847Z: list.run_id matches
+[ok] run-20260929T142847Z: list.stage matches
+[ok] run-20260929T142847Z: list.created_at matches
+[ok] run-20260929T142847Z: list.commit matches
+[ok] run-20260929T142847Z: list.schema_version matches
+[ok] run-20260929T142847Z: list.core_version matches
+[ok] run-20260929T142847Z: list.verdict matches
+[ok] run-20260929T142847Z: list.case_counts matches
+[ok] run-20260929T142847Z: list.record_sha256 matches
+[ok] run-20260929T142847Z: list.synthetic matches
+[ok] run-20260929T142847Z: list.manifest_status matches
+[ok] run-20260929T142847Z: no manifest.json exists on disk
+[timing] #8 GET /v1/validation/runs/run-20260929T142847Z 0.005s status=200
+[ok] run-20260929T142847Z: detail is 200
+[ok] run-20260929T142847Z: detail.run_id matches
+[ok] run-20260929T142847Z: detail.stage matches
+[ok] run-20260929T142847Z: detail.created_at matches
+[ok] run-20260929T142847Z: detail.commit matches
+[ok] run-20260929T142847Z: detail.schema_version matches
+[ok] run-20260929T142847Z: detail.core_version matches
+[ok] run-20260929T142847Z: detail.verdict matches
+[ok] run-20260929T142847Z/P0-T01: verdict matches
+[ok] run-20260929T142847Z/P0-T01: failure_class matches
+[ok] run-20260929T142847Z/P0-T01: failure_output matches
+[ok] run-20260929T142847Z/P0-T02: verdict matches
+[ok] run-20260929T142847Z/P0-T02: failure_class matches
+[ok] run-20260929T142847Z/P0-T02: failure_output matches
+[ok] run-20260929T142847Z/P0-T03: verdict matches
+[ok] run-20260929T142847Z/P0-T03: failure_class matches
+[ok] run-20260929T142847Z/P0-T03: failure_output matches
+[ok] run-20260929T142847Z/P0-T04: verdict matches
+[ok] run-20260929T142847Z/P0-T04: failure_class matches
+[ok] run-20260929T142847Z/P0-T04: failure_output matches
+[ok] run-20260929T142847Z/P0-T05: verdict matches
+[ok] run-20260929T142847Z/P0-T05: failure_class matches
+[ok] run-20260929T142847Z/P0-T05: failure_output matches
+[ok] run-20260929T142847Z/P0-T06: verdict matches
+[ok] run-20260929T142847Z/P0-T06: failure_class matches
+[ok] run-20260929T142847Z/P0-T06: failure_output matches
+[ok] run-20260929T142847Z/P0-T07: verdict matches
+[ok] run-20260929T142847Z/P0-T07: failure_class matches
+[ok] run-20260929T142847Z/P0-T07: failure_output matches
+[ok] run-20260929T143156Z: list.run_id matches
+[ok] run-20260929T143156Z: list.stage matches
+[ok] run-20260929T143156Z: list.created_at matches
+[ok] run-20260929T143156Z: list.commit matches
+[ok] run-20260929T143156Z: list.schema_version matches
+[ok] run-20260929T143156Z: list.core_version matches
+[ok] run-20260929T143156Z: list.verdict matches
+[ok] run-20260929T143156Z: list.case_counts matches
+[ok] run-20260929T143156Z: list.record_sha256 matches
+[ok] run-20260929T143156Z: list.synthetic matches
+[ok] run-20260929T143156Z: list.manifest_status matches
+[ok] run-20260929T143156Z: no manifest.json exists on disk
+[timing] #9 GET /v1/validation/runs/run-20260929T143156Z 0.004s status=200
+[ok] run-20260929T143156Z: detail is 200
+[ok] run-20260929T143156Z: detail.run_id matches
+[ok] run-20260929T143156Z: detail.stage matches
+[ok] run-20260929T143156Z: detail.created_at matches
+[ok] run-20260929T143156Z: detail.commit matches
+[ok] run-20260929T143156Z: detail.schema_version matches
+[ok] run-20260929T143156Z: detail.core_version matches
+[ok] run-20260929T143156Z: detail.verdict matches
+[ok] run-20260929T143156Z/P0-T01: verdict matches
+[ok] run-20260929T143156Z/P0-T01: failure_class matches
+[ok] run-20260929T143156Z/P0-T01: failure_output matches
+[ok] run-20260929T143156Z/P0-T02: verdict matches
+[ok] run-20260929T143156Z/P0-T02: failure_class matches
+[ok] run-20260929T143156Z/P0-T02: failure_output matches
+[ok] run-20260929T143156Z/P0-T03: verdict matches
+[ok] run-20260929T143156Z/P0-T03: failure_class matches
+[ok] run-20260929T143156Z/P0-T03: failure_output matches
+[ok] run-20260929T143156Z/P0-T04: verdict matches
+[ok] run-20260929T143156Z/P0-T04: failure_class matches
+[ok] run-20260929T143156Z/P0-T04: failure_output matches
+[ok] run-20260929T143156Z/P0-T05: verdict matches
+[ok] run-20260929T143156Z/P0-T05: failure_class matches
+[ok] run-20260929T143156Z/P0-T05: failure_output matches
+[ok] run-20260929T143156Z/P0-T06: verdict matches
+[ok] run-20260929T143156Z/P0-T06: failure_class matches
+[ok] run-20260929T143156Z/P0-T06: failure_output matches
+[ok] run-20260929T143156Z/P0-T07: verdict matches
+[ok] run-20260929T143156Z/P0-T07: failure_class matches
+[ok] run-20260929T143156Z/P0-T07: failure_output matches
+[ok] run-20260929T173423Z: list.run_id matches
+[ok] run-20260929T173423Z: list.stage matches
+[ok] run-20260929T173423Z: list.created_at matches
+[ok] run-20260929T173423Z: list.commit matches
+[ok] run-20260929T173423Z: list.schema_version matches
+[ok] run-20260929T173423Z: list.core_version matches
+[ok] run-20260929T173423Z: list.verdict matches
+[ok] run-20260929T173423Z: list.case_counts matches
+[ok] run-20260929T173423Z: list.record_sha256 matches
+[ok] run-20260929T173423Z: list.synthetic matches
+[ok] run-20260929T173423Z: list.manifest_status matches
+[ok] run-20260929T173423Z: no manifest.json exists on disk
+[timing] #10 GET /v1/validation/runs/run-20260929T173423Z 0.004s status=200
+[ok] run-20260929T173423Z: detail is 200
+[ok] run-20260929T173423Z: detail.run_id matches
+[ok] run-20260929T173423Z: detail.stage matches
+[ok] run-20260929T173423Z: detail.created_at matches
+[ok] run-20260929T173423Z: detail.commit matches
+[ok] run-20260929T173423Z: detail.schema_version matches
+[ok] run-20260929T173423Z: detail.core_version matches
+[ok] run-20260929T173423Z: detail.verdict matches
+[ok] run-20260929T173423Z/P0-T01: verdict matches
+[ok] run-20260929T173423Z/P0-T01: failure_class matches
+[ok] run-20260929T173423Z/P0-T01: failure_output matches
+[ok] run-20260929T173423Z/P0-T02: verdict matches
+[ok] run-20260929T173423Z/P0-T02: failure_class matches
+[ok] run-20260929T173423Z/P0-T02: failure_output matches
+[ok] run-20260929T173423Z/P0-T03: verdict matches
+[ok] run-20260929T173423Z/P0-T03: failure_class matches
+[ok] run-20260929T173423Z/P0-T03: failure_output matches
+[ok] run-20260929T173423Z/P0-T04: verdict matches
+[ok] run-20260929T173423Z/P0-T04: failure_class matches
+[ok] run-20260929T173423Z/P0-T04: failure_output matches
+[ok] run-20260929T173423Z/P0-T05: verdict matches
+[ok] run-20260929T173423Z/P0-T05: failure_class matches
+[ok] run-20260929T173423Z/P0-T05: failure_output matches
+[ok] run-20260929T173423Z/P0-T06: verdict matches
+[ok] run-20260929T173423Z/P0-T06: failure_class matches
+[ok] run-20260929T173423Z/P0-T06: failure_output matches
+[ok] run-20260929T173423Z/P0-T07: verdict matches
+[ok] run-20260929T173423Z/P0-T07: failure_class matches
+[ok] run-20260929T173423Z/P0-T07: failure_output matches
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-01-real-field-comparison.json
+[timing] #11 GET /v1/validation/runs/run-20260929T173423Z/manifest 0.004s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-02-real-manifest-absent.json
+[ok] a real run's manifest status is absent
+[ok] an absent manifest carries no manifest_sha256
+[timing] #12 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-03-fixture-manifest.json
+[ok] fixture manifest is 200
+[ok] manifest: manifest_sha256 matches
+[ok] manifest_authentication is unauthenticated
+[timing] #13 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-04-good-metadata.json
+[ok] art_good: declared_sha256 matches
+[ok] art_good: declared_bytes matches
+[ok] art_good: bytes matches
+[ok] art_good: digests.original matches
+[ok] art_good: integrity matches
+[timing] #14 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content?form=original 0.001s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-05-good-original-content.json
+[ok] art_good content: original_sha256 matches
+[ok] art_good content: masked_sha256 matches
+[ok] art_good content: served_sha256 matches
+[ok] art_good content: content matches
+[ok] art_good content: bytes matches
+[timing] #15 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_assign 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-06-assign-metadata.json
+[ok] art_assign: declared_sha256 matches
+[ok] art_assign: digests.original matches
+[ok] art_assign: digests.masked matches
+[ok] art_assign: integrity matches
+[timing] #16 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_assign/content 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-07-assign-masked-content.json
+[ok] art_assign content: original_sha256 matches
+[ok] art_assign content: masked_sha256 matches
+[ok] art_assign content: served_sha256 matches
+[ok] art_assign content: content matches
+[ok] art_assign content: mask_algorithm matches
+[ok] art_assign content: mask_version matches
+[timing] #17 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] fixture run: list.record_sha256 matches
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-08-field-comparison-table.json
+compared 373 fields; 0 mismatches
+fields compared: art_assign content.content, art_assign content.mask_algorithm, art_assign content.mask_version, art_assign content.masked_sha256, art_assign content.original_sha256, art_assign content.served_sha256, art_assign.declared_sha256, art_assign.digests.masked, art_assign.digests.original, art_assign.integrity, art_good content.bytes, art_good content.content, art_good content.masked_sha256, art_good content.original_sha256, art_good content.served_sha256, art_good.bytes, art_good.declared_bytes, art_good.declared_sha256, art_good.digests.original, art_good.integrity, fixture run.list.record_sha256, manifest.manifest_sha256, run-20260929T142847Z.detail.commit, run-20260929T142847Z.detail.core_version, run-20260929T142847Z.detail.created_at, run-20260929T142847Z.detail.run_id, run-20260929T142847Z.detail.schema_version, run-20260929T142847Z.detail.stage, run-20260929T142847Z.detail.verdict, run-20260929T142847Z.list.case_counts, run-20260929T142847Z.list.commit, run-20260929T142847Z.list.core_version, run-20260929T142847Z.list.created_at, run-20260929T142847Z.list.manifest_status, run-20260929T142847Z.list.record_sha256, run-20260929T142847Z.list.run_id, run-20260929T142847Z.list.schema_version, run-20260929T142847Z.list.stage, run-20260929T142847Z.list.synthetic, run-20260929T142847Z.list.verdict, run-20260929T142847Z/P0-T01.failure_class, run-20260929T142847Z/P0-T01.failure_output, run-20260929T142847Z/P0-T01.verdict, run-20260929T142847Z/P0-T02.failure_class, run-20260929T142847Z/P0-T02.failure_output, run-20260929T142847Z/P0-T02.verdict, run-20260929T142847Z/P0-T03.failure_class, run-20260929T142847Z/P0-T03.failure_output, run-20260929T142847Z/P0-T03.verdict, run-20260929T142847Z/P0-T04.failure_class, run-20260929T142847Z/P0-T04.failure_output, run-20260929T142847Z/P0-T04.verdict, run-20260929T142847Z/P0-T05.failure_class, run-20260929T142847Z/P0-T05.failure_output, run-20260929T142847Z/P0-T05.verdict, run-20260929T142847Z/P0-T06.failure_class, run-20260929T142847Z/P0-T06.failure_output, run-20260929T142847Z/P0-T06.verdict, run-20260929T142847Z/P0-T07.failure_class, run-20260929T142847Z/P0-T07.failure_output, run-20260929T142847Z/P0-T07.verdict, run-20260929T143156Z.detail.commit, run-20260929T143156Z.detail.core_version, run-20260929T143156Z.detail.created_at, run-20260929T143156Z.detail.run_id, run-20260929T143156Z.detail.schema_version, run-20260929T143156Z.detail.stage, run-20260929T143156Z.detail.verdict, run-20260929T143156Z.list.case_counts, run-20260929T143156Z.list.commit, run-20260929T143156Z.list.core_version, run-20260929T143156Z.list.created_at, run-20260929T143156Z.list.manifest_status, run-20260929T143156Z.list.record_sha256, run-20260929T143156Z.list.run_id, run-20260929T143156Z.list.schema_version, run-20260929T143156Z.list.stage, run-20260929T143156Z.list.synthetic, run-20260929T143156Z.list.verdict, run-20260929T143156Z/P0-T01.failure_class, run-20260929T143156Z/P0-T01.failure_output, run-20260929T143156Z/P0-T01.verdict, run-20260929T143156Z/P0-T02.failure_class, run-20260929T143156Z/P0-T02.failure_output, run-20260929T143156Z/P0-T02.verdict, run-20260929T143156Z/P0-T03.failure_class, run-20260929T143156Z/P0-T03.failure_output, run-20260929T143156Z/P0-T03.verdict, run-20260929T143156Z/P0-T04.failure_class, run-20260929T143156Z/P0-T04.failure_output, run-20260929T143156Z/P0-T04.verdict, run-20260929T143156Z/P0-T05.failure_class, run-20260929T143156Z/P0-T05.failure_output, run-20260929T143156Z/P0-T05.verdict, run-20260929T143156Z/P0-T06.failure_class, run-20260929T143156Z/P0-T06.failure_output, run-20260929T143156Z/P0-T06.verdict, run-20260929T143156Z/P0-T07.failure_class, run-20260929T143156Z/P0-T07.failure_output, run-20260929T143156Z/P0-T07.verdict, run-20260929T143845Z.detail.commit, run-20260929T143845Z.detail.core_version, run-20260929T143845Z.detail.created_at, run-20260929T143845Z.detail.run_id, run-20260929T143845Z.detail.schema_version, run-20260929T143845Z.detail.stage, run-20260929T143845Z.detail.verdict, run-20260929T143845Z.list.case_counts, run-20260929T143845Z.list.commit, run-20260929T143845Z.list.core_version, run-20260929T143845Z.list.created_at, run-20260929T143845Z.list.manifest_status, run-20260929T143845Z.list.record_sha256, run-20260929T143845Z.list.run_id, run-20260929T143845Z.list.schema_version, run-20260929T143845Z.list.stage, run-20260929T143845Z.list.synthetic, run-20260929T143845Z.list.verdict, run-20260929T143845Z/P0-T01.failure_class, run-20260929T143845Z/P0-T01.failure_output, run-20260929T143845Z/P0-T01.verdict, run-20260929T143845Z/P0-T02.failure_class, run-20260929T143845Z/P0-T02.failure_output, run-20260929T143845Z/P0-T02.verdict, run-20260929T143845Z/P0-T03.failure_class, run-20260929T143845Z/P0-T03.failure_output, run-20260929T143845Z/P0-T03.verdict, run-20260929T143845Z/P0-T04.failure_class, run-20260929T143845Z/P0-T04.failure_output, run-20260929T143845Z/P0-T04.verdict, run-20260929T143845Z/P0-T05.failure_class, run-20260929T143845Z/P0-T05.failure_output, run-20260929T143845Z/P0-T05.verdict, run-20260929T143845Z/P0-T06.failure_class, run-20260929T143845Z/P0-T06.failure_output, run-20260929T143845Z/P0-T06.verdict, run-20260929T143845Z/P0-T07.failure_class, run-20260929T143845Z/P0-T07.failure_output, run-20260929T143845Z/P0-T07.verdict, run-20260929T144539Z.detail.commit, run-20260929T144539Z.detail.core_version, run-20260929T144539Z.detail.created_at, run-20260929T144539Z.detail.run_id, run-20260929T144539Z.detail.schema_version, run-20260929T144539Z.detail.stage, run-20260929T144539Z.detail.verdict, run-20260929T144539Z.list.case_counts, run-20260929T144539Z.list.commit, run-20260929T144539Z.list.core_version, run-20260929T144539Z.list.created_at, run-20260929T144539Z.list.manifest_status, run-20260929T144539Z.list.record_sha256, run-20260929T144539Z.list.run_id, run-20260929T144539Z.list.schema_version, run-20260929T144539Z.list.stage, run-20260929T144539Z.list.synthetic, run-20260929T144539Z.list.verdict, run-20260929T144539Z/P0-T01.failure_class, run-20260929T144539Z/P0-T01.failure_output, run-20260929T144539Z/P0-T01.verdict, run-20260929T144539Z/P0-T02.failure_class, run-20260929T144539Z/P0-T02.failure_output, run-20260929T144539Z/P0-T02.verdict, run-20260929T144539Z/P0-T03.failure_class, run-20260929T144539Z/P0-T03.failure_output, run-20260929T144539Z/P0-T03.verdict, run-20260929T144539Z/P0-T04.failure_class, run-20260929T144539Z/P0-T04.failure_output, run-20260929T144539Z/P0-T04.verdict, run-20260929T144539Z/P0-T05.failure_class, run-20260929T144539Z/P0-T05.failure_output, run-20260929T144539Z/P0-T05.verdict, run-20260929T144539Z/P0-T06.failure_class, run-20260929T144539Z/P0-T06.failure_output, run-20260929T144539Z/P0-T06.verdict, run-20260929T144539Z/P0-T07.failure_class, run-20260929T144539Z/P0-T07.failure_output, run-20260929T144539Z/P0-T07.verdict, run-20260929T145257Z.detail.commit, run-20260929T145257Z.detail.core_version, run-20260929T145257Z.detail.created_at, run-20260929T145257Z.detail.run_id, run-20260929T145257Z.detail.schema_version, run-20260929T145257Z.detail.stage, run-20260929T145257Z.detail.verdict, run-20260929T145257Z.list.case_counts, run-20260929T145257Z.list.commit, run-20260929T145257Z.list.core_version, run-20260929T145257Z.list.created_at, run-20260929T145257Z.list.manifest_status, run-20260929T145257Z.list.record_sha256, run-20260929T145257Z.list.run_id, run-20260929T145257Z.list.schema_version, run-20260929T145257Z.list.stage, run-20260929T145257Z.list.synthetic, run-20260929T145257Z.list.verdict, run-20260929T145257Z/P0-T01.failure_class, run-20260929T145257Z/P0-T01.failure_output, run-20260929T145257Z/P0-T01.verdict, run-20260929T145257Z/P0-T02.failure_class, run-20260929T145257Z/P0-T02.failure_output, run-20260929T145257Z/P0-T02.verdict, run-20260929T145257Z/P0-T03.failure_class, run-20260929T145257Z/P0-T03.failure_output, run-20260929T145257Z/P0-T03.verdict, run-20260929T145257Z/P0-T04.failure_class, run-20260929T145257Z/P0-T04.failure_output, run-20260929T145257Z/P0-T04.verdict, run-20260929T145257Z/P0-T05.failure_class, run-20260929T145257Z/P0-T05.failure_output, run-20260929T145257Z/P0-T05.verdict, run-20260929T145257Z/P0-T06.failure_class, run-20260929T145257Z/P0-T06.failure_output, run-20260929T145257Z/P0-T06.verdict, run-20260929T145257Z/P0-T07.failure_class, run-20260929T145257Z/P0-T07.failure_output, run-20260929T145257Z/P0-T07.verdict, run-20260929T161915Z.detail.commit, run-20260929T161915Z.detail.core_version, run-20260929T161915Z.detail.created_at, run-20260929T161915Z.detail.run_id, run-20260929T161915Z.detail.schema_version, run-20260929T161915Z.detail.stage, run-20260929T161915Z.detail.verdict, run-20260929T161915Z.list.case_counts, run-20260929T161915Z.list.commit, run-20260929T161915Z.list.core_version, run-20260929T161915Z.list.created_at, run-20260929T161915Z.list.manifest_status, run-20260929T161915Z.list.record_sha256, run-20260929T161915Z.list.run_id, run-20260929T161915Z.list.schema_version, run-20260929T161915Z.list.stage, run-20260929T161915Z.list.synthetic, run-20260929T161915Z.list.verdict, run-20260929T161915Z/P0-T01.failure_class, run-20260929T161915Z/P0-T01.failure_output, run-20260929T161915Z/P0-T01.verdict, run-20260929T161915Z/P0-T02.failure_class, run-20260929T161915Z/P0-T02.failure_output, run-20260929T161915Z/P0-T02.verdict, run-20260929T161915Z/P0-T03.failure_class, run-20260929T161915Z/P0-T03.failure_output, run-20260929T161915Z/P0-T03.verdict, run-20260929T161915Z/P0-T04.failure_class, run-20260929T161915Z/P0-T04.failure_output, run-20260929T161915Z/P0-T04.verdict, run-20260929T161915Z/P0-T05.failure_class, run-20260929T161915Z/P0-T05.failure_output, run-20260929T161915Z/P0-T05.verdict, run-20260929T161915Z/P0-T06.failure_class, run-20260929T161915Z/P0-T06.failure_output, run-20260929T161915Z/P0-T06.verdict, run-20260929T161915Z/P0-T07.failure_class, run-20260929T161915Z/P0-T07.failure_output, run-20260929T161915Z/P0-T07.verdict, run-20260929T162307Z.detail.commit, run-20260929T162307Z.detail.core_version, run-20260929T162307Z.detail.created_at, run-20260929T162307Z.detail.run_id, run-20260929T162307Z.detail.schema_version, run-20260929T162307Z.detail.stage, run-20260929T162307Z.detail.verdict, run-20260929T162307Z.list.case_counts, run-20260929T162307Z.list.commit, run-20260929T162307Z.list.core_version, run-20260929T162307Z.list.created_at, run-20260929T162307Z.list.manifest_status, run-20260929T162307Z.list.record_sha256, run-20260929T162307Z.list.run_id, run-20260929T162307Z.list.schema_version, run-20260929T162307Z.list.stage, run-20260929T162307Z.list.synthetic, run-20260929T162307Z.list.verdict, run-20260929T162307Z/P0-T01.failure_class, run-20260929T162307Z/P0-T01.failure_output, run-20260929T162307Z/P0-T01.verdict, run-20260929T162307Z/P0-T02.failure_class, run-20260929T162307Z/P0-T02.failure_output, run-20260929T162307Z/P0-T02.verdict, run-20260929T162307Z/P0-T03.failure_class, run-20260929T162307Z/P0-T03.failure_output, run-20260929T162307Z/P0-T03.verdict, run-20260929T162307Z/P0-T04.failure_class, run-20260929T162307Z/P0-T04.failure_output, run-20260929T162307Z/P0-T04.verdict, run-20260929T162307Z/P0-T05.failure_class, run-20260929T162307Z/P0-T05.failure_output, run-20260929T162307Z/P0-T05.verdict, run-20260929T162307Z/P0-T06.failure_class, run-20260929T162307Z/P0-T06.failure_output, run-20260929T162307Z/P0-T06.verdict, run-20260929T162307Z/P0-T07.failure_class, run-20260929T162307Z/P0-T07.failure_output, run-20260929T162307Z/P0-T07.verdict, run-20260929T162925Z.detail.commit, run-20260929T162925Z.detail.core_version, run-20260929T162925Z.detail.created_at, run-20260929T162925Z.detail.run_id, run-20260929T162925Z.detail.schema_version, run-20260929T162925Z.detail.stage, run-20260929T162925Z.detail.verdict, run-20260929T162925Z.list.case_counts, run-20260929T162925Z.list.commit, run-20260929T162925Z.list.core_version, run-20260929T162925Z.list.created_at, run-20260929T162925Z.list.manifest_status, run-20260929T162925Z.list.record_sha256, run-20260929T162925Z.list.run_id, run-20260929T162925Z.list.schema_version, run-20260929T162925Z.list.stage, run-20260929T162925Z.list.synthetic, run-20260929T162925Z.list.verdict, run-20260929T162925Z/P0-T01.failure_class, run-20260929T162925Z/P0-T01.failure_output, run-20260929T162925Z/P0-T01.verdict, run-20260929T162925Z/P0-T02.failure_class, run-20260929T162925Z/P0-T02.failure_output, run-20260929T162925Z/P0-T02.verdict, run-20260929T162925Z/P0-T03.failure_class, run-20260929T162925Z/P0-T03.failure_output, run-20260929T162925Z/P0-T03.verdict, run-20260929T162925Z/P0-T04.failure_class, run-20260929T162925Z/P0-T04.failure_output, run-20260929T162925Z/P0-T04.verdict, run-20260929T162925Z/P0-T05.failure_class, run-20260929T162925Z/P0-T05.failure_output, run-20260929T162925Z/P0-T05.verdict, run-20260929T162925Z/P0-T06.failure_class, run-20260929T162925Z/P0-T06.failure_output, run-20260929T162925Z/P0-T06.verdict, run-20260929T162925Z/P0-T07.failure_class, run-20260929T162925Z/P0-T07.failure_output, run-20260929T162925Z/P0-T07.verdict, run-20260929T173423Z.detail.commit, run-20260929T173423Z.detail.core_version, run-20260929T173423Z.detail.created_at, run-20260929T173423Z.detail.run_id, run-20260929T173423Z.detail.schema_version, run-20260929T173423Z.detail.stage, run-20260929T173423Z.detail.verdict, run-20260929T173423Z.list.case_counts, run-20260929T173423Z.list.commit, run-20260929T173423Z.list.core_version, run-20260929T173423Z.list.created_at, run-20260929T173423Z.list.manifest_status, run-20260929T173423Z.list.record_sha256, run-20260929T173423Z.list.run_id, run-20260929T173423Z.list.schema_version, run-20260929T173423Z.list.stage, run-20260929T173423Z.list.synthetic, run-20260929T173423Z.list.verdict, run-20260929T173423Z/P0-T01.failure_class, run-20260929T173423Z/P0-T01.failure_output, run-20260929T173423Z/P0-T01.verdict, run-20260929T173423Z/P0-T02.failure_class, run-20260929T173423Z/P0-T02.failure_output, run-20260929T173423Z/P0-T02.verdict, run-20260929T173423Z/P0-T03.failure_class, run-20260929T173423Z/P0-T03.failure_output, run-20260929T173423Z/P0-T03.verdict, run-20260929T173423Z/P0-T04.failure_class, run-20260929T173423Z/P0-T04.failure_output, run-20260929T173423Z/P0-T04.verdict, run-20260929T173423Z/P0-T05.failure_class, run-20260929T173423Z/P0-T05.failure_output, run-20260929T173423Z/P0-T05.verdict, run-20260929T173423Z/P0-T06.failure_class, run-20260929T173423Z/P0-T06.failure_output, run-20260929T173423Z/P0-T06.verdict, run-20260929T173423Z/P0-T07.failure_class, run-20260929T173423Z/P0-T07.failure_output, run-20260929T173423Z/P0-T07.verdict
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-10-criterion6-report.json
+[timing-summary] {"max_seconds": 0.0112, "over_10s": [], "over_5s": [], "requests": 17, "requests_without_status": [], "total_seconds": 0.0656, "transport_retries": 0}

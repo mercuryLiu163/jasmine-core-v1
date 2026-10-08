@@ -1,0 +1,233 @@
+control source: /tmp/p7-01-control-old-src/src  (extracted from 0ae80411824739b11485c61ed388d86093f2be7c)
+control reads module: /tmp/p7-01-control-old-src/src/jasmine_core/validation/reads.py
+
+########## PART A — manifest swapped after the grant check (acl)
+[timing] #1 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[ok] A granted content (manifest A): answered inside 3.0s with an HTTP status (no hang)
+[ok] A (manifest A): granted content is 200 and serves A's bytes
+[ok] A (manifest A): served digest is A's, header agrees
+[timing] #2 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[ok] A granted manifest (manifest A): answered inside 3.0s with an HTTP status (no hang)
+[ok] A (manifest A): manifest route serves A (sha + path agree)
+[timing] #3 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[ok] A content after swap to B: answered inside 3.0s with an HTTP status (no hang)
+[ok] A after swap to B: content is refused 404 validation_run_not_found
+[ok] A after swap to B: the refusal serves nothing from manifest B
+[timing] #4 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=404
+[ok] A after swap to B: manifest route is refused 404 too
+[timing] #5 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[ok] A after swapping back to A: granted content is 200 with A's bytes
+[timing] #6 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #7 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #8 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #9 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #10 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #11 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #12 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #13 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #14 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.003s status=200
+[timing] #15 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.005s status=404
+[timing] #16 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #17 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #18 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #19 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #20 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #21 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #22 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #23 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #24 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #25 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #26 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #27 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #28 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #29 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #30 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #31 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #32 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #33 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #34 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #35 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #36 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #37 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.005s status=404
+[timing] #38 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #39 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #40 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #41 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #42 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #43 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #44 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #45 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.003s status=200
+[timing] #46 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #47 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #48 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #49 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #50 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #51 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #52 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #53 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.003s status=404
+[timing] #54 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #55 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #56 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #57 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #58 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #59 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #60 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.004s status=200
+[timing] #61 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #62 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #63 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #64 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #65 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #66 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #67 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #68 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #69 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #70 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #71 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #72 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #73 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #74 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #75 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #76 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #77 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #78 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #79 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #80 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #81 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #82 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.005s status=200
+[timing] #83 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #84 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #85 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #86 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #87 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #88 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #89 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #90 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #91 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #92 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #93 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #94 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #95 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #96 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #97 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #98 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #99 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #100 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #101 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #102 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #103 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #104 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.005s status=404
+[timing] #105 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #106 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #107 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #108 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.003s status=200
+[timing] #109 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #110 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #111 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #112 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #113 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #114 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #115 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #116 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #117 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #118 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #119 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #120 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #121 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #122 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #123 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #124 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #125 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[FAIL] A rapid swap race: no response ever mixes A's permission with B's payload (or B's with A's)  actual=[('content-200-mixed', 'BBB-CONTENT-SERVED-FROM-MANIFEST-B', 'cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200'), ('content-200-mixed', 'BBB-CONTENT-SERVED-FROM-MANIFEST-B', 'cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200'), ('content-200-mixed', 'BBB-CONTENT-SERVED-FROM-MANIFEST-B', 'cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200'), ('content-200-mixed', 'BBB-CONTENT-SERVED-FROM-MANIFEST-B', 'cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200'), ('content-200-mixed', 'BBB-CONTENT-SERVED-FROM-MANIFEST-B', 'cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200')]
+[ok] A rapid swap race: both the granted (200) and refused (404) branches were exercised
+[ok] A rapid swap race: every request answered well inside the timeout
+[timing] #126 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.004s status=200
+[ok] A after the race: manifest A restored and content is 200 with A
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/control-old/fix-defects-01-manifest-swap.json
+
+########## PART B — FIFO at a record path, manifest.json, artifact
+[ok] B: the record-path entry is a real FIFO on disk
+[ok] B: the manifest.json entry is a real FIFO on disk
+[ok] B: the artifact entry is a real FIFO on disk
+[timing] #127 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] B list over a root with a FIFO record: answered inside 3.0s with an HTTP status (no hang)
+[ok] B list: the FIFO record is not served as a run row
+[ok] B list: the three regular records are still served
+[ok] B list: the FIFO record is counted not_regular_file
+[timing] #128 GET /v1/validation/runs/run-20261008T000402Z 0.002s status=404
+[ok] B detail of the FIFO record stem: answered inside 3.0s with an HTTP status (no hang)
+[ok] B detail of the FIFO record stem: 404 validation_run_not_found
+[timing] #129 GET /v1/validation/runs/run-20261008T000403Z/manifest 0.002s status=409
+[ok] B manifest route with a FIFO manifest.json: answered inside 3.0s with an HTTP status (no hang)
+[FAIL] B manifest route with a FIFO manifest.json: 409 manifest_corrupt naming not_regular_file  actual=(409, 'validation_manifest_corrupt', 'manifest.json is not a regular file')
+[timing] #130 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] B list: the FIFO manifest is reported manifest_status corrupt
+[timing] #131 GET /v1/validation/runs/run-20261008T000404Z/artifacts/art_fifo 0.002s status=503
+[ok] B artifact metadata with a FIFO artifact path: answered inside 3.0s with an HTTP status (no hang)
+[ok] B artifact metadata with a FIFO artifact path: refused 503 artifact_unreadable (never blocked)
+[timing] #132 GET /v1/validation/runs/run-20261008T000404Z/artifacts/art_fifo/content 0.002s status=503
+[ok] B artifact content with a FIFO artifact path: answered inside 3.0s with an HTTP status (no hang)
+[ok] B artifact content with a FIFO artifact path: refused 503 artifact_unreadable (never blocked)
+[timing] #133 GET /v1/validation/runs/run-20261008T000404Z/manifest 0.001s status=200
+[ok] B manifest route listing a FIFO artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] B manifest route: the FIFO artifact is listed integrity unreadable
+[timing] #134 GET /v1/validation/runs?limit=100 0.002s status=200
+[timing] #135 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #136 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #137 GET /v1/validation/runs?limit=100 5.001s status=None
+[FAIL] B regular<->FIFO record swap race: no request blocked (all answered)  actual=[{'status': 200, 'seconds': 0.0016, 'row_status': 'ok', 'row_reason': None}, {'status': 200, 'seconds': 0.0015, 'row_status': None, 'row_reason': None}, {'status': 200, 'seconds': 0.0015, 'row_status': 'ok', 'row_reason': None}]
+[FAIL] B regular<->FIFO record swap race: every response was inside the hang threshold  actual=5.0013
+[ok] B swap race: a swapped-in FIFO is refused as not a regular file, never read
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/control-old/fix-defects-02-fifo.json
+
+########## PART D — root replaced by a symlink to an outside directory
+[timing] #138 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] D before swap: the inside run is served from the real root
+[timing] #139 GET /v1/validation/runs/run-20261008T000701Z 0.002s status=200
+[ok] D before swap: inside detail is 200 (grant check exercised)
+[ok] D the configured root is now a symlink to the outside directory
+[timing] #140 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] D symlinked root, list: answered inside 3.0s with an HTTP status (no hang)
+[FAIL] D symlinked root, list: refused 503 symlinked_root and serves nothing from outside  actual=(200, None, None, True)
+[timing] #141 GET /v1/validation/runs/run-20261008T000701Z 0.001s status=404
+[ok] D symlinked root, inside detail: answered inside 3.0s with an HTTP status (no hang)
+[FAIL] D symlinked root, inside detail: refused 503 symlinked_root and serves nothing from outside  actual=(404, 'validation_run_not_found', None, False)
+[timing] #142 GET /v1/validation/runs/run-20261008T000702Z 0.002s status=200
+[ok] D symlinked root, outside detail: answered inside 3.0s with an HTTP status (no hang)
+[FAIL] D symlinked root, outside detail: refused 503 symlinked_root and serves nothing from outside  actual=(200, None, None, True)
+[timing] #143 GET /v1/validation/runs/run-20261008T000702Z/manifest 0.002s status=200
+[ok] D symlinked root, outside manifest: answered inside 3.0s with an HTTP status (no hang)
+[FAIL] D symlinked root, outside manifest: refused 503 symlinked_root and serves nothing from outside  actual=(200, None, None, True)
+[timing] #144 GET /v1/validation/runs/run-20261008T000702Z/artifacts/art_loot/content 0.002s status=200
+[ok] D symlinked root, outside artifact: answered inside 3.0s with an HTTP status (no hang)
+[FAIL] D symlinked root, outside artifact: refused 503 symlinked_root and serves nothing from outside  actual=(200, None, None, True)
+[ok] D the root is a real directory again
+[timing] #145 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] D after restore: the list serves the inside run again and nothing from outside
+[timing] #146 GET /v1/validation/runs/run-20261008T000701Z 0.002s status=200
+[ok] D after restore: inside detail is 200 with the inside record
+[timing] #147 GET /v1/validation/runs/run-20261008T000701Z/artifacts/art_note/content 0.005s status=200
+[ok] D after restore: the inside artifact content is 200 and correct
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/control-old/fix-defects-04-root-symlink.json
+
+########## PART E — masked output measured against MAX_ARTIFACT_BYTES
+[ok] E the validator's raw artifact is under MAX_ARTIFACT_BYTES
+[ok] E the validator's masked artifact is over MAX_ARTIFACT_BYTES
+[timing] #148 GET /v1/validation/runs/run-20261008T000801Z/artifacts/art_mask 1.905s status=200
+[ok] E artifact metadata for the expanding artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] E artifact metadata: 200 integrity match, declared bytes agree
+[ok] E artifact metadata: digests.masked is our recomputed masked digest
+[timing] #149 GET /v1/validation/runs/run-20261008T000801Z/artifacts/art_mask/content 1.217s status=200
+[ok] E content route for the expanding artifact: answered inside 3.0s with an HTTP status (no hang)
+[FAIL] E masked content: refused 413 payload_too_large  actual=(200, None)
+[FAIL] E masked content: details name the masked form, the limit and the original size  actual={}
+[FAIL] E masked content: the over-cap masked text was NOT returned  actual=(10200458, ['artifact_id', 'form', 'media_type', 'bytes', 'served_sha256', 'original_sha256', 'masked_sha256', 'mask_algorithm', 'mask_version', 'content', 'content_is_original'])
+[timing] #150 GET /v1/validation/runs/run-20261008T000801Z/artifacts/art_mask/content?form=original 1.166s status=403
+[ok] E original form for the expanding artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] E original form: withheld 403 original_withheld (mask not a no-op)
+[timing] #151 GET /v1/validation/runs/run-20261008T000801Z/artifacts/art_small/content 0.003s status=200
+[ok] E control small expanding artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] E control: a masked artifact under the cap is still served 200
+[ok] E control: the served content is the masked text and its digest agrees
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/control-old/fix-defects-05-masked-cap.json
+CONTROL-OLD: 66 checks, 12 failed
+[timing-summary] {"max_seconds": 5.0012, "over_10s": [], "over_5s": ["/v1/validation/runs?limit=100"], "requests": 151, "requests_without_status": [{"method": "GET", "path": "/v1/validation/runs?limit=100", "seconds": 5.0012, "seq": 137, "status": null}], "total_seconds": 9.6016, "transport_retries": 0}

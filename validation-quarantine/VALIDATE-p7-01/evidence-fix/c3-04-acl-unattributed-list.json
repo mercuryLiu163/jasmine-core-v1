@@ -1,0 +1,111 @@
+{
+  "complete": true,
+  "corrupt_count": 1,
+  "count": 3,
+  "discovery": {
+    "capped": false,
+    "max_depth": 4,
+    "root_present": true,
+    "run_shaped_files": 3,
+    "scanned_dirs": 10,
+    "scanned_files": 7,
+    "unreadable_entries": 0
+  },
+  "duplicate_count": 0,
+  "has_more": false,
+  "ignored_entries": 3,
+  "ignored_samples": [],
+  "limit": 100,
+  "offset": 0,
+  "runs": [
+    {
+      "attribution": {
+        "projects": [],
+        "reason": "manifest_absent",
+        "status": "unattributed"
+      },
+      "case_counts": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 2,
+        "total": 3
+      },
+      "commit": "0000000000000000000000000000000000000000",
+      "core_version": "0.1.0",
+      "created_at": "2026-10-08T00:00:03.000000Z",
+      "evidence_grade": "unknown",
+      "grade_downgraded_by": [],
+      "manifest_status": "absent",
+      "mode": "unknown",
+      "mode_basis": "no bundle manifest on disk",
+      "record_sha256": "f82e0d0f52b55d99e250112280cff80136f7c35c3a7708ed52f6956e99bd91ca",
+      "record_status": "ok",
+      "run_id": "run-20261008T000003Z",
+      "schema_version": 11,
+      "stage": "P7",
+      "synthetic": false,
+      "verdict": "BLOCKED",
+      "verdict_consistent": true
+    },
+    {
+      "attribution": {
+        "projects": [
+          "prj_01M4E6VCCQBS71XGKA6KB03V74"
+        ],
+        "status": "attributed"
+      },
+      "case_counts": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 1,
+        "total": 1
+      },
+      "commit": "0000000000000000000000000000000000000000",
+      "core_version": "0.1.0",
+      "created_at": "2026-10-08T00:00:01.000000Z",
+      "evidence_grade": "simulated",
+      "grade_downgraded_by": [
+        "T-1"
+      ],
+      "manifest_status": "frozen",
+      "mode": "real",
+      "mode_basis": "declared real with recorder provenance and project attribution",
+      "record_sha256": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+      "record_status": "ok",
+      "run_id": "run-20261008T000001Z",
+      "schema_version": 11,
+      "stage": "P7",
+      "synthetic": false,
+      "verdict": "PASS",
+      "verdict_consistent": true
+    },
+    {
+      "attribution": null,
+      "case_counts": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 0,
+        "total": 0
+      },
+      "commit": null,
+      "core_version": null,
+      "corrupt_reason": "unparseable: JSONDecodeError",
+      "created_at": null,
+      "evidence_grade": null,
+      "grade_downgraded_by": [],
+      "manifest_status": null,
+      "mode": null,
+      "mode_basis": null,
+      "record_sha256": "92072df399cb74703f8e86f450d552bc0bb01eeeb98a90985a1b7772c8fd0016",
+      "record_status": "corrupt",
+      "run_id": "run-20261008T000004Z",
+      "schema_version": null,
+      "stage": null,
+      "synthetic": false,
+      "verdict": null,
+      "verdict_consistent": null
+    }
+  ],
+  "total": 3,
+  "visibility": "grant_filtered"
+}
