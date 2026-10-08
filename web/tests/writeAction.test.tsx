@@ -32,6 +32,22 @@ describe('classifyWriteError', () => {
     }
   })
 
+  it('treats P4 state refusals as refusals, though Core sends them as 409', () => {
+    // A `DONE`/`RUNNING`/already-`PENDING` retry and a lifecycle command the item's state
+    // forbids are 409s, but they are not conflicts to re-review: re-reading changes nothing.
+    // Classifying them as conflicts would show "Core's current value is beside your draft —
+    // review and retry", which is a retry that cannot succeed.
+    expect(classifyWriteError(new CoreApiError({
+      kind: 'conflict', status: 409, code: 'invalid_state_transition', message: 'done',
+    }))).toBe('refused')
+    expect(classifyWriteError(new CoreApiError({
+      kind: 'forbidden', status: 403, code: 'forbidden_actor_kind', message: 'agent',
+    }))).toBe('refused')
+    expect(classifyWriteError(new CoreApiError({
+      kind: 'invalid', status: 400, code: 'missing_expected_revision', message: 'guard',
+    }))).toBe('refused')
+  })
+
   it('separates refusal from an unknown result', () => {
     expect(classifyWriteError(new CoreApiError({ kind: 'forbidden', status: 403, code: 'forbidden_scope', message: 'x' }))).toBe('refused')
     expect(classifyWriteError(new CoreApiError({ kind: 'unauthenticated', status: 401, code: 'unauthenticated', message: 'x' }))).toBe('refused')

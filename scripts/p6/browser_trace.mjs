@@ -2120,6 +2120,12 @@ async function main() {
         await waitForCount(
           () => requests.filter((r) => r.method === method && r.path === path).length,
           expected, `readback ${method} ${path}`)
+        // Waiting for the *request* is not waiting for the page: the CDP event fires before the
+        // response lands and before React re-renders. The readback block is the thing the record
+        // claims, so it is what is waited for — an earlier version checked a single evaluate and
+        // reported "no readback" for a page that was about to render one.
+        await waitFor(cdp, `document.querySelector('[data-testid="write-readback"]') !== null`,
+          { label: 'written-row readback block' })
       }
       /** Re-read the item so the panel's `expected_revision` is the fixture's current one. */
       const freshItem = async (label) => {

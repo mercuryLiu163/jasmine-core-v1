@@ -404,10 +404,13 @@ describe('the retry panel', () => {
     const submit = await within(panel).findByTestId('write-submit')
     expect(panel.textContent).toContain('DONE')
     await user.click(submit)
-    const refused = await within(panel).findByText(/冲突,已保留草稿|被拒绝/)
-    expect(refused.textContent).toBeTruthy()
-    expect(panel.textContent).toContain('invalid_state_transition')
+    // A state refusal is a *refusal*, not a conflict to re-review: re-reading a DONE job will
+    // not make it retryable, so the conflict block ("Core's current value is beside your draft,
+    // review and decide") would invite a retry that cannot succeed.
+    const refused = await within(panel).findByText(/被拒绝/)
+    expect(refused.textContent).toContain('invalid_state_transition')
     expect(panel.textContent).not.toContain('已提交')
+    expect(panel.textContent).not.toContain('冲突,已保留草稿')
   })
 })
 

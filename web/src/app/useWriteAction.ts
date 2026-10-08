@@ -89,8 +89,19 @@ const CONFLICT_CODES = new Set([
   'event_id_conflict',
 ])
 
+/** Codes that mean "Core refuses this command in this state".
+ *
+ * A `409` is not automatically a conflict to re-review. P4 answers `invalid_state_transition`
+ * for a `DONE`/`RUNNING`/already-`PENDING` retry and for a lifecycle command the item's state
+ * forbids: re-reading the object will not make it legal, so showing the conflict block ("Core's
+ * current value is beside your draft, review and decide") would invite exactly the retry that
+ * cannot succeed. It is a refusal, and it says so.
+ */
+const STATE_REFUSAL_CODES = new Set(['invalid_state_transition'])
+
 export function classifyWriteError(error: CoreApiError): WriteState {
   if (CONFLICT_CODES.has(error.code)) return 'conflict'
+  if (STATE_REFUSAL_CODES.has(error.code)) return 'refused'
   if (error.kind === 'unreachable') return 'unknown'
   if (error.kind === 'conflict') return 'conflict'
   if (error.kind === 'forbidden' || error.kind === 'unauthenticated') return 'refused'
