@@ -221,6 +221,16 @@ async function main() {
     // which the failure test below would count as a failed read.
     const apiStatuses = (prefix) => requests.filter((entry) => entry.path.startsWith(prefix))
       .map((entry) => responses.get(entry.requestId) ?? null)
+    // Wait for the read behind a view to be *observed* answered, so the containment assertion does
+    // not race the request: a view can render its panel before its data arrives.
+    const waitForStatus = async (prefix, label) => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const statuses = apiStatuses(prefix)
+        if (statuses.some((status) => status === 200)) return statuses
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+      throw new Error(`no 200 observed for ${prefix} (${label})`)
+    }
     const p1 = {}
     for (const [name, hash, marker, prefix] of [
       ['overview', 'overview', 'Core 健康与 Schema', '/v1/projects'],
@@ -233,7 +243,7 @@ async function main() {
     ]) {
       await goto(hash, `P1 ${name}`,
         `document.body.textContent.includes(${JSON.stringify(marker)})`)
-      const statuses = apiStatuses(prefix)
+      const statuses = await waitForStatus(prefix, name)
       const shown = await alerts()
       p1[name] = {
         marker: true,
