@@ -1779,9 +1779,12 @@ async function main() {
       if (args.realCore) {
         // A real P3 build: no reply may carry the fixture label, and the Core must say it is P3.
         const health = await httpJson(`${args.ui}/v1/health`, 'GET').catch(() => ({}))
+        // `>= 10`, not `=== 10`: P3's own build is schema 10, and a baseline that also contains P4
+        // is 11. The check is "a real build with P3's migrations", not a number.
         trace.record(
-          'every P3 continuity read comes from a real P3 build: no simulation label, and health reports P3 schema',
-          continuityReads.length >= 4 && labelled.length === 0 && health?.schema_version === 10,
+          'every P3 continuity read comes from a real P3 build: no simulation label, and health reports at least P3 schema',
+          continuityReads.length >= 4 && labelled.length === 0
+            && Number.isInteger(health?.schema_version) && health.schema_version >= 10,
           `${continuityReads.length} continuity reads, ${labelled.length} labelled, ` +
             `health schema ${health?.schema_version}`,
         )
