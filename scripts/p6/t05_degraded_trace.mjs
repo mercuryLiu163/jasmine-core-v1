@@ -217,8 +217,10 @@ async function main() {
     // --- 3. the P1 views are untouched: no dependency panel, no alert, real data ----------------
     // Each P1 view gets the marker its own panel renders, plus a check that the Core read behind it
     // really answered 200 — "the page rendered" alone would not show the outage stayed contained.
+    // `?? null` matters: an unobserved response must read as "not seen yet", not as `undefined`,
+    // which the failure test below would count as a failed read.
     const apiStatuses = (prefix) => requests.filter((entry) => entry.path.startsWith(prefix))
-      .map((entry) => responses.get(entry.requestId))
+      .map((entry) => responses.get(entry.requestId) ?? null)
     const p1 = {}
     for (const [name, hash, marker, prefix] of [
       ['overview', 'overview', 'Core 健康与 Schema', '/v1/projects'],
