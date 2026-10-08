@@ -85,6 +85,15 @@ function parseArgs(argv) {
       case '--p3-workspace-digest': args.p3WorkspaceDigest = next; index += 1; break
       case '--p3-checkpoint-2-revision': args.p3Checkpoint2Revision = next; index += 1; break
       case '--p3-first-note-text': args.p3FirstNoteText = next; index += 1; break
+      // Two P3 records were bound to fixture *values*: the context record asserted the fixture's
+      // task title, and the resume record asserted the fixture's single action
+      // (`RECONCILE_CURRENT_TRUTH`). A real Core renders its own content, and a real Resume may
+      // legitimately carry no next action at all, so both are parameters. The defaults reproduce
+      // the fixture run unchanged; a real run passes the Core's own values, and a count of 0 tells
+      // the record to assert the empty-list rendering instead of an action list.
+      case '--p3-pack-marker': args.p3PackMarker = next; index += 1; break
+      case '--p3-resume-action-count': args.p3ResumeActionCount = next; index += 1; break
+      case '--p3-resume-action-kind': args.p3ResumeActionKind = next; index += 1; break
       case '--p4-reads': args.p4Reads = true; break
       case '--p4-limited-token': args.p4LimitedToken = next; index += 1; break
       case '--p4-writes': args.p4Writes = true; break
@@ -1509,6 +1518,14 @@ async function main() {
       const TASK = args.p3Task ?? 'tsk_01M4B6VGC29ESRDRQR62DX8AK8'
       const TASK_EMPTY = args.p3TaskEmpty ?? 'tsk_01M4B6VGC29ESRDRQR62DX8AK9'
       const UNKNOWN = args.p3Unknown ?? 'ckp_01M4B6VGC29ESRDRQR62DX8AK7'
+      // A literal slice of the Context Pack's own `rendered_content` (the real Core's, when this is
+      // a real run) and the Resume's own next-action count/kind. See the flags in `parseArgs`.
+      const PACK_MARKER = args.p3PackMarker ?? 'fixture task'
+      const RESUME_ACTIONS = Number(args.p3ResumeActionCount ?? '1')
+      const RESUME_ACTION_KIND = args.p3ResumeActionKind ?? 'RECONCILE_CURRENT_TRUTH'
+      if (!Number.isInteger(RESUME_ACTIONS) || RESUME_ACTIONS < 0) {
+        throw new Error(`--p3-resume-action-count must be a non-negative integer, got ${args.p3ResumeActionCount}`)
+      }
 
       // Reads one KeyValue row by its label, so a status/revision assertion reads the
       // object's own row rather than a substring somewhere on the page.
@@ -1601,22 +1618,39 @@ async function main() {
       // --- a context pack: what was actually rendered, memory marked non-authoritative
       if (args.p3NoContext) {
         trace.record('a context pack shows what was rendered and marks memory non-authoritative',
-          null, 'BLOCKED: no context pack exists in this Core — P3\'s ContextBuilder needs its '
-            + 'pinned tokenizer (tiktoken + a fixed BPE asset SHA-256), which this environment does '
-            + 'not have; the route\'s shape is covered by the frozen contract and the simulated '
-            + 'fixture, and nothing was fabricated')
+          null, 'BLOCKED: this Core has no Context Pack to read. P3\'s ContextBuilder refused it — '
+            + 'its pinned tokenizer (`tiktoken` + a fixed BPE asset SHA-256) or its workspace scan '
+            + 'was unavailable — and the Core\'s own refusal is recorded in the Core matrix. The '
+            + 'route\'s shape is covered by the frozen contract and the simulated fixture, and '
+            + 'nothing was fabricated')
         await trace.screenshot(cdp, '22-context-pack-blocked')
       } else {
       await cdp.send('Page.navigate', { url: `${args.ui}/#/context/${PACK}` })
       await waitFor(cdp, `document.body.textContent.includes('实际渲染记录')`,
         { label: 'context pack' })
-      const pack = {
-        rendered: (await pageText()).includes('fixture task'),
-        memoryNote: (await pageText()).includes('memory 非权威'),
-        pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
-      }
+      const pack = await evaluate(cdp, `(() => {
+        // Read the rendered_content block itself, by its label. Asserting the marker somewhere in
+        // the page would pass even if the block never rendered, and the marker is a literal slice
+        // of what the Core itself says it rendered — so this fails if the page shows anything else.
+        const marker = ${JSON.stringify(PACK_MARKER)}
+        const block = [...document.querySelectorAll('.rawtext')].find((node) => {
+          const label = node.querySelector('.rawtext__label')
+          return label ? (label.textContent ?? '').includes('rendered_content') : false
+        })
+        const body = block ? block.querySelector('.rawtext__body') : null
+        const text = body ? (body.textContent ?? '') : ''
+        return {
+          blockRendered: Boolean(block),
+          rendered: text.includes(marker),
+          shown: text.slice(0, 120),
+          marker,
+          memoryNote: (document.body.textContent ?? '').includes('memory 非权威'),
+          pending: document.querySelector('[data-testid="dependency-pending"]') !== null,
+        }
+      })()`)
       trace.record('a context pack shows what was rendered and marks memory non-authoritative',
-        pack.rendered && pack.memoryNote && pack.pending === false, JSON.stringify(pack))
+        pack.blockRendered && pack.rendered && pack.memoryNote && pack.pending === false,
+        JSON.stringify(pack))
       await trace.screenshot(cdp, '22-context-pack')
       }
 
@@ -1629,19 +1663,35 @@ async function main() {
           const note = document.querySelector('[data-testid="resume-note"]')
           return note ? (note.textContent ?? '') : ''
         })()`)),
-        // P3 returns next_actions as objects; the fixture serves the real shape, so this
-        // asserts the action `kind` is on screen — not a string a fixture invented.
-        nextActions: (await evaluate(cdp, `(() => {
-          const node = document.querySelector('[data-testid="next-actions"]')
-          return node ? (node.textContent ?? '') : ''
-        })()`)),
+        // P3 returns next_actions as a list of objects. When it carries actions the view renders
+        // them as rows behind the "suggestion, not executed" framing; when the comparison needs no
+        // reconciliation P3 returns `[]` and the view renders the raw field instead. Both are real
+        // renderings of the Core's own payload, so the record reads *which* form is on screen and
+        // holds it to the count the Core returned: an action list for a Core that sent actions, the
+        // empty field for a Core that sent none. An action must never look like no action, and an
+        // empty list must not disappear.
+        nextActions: await evaluate(cdp, `(() => {
+          const list = document.querySelector('[data-testid="next-actions"]')
+          if (list) return { form: 'list', text: list.textContent ?? '' }
+          const block = [...document.querySelectorAll('.jsonblock')].find((node) =>
+            (node.textContent ?? '').includes('next_actions'))
+          return block ? { form: 'raw', text: block.textContent ?? '' } : { form: 'absent', text: '' }
+        })()`),
         pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
       }
+      const expected = {
+        form: RESUME_ACTIONS > 0 ? 'list' : 'raw', count: RESUME_ACTIONS, kind: RESUME_ACTION_KIND,
+      }
+      const nextOk = res.nextActions.form === expected.form &&
+        (RESUME_ACTIONS > 0
+          ? res.nextActions.text.includes('建议而非已执行') &&
+            res.nextActions.text.includes(RESUME_ACTION_KIND)
+          : res.nextActions.text.includes('next_actions') &&
+            res.nextActions.text.replace(/\s+/g, '').includes('[]'))
       trace.record('a resume is a comparison, and its note is historical and non-authoritative',
         res.historical.includes('historical') && res.historical.includes('authority = false') &&
-          res.nextActions.includes('RECONCILE_CURRENT_TRUTH') &&
-          res.nextActions.includes('建议而非已执行') && res.pending === false,
-        JSON.stringify(res))
+          nextOk && res.pending === false,
+        JSON.stringify({ ...res, expected }))
       await trace.screenshot(cdp, '23-resume')
 
       // --- each view shows the scope the frozen contract requires ----------------
