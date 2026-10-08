@@ -2040,6 +2040,19 @@ async function main() {
           { label: 'sign-in after 退出 (P6-03b2)' })
       }
       const pageText = () => evaluate(cdp, `document.body.textContent ?? ''`)
+      /**
+       * A same-origin Core read with the human token, from Node.
+       *
+       * The dashboard proxy never adds an Authorization header, so a read issued without one is
+       * a 401 — which is what the audit readback was doing: it asked for the command Event with
+       * no credential and reported "Core cannot read this back" for an Event Core had recorded.
+       */
+      const apiGet = async (path) => {
+        const response = await fetch(`http://127.0.0.1:${new URL(args.ui).port}${path}`, {
+          headers: { authorization: `Bearer ${token}` },
+        })
+        return response.json()
+      }
       const goto = async (hash, label, waitForExpression) => {
         await evaluate(cdp, `(() => {
           const next = '#/' + ${JSON.stringify(hash)}
@@ -2638,7 +2651,7 @@ async function main() {
               entries: writeEvidence.filter((entry) => entry.path === route.literal).length })
             continue
           }
-          const event = await httpJson(`${args.ui}/v1/events/${eventId}`, 'GET')
+          const event = await apiGet(`/v1/events/${eventId}`)
             .catch((error) => ({ __error: String(error.message ?? error) }))
           audit.push({
             route: route.literal,

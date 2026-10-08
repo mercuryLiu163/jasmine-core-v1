@@ -29,9 +29,15 @@ COMMIT="$(git -C "$ROOT" rev-parse HEAD)"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 OUT="$ROOT/validation-runs/p6/${STAMP}-p6-03b2-clickthrough"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/p6-03b2-gate.XXXXXX")"
-FIXTURE_PORT="${FIXTURE_PORT:-8918}"
-UI_PORT="${UI_PORT:-5181}"
-UI_OFF_PORT="${UI_OFF_PORT:-5182}"
+# Ports are chosen free at start-up unless the operator pins them. A fixed port is how the first
+# OFF run ended up talking to a stale dashboard from an earlier session that happened to hold
+# 5182 — it answered 401 for a token it had never been given, and the Gate blamed the product.
+free_port() {
+  "$PYTHON" -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()'
+}
+FIXTURE_PORT="${FIXTURE_PORT:-$(free_port)}"
+UI_PORT="${UI_PORT:-$(free_port)}"
+UI_OFF_PORT="${UI_OFF_PORT:-$(free_port)}"
 KEEP=0
 [ "${1:-}" = "--keep" ] && KEEP=1
 
@@ -128,6 +134,18 @@ P6_CORE_ORIGIN="http://127.0.0.1:${FIXTURE_PORT}" P6_ENABLE_P4_READS=1 \
 UI_OFF_PID=$!
 wait_for "http://127.0.0.1:${UI_PORT}/v1/health"
 wait_for "http://127.0.0.1:${UI_OFF_PORT}/v1/health"
+# `/v1/health` is public and answers 200 for any token, so a *stale* dashboard on the same port
+# would pass the wait. The host prints its own bundle root and Core origin; require that line,
+# so the Gate cannot run against a server it did not start.
+for pair in "${UI_PORT}:${UI_OFF_PORT}=writes on" "${UI_OFF_PORT}:${UI_PORT}=writes off"; do
+  port="${pair%%:*}"
+  log="$OUT/serve.stderr.txt"
+  [ "$port" = "$UI_OFF_PORT" ] && log="$OUT/serve-off.stderr.txt"
+  grep -q "p6 dashboard on http://127.0.0.1:${port}" "$log" || {
+    echo "the host on ${port} is not the one this Gate started (see ${log})" >&2
+    exit 1
+  }
+done
 
 # --- 4. the OFF run: default-closed ------------------------------------------------------------
 mkdir -p "$OUT/writes-off"
