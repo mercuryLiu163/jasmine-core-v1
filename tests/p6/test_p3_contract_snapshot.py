@@ -34,8 +34,24 @@ ALLOWLIST_PATH = ROOT / "web" / "server" / "core-paths.json"
 P3_REF = "p3-checkpoint-context-resume"
 
 
+#: The baseline the contract was derived against (main, schema 8).
+BASELINE_REF = "850fbecac516ca55e396dc13bf722a28b1dd7837"
+#: The module whose presence decides whether this Core can serve the P3 routes at all.
+DEPENDENCY_MODULE = "src/jasmine_core/continuity.py"
+
+
 def baseline_routes() -> list[tuple[str, re.Pattern[str]]]:
     return [(route.method, route.pattern) for route in ROUTES]
+
+
+def dependency_in_this_tree() -> bool:
+    return (ROOT / DEPENDENCY_MODULE).is_file()
+
+
+def pinned_baseline_has_dependency() -> bool:
+    result = subprocess.run(["git", "cat-file", "-e", f"{BASELINE_REF}:{DEPENDENCY_MODULE}"],
+                            cwd=ROOT, capture_output=True)
+    return result.returncode == 0
 
 
 def ref_exists(ref: str) -> bool:
@@ -162,9 +178,17 @@ class P3ContractSnapshot(unittest.TestCase):
 
 
 class BaselineDoesNotHaveP3Routes(unittest.TestCase):
-    """The dependency is missing, and that is checkable from Core's own route table."""
+    """The dependency's absence is a fact about the *pinned baseline*, not about any tree.
 
-    def test_baseline_core_serves_none_of_the_four_endpoints(self) -> None:
+    Asserting "**this** Core serves none of the four" was true only before P3 is merged; the
+    integration rehearsal recorded it as a false failure at the merged ref. The ref-relative form
+    holds in both states: with the continuity module present the Core must serve all four, and
+    without it, none.
+    """
+
+    def test_the_pinned_baseline_lacks_the_dependency_and_this_core_agrees_with_its_own_tree(self) -> None:
+        self.assertFalse(pinned_baseline_has_dependency(),
+                         f"{BASELINE_REF[:12]} must not contain {DEPENDENCY_MODULE}")
         routes = baseline_routes()
         patterns = [route["path_pattern"] for route in
                     json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))["read_routes"]]
@@ -178,13 +202,18 @@ class BaselineDoesNotHaveP3Routes(unittest.TestCase):
             "/v1/checkpoints/" + sample["ckp"],
             "/v1/resumes/" + sample["rms"],
         ]
-        for path in paths:
-            with self.subTest(path=path):
-                matching = [(method, pattern.pattern) for method, pattern in routes
-                            if pattern.fullmatch(path)]
-                self.assertEqual(matching, [],
-                                 f"{path} is served by this baseline; the P3 dependency "
-                                 f"would then not be missing and this test is stale")
+        served = [path for path in paths
+                  if any(pattern.fullmatch(path) for _, pattern in routes)]
+        if dependency_in_this_tree():
+            self.assertEqual(sorted(served), sorted(paths),
+                             "this tree contains the P3 modules, so its Core must serve all four")
+        else:
+            for path in paths:
+                with self.subTest(path=path):
+                    matching = [(method, pattern.pattern) for method, pattern in routes
+                                if pattern.fullmatch(path)]
+                    self.assertEqual(matching, [],
+                                     f"{path} is served by this baseline, which has no P3 module")
         # And the reverse direction: the snapshot's patterns are not vacuous, they would
         # match the paths above if a P3 Core were serving them.
         for pattern in patterns:

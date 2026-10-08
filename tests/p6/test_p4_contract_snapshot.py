@@ -49,8 +49,24 @@ READ_PATHS = (
 )
 
 
+#: The baseline the contract's `baseline` block describes (main, schema 8).
+BASELINE_REF = "850fbecac516ca55e396dc13bf722a28b1dd7837"
+#: The module whose presence decides whether this Core can serve the P4 routes at all.
+DEPENDENCY_MODULE = "src/jasmine_core/memory/api.py"
+
+
 def baseline_routes() -> list[tuple[str, re.Pattern[str]]]:
     return [(route.method, route.pattern) for route in ROUTES]
+
+
+def dependency_in_this_tree() -> bool:
+    return (ROOT / DEPENDENCY_MODULE).is_file()
+
+
+def pinned_baseline_has_dependency() -> bool:
+    result = subprocess.run(["git", "cat-file", "-e", f"{BASELINE_REF}:{DEPENDENCY_MODULE}"],
+                            cwd=ROOT, capture_output=True)
+    return result.returncode == 0
 
 
 class P4ContractSnapshot(unittest.TestCase):
@@ -135,17 +151,32 @@ class P4ContractSnapshot(unittest.TestCase):
 
 
 class BaselineDoesNotHaveP4Routes(unittest.TestCase):
-    def test_baseline_core_serves_none_of_the_seven_endpoints(self) -> None:
-        routes = baseline_routes()
+    """The dependency's absence is a fact about the *pinned baseline*, not about any tree.
+
+    This used to assert that **this** Core serves none of the seven. That was true of the
+    unmerged baseline and false the moment P4 is merged in — the integration rehearsal caught it
+    as a failure whose cause was the premise, not the product. The ref-relative form holds in
+    both states and asserts more: with the dependency module in this tree the Core must serve all
+    seven, and without it, none.
+    """
+
+    def test_the_pinned_baseline_lacks_the_dependency_and_this_core_agrees_with_its_own_tree(self) -> None:
         samples = ["/v1/memory/health", "/v1/memory/jobs", "/v1/memory/items",
                    "/v1/memory/traces", *READ_PATHS[2::2]]
-        for path in samples:
-            with self.subTest(path=path):
-                matching = [(method, pattern.pattern) for method, pattern in routes
-                            if pattern.fullmatch(path)]
-                self.assertEqual(matching, [],
-                                 f"{path} is served by this baseline; the P4 dependency would "
-                                 f"then not be missing and this test is stale")
+        # The baseline fact the snapshot records: main has no memory module at all.
+        self.assertFalse(pinned_baseline_has_dependency(),
+                         f"{BASELINE_REF[:12]} must not contain {DEPENDENCY_MODULE}; the "
+                         f"snapshot's `baseline.these_routes_exist: false` would be wrong")
+        routes = baseline_routes()
+        served = [path for path in samples
+                  if any(pattern.fullmatch(path) for _, pattern in routes)]
+        if dependency_in_this_tree():
+            self.assertEqual(sorted(served), sorted(samples),
+                             "this tree contains the P4 module, so its Core must serve all seven "
+                             "— a missing route here is a wiring bug, not a missing dependency")
+        else:
+            self.assertEqual(served, [],
+                             "this tree has no P4 module, so its Core must serve none of the seven")
 
     def test_pending_paths_are_not_in_the_live_read_allowlist(self) -> None:
         allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))

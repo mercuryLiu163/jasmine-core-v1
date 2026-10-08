@@ -262,7 +262,15 @@ What it found on the current tips (`p4-integration` `0c4f8f0`, `p6-01` `e570f6b`
   `test_baseline_core_serves_none_of_the_four_endpoints` (whose premise — "the baseline serves none
   of these routes" — inverts once the slices are in), and
   `test_conversation_event_filter_matches_the_core_enum` (the merged baseline's event enum has
-  values the P6 comparison did not know). None is a product defect, and none is fixed here.
+  values the P6 comparison did not know). None is a product defect.
+
+**Status of those three, updated.** All three were made ref-relative in the round after this
+rehearsal, and the rehearsal was re-run to prove it: the two route tests now assert the fact about
+the *pinned baseline* from Git and require the running Core to serve the routes **iff** the
+dependency module is in the tree (so they hold before and after integration, and assert more than
+before); the enum test keeps the "never name a type Core cannot emit" direction in full and measures
+completeness against the **pinned baseline's** enum read from Git, so a later baseline adding types
+is an improvement rather than a failure. The re-run's result is in the newer rehearsal bundle.
 
 A wording correction, recorded rather than silently amended: the commit that added the rehearsal
 said "12 appear only when merged", conflating failing *assertions* with unique tests. The precise

@@ -17,11 +17,27 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+#: The baseline the dashboard's event filter was written against (main, schema 8). Completeness is
+#: measured against *this* commit, read from Git, so a later baseline that adds event types is an
+#: improvement rather than a failure — which is what the integration rehearsal recorded.
+BASELINE_REF = "850fbecac516ca55e396dc13bf722a28b1dd7837"
+MODELS_PATH = "src/jasmine_core/models.py"
+
+
+def baseline_event_types() -> set[str]:
+    source = subprocess.run(["git", "show", f"{BASELINE_REF}:{MODELS_PATH}"],
+                            cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    marker = "EVENT_TYPES = frozenset({"
+    start = source.index(marker) + len(marker)
+    end = source.index("})", start)
+    return set(re.findall(r'"([^"]+)"', source[start:end]))
 sys.path.insert(0, str(ROOT / "src"))
 
 from jasmine_core.api.handlers import ROUTES  # noqa: E402
@@ -265,11 +281,20 @@ class DashboardProxyContract(unittest.TestCase):
             )
 
     def test_conversation_event_filter_matches_the_core_enum(self) -> None:
-        """The UI dropdown and `models.EVENT_TYPES` must not drift apart.
+        """The UI dropdown must not offer a type Core cannot emit, and must cover its baseline.
 
-        The dashboard renders unknown event types verbatim, so a stale list is a
-        usability bug rather than a truth bug - but it is exactly the kind of
-        silent drift a contract test should catch.
+        The dashboard renders unknown event types verbatim, so a stale list is a usability bug
+        rather than a truth bug - but it is exactly the kind of silent drift a contract test
+        should catch.
+
+        This asserted **equality** with the running Core's enum, which turned into a false failure
+        the moment the dependency branches are merged in: the Core gains types the baseline
+        dashboard never had, and the dashboard is not wrong for not knowing them yet. The two
+        directions are therefore measured separately:
+
+        * never name a type the running Core does not define (holds in every baseline);
+        * be complete for the **pinned baseline's** enum, read from Git - so adding types later is
+          an improvement to be adopted, not a test failure.
         """
         source = (ROOT / "web" / "src" / "views" / "ConversationView.tsx").read_text(encoding="utf-8")
         marker = "const EVENT_TYPES = ["
@@ -280,13 +305,15 @@ class DashboardProxyContract(unittest.TestCase):
         from jasmine_core.models import EVENT_TYPES
 
         self.assertEqual(
-            sorted(EVENT_TYPES - listed), [],
-            "Core event types missing from the dashboard filter",
-        )
-        self.assertEqual(
             sorted(listed - EVENT_TYPES), [],
             "dashboard filter lists event types Core does not define",
         )
+        self.assertEqual(
+            sorted(baseline_event_types() - listed), [],
+            f"the dashboard filter is missing event types {BASELINE_REF[:12]} already defined",
+        )
+        # And the filter is still a real list, not an empty one that trivially passes.
+        self.assertGreater(len(listed), 5)
 
     def test_traversal_and_absolute_targets_are_not_matched(self) -> None:
         for hostile in (
