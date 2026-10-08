@@ -1,12 +1,18 @@
 # P7-01 phase report — the minimal Validation read slice
 
-**Status: delivered and independently gated.** The phase-1 contract proposal was frozen after five
-independent reviews; the implementation was then reviewed three times and validated three times, each in a
-separate agent context. The **final candidate** is
+**Status: delivered and independently gated, including the operator's re-check.** The phase-1 contract
+proposal was frozen after five independent reviews; the implementation was then reviewed four times and
+validated four times, each in a separate agent context. A human operator independently re-checked the
+first delivered candidate and found four real defects in the read path; those are fixed and the fixes were
+re-reviewed and re-validated. The **delivered tip** is
 
 ```
-0ae80411824739b11485c61ed388d86093f2be7c
+477e17fd71161b31e1920b7306dc70760ddd50b4
 ```
+
+whose implementation behaviour is the one reviewed and validated at
+`264163b9406bbb0921ff0edb8692f4d9c7d6dcc8` (code) and `f0aea886186a6c1e4704eceb2552c74845f333b2`
+(code plus contract); the tip adds documentation-only corrections.
 
 on branch `p7-01-validation-read` in worktree `_worktrees/p7-01`.
 
@@ -14,8 +20,9 @@ on branch `p7-01-validation-read` in worktree `_worktrees/p7-01`.
 | --- | --- | --- | --- |
 | Proposal author, implementer, coordinator | this session | `deepseek-flash` | — |
 | Proposal reviews (5 rounds) | fresh context each round | `deepseek-flash` | final round **APPROVE (freeze as-is)** |
-| Implementation reviews (3 rounds) | fresh context each round | `deepseek-flash` | final round **APPROVE** |
-| Acceptance validations (3 rounds) | fresh context each round | `deepseek-flash` | final round **904/904 checks**, criteria 2–6 PASS, criterion 1 BLOCKED |
+| Implementation reviews (4 rounds) | fresh context each round | `deepseek-flash` | final round **APPROVE** |
+| Acceptance validations (4 rounds) | fresh context each round | `deepseek-flash` | final round **904/904 checks** plus 100/100 defect probes, criteria 2–6 PASS, criterion 1 BLOCKED |
+| Independent re-check by the operator (human) | the operator | — | four defects found (two P1, two P2); fixed, re-reviewed and re-validated |
 
 `gpt-6.1-sol` was unreachable in this deployment, so every independent role ran on `deepseek-flash`; that
 is recorded as a limitation, not hidden.
@@ -61,7 +68,11 @@ Deliverables, all bound to the final candidate:
 | `f0be738` | implementation review F1–F9 |
 | `a252097` | contract re-pinned |
 | `46a33d7` | re-review N3 (non-regular run-shaped entries) and N5 |
-| `0ae8041` | **final candidate** — contract re-pinned to `46a33d7` |
+| `0ae8041` | first delivered candidate — contract re-pinned to `46a33d7` |
+| `264163b` | the operator's four defects: one manifest read per request, one rooted bounded read path, root re-validated per use, masked form measured |
+| `f0aea88` | contract re-pinned; **behaviourally reviewed and validated** |
+| `e79c117` | documentation corrections from the fix review (A1, A2, A5) |
+| `477e17f` | **delivered tip** — contract re-pinned after the documentation fix |
 
 A contract cannot record the SHA of the commit that contains it, so the snapshot pins the commit it was
 *derived from* and `--check` re-derives at that pin. This is the same stamp-lag arrangement the P6
@@ -71,7 +82,12 @@ contracts use.
 
 Validated by an independent agent over real loopback HTTP against a real migrated database, over the nine
 real records plus validator-built fixture roots, in both `single_user` and `acl` modes: **904/904 checks,
-0 failed, 0 `[FAIL]` lines, 170 timed requests, max 12.5 ms, nothing hung.**
+0 failed, 0 `[FAIL]` lines, and, across the criterion and defect runs, 365 requests of which every one
+returned a status — 0 timeouts, 0 transport retries, maximum 1.72 s (the deliberate masked-expansion
+probe).** The four defect classes were separately probed **100/100** with the filesystem changing under
+the running server, and the same probes were run as a **negative control against the superseded
+`0ae8041`**, where they detected all four (12 failed checks, including a request blocked for 5 s and a
+10,200,458-byte masked body returned with 200) — so the probes have teeth.
 
 | # | Criterion | Verdict | Checks |
 | --- | --- | --- | --- |
@@ -128,6 +144,25 @@ the final candidate existed:
   **FIFO named `run-*.json` that made every request hang** (§2 says only regular files are considered).
   Each fix landed with a regression test; the new tests were shown to fail against the unfixed reader.
 
+## 4b. The operator's independent re-check, and the four defects it found
+
+The first delivered candidate (`0ae8041`) was re-checked by the operator, who reproduced four defects in
+the read path. All four were real, none was introduced by the round that preceded them, and each was
+reproduced here before being fixed. Each now has a regression test that fails against the pre-fix reader
+(6 failures + 2 errors) and passes against the fix.
+
+| # | Defect | Effect | Fix |
+| --- | --- | --- | --- |
+| P1 | The artifact routes re-read the manifest **after** the grant check. | A manifest swapped between the two reads decided the permissions while a different manifest decided the bytes. Measured before: `_load_manifest` ran **twice** per request; the reviewer's ACL swap-injection served one manifest's bytes under another manifest's permission. | `_locate` returns the manifest it read; the run-detail, manifest and both artifact routes use that one object. Measured after: **one** read per request on all four routes. |
+| P1 | The record and manifest reads checked size with `stat` and then read uncapped. | A FIFO swapped in after the check **blocked the request forever**; a file that grew past the cap was **read whole**. Measured before: `_classify` on a FIFO never returned; a 16 MiB+5 record was read with the cap at 16 MiB. | One rooted read path (`_open_regular_under` + `_read_capped`): root re-opened `O_DIRECTORY\|O_NOFOLLOW` per call, every component descriptor-relative with `O_NOFOLLOW`, `O_NONBLOCK` so the `fstat` `S_ISREG` test refuses a FIFO instead of opening it, and the cap enforced **inside** the read loop. `_read_artifact` was refactored onto the same helpers, so there is now one read path for records, manifests and artifacts. |
+| P2 | The resolved root was **cached**, so the `O_NOFOLLOW` validation ran once. | A root replaced by a symlink after the first request was followed and an outside directory was served. Measured before: the next request returned 200 and served the outside record. | The cache is gone; the root is re-validated on every use, and every read re-opens it with `O_NOFOLLOW`, so content cannot be served through a root that is currently a symlink. Measured after: `503 validation_not_configured`, reason `symlinked_root`, on the list and the detail route. |
+| P2 | The masked output was never measured against the cap. | `redact_text` **expands** content (`token=x` → `token=[REDACTED]`), so a raw artifact under the cap masked into a body over it and was returned with 200. Measured before: 144 raw bytes → 306 masked bytes served under a 200-byte cap. | The masked bytes are measured and a body over `MAX_ARTIFACT_BYTES` is refused `413 payload_too_large` with `details.limit` and `details.original_bytes`. |
+
+ADR 0015 §5.4 records the four invariants. The independent fix review reproduced every one of the four
+against a throwaway clone of `0ae8041` (including a FIFO that hung at its 10 s timeout and an ACL
+swap-injection that served ungranted bytes) and confirmed them closed, and the independent fix validation
+did the same end to end with the filesystem changing under the running server.
+
 ## 5. Advisory follow-ups (not defects in this slice)
 
 Recorded so they are not lost; none blocks the six criteria.
@@ -140,6 +175,9 @@ Recorded so they are not lost; none blocks the six criteria.
 | A1 | `Path.is_file()` swallows `OSError`, so a stat failure is labelled `not_regular_file` rather than `corrupt`. | Fail-closed and cosmetic; a follow-up could distinguish the two reasons. |
 | A2 | The regular-file rule is a check, not a lock: a concurrent swap of a regular file for a FIFO could still block one request. | Pre-existing and optional hardening (`O_NONBLOCK` on the record open). |
 | A3 | ADR 0015 §5.3's heading says "two deliberate over-rejections" while it lists three bullets (the third is a spec-conformant rule, not an over-rejection). | Wording only. |
+| A7 | `_open_regular_under` can return `invalid_path` for a declared artifact path, which now maps to `missing` (404) where the pre-fix code returned `unreadable` (503). | Unreachable through all five routes, because `_classify_path` rejects those paths when the manifest loads; noted so a future caller does not depend on the old mapping. |
+| A8 | `_Record.root` still defaults to `None`, so a hand-built record would raise `TypeError` in the artifact read. | Every route record is built by `_classify`, which sets it; making the field required would keep the invariant local. |
+| A9 | The committed test pins the in-loop cap on a pre-grown buffer; the distinct "grew between the size check and the read" case is covered only by the reviewer's harness. | Optionally add a committed test that appends after the `fstat`. |
 
 ## 6. Boundaries honoured
 

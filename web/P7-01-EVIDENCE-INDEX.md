@@ -43,7 +43,8 @@ synthetic tree before any code existed, with their raw output and a re-run recip
 | --- | --- | --- |
 | `findings.md` | `1f7b0af` | APPROVE WITH NAMED MANDATORY CHANGES (F1 mandatory; F2–F9) |
 | `RE-REVIEW-findings.md` | `a252097` | **APPROVE**; five non-blocking advisories N1–N5 |
-| `FINAL-REVIEW-findings.md` | `0ae8041` | **APPROVE** — the final candidate |
+| `FINAL-REVIEW-findings.md` | `0ae8041` | **APPROVE** |
+| `FIX-REVIEW-findings.md` | `f0aea88` | **APPROVE** — the four operator-reported defects reproduced on `0ae8041` and confirmed closed; the behavioural candidate |
 
 ## 5. Acceptance validations (`validation-quarantine/VALIDATE-p7-01/`)
 
@@ -51,7 +52,8 @@ synthetic tree before any code existed, with their raw output and a re-run recip
 | --- | --- | --- |
 | `findings.md` | `1f7b0af` | criteria 2–6 PASS (760 checks), criterion 1 BLOCKED |
 | `RE-VALIDATION-findings.md` | `a252097` | criteria 2–6 PASS (879 checks), criterion 1 BLOCKED |
-| `FINAL-VALIDATION-findings.md` | `0ae8041` | **criteria 2–6 PASS (904/904 checks, 0 failed), criterion 1 BLOCKED** |
+| `FINAL-VALIDATION-findings.md` | `0ae8041` | criteria 2–6 PASS (904/904 checks), criterion 1 BLOCKED |
+| `FIX-VALIDATION-findings.md` | `f0aea88` | **criteria 2–6 PASS (904/904 checks) plus 100/100 defect probes with 365 timed requests and 0 hangs; negative controls against `0ae8041` detected all four defect classes** — the behavioural candidate |
 
 The validator's own harness and per-criterion scripts, with all raw output, are retained beside the
 reports:
@@ -61,17 +63,21 @@ reports:
 | `harness.py`, `c1_fail.py` … `c6_values.py`, `extra_probes.py`, `analysis_real_records.py` | the six criterion scripts and the supplementary probes |
 | `evidence/` (68 files) | raw output for the first validation round |
 | `evidence-revalidation/` (87 files) | raw output for the second round |
-| `evidence-final/` (99 files) | raw output for the final round — the evidence behind the 904/904 result |
+| `evidence-final/` (99 files) | raw output for the final round |
+| `evidence-fix/` | raw output for the fix round: the six criteria, the four defect classes under a changing filesystem, the negative controls against `0ae8041`, and per-request timings |
 
 ## 6. How to re-check the delivered candidate
 
 ```sh
 cd "_worktrees/p7-01"
-git rev-parse HEAD                                   # 0ae80411824739b11485c61ed388d86093f2be7c
-python3.13 scripts/p7/p7_contract.py --check         # matches 46a33d78…   (exit 0; exit 2 if it cannot look)
+git rev-parse HEAD                                   # 477e17fd71161b31e1920b7306dc70760ddd50b4
+python3.13 scripts/p7/p7_contract.py --check         # matches e79c1172…   (exit 0; exit 2 if it cannot look)
 PYTHONPATH="src:tests" python3.13 -m unittest discover -s tests -t tests -p "test_validation_read.py"
 PYTHON=python3.13 ./scripts/run-tests.sh             # full suite; only the pre-existing P4 failures
 ```
+
+The four defects the operator's re-check found are described in the phase report §4b, with the
+before-and-after measurements and the regression tests that pin each fix.
 
 The three real-record tests read the operator's gitignored tree; point `P7_REAL_RUNS_ROOT` at a tree of
 real records elsewhere, or they skip with a message rather than pretending to have run.
