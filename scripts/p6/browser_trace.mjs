@@ -2183,7 +2183,7 @@ async function main() {
         const pinEvidence = await evidenceFor('/pin')
         const pinPayload = assertPayload('/pin', pinEvidence?.requestBody ?? null, pinRoute)
         const pinReadback = {
-          block: await evaluate(cdp, `document.querySelector('[data-write-readback]') !== null`),
+          block: await evaluate(cdp, `document.querySelector('[data-testid="write-readback"]') !== null`),
           revision: (await pageText()).includes(`r${expectedRevision}`),
           commandEvent: (await pageText()).includes('command Event'),
           readsAfter: requests.filter(
@@ -2307,16 +2307,21 @@ async function main() {
         const beforeNew = writeRequests('/retry').length
         await clickSubmit('Memory retry (memory:manage)')
         await waitForPost('/retry', beforeNew + 1)
+        await waitForWriteResult('Memory retry (memory:manage)', '已提交')
         const thirdRetry = await evidenceFor('/retry')
+        // The replay key is per *intent* and both halves are load-bearing: after a success the
+        // next command is a new one and gets a new key, while a refused command is unresolved,
+        // so its key is kept — that is what stops a corrected retry looking like a second command.
+        const refusalKey = invariantRefusals[invariantRefusals.length - 1]?.requestEventId ?? null
         trace.record(
-          'retry: a further retry after a refusal carries a new event_id (a new command, not a replay of the refused one)',
+          'retry: the replay key is new after a success and kept after a refusal (one key per intent)',
           thirdRetry?.status === 200 &&
-            thirdRetry?.requestBody?.event_id !== retryEvidence?.requestBody?.event_id &&
-            !invariantRefusals.some((entry) =>
-              entry.requestEventId === thirdRetry?.requestBody?.event_id),
+            thirdRetry?.requestBody?.event_id === refusalKey &&
+            thirdRetry?.requestBody?.event_id !== retryEvidence?.requestBody?.event_id,
           JSON.stringify({ status: thirdRetry?.status,
-            newEventId: thirdRetry?.requestBody?.event_id,
-            firstEventId: retryEvidence?.requestBody?.event_id }))
+            keptAfterRefusal: thirdRetry?.requestBody?.event_id === refusalKey,
+            newAfterSuccess: thirdRetry?.requestBody?.event_id !== retryEvidence?.requestBody?.event_id,
+            refusalKeys: invariantRefusals.map((entry) => entry.requestEventId) }))
       }
 
       // --- default-closed: with the switch off the proxy refuses and names the switch -----
@@ -2470,12 +2475,18 @@ async function main() {
         await clickSubmit('Memory 生命周期写入 (memory:manage)')
         await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '结果未知')
         const dropped = await evidenceFor('/pin')
+        // The whole panel text: slicing the first 400 characters cut it off before the state
+        // block, so a page that did show the unknown state was recorded as not showing it.
         const keyAfterDrop = await evaluate(cdp, `(() => {
           const panel = document.querySelector('[data-write-panel="Memory 生命周期写入 (memory:manage)"]')
-          return panel ? (panel.textContent ?? '').slice(0, 400) : ''
+          return panel ? (panel.textContent ?? '') : ''
         })()`)
         await clickSubmit('Memory 生命周期写入 (memory:manage)')
-        await waitForWriteResult('Memory 生命周期写入 (memory:manage)', 'replayed')
+        // Not the bare word `replayed`: the panel's own key note contains it, so waiting for it
+        // returned immediately and the response body was read before it had arrived. Only a
+        // replayed 200 renders this headline.
+        await waitForWriteResult('Memory 生命周期写入 (memory:manage)',
+          'replayed: Core 返回了原命令结果')
         const replayEvidence = await evidenceFor('/pin')
         const afterReplay = await simState()
         const replayCheck = {
@@ -2616,9 +2627,17 @@ async function main() {
         const audit = []
         for (const route of ROUTES) {
           if (route.is_generator) continue
-          const evidence = writeEvidence.filter((entry) => entry.path === route.literal).pop()
+          // A replay's response body can be unavailable over CDP; the audit wants an entry that
+          // carried an event id, and says how many POSTs it had to choose from when none did.
+          const evidence = writeEvidence
+            .filter((entry) => entry.path === route.literal && entry.responseBody?.event?.event_id)
+            .pop()
           const eventId = evidence?.responseBody?.event?.event_id ?? null
-          if (!eventId) { audit.push({ route: route.literal, eventId: null }); continue }
+          if (!eventId) {
+            audit.push({ route: route.literal, eventId: null,
+              entries: writeEvidence.filter((entry) => entry.path === route.literal).length })
+            continue
+          }
           const event = await httpJson(`${args.ui}/v1/events/${eventId}`, 'GET')
             .catch((error) => ({ __error: String(error.message ?? error) }))
           audit.push({

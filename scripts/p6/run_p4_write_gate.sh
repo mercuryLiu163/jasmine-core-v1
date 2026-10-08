@@ -35,6 +35,11 @@ UI_OFF_PORT="${UI_OFF_PORT:-5182}"
 KEEP=0
 [ "${1:-}" = "--keep" ] && KEEP=1
 
+# The agent token deliberately carries `memory:manage` too. P4's API layer checks the *scope*
+# before the handler checks the *actor kind*, so an agent key without the scope would be refused
+# with `forbidden_scope` and the actor-kind rule would never be observable. Real P4 would not
+# issue an agent a manage scope; the fixture's actor kind is a scope stand-in, and the bundle
+# README says so.
 HUMAN="p6b2-human-$(openssl rand -hex 12)"
 AGENT="p6b2-agent-$(openssl rand -hex 12)"
 READONLY="p6b2-readonly-$(openssl rand -hex 12)"
@@ -96,7 +101,7 @@ start_fixture() { # log-suffix
   "$PYTHON" "$WORK/scripts/p6/p4_write_fixture.py" \
     --port "$FIXTURE_PORT" \
     --token "$HUMAN" --scopes "objects:read,memory:read,memory:manage,memory:reflect" \
-    --token "$AGENT" --scopes "objects:read,memory:read,memory:reflect,actor:agent" \
+    --token "$AGENT" --scopes "objects:read,memory:read,memory:manage,memory:reflect,actor:agent" \
     --token "$READONLY" --scopes "objects:read,memory:read" \
     >> "$OUT/fixture.stdout.txt" 2>> "$OUT/fixture.stderr.txt" &
   FIXTURE_PID=$!

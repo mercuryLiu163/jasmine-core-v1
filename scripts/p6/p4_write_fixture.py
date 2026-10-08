@@ -600,6 +600,20 @@ class Handler(base.Handler):
         if path.startswith(CONTROL_PREFIX):
             self._control("GET", path, query)
             return
+        # The dashboard's audit readback reads the command Event back through the *read* surface
+        # rather than trusting the write response. The read fixture has no events route (its Gate
+        # never needed one), so the write fixture serves the Events it recorded; a real Core would
+        # answer this from the EventStore.
+        event = re.fullmatch(r"/v1/events/([^/]+)", path)
+        if event is not None:
+            if not self._require(self._scopes(), "objects:read"):
+                return
+            ident = event.group(1)
+            if not base.ID_RE.fullmatch(ident):
+                self._error(400, "invalid_request", "invalid event_id", field="event_id")
+                return
+            self._read_event(ident)
+            return
         item = re.fullmatch(r"/v1/memory/items/([^/]+)", path)
         if item is not None:
             self._read_item(item.group(1))
@@ -610,6 +624,18 @@ class Handler(base.Handler):
             return
         # Every other read is the read fixture's, unchanged.
         super().do_GET()
+
+    def _read_event(self, ident: str) -> None:
+        """The command Event the fixture recorded, by id.
+
+        It is the same dict the write response carried, kept rather than rebuilt, so "the audit
+        knows this command" and "the response said so" cannot drift apart.
+        """
+        record = self.state["events"].get(ident)
+        if record is None:
+            self._error(404, "not_found", f"event {ident} not found")
+            return
+        self._send(200, {"event": record["event"]})
 
     # -- fixture-only controls (no token, no contract, no product surface) -------
     def _control(self, method: str, path: str, query: dict[str, list[str]]) -> None:

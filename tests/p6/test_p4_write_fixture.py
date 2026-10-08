@@ -195,7 +195,13 @@ class ContractDriven(unittest.TestCase):
                 self.assertFalse(any(route["pattern"].fullmatch(path) for route in routes))
 
 
-class OverHttp(unittest.TestCase):
+class HttpHarness(unittest.TestCase):
+    """A live fixture on an ephemeral port, with a fresh state per test.
+
+    Split out of `OverHttp` so the audit-readback class can use the same harness
+    without inheriting — and therefore re-running — every one of its tests.
+    """
+
     @classmethod
     def setUpClass(cls) -> None:
         fixture.Handler.contract = READ_CONTRACT
@@ -228,6 +234,8 @@ class OverHttp(unittest.TestCase):
 
     def post(self, path: str, body: dict | None = None, token: str | None = "full"):
         return call(self.port, path, token, method="POST", body=body)
+
+class OverHttp(HttpHarness):
 
     # -- 1. authentication ------------------------------------------------------
     def test_no_token_is_401_unauthenticated_on_every_write(self) -> None:
@@ -879,6 +887,51 @@ class OverHttp(unittest.TestCase):
                                        {"project_id": fixture.PROJECT, "query": "hi"})
         self.assertEqual(status, 200)
         self.assertEqual(headers.get("X-P6-Fixture"), fixture.FIXTURE_HEADER)
+
+
+class TheCommandEventCanBeReadBack(HttpHarness):
+    """`GET /v1/events/{evt}` — the audit readback the dashboard performs.
+
+    The write response carries the command Event, but a client that trusts only its own
+    response has not checked the audit log. The Gate re-reads the Event by id through the read
+    surface, so the fixture has to serve it; the read fixture has no events route because its
+    Gate never needed one.
+    """
+
+    def test_a_recorded_command_event_is_served_by_id(self) -> None:
+        status, written, _ = self.post(f"/v1/memory/items/{fixture.ITEM}/pin",
+                                       allowed_body(f"/v1/memory/items/{fixture.ITEM}/pin"))
+        self.assertEqual(status, 200, written)
+        event_id = written["event"]["event_id"]
+        status, read, headers = call(self.port, f"/v1/events/{event_id}")
+        self.assertEqual(status, 200, read)
+        self.assertEqual(read["event"]["event_id"], event_id)
+        self.assertEqual(read["event"], written["event"],
+                         "the audit read must be the same record the response carried")
+        self.assertEqual(headers.get("X-P6-Fixture"), fixture.FIXTURE_HEADER)
+
+    def test_a_replayed_command_is_readable_under_the_same_id(self) -> None:
+        path = f"/v1/memory/items/{fixture.ITEM}/pin"
+        body = allowed_body(path)
+        first = self.post(path, body)[1]
+        replay = self.post(path, body)[1]
+        self.assertTrue(replay["replayed"])
+        status, read, _ = call(self.port, f"/v1/events/{body['event_id']}")
+        self.assertEqual(status, 200)
+        self.assertEqual(read["event"], first["event"])
+
+    def test_an_unknown_event_is_404_and_a_malformed_one_is_400(self) -> None:
+        status, body, _ = call(self.port, f"/v1/events/evt_{'0' * 26}")
+        self.assertEqual(status, 404, body)
+        self.assertEqual(body["error"]["code"], "not_found")
+        status, body, _ = call(self.port, "/v1/events/not-an-id")
+        self.assertEqual(status, 400, body)
+        self.assertEqual(body["error"]["details"]["field"], "event_id")
+
+    def test_the_events_route_needs_a_token(self) -> None:
+        # Same rule as every other read: the proxy forwards it, Core authorises it.
+        status, body, _ = call(self.port, f"/v1/events/evt_{'0' * 26}", token=None)
+        self.assertEqual(status, 401, body)
 
 
 if __name__ == "__main__":
