@@ -265,7 +265,48 @@ def main(argv: list[str] | None = None) -> int:
                and all(value == "failed" for value in reflect_state["bank_statuses"]),
                reflect_state)
 
-        # --- C5/C6: recovery in the same environment, then read again -----------------------------
+        # --- the dashboard first: the outage has to be read in a browser *before* the engine
+        # returns, and the recovery after it, so the browser pass runs twice with the restore
+        # between the two phases ------------------------------------------------------------------
+        web_work.mkdir(parents=True, exist_ok=True)
+        archive = subprocess.run(["git", "-C", str(repo), "archive", args.dashboard_ref],
+                                 check=True, capture_output=True)
+        subprocess.run(["tar", "-x", "-C", str(web_work)], input=archive.stdout, check=True)
+        os.symlink(args.node_modules, web_work / "web" / "node_modules")
+        subprocess.run(["npx", "vite", "build"], cwd=web_work / "web", check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        ui_env = dict(os.environ, P6_CORE_ORIGIN=origin, P6_ENABLE_P4_READS="1")
+        serve_log = (out / "serve.stderr.txt").open("w")
+        procs.append(subprocess.Popen(
+            ["node", str(web_work / "web" / "server" / "serve.mjs"),
+             "--root", str(web_work / "web" / "dist"), "--port", str(ui_port)],
+            env=ui_env, stdout=subprocess.DEVNULL, stderr=serve_log))
+        if not wait_for(f"http://127.0.0.1:{ui_port}/v1/health"):
+            log("the dashboard host never answered")
+            return 1
+        events = direct("GET", f"/v1/events?task_id={seeded['task_id']}&limit=1",
+                        "human_manage", token)[1]
+        event_id = None
+        if isinstance(events, dict) and isinstance(events.get("events"), list) and events["events"]:
+            event_id = events["events"][0].get("event_id")
+        expect = {"project_id": seeded["project_id"], "task_id": seeded["task_id"],
+                  "rule_id": seeded["rule_id"], "evidence_id": seeded["evidence_id"],
+                  "event_id": event_id}
+        (out / "expect.json").write_text(json.dumps(expect, indent=2), encoding="utf-8")
+
+        def browser_phase(phase: str) -> subprocess.CompletedProcess:
+            return subprocess.run(
+                ["node", str(REPO_ROOT / "scripts" / "p6" / "t05_degraded_trace.mjs"),
+                 "--ui", f"http://127.0.0.1:{ui_port}", "--tokens", str(env_dir / "tokens.json"),
+                 "--descriptor", str(env_dir / "descriptor.json"),
+                 "--expect", str(out / "expect.json"), "--phase", phase, "--out", str(out)],
+                stdout=(out / f"trace-{phase}.stdout.txt").open("w"),
+                stderr=subprocess.STDOUT, text=True)
+
+        outage_trace = browser_phase("outage")
+        log(f"browser outage pass exit={outage_trace.returncode}")
+
+        # --- C5/C6/C7: recovery in the same environment, then read again -------------------------
         if not control_url:
             for ident, check in (("C5.engine_restore", "the engine returns on the same address"),
                                  ("C6.recovery_health", "Memory reports recovery after the restore"),
@@ -331,45 +372,28 @@ def main(argv: list[str] | None = None) -> int:
                    "a degraded and a recovered Memory call changed no Task revision or Rule",
                    before == after, {"before": before, "after": after})
 
-        # --- the browser pass -------------------------------------------------------------------
-        web_work.mkdir(parents=True, exist_ok=True)
-        archive = subprocess.run(["git", "-C", str(repo), "archive", args.dashboard_ref],
-                                 check=True, capture_output=True)
-        subprocess.run(["tar", "-x", "-C", str(web_work)], input=archive.stdout, check=True)
-        os.symlink(args.node_modules, web_work / "web" / "node_modules")
-        subprocess.run(["npx", "vite", "build"], cwd=web_work / "web", check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        ui_env = dict(os.environ, P6_CORE_ORIGIN=origin, P6_ENABLE_P4_READS="1")
-        serve_log = (out / "serve.stderr.txt").open("w")
-        procs.append(subprocess.Popen(
-            ["node", str(web_work / "web" / "server" / "serve.mjs"),
-             "--root", str(web_work / "web" / "dist"), "--port", str(ui_port)],
-            env=ui_env, stdout=subprocess.DEVNULL, stderr=serve_log))
-        if not wait_for(f"http://127.0.0.1:{ui_port}/v1/health"):
-            log("the dashboard host never answered")
-            return 1
-        events = direct("GET", f"/v1/events?task_id={seeded['task_id']}&limit=1",
-                        "human_manage", token)[1]
-        event_id = None
-        if isinstance(events, dict) and isinstance(events.get("events"), list) and events["events"]:
-            event_id = events["events"][0].get("event_id")
-        expect = {"project_id": seeded["project_id"], "task_id": seeded["task_id"],
-                  "rule_id": seeded["rule_id"], "evidence_id": seeded["evidence_id"],
-                  "event_id": event_id}
-        (out / "expect.json").write_text(json.dumps(expect, indent=2), encoding="utf-8")
-        control_restore = "restored" if control_url else "not-available"
-        trace = subprocess.run(
-            ["node", str(REPO_ROOT / "scripts" / "p6" / "t05_degraded_trace.mjs"),
-             "--ui", f"http://127.0.0.1:{ui_port}", "--tokens", str(env_dir / "tokens.json"),
-             "--descriptor", str(env_dir / "descriptor.json"), "--expect", str(out / "expect.json"),
-             "--control-state", control_restore, "--out", str(out)],
-            stdout=(out / "trace.stdout.txt").open("w"), stderr=subprocess.STDOUT, text=True)
-        log(f"browser pass exit={trace.returncode}")
+        if control_url:
+            recovered_trace = browser_phase("recovered")
+            log(f"browser recovery pass exit={recovered_trace.returncode}")
+        else:
+            recovered_trace = None
+            entries.append({"id": "UI.recovery_phase",
+                            "check": "the browser reads the dashboard after the engine returns",
+                            "mode": MODE, "ok": None, "detail": {"engine_control_url": None},
+                            "note": "BLOCKED: no engine control channel, so the recovery was not "
+                                    "performed and the panel was not read as recovered"})
 
         ui_records = []
-        if (out / "click-trace.jsonl").is_file():
-            ui_records = [json.loads(line) for line in
-                          (out / "click-trace.jsonl").read_text().splitlines() if line]
+        for phase in ("outage", "recovered"):
+            phase_file = out / f"click-trace-{phase}.jsonl"
+            if phase_file.is_file():
+                for line in phase_file.read_text().splitlines():
+                    if line:
+                        record_row = json.loads(line)
+                        record_row["phase"] = phase
+                        ui_records.append(record_row)
+        (out / "click-trace.jsonl").write_text(
+            "\n".join(json.dumps(row) for row in ui_records) + "\n", encoding="utf-8")
         blocked = [e for e in entries if e["ok"] is None] + \
                   [r for r in ui_records if r.get("ok") is None]
         failed = [e for e in entries if e["ok"] is False] + \
@@ -387,6 +411,9 @@ def main(argv: list[str] | None = None) -> int:
             "ui_records": ui_records,
             "calls": calls,
             "expect": expect,
+            "browser_phases": {"outage_exit": outage_trace.returncode,
+                               "recovered_exit": (recovered_trace.returncode
+                                                  if recovered_trace is not None else None)},
             "summary": {
                 "core_checks": len(entries), "ui_records": len(ui_records),
                 "passed": len(entries) + len(ui_records) - len(blocked) - len(failed),
@@ -403,9 +430,11 @@ def main(argv: list[str] | None = None) -> int:
                 raise SystemExit(f"REFUSING TO FREEZE: token {token_name} appears in {found}")
         log(f"{evidence['summary']['passed']} passed, {evidence['summary']['failed']} failed, "
             f"{evidence['summary']['blocked']} blocked")
-        if not failed and trace.returncode == 0 and not args.no_freeze:
+        trace_failed = (outage_trace.returncode != 0
+                        or (recovered_trace is not None and recovered_trace.returncode != 0))
+        if not failed and not trace_failed and not args.no_freeze:
             freeze(out, ref, evidence)
-        return 1 if (failed or trace.returncode != 0) else 0
+        return 1 if (failed or trace_failed) else 0
     finally:
         for proc in procs:
             proc.terminate()

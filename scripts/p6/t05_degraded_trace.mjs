@@ -21,6 +21,11 @@
  * * the P1 views must show no dependency-pending panel and no alert that names a dependency failure
  *   (the Rules page also renders the audited write forms, whose empty-field hints are `role=alert`;
  *   every alert is recorded verbatim so nothing is filtered away silently).
+ *
+ * The pass runs **twice**, in two phases, because the runner restarts the engine between them: the
+ * outage can only be read while it is down and the recovery only afterwards. A single pass after the
+ * restore could never show the outage (the first version did that, and its outage record read the
+ * recovered `idle` / `reachable: true`).
  */
 
 import { spawn } from 'node:child_process'
@@ -41,7 +46,8 @@ import {
 } from './browser_trace.mjs'
 
 function parseArgs(argv) {
-  const args = { width: 1440, height: 1000, headful: false, controlState: 'not-available' }
+  const args = { width: 1440, height: 1000, headful: false, controlState: 'not-available',
+                 phase: 'outage' }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]
     const next = argv[index + 1]
@@ -51,6 +57,7 @@ function parseArgs(argv) {
       case '--descriptor': args.descriptor = next; index += 1; break
       case '--expect': args.expect = next; index += 1; break
       case '--control-state': args.controlState = next; index += 1; break
+      case '--phase': args.phase = next; index += 1; break
       case '--out': args.out = next; index += 1; break
       case '--headful': args.headful = true; index += 1; break
       default: throw new Error(`unknown argument ${flag}`)
@@ -58,6 +65,9 @@ function parseArgs(argv) {
   }
   for (const required of ['ui', 'tokens', 'descriptor', 'expect', 'out']) {
     if (!args[required]) throw new Error(`--${required} is required`)
+  }
+  if (!['outage', 'recovered'].includes(args.phase)) {
+    throw new Error(`--phase must be outage or recovered, got ${args.phase}`)
   }
   return args
 }
@@ -178,6 +188,11 @@ async function main() {
     await signIn(token)
 
     // === OUTAGE PHASE =========================================================================
+    // Two phases, not one: the runner restarts the engine between them, so the outage must be read
+    // while it is down and the recovery after it is back. A single pass after the restore could only
+    // ever see the recovered state (the first version did exactly that and its outage record read
+    // `idle` / `reachable: true`).
+    if (args.phase === 'outage') {
     const markHealth = await goto('memory/health', 'memory health',
       `[...document.querySelectorAll('dl.kv dt')].some((n) => (n.textContent ?? '').trim() === 'status')`)
     const healthFresh = await waitForFresh('/v1/memory/health', markHealth, 'memory health')
@@ -202,7 +217,7 @@ async function main() {
         health.pending === false && health.alerts.length === 0 &&
         health.fresh.includes(200),
       JSON.stringify(health))
-    await trace.screenshot(cdp, 't05-01-memory-health-outage')
+    await trace.screenshot(cdp, 't05-outage-01-memory-health')
 
     const markJobs = await goto('memory/jobs', 'memory jobs',
       `document.querySelectorAll('[data-testid="memory-jobs"] tbody tr').length > 0`)
@@ -218,7 +233,7 @@ async function main() {
       jobs.rows > 0 && jobs.statuses && jobs.fresh.includes(200) &&
         jobs.pending === false && jobs.alerts.length === 0,
       JSON.stringify(jobs))
-    await trace.screenshot(cdp, 't05-02-memory-jobs')
+    await trace.screenshot(cdp, 't05-outage-02-memory-jobs')
 
     const markTraces = await goto('memory/traces', 'memory traces',
       `document.querySelectorAll('[data-testid="memory-traces"] tbody tr').length > 0`)
@@ -267,7 +282,7 @@ async function main() {
         view.fresh.every((status) => status === null || status === 200) &&
         view.pending === false && view.dependencyAlerts.length === 0),
       JSON.stringify(p1))
-    await trace.screenshot(cdp, 't05-03-p1-during-outage')
+    await trace.screenshot(cdp, 't05-outage-03-p1-views')
 
     const healthCalls = requests.filter((entry) => entry.path === '/v1/health')
     trace.record('every page read the real Core, and Core health answered 200 while Memory was down',
@@ -275,8 +290,14 @@ async function main() {
       JSON.stringify({ health: healthCalls.length,
                        healthStatuses: healthCalls.map((e) => responses.get(e.requestId)) }))
 
+    const expectedOutage = consoleErrors.filter((line) => /Failed to load resource/.test(line))
+    const unexpectedOutage = consoleErrors.filter((line) => !expectedOutage.includes(line))
+    trace.record('no unexpected console errors during the outage pass',
+      unexpectedOutage.length === 0, `${unexpectedOutage.length} unexpected`)
+    }
+
     // === RECOVERY PHASE (the runner restarted the engine on the same address) ==================
-    if (args.controlState === 'restored') {
+    if (args.phase === 'recovered') {
       const markRecovered = await goto('memory/health', 'memory health after recovery',
         `[...document.querySelectorAll('dl.kv dt')].some((n) => (n.textContent ?? '').trim() === 'status')`)
       const recoveredFresh = await waitForFresh('/v1/memory/health', markRecovered,
@@ -299,7 +320,7 @@ async function main() {
           recovered.pausedSentence === false && recovered.fresh.includes(200) &&
           recovered.pending === false && recovered.alerts.length === 0,
         JSON.stringify(recovered))
-      await trace.screenshot(cdp, 't05-04-memory-health-recovered')
+      await trace.screenshot(cdp, 't05-recovered-01-memory-health')
 
       const markTaskAfter = await goto(`task/${task}`, 'P1 task after recovery',
         `document.body.textContent.includes('Task 状态')`)
@@ -311,7 +332,7 @@ async function main() {
           taskFresh.every((status) => status === null || status === 200) &&
           (await pending()) === false && dependencyAlerts(taskAlerts).length === 0,
         JSON.stringify({ taskFresh, taskShown, alerts: taskAlerts }))
-      await trace.screenshot(cdp, 't05-05-p1-after-recovery')
+      await trace.screenshot(cdp, 't05-recovered-02-p1-task')
 
       const markTracesAfter = await goto('memory/traces', 'memory traces after recovery',
         `document.querySelectorAll('[data-testid="memory-traces"] tbody tr').length > 0`)
@@ -326,25 +347,25 @@ async function main() {
       trace.record('the outage attempt is still history after recovery, and the list re-read',
         tracesAfter.rows >= 1 && tracesAfter.fresh.includes(200) &&
           tracesAfter.outageStillRecorded, JSON.stringify(tracesAfter))
-    }
 
-    const expected = consoleErrors.filter((line) => /Failed to load resource/.test(line))
-    const unexpected = consoleErrors.filter((line) => !expected.includes(line))
-    trace.record('no unexpected console errors during the degraded walkthrough',
-      unexpected.length === 0, `${unexpected.length} unexpected`)
+      const expectedRecovered = consoleErrors.filter((line) => /Failed to load resource/.test(line))
+      const unexpectedRecovered = consoleErrors.filter((line) => !expectedRecovered.includes(line))
+      trace.record('no unexpected console errors during the recovery pass',
+        unexpectedRecovered.length === 0, `${unexpectedRecovered.length} unexpected`)
+    }
   } finally {
     cdp?.close()
     chrome.kill('SIGTERM')
     await rm(profile, { recursive: true, force: true }).catch(() => {})
     await writeFile(join(args.out, 'chrome-stderr.log'), chromeLog.join('')).catch(() => {})
-    await writeFile(join(args.out, 'click-trace.jsonl'),
+    await writeFile(join(args.out, `click-trace-${args.phase}.jsonl`),
       trace.steps.map((step) => JSON.stringify(step)).join('\n') + '\n')
     await writeFile(join(args.out, 'browser-requests.jsonl'),
       requests.map((entry) => JSON.stringify({
         method: entry.method, path: entry.path, status: responses.get(entry.requestId) ?? null,
       })).join('\n') + '\n')
     await writeFile(join(args.out, 'browser-trace.md'),
-      ['# P6-T05 degraded slice — browser pass (outage and recovery)', '',
+      [`# P6-T05 degraded slice — browser pass (${args.phase})`, '',
         ...trace.steps.map((step) =>
           `- ${step.ok === null ? 'BLKD' : step.ok ? 'PASS' : 'FAIL'} ${step.step}` +
           (step.detail ? ` — \`${step.detail}\`` : '')),
