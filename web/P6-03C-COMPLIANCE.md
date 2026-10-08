@@ -119,10 +119,11 @@ was fixed and re-gated:
   pre-fix extraction on the same planted case.
 * **No conclusion is hard-coded.** The criterion-1 heading, the `result.md` intro and
   unverified-scope bullet, `scenario.md`, `manifest.json`'s `phase_acceptance`, `validation_root`
-  and `dirty_note`, the census check's name and `ok`, and the env banner/`descriptor.json` note are
-  all derived from the census, so a records tree that carries a FAIL case produces a bundle that
-  says so coherently (verified by simulating one on a temporary copy) and a clean tree still reads
-  BLOCKED.
+  `dirty_note` and the `result.md` paragraph about the build tree, the census check's name and `ok`,
+  and the env banner/`descriptor.json` note are all derived from the census or from `git status`,
+  so a records tree that carries a FAIL case produces a bundle that says so coherently (verified by
+  simulating one on a temporary copy), a clean tree still reads BLOCKED, and a clean committed tree
+  is not described as dirty.
 * **The record count is derived.** The env builder no longer aborts on any count but a usable tree;
   the driver hands the trace a `p7-trace-expectations.json` read from disk; and the list, paging,
   ACL and agent checks compare exact id sets, so the harness produces a bundle for the tenth record
