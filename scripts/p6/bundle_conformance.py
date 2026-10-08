@@ -21,30 +21,43 @@ without inventing anything**:
   files it looked at. It never synthesises a request, a response or a Truth comparison;
 * the derived `result.md` **restates** the counts the source bundle records and says in words that
   format conformance is not acceptance: the binding verdict stays the source bundle's;
-* it never writes through a link: the derived files are staged in a private directory and moved into
-  place with `os.replace`, so a symlink at a target name cannot redirect a write into the source (a
-  pre-existing symlink or non-file target is refused), and a failure never leaves a half-written
-  output directory — a fresh output appears by one atomic directory rename, and refreshing an
-  existing one moves the old directory aside first and restores it if the move fails.
+* it never writes through a link and never removes anything but its own private staging directory:
+  the derived files are staged in a private directory beside `--out` and installed with a single
+  `os.replace` into a path that **must not exist yet**, so a symlink at a target name cannot
+  redirect a write into the source, a failure leaves either the finished directory or nothing at
+  all, and **no cleanup step ever deletes a directory the tool did not create**;
+* **an existing output directory is never written to**: it is only compared (`--check`). To
+  re-derive, point `--out` at a new path. This is deliberate — an earlier version "refreshed" an
+  existing directory by moving it aside and deleting the copy, which could delete the source bundle
+  if the source lived inside the output, or delete a source bundle that happened to occupy the fixed
+  backup path;
+* the source bundle and the output must not contain one another in **either** direction, checked on
+  resolved paths before anything is written.
 
 Idempotent by construction: no timestamps, no environment-dependent fields, deterministic walk and
 key order. Two runs over the same bundle are byte-identical (`--check` proves it).
 
 Usage::
 
-    python3.13 scripts/p6/bundle_conformance.py --bundle <frozen bundle> --out <derived dir>
-    python3.13 scripts/p6/bundle_conformance.py --bundle <bundle> --out <derived dir> --check
+    python3.13 scripts/p6/bundle_conformance.py --bundle <frozen bundle> --out <new derived dir>
+    python3.13 scripts/p6/bundle_conformance.py --bundle <bundle> --out <existing derived dir> --check
     python3.13 scripts/p6/bundle_conformance.py --bundle <bundle> --out <dir> \
         --expect-commit f323c779bc91893b5908218d8c5c148619159180
 
 Exit codes: 0 derived / identical; 1 source failed verification, a write failed, or `--check`
-differs; 2 not frozen, bad paths, or a usage problem. "Could not look" is never 0.
+differs; 2 not frozen, bad paths (including an output that already exists without `--check`), or a
+usage problem. "Could not look" is never 0.
 
 History: the first version of this tool (reviewed and reproduced against by the operator) dropped
 every non-empty request body (`browser-requests.jsonl`'s `postData`, `evidence.json`'s
 `request_body`) and every record in nested files such as `stability/`, wrote through a symlink placed
-at a target name, and claimed a cleanup it did not implement. All three are fixed here and covered by
-tests; the derivation produced by the first version is superseded, not edited.
+at a target name, and claimed a cleanup it did not implement. Those three were fixed, and **the fix
+introduced two more destructive paths** — the operator reproduced them: refreshing an existing output
+directory deleted it, so a source bundle *inside* the output was deleted with it, and a source bundle
+occupying the fixed backup path (`<out>.p6-previous`) was deleted too. This revision removes both by
+construction: new directories only, `--check` for existing ones, bidirectional containment refused,
+and no backup path at all. The derived bytes are unchanged — `--check` against the version-2
+derivation still reports identical.
 """
 
 from __future__ import annotations
@@ -340,66 +353,66 @@ def build_payloads(bundle: Path, source: dict[str, Any], commit: str) -> dict[st
     }
 
 
-def refuse_linked_targets(out: Path) -> None:
-    """Refuse a target that is a symlink or not a regular file.
+def refuse_containment(bundle: Path, out: Path) -> None:
+    """Refuse if the source and the output contain one another, in either direction.
 
-    `os.replace` cannot write *through* a link, but silently replacing one would hide a reviewer's
-    or an attacker's redirection, so it is refused and named.
+    The direction that bit once already: an output directory *containing* the bundle. An earlier
+    version refreshed such an output by deleting the directory it had moved aside, which deleted the
+    source bundle with it. Resolved paths are compared, so a symlink cannot hide the relation.
     """
-    if out.is_symlink():
-        raise Refused(f"--out {out} is a symlink; refusing to write through it")
-    if out.exists() and not out.is_dir():
-        raise Refused(f"--out {out} exists and is not a directory")
-    if out.is_dir():
-        for name in DERIVED_FILES:
-            target = out / name
-            if target.is_symlink():
-                raise Refused(f"{target} is a symlink; refusing to write through it")
-            if target.exists() and not target.is_file():
-                raise Refused(f"{target} exists and is not a regular file")
+    if out == bundle:
+        raise Refused(f"--out {out} is the source bundle itself")
+    if bundle in out.parents:
+        raise Refused(f"--out {out} is inside the source bundle {bundle}; derive elsewhere")
+    if out in bundle.parents:
+        raise Refused(f"the source bundle {bundle} is inside --out {out}; refusing — writing there "
+                      f"would put the bundle inside a directory this tool manages")
 
 
-def install(staging: Path, out: Path) -> None:
-    """Make `out` the staging directory, atomically, without ever showing a half-written tree."""
-    if not out.exists() and not out.is_symlink():
-        os.replace(staging, out)
-        return
-    backup = out.parent / f".{out.name}.p6-previous"
-    if backup.is_symlink() or (backup.exists() and not backup.is_dir()):
-        backup.unlink()
-    elif backup.is_dir():
-        shutil.rmtree(backup, ignore_errors=True)
-    os.replace(out, backup)
-    try:
-        os.replace(staging, out)
-    except BaseException:
-        os.replace(backup, out)  # put the previous derivation back
-        raise
-    if backup.is_symlink() or not backup.is_dir():
-        backup.unlink(missing_ok=True)
-    else:
-        shutil.rmtree(backup, ignore_errors=True)
+def refuse_target_entries(out: Path) -> None:
+    """For `--check` on an existing directory: refuse symlinked or non-file entries.
+
+    Reading through a link would compare bytes that are not in the directory being checked, so the
+    entry is refused and named rather than followed.
+    """
+    for name in DERIVED_FILES:
+        target = out / name
+        if target.is_symlink():
+            raise Refused(f"{target} is a symlink; refusing to read through it")
+        if target.exists() and not target.is_file():
+            raise Refused(f"{target} exists and is not a regular file")
+
+
+def install_new(staging: Path, out: Path) -> None:
+    """Install `staging` at `out`, which must not exist. One rename; no cleanup path at all.
+
+    There is deliberately no "replace an existing directory" branch: the only directory this tool
+    ever removes is its own staging directory, and only when a step failed. Nothing else on disk is
+    a candidate for deletion, so there is no path by which a source bundle can be removed.
+    """
+    if out.exists() or out.is_symlink():
+        raise Refused(f"{out} already exists; derive into a NEW directory, and use --check to "
+                      f"compare an existing derivation")
+    os.replace(staging, out)
 
 
 def derive(bundle: Path, out: Path, commit: str) -> dict[str, Path]:
-    """Stage the derived files privately, then move them into place. Never a partial output."""
-    created = not out.exists()
-    refuse_linked_targets(out)
+    """Stage the derived files privately, then install them into a new directory. Never partial."""
+    refuse_containment(bundle, out)
     payloads = build_payloads(bundle, source=read_json(bundle / MANIFEST), commit=commit)
     out.parent.mkdir(parents=True, exist_ok=True)
+    # Re-check after creating the parent: the parent's creation could have resolved the relation.
+    refuse_containment(bundle, out)
     staging = Path(tempfile.mkdtemp(dir=out.parent, prefix=".p6-conformance-staging-"))
     try:
         for name in DERIVED_FILES:
             (staging / name).write_text(payloads[name], encoding="utf-8")
         if any(not (staging / name).is_file() for name in DERIVED_FILES):
             raise Refused("staging is incomplete; refusing to install it")
-        refuse_linked_targets(out)
-        install(staging, out)
+        install_new(staging, out)
     except BaseException:
+        # The only deletion in this program: our own staging directory, on a failed run.
         shutil.rmtree(staging, ignore_errors=True)
-        if created and out.exists() and not out.is_symlink():
-            # Cannot happen through `install`, but if anything created it, do not leave a partial.
-            shutil.rmtree(out, ignore_errors=True)
         raise
     return {name: out / name for name in DERIVED_FILES}
 
@@ -428,11 +441,13 @@ def main(argv: list[str] | None = None) -> int:
     if not (bundle / MANIFEST).is_file():
         print(f"REFUSING: {bundle} has no {MANIFEST}; it is not a frozen bundle", file=sys.stderr)
         return 2
-    # Never write into the source: a derived file inside the bundle would both pollute it and break
-    # its own freeze verification (an added file fails `--verify`).
-    if out == bundle or bundle in out.parents:
-        print(f"REFUSING: --out {out} is the bundle or inside it ({bundle}); derive elsewhere",
-              file=sys.stderr)
+    # Never write into the source, and never let the output contain it: both directions are refused.
+    # The containing direction is the one that deleted a source bundle once — an output directory
+    # that contained the bundle was "refreshed" by deleting itself.
+    try:
+        refuse_containment(bundle, out)
+    except Refused as refusal:
+        print(f"REFUSING: {refusal}", file=sys.stderr)
         return 2
 
     try:
@@ -458,7 +473,7 @@ def main(argv: list[str] | None = None) -> int:
             print(f"REFUSING: --check needs an existing derived directory at {out}", file=sys.stderr)
             return 2
         try:
-            refuse_linked_targets(out)
+            refuse_target_entries(out)
         except Refused as refusal:
             print(f"REFUSING: {refusal}", file=sys.stderr)
             return 2
