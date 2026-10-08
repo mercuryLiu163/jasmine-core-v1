@@ -175,8 +175,13 @@ Falsifiable, each a test or a Gate record rather than a sentence.
    dependency-pending panel; missing `memory:read` → Core's `forbidden_scope`; P4 absent →
    the dependency-pending panel.
 6. **Malformed ids are refused locally** with the right field named and **zero** requests sent.
-7. **Redaction is respected.** With an agent key, engine-derived text is absent from the
-   rendered job payloads.
+7. **Redaction is respected, at the layer this slice controls.** P4 withholds engine free
+   text (`safe_error_summary`) from any actor that is not human or system, by nulling the
+   value and keeping the key (`_withhold_engine_text`). The fixture models that rule through
+   an `actor:agent` scope, and tests assert both directions: a human key sees the text, an
+   agent key does not, the key is still present, and the view renders the absence rather than
+   inventing text. P4's own actor-kind decision is server-side and is **not** re-implemented —
+   what is verified is that the UI does not undo the withholding.
 8. **No forbidden affordance and no engine client exists.** No retain, no bank selector, no
    direct-engine call, no `reflect` control, no lifecycle button. Asserted structurally rather
    than by word search, because the first draft of this criterion said "a grep over the bundle

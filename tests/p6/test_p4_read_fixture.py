@@ -174,6 +174,8 @@ class OverHttp(unittest.TestCase):
             "grantless": {"objects:read", "memory:read", "projects:none"},
             # Can sign in, but cannot read Memory.
             "nomem": {"objects:read"},
+            # A non-human actor: P4 withholds engine free text from it.
+            "agent": {"objects:read", "memory:read", "actor:agent"},
         }
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), fixture.Handler)
         cls.port = cls.server.server_address[1]
@@ -271,6 +273,33 @@ class OverHttp(unittest.TestCase):
                 _, body, _ = call(self.port, path)
                 self.assertNotIn("non_authoritative", body,
                                  "P4 does not mark these payloads; the fixture must not either")
+
+    def test_a_human_key_sees_the_engine_text(self) -> None:
+        """The control for the redaction test: without this, withholding proves nothing."""
+        _, job, _ = call(self.port, f"/v1/memory/jobs/{fixture.JOB_2}")
+        _, listing, _ = call(self.port, "/v1/memory/jobs")
+        failed = next(row for row in listing["jobs"] if row["job_id"] == fixture.JOB_2)
+        self.assertIsNotNone(job["job"]["safe_error_summary"])
+        self.assertIsNotNone(failed["safe_error_summary"])
+
+    def test_an_agent_key_has_the_engine_text_withheld(self) -> None:
+        """P4's `_withhold_engine_text`: the key stays, the value does not."""
+        _, job, _ = call(self.port, f"/v1/memory/jobs/{fixture.JOB_2}", "agent")
+        self.assertIn("safe_error_summary", job["job"])
+        self.assertIsNone(job["job"]["safe_error_summary"])
+
+        _, listing, _ = call(self.port, "/v1/memory/jobs", "agent")
+        failed = next(row for row in listing["jobs"] if row["job_id"] == fixture.JOB_2)
+        self.assertIsNone(failed["safe_error_summary"])
+        # Nested occurrences too: the same job appears inside an item's jobs.
+        _, item, _ = call(self.port, f"/v1/memory/items/{fixture.ITEM}", "agent")
+        for nested in item["jobs"]:
+            self.assertIsNone(nested["safe_error_summary"])
+
+    def test_withholding_does_not_drop_the_field(self) -> None:
+        """A dropped key would change the shape; P4 nulls the value and keeps the key."""
+        _, job, _ = call(self.port, f"/v1/memory/jobs/{fixture.JOB_2}", "agent")
+        self.assertEqual(set(job["job"]), set(CONTRACT["nested_fields"]["job"]))
 
     def test_the_count_matches_the_rows_served(self) -> None:
         for path, key in (("/v1/memory/jobs", "jobs"), ("/v1/memory/items", "items"),

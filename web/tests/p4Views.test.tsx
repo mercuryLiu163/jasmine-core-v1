@@ -335,6 +335,44 @@ describe('a real P4 read renders the record it was given', () => {
   })
 })
 
+describe('the view does not synthesise engine text Core withheld', () => {
+  it('renders a withheld safe_error_summary as nothing, not as a placeholder', async () => {
+    // P4 nulls `safe_error_summary` for a non-human actor and keeps the key. The UI must
+    // render the absence, not invent text and not leak a stale value from a previous read.
+    const user = userEvent.setup()
+    await enter(user, '#/memory/jobs', {
+      ...SIGNED_IN,
+      'GET /v1/memory/jobs': {
+        body: {
+          jobs: [job({ status: 'FAILED', safe_error_summary: null, last_error_code: 'engine_unavailable' })],
+          count: 1,
+          counts: withKeys(contract.nested_fields.job_counts, { failed: 1 }),
+        },
+      },
+    })
+    const panel = await screen.findByRole('region', { name: /Memory Jobs/ })
+    const table = await within(panel).findByTestId('memory-jobs')
+    expect(table.textContent).toContain('FAILED')
+    expect(table.textContent).not.toContain('simulated text')
+  })
+
+  it('shows the engine text when Core did send it', async () => {
+    // The control: without this, rendering nothing would look like success either way.
+    const user = userEvent.setup()
+    await enter(user, `#/memory/jobs/${JOB}`, {
+      ...SIGNED_IN,
+      ['GET /v1/memory/jobs/' + JOB]: {
+        body: {
+          job: job({ status: 'FAILED', safe_error_summary: 'engine refused the retain' }),
+          attempts: [],
+        },
+      },
+    })
+    const panel = await screen.findByRole('region', { name: /Memory Job/ })
+    await waitFor(() => expect(panel.textContent).toContain('engine refused the retain'))
+  })
+})
+
 describe('this slice has no write affordance', () => {
   /**
    * The only interactive controls a read-only Memory view may offer, each named so a new

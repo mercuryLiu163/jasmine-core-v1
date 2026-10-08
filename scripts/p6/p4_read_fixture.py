@@ -125,12 +125,15 @@ def job_row(contract: dict[str, Any], *, ident: str, status: str = "DONE") -> di
         "lease_owner": None,
         "lease_expires_at": None,
         "claim_generation": 1,
-        "last_error_code": None,
-        "safe_error_summary": None,
+        "last_error_code": None if status == "DONE" else "engine_unavailable",
+        # Carries text so the agent-redaction rule is observable rather than vacuous: a
+        # fixture whose engine text is already null cannot show redaction working.
+        "safe_error_summary": (None if status == "DONE"
+                               else "fixture: the engine refused (simulated text)"),
         "receipt": None,
         "created_at": "2026-10-07T12:00:00Z",
         "updated_at": "2026-10-07T12:01:00Z",
-        "completed_at": "2026-10-07T12:01:00Z",
+        "completed_at": "2026-10-07T12:01:00Z" if status == "DONE" else None,
     })
     assert set(row) == set(contract["nested_fields"]["job"]), "fixture job shape drifted"
     return row
@@ -250,8 +253,12 @@ def jobs_payload(contract: dict[str, Any], *, empty: bool) -> dict[str, Any]:
     return payload
 
 
-def job_payload(contract: dict[str, Any]) -> dict[str, Any]:
-    payload = {"job": job_row(contract, ident=JOB), "attempts": attempt_rows(contract)}
+def job_payload(contract: dict[str, Any], *, ident: str = JOB) -> dict[str, Any]:
+    # The detail read reflects the job that was asked for, including its status — otherwise
+    # the DONE job's null engine text would make the agent-withholding rule untestable.
+    status = "DONE" if ident == JOB else "FAILED"
+    payload = {"job": job_row(contract, ident=ident, status=status),
+               "attempts": attempt_rows(contract)}
     assert set(payload) == set(contract_field_sets(contract)["job"]), (
         "fixture job-detail shape drifted from the frozen contract")
     return payload
@@ -312,6 +319,31 @@ def trace_payload(contract: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+#: The one field P4 treats as engine free text (`_ENGINE_TEXT_KEY`), from the pinned commit.
+ENGINE_TEXT_KEY = "safe_error_summary"
+
+#: A token carrying this scope is treated as a non-human actor, which is how P4 decides.
+AGENT_SCOPE = "actor:agent"
+
+
+def for_actor(payload: Any, *, agent: bool) -> Any:
+    """P4's `_withhold_engine_text`: null the engine free text wherever it is nested.
+
+    Mirrors the pinned commit rather than inventing a rule: for a human or system actor the
+    payload is returned unchanged, and for anyone else `safe_error_summary` becomes None —
+    the key stays, its value does not. The walk is recursive for the same reason P4's is: the
+    same job appears at the top level, inside `attempts`, and inside `items`.
+    """
+    if not agent:
+        return payload
+    if isinstance(payload, dict):
+        return {key: (None if key == ENGINE_TEXT_KEY else for_actor(value, agent=agent))
+                for key, value in payload.items()}
+    if isinstance(payload, list):
+        return [for_actor(item, agent=agent) for item in payload]
+    return payload
+
+
 class Handler(BaseHTTPRequestHandler):
     contract: dict[str, Any] = {}
     tokens: dict[str, set[str]] = {}
@@ -344,6 +376,10 @@ class Handler(BaseHTTPRequestHandler):
     def _error(self, status: int, code: str, message: str, **details: Any) -> None:
         self._send(status, {"error": {"code": code, "message": message,
                                       "request_id": "aud_fixture", "details": details}})
+
+    def _agent(self, scopes: set[str] | None) -> bool:
+        """Whether this token is a non-human actor, by P4's own distinction."""
+        return scopes is not None and AGENT_SCOPE in scopes
 
     def _require_route(self, scopes: set[str] | None, pattern: str) -> bool:
         """Enforce the full scope set the frozen contract records for a route."""
@@ -430,7 +466,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/v1/memory/jobs":
             if not self._require_route(scopes, r"^/v1/memory/jobs$"):
                 return
-            self._send(200, jobs_payload(self.contract, empty=grantless))
+            self._send(200, for_actor(jobs_payload(self.contract, empty=grantless),
+                                   agent=self._agent(scopes)))
             return
 
         job = re.fullmatch(r"/v1/memory/jobs/([^/]+)", path)
@@ -444,7 +481,8 @@ class Handler(BaseHTTPRequestHandler):
             if ident not in (JOB, JOB_2):
                 self._error(404, "not_found", f"memory_job {ident} not found")
                 return
-            self._send(200, job_payload(self.contract))
+            self._send(200, for_actor(job_payload(self.contract, ident=ident),
+                                      agent=self._agent(scopes)))
             return
 
         if path == "/v1/memory/items":
@@ -470,7 +508,8 @@ class Handler(BaseHTTPRequestHandler):
             if ident not in (ITEM, ITEM_2):
                 self._error(404, "not_found", f"memory {ident} not found")
                 return
-            self._send(200, item_payload(self.contract))
+            self._send(200, for_actor(item_payload(self.contract),
+                                   agent=self._agent(scopes)))
             return
 
         if path == "/v1/memory/traces":
@@ -537,6 +576,7 @@ def main(argv: list[str] | None = None) -> int:
                           ("jobs", jobs_payload(contract, empty=False)),
                           ("jobs-empty", jobs_payload(contract, empty=True)),
                           ("job", job_payload(contract)),
+                          ("job-failed", job_payload(contract, ident=JOB_2)),
                           ("items", items_payload(contract, empty=False)),
                           ("items-empty", items_payload(contract, empty=True)),
                           ("item", item_payload(contract)),
