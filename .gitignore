@@ -16,6 +16,12 @@ eggs/
 .eggs/
 lib/
 lib64/
+# The `lib/` above is Python's, but gitignore patterns are path-agnostic, so it
+# also matched the dashboard's own `web/src/lib/`. Those four modules are imported
+# by the committed app and were silently untracked for the whole of P6-01/P6-02:
+# the "frozen" commits compiled only because the working tree happened to contain
+# them. Re-include the directory explicitly.
+!web/src/lib/
 parts/
 sdist/
 var/

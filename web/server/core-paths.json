@@ -1,0 +1,67 @@
+{
+  "comment": "P6-A02 frozen Core path allowlist. Single source of truth for the Vite dev proxy and the standalone static server. Admin surfaces (/v1/auth/keys, /v1/audit) are deliberately absent: the browser proxy must not be able to mint keys or read audit even if a token carried admin.",
+  "methods": [
+    "GET"
+  ],
+  "paths": [
+    "^/v1/health$",
+    "^/v1/meta/schema$",
+    "^/v1/hosts$",
+    "^/v1/actors$",
+    "^/v1/projects$",
+    "^/v1/projects/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/tasks$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(steps|history|evidence)$",
+    "^/v1/sessions$",
+    "^/v1/sessions/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/steps/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/steps/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/history$",
+    "^/v1/events$",
+    "^/v1/events/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/rules/active$",
+    "^/v1/rules/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/rules/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/history$",
+    "^/v1/evidence/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/interpretations$",
+    "^/v1/interpretations/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/reviews/pending$",
+    "^/v1/reviews/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/resolutions/preview$",
+    "^/v1/resolutions/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
+  ],
+  "phase_note": "P6-01/P6-02 read slice forwards GET only: the browser is same-origin, so no preflight is needed and OPTIONS is deliberately NOT forwarded. Mutation paths are listed for P6-02 milestone B; the method allowlist is what gates them, and Core still enforces scopes and actor kind per request. Every path pattern names a real Core route for the method it is listed under, and id segments use Core's own id shape (`[a-z]{3}_` + 26 Crockford base32 characters, ADR 0001) rather than a loose `[A-Za-z0-9_]+`. The loose form matched POST-only literals (`proposals`, `confirm`), so a GET on those was forwarded and refused by Core; with the real shape they are not reachable by GET at all. There is no /v1/reviews or /v1/resolutions collection: the P2 collection reads are /v1/interpretations and /v1/reviews/pending (after_id cursor), plus /v1/resolutions/preview which requires an explicit interpretation_id.",
+  "write_methods": [
+    "POST"
+  ],
+  "write_paths": [
+    "^/v1/interpretations/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(correct|reject|rerun)$",
+    "^/v1/reviews/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(approve|reject)$",
+    "^/v1/rules/proposals$",
+    "^/v1/rules/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(approve|supersede|retire)$"
+  ],
+  "write_note": "Milestone B writes, frozen per method+path. `manual-reapply`, `resolve/{int}` and `evidence/confirm` are deliberately absent: the first two need an explicit operator decision outside this slice, and a web button cannot produce ADR 0007 human-prompt provenance. Core still enforces scope, actor kind, idempotency and revision per request.",
+  "p3_pending_paths": [
+    "^/v1/context/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/checkpoints/latest$",
+    "^/v1/checkpoints/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/resumes/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
+  ],
+  "p3_pending_note": "P6-03a continuity reads. These four paths are real on branch p3-checkpoint-context-resume (schema 10) and are NOT served by this baseline's Core (850fbec, schema 8), so they are deliberately absent from `paths`: forwarding them would send the browser to a Core that cannot answer. They become live only when the operator starts a proxy for a P3 Core with P6_ENABLE_P3_READS=1, and even then Core enforces context:read / checkpoint:read / resume:read itself. `/v1/context/build`, `POST /v1/checkpoints` and `POST /v1/tasks/{id}/resume` are build operations and are not part of this read slice. The contract is derived from the P3 branch by scripts/p6/p3_contract.py and frozen in web/contracts/p3-continuity-read.v1.json.",
+  "p4_pending_paths": [
+    "^/v1/memory/health$",
+    "^/v1/memory/jobs$",
+    "^/v1/memory/jobs/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/memory/items$",
+    "^/v1/memory/items/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/memory/traces$",
+    "^/v1/memory/traces/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
+  ],
+  "p4_pending_note": "P6-03b1 memory reads. These seven paths are real on the P4 commit 0c4f8f0e2118711ac9aa2a7006fddc6982962248 (schema 11) and are NOT served by this baseline's Core (850fbec, schema 8), so they are deliberately absent from `paths`: forwarding them would send the browser to a Core that cannot answer. They become live only when the operator starts a proxy for a P4 Core with P6_ENABLE_P4_READS=1, and even then Core enforces memory:read itself. The five lifecycle/retry writes and `reflect` are P6-03b2 and are not part of this read slice. The contract is derived from the pinned P4 commit by scripts/p6/p4_contract.py and frozen in web/contracts/p4-memory-read.v1.json.",
+  "p4_write_paths": [
+    "^/v1/memory/jobs/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/retry$",
+    "^/v1/memory/items/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(obsolete|delete|pin|unpin)$",
+    "^/v1/memory/reflect$"
+  ],
+  "p4_write_note": "P6-03b2 memory writes: retry, the four lifecycle commands and reflect. The five `memory:manage` writes and `reflect` are real on the same unmerged P4 commit as the reads and are absent from this baseline, so they are NOT in `write_paths`: that list is the always-on P6-02 milestone B surface, and putting an unmerged dependency there would forward the browser to a Core that cannot answer. They become live only when the operator states the Core behind the proxy has P4 writes with P6_ENABLE_P4_WRITES=1, which is a *separate* switch from the reads: reading Memory and changing it are different decisions with different scopes. Even then Core enforces `memory:manage` / `memory:reflect`, the human-or-system actor kind, idempotency on `event_id` and `expected_revision` itself; the proxy only decides what the browser may reach. The payload and response contract is frozen in web/contracts/p4-memory-write.v1.json, derived by scripts/p6/p4_write_spec.py."
+}

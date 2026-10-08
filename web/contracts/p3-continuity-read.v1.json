@@ -1,0 +1,200 @@
+{
+  "contract": "jasmine.p3-continuity-read.v1",
+  "source": {
+    "ref": "p3-checkpoint-context-resume",
+    "commit": "7016dabb8926d6bd6599f1f56b8f39cbda253ebf",
+    "derived_by": "scripts/p6/p3_contract.py",
+    "schema_version_in_p3": 10
+  },
+  "baseline": {
+    "commit": "850fbec",
+    "schema_version": 8,
+    "these_routes_exist": false,
+    "why": "P3 (Context/Checkpoint/Resume) is not merged into this baseline: Core here has no context/, continuity.py or task_snapshot.py, and no route for any of the four endpoints below. P6-03a is therefore delivered against this contract with the dependency marked pending."
+  },
+  "read_routes": [
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/context/([^/]+)$",
+      "scope": "context:read",
+      "handler": "get_context",
+      "response_key": "context",
+      "extra_scopes": [
+        "objects:read",
+        "state:read",
+        "authority:read",
+        "evidence:read",
+        "events:read",
+        "checkpoint:read"
+      ],
+      "query": []
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/tasks/([^/]+)/checkpoints/latest$",
+      "scope": "checkpoint:read",
+      "handler": "latest_checkpoint",
+      "response_key": "checkpoint",
+      "extra_scopes": [
+        "objects:read",
+        "state:read",
+        "authority:read",
+        "evidence:read",
+        "events:read"
+      ],
+      "query": [
+        "session_id"
+      ]
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/checkpoints/([^/]+)$",
+      "scope": "checkpoint:read",
+      "handler": "get_checkpoint",
+      "response_key": "checkpoint",
+      "extra_scopes": [
+        "objects:read",
+        "state:read",
+        "authority:read",
+        "evidence:read",
+        "events:read"
+      ],
+      "query": []
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/resumes/([^/]+)$",
+      "scope": "resume:read",
+      "handler": "get_resume",
+      "response_key": "resume",
+      "extra_scopes": [
+        "objects:read",
+        "state:read",
+        "authority:read",
+        "evidence:read",
+        "events:read",
+        "checkpoint:read"
+      ],
+      "query": []
+    }
+  ],
+  "not_in_this_slice": [
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/context/build$",
+      "scope": "context:build",
+      "why": "builds a pack; a write, not a read"
+    },
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/context/([^/]+)/check-current$",
+      "scope": "context:build",
+      "why": "recomputes currency; not a read"
+    },
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/checkpoints$",
+      "scope": "checkpoint:write",
+      "why": "creates a checkpoint"
+    },
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/tasks/([^/]+)/resume$",
+      "scope": "resume:build",
+      "why": "builds a resume receipt"
+    }
+  ],
+  "response_fields": {
+    "checkpoint": [
+      "actor_id",
+      "checkpoint_id",
+      "command_event_id",
+      "created_at",
+      "full_context_digest",
+      "host_id",
+      "note",
+      "project_id",
+      "projection",
+      "projection_digest",
+      "projection_version",
+      "reason",
+      "session_id",
+      "source_event_id",
+      "task_id",
+      "task_revision",
+      "trigger_provenance",
+      "workspace",
+      "workspace_digest"
+    ],
+    "resume": [
+      "actor_id",
+      "checkpoint_id",
+      "command_event_id",
+      "comparison",
+      "created_at",
+      "host_id",
+      "next_actions",
+      "note",
+      "project_id",
+      "projection",
+      "resume_id",
+      "sample_window",
+      "session_id",
+      "source_event_id",
+      "task_id",
+      "truth_digest",
+      "workspace"
+    ],
+    "context": [
+      "actor_id",
+      "command_event_id",
+      "config_digest",
+      "configuration",
+      "context_pack_id",
+      "created_at",
+      "current_step_id",
+      "host_id",
+      "memory",
+      "omissions",
+      "project_id",
+      "projection",
+      "reason",
+      "rendered_content",
+      "rendered_sha256",
+      "rendered_utf8_bytes",
+      "renderer_version",
+      "resume_comparison",
+      "sample_window",
+      "section_metrics",
+      "selected_optional_ids",
+      "selector",
+      "session_id",
+      "source_event_id",
+      "task_id",
+      "token_count",
+      "tokenizer",
+      "trigger_provenance",
+      "truth_digest",
+      "workspace",
+      "workspace_digest"
+    ],
+    "context_spread_resolved": {
+      "rendering": [
+        "omissions",
+        "rendered_content",
+        "rendered_sha256",
+        "rendered_utf8_bytes",
+        "renderer_version",
+        "section_metrics",
+        "selected_optional_ids",
+        "token_count"
+      ]
+    }
+  },
+  "semantics": {
+    "checkpoint_projection_is_not_truth": "A checkpoint's `projection` is an immutable snapshot of what the Task looked like at that revision (projection_version jasmine.task-snapshot.v1), carried with `projection_digest`, `full_context_digest`, `workspace_digest` and the `task_revision` it was taken at. It is a record, never a current-state claim.",
+    "latest_may_be_null": "`GET /v1/tasks/{id}/checkpoints/latest` answers 200 with `{\"checkpoint\": null}` when the Task has no checkpoint yet. That is an empty result, not an error and not an absent Task.",
+    "resume_note_is_historical": "A resume carries `note` as {value, authority: false, historical: true} — the note of the checkpoint it resumed from. The view must present it as historical and non-authoritative.",
+    "resume_is_a_comparison_not_a_restore": "`comparison` and `next_actions` describe how the checkpoint and the current projection differ; nothing is applied. `truth_digest` is the current Truth digest, not a restore point."
+  }
+}
