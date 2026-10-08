@@ -20,11 +20,17 @@
 
 import { isDependencyPending, type CoreApiError } from '../api/errors'
 
-/** Every Memory view states this, whether or not the read succeeded. */
-export function MemorySliceStatus(): JSX.Element {
+/**
+ * Every Memory view states this, whether or not its request succeeded.
+ *
+ * `slice` names which part of P6-03b is speaking: the reads and the writes share the pinned
+ * commit and the unpassed acceptance, but a write view saying "P6-03b1" would be describing the
+ * wrong surface — and this line is the one a reader uses to decide what a screenshot proves.
+ */
+export function MemorySliceStatus({ slice = 'P6-03b1' }: { slice?: string } = {}): JSX.Element {
   return (
     <p className="state state--meta" data-testid="slice-status">
-      <strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— P6-03b1 的契约固定自 P4 提交{' '}
+      <strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— {slice} 的契约固定自 P4 提交{' '}
       <code>0c4f8f0</code>,该阶段<strong>验收未通过</strong>;本页不是已通过的 P6 能力。
     </p>
   )

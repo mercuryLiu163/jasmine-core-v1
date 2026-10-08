@@ -78,8 +78,10 @@ export function MemoryWriteDependency({
     <>
       <p>
         <strong>{what}</strong> 的 <code>{method}</code> <code>{path}</code> 只存在于固定的 P4
-        提交,且由<strong>独立于读取的开关</strong>控制。仪表盘的 live 白名单不会转发写入 ——
-        代理以 <code>proxy_path_not_allowed</code> 拒绝,而不是把请求送给一个必然 404 的 Core。
+        提交,且由<strong>独立于读取的开关</strong>控制。<code>paths</code> 与 milestone B 的
+        <code> write_paths</code> 都<strong>不含</strong>它:只有以{' '}
+        <code>{P4_WRITES_SWITCH}=1</code> 启动的代理才会转发;否则代理以{' '}
+        <code>proxy_path_not_allowed</code> 拒绝,而不是把请求送给一个必然 404 的 Core。
       </p>
       <ul className="plain">
         <li>
@@ -395,7 +397,7 @@ export function MemoryReflectView(): JSX.Element {
   return (
     <Panel title="Memory reflect (memory:reflect)">
       <div className="stack">
-        <MemorySliceStatus />
+        <MemorySliceStatus slice="P6-03b2(写入)" />
         <MemoryWriteDependency
           what="Memory reflect"
           method="POST"
