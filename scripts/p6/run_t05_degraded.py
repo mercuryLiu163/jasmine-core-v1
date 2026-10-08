@@ -151,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     procs: list[subprocess.Popen] = []
     entries: list[dict[str, Any]] = []
     calls: list[dict[str, Any]] = []
+    engine_events: list[dict[str, Any]] | None = None
 
     def record(ident: str, check: str, ok: bool | None, detail: Any = None, note: str = "") -> None:
         entries.append({"id": ident, "check": check, "mode": MODE, "ok": ok,
@@ -354,6 +355,14 @@ def main(argv: list[str] | None = None) -> int:
                    and ok_state["bank_statuses"] not in (None, [])
                    and all(value == "ok" for value in ok_state["bank_statuses"]),
                    ok_state)
+            # The env's own stop/restore log lives in the env process, so the descriptor snapshot
+            # taken at startup only shows `stop`; read it again after the recovery so the evidence
+            # carries both events and the health each left.
+            status, control_status = call(control_url, "GET", "/status", None)
+            if status == 200 and isinstance(control_status, dict):
+                engine_events = control_status.get("events")
+            else:
+                log(f"could not read the engine event log: HTTP {status}")
 
         # --- C8: no Task/Rule revision moved across the whole outage and recovery ----------------
         try:
@@ -405,7 +414,8 @@ def main(argv: list[str] | None = None) -> int:
             "mode": descriptor["mode"],
             "engine_url": descriptor["engine_url"],
             "engine_control_url": control_url,
-            "engine_events": descriptor.get("engine_events"),
+            "engine_events_at_build": descriptor.get("engine_events"),
+            "engine_events": engine_events or descriptor.get("engine_events"),
             "health_at_build": health_at_build,
             "core_entries": entries,
             "ui_records": ui_records,
