@@ -95,6 +95,29 @@ export function MemoryDependencyPending({
   )
 }
 
+/**
+ * Core answered `not_found` — and P4 deliberately makes that one answer mean two things.
+ *
+ * `_may_see` refuses a row the actor may not see with the same `not_found` it uses for a row
+ * that does not exist, so that the Inspector and the job list cannot be used to enumerate
+ * another project's work. The UI therefore must not dress it up as a failure with a retry
+ * button — that would imply "try again and you might get it", recreate the enumeration hint
+ * P4 removed, and invite a retry that can never succeed. It is not the missing dependency
+ * either: Core answered, so the dependency is present.
+ */
+export function MemoryNotFound({ what }: { what: string }): JSX.Element {
+  return (
+    <div className="state state--meta" role="status" data-testid="not-found">
+      <p className="state__headline">Core 返回 not_found:{what} 不存在,或者当前 actor 无权访问</p>
+      <p>
+        P4 刻意<b>不区分</b>这两种情况(<code>_may_see</code> 对两种情况都回 <code>not_found</code>),
+        这样 Inspector 就不能被用来枚举他人项目的内容。所以这里也不替你猜测是哪一个,更不会建议
+        重试 —— 重试不会改变结果。若你认为自己本应有权限,那是 Core 的授权判断,不是本页能修的。
+      </p>
+    </div>
+  )
+}
+
 /** A malformed id is refused here, with the right reason, before any request is made. */
 export function MemoryInvalidId({
   prefix,

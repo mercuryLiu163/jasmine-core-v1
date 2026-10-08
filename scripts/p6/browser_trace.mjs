@@ -1829,16 +1829,22 @@ async function main() {
         JSON.stringify({ ...tracesList, ...traceView }))
       await trace.screenshot(cdp, '28-memory-traces')
 
-      // --- an unknown id is Core's not_found, not the missing dependency --------------
+      // --- an unknown id is Core's not_found: its own state, not an error, not pending ---
       await gotoMemory(`memory/items/${MUNKNOWN}`, 'unknown memory item',
-        `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('not_found'))`)
+        `document.querySelector('[data-testid="not-found"]') !== null`)
       const unknownItem = {
-        alert: (await pageText()).includes('not_found'),
+        notFound: await evaluate(cdp,
+          `document.querySelector('[data-testid="not-found"]') !== null`),
+        // P4 answers `not_found` for an absent row and for one the actor may not see, so an
+        // error banner with a retry would both invent a distinction and invite a retry that
+        // cannot succeed.
+        alert: await evaluate(cdp, `document.querySelector('[role=alert]') !== null`),
         pending: await evaluate(cdp,
           `document.querySelector('[data-testid="dependency-pending"]') !== null`),
       }
-      trace.record('an unknown memory id is Core not_found, not the missing dependency',
-        unknownItem.alert && unknownItem.pending === false, JSON.stringify(unknownItem))
+      trace.record('an unknown memory id is Core not_found: not an error, not the missing dependency',
+        unknownItem.notFound && unknownItem.alert === false && unknownItem.pending === false,
+        JSON.stringify(unknownItem))
 
       // --- a malformed id is refused locally, with no request ------------------------
       await gotoMemory('memory/items/mem_short', 'malformed memory id',

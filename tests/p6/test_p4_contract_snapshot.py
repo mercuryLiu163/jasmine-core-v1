@@ -228,6 +228,12 @@ class DashboardTypesMatchTheP4Contract(unittest.TestCase):
                     f"{interface} and the contract disagree: "
                     f"missing {sorted(expected - declared)}, extra {sorted(declared - expected)}")
 
+    def test_the_trace_detail_interface_is_the_list_row_plus_four(self) -> None:
+        source = TYPES_PATH.read_text(encoding="utf-8")
+        listed = self._declared_fields(source, "MemoryTrace")
+        self.assertEqual(listed, set(SNAPSHOT["nested_fields"]["trace"]))
+        self.assertEqual(len(listed), 16, "the list row is the 16 columns store.traces() reads")
+
     def test_the_health_interface_is_the_health_response(self) -> None:
         """Health is the one route whose body *is* the report; it adds `non_authoritative`."""
         source = TYPES_PATH.read_text(encoding="utf-8")
@@ -238,16 +244,21 @@ class DashboardTypesMatchTheP4Contract(unittest.TestCase):
 
     def test_the_row_extensions_add_only_what_the_contract_records(self) -> None:
         source = TYPES_PATH.read_text(encoding="utf-8")
-        # The list endpoint adds `lifecycle` to each item row; the detail read adds `items`
-        # to a trace. Each extension must be exactly that one field.
-        for interface, base, extra in (("MemoryItemListRow", "MemoryItem", "lifecycle"),
-                                       ("MemoryTraceDetail", "MemoryTrace", "items")):
+        # Each extension must add exactly what the contract says, named from the snapshot
+        # rather than hardcoded: the trace detail adds four fields, not the one the first
+        # draft of this contract recorded.
+        trace_extra = set(SNAPSHOT["nested_fields"]["trace_detail"]) - set(
+            SNAPSHOT["nested_fields"]["trace"])
+        self.assertEqual(trace_extra,
+                         {"filtered", "authority_refs", "state_revision", "items"})
+        for interface, base, extra in (("MemoryItemListRow", "MemoryItem", {"lifecycle"}),
+                                       ("MemoryTraceDetail", "MemoryTrace", trace_extra)):
             with self.subTest(interface=interface):
                 body = re.search(r"export interface " + interface + r" extends " + base +
                                  r" \{(.*?)\n\}", source, re.S)
                 self.assertIsNotNone(body, f"{interface} must extend {base}")
                 self.assertEqual(set(re.findall(r"^\s{2}([a-z][a-z0-9_]*)\??:",
-                                                body.group(1), re.M)), {extra})
+                                                body.group(1), re.M)), extra)
 
     def test_the_memory_endpoint_layer_issues_get_only(self) -> None:
         """A `POST` among the memory endpoints would be a b2 write in a b1 slice.

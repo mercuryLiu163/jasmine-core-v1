@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import re
 import json
 import subprocess
 import sys
@@ -59,9 +60,36 @@ def _p4_source(ref: str, path: str) -> str:
     return source
 
 
+def _select_columns(source: str, func_name: str) -> list[str]:
+    """The columns a list query's SELECT names, joined across P4's adjacent f-strings."""
+    import ast as _ast
+    for outer in _ast.walk(_ast.parse(source)):
+        if not (isinstance(outer, _ast.FunctionDef) and outer.name == func_name):
+            continue
+        for node in _ast.walk(outer):
+            if not (isinstance(node, _ast.Call) and isinstance(node.func, _ast.Attribute)
+                    and node.func.attr == "execute" and node.args):
+                continue
+            sql = _sql_text(node.args[0])
+            match = re.search(r"SELECT\s+(.*?)\s+FROM", sql, re.S)
+            if match:
+                return [c.strip() for c in match.group(1).split(",") if c.strip()]
+    raise AssertionError(f"no SELECT found in {func_name}")
+
+
+def _sql_text(node) -> str:
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(_sql_text(p) if not isinstance(p, ast.FormattedValue) else "?"
+                       for p in node.values)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _sql_text(node.left) + _sql_text(node.right)
+    return ""
+
+
 def _table_columns(source: str, table: str) -> list[str]:
     """Columns of one `CREATE TABLE`, scoped to that table on purpose."""
-    import re
     block = re.search(r"CREATE TABLE " + table + r" \((.*?)\n    \)", source, re.S)
     if block is None:
         raise AssertionError(f"table {table} not found")
@@ -116,11 +144,20 @@ class PayloadShapes(unittest.TestCase):
         detail = fixture.item_payload(CONTRACT)["memory"]
         self.assertEqual(set(detail), set(CONTRACT["nested_fields"]["item"]))
 
-    def test_the_trace_detail_adds_items_and_the_list_row_does_not(self) -> None:
+    def test_the_trace_detail_adds_four_fields_the_list_row_does_not(self) -> None:
+        """P4's list query selects 16 of the 19 columns and does not join `items`.
+
+        The first version of this contract described one shape for both, so a list row was
+        documented with `filtered`, `authority_refs` and `state_revision` it never carries.
+        """
         listed = fixture.traces_payload(CONTRACT, empty=False)["traces"][0]
         self.assertEqual(set(listed), set(CONTRACT["nested_fields"]["trace"]))
         detail = fixture.trace_payload(CONTRACT)["trace"]
-        self.assertEqual(set(detail), set(CONTRACT["nested_fields"]["trace"]) | {"items"})
+        self.assertEqual(set(detail), set(CONTRACT["nested_fields"]["trace_detail"]))
+        self.assertEqual(set(detail) - set(listed),
+                         {"filtered", "authority_refs", "state_revision", "items"})
+        # And the narrower direction: the list is a strict subset of the detail.
+        self.assertEqual(set(listed) - set(detail), set())
 
 
 class ShapesMirrorP4(unittest.TestCase):
@@ -135,12 +172,20 @@ class ShapesMirrorP4(unittest.TestCase):
         # one substitution.
         self.assertEqual(set(CONTRACT["nested_fields"]["job"]),
                          (set(job_columns) - {"receipt_json"}) | {"receipt"})
-        for table, key in (("memory_query_traces", "trace"),
-                           ("memory_job_attempts", "attempt")):
-            columns = _table_columns(migration, table)
-            with self.subTest(table=table):
-                decoded = {c.removesuffix("_json") for c in columns}
-                self.assertEqual(set(CONTRACT["nested_fields"][key]), decoded)
+        attempts = _table_columns(migration, "memory_job_attempts")
+        self.assertEqual(set(CONTRACT["nested_fields"]["attempt"]),
+                         {c.removesuffix("_json") for c in attempts})
+
+        # The trace has two shapes, and the list one comes from the query's SELECT list, not
+        # from the table: reading the table alone is what made the contract over-report it.
+        trace_columns = _table_columns(migration, "memory_query_traces")
+        self.assertEqual(set(CONTRACT["nested_fields"]["trace_detail"]),
+                         {c.removesuffix("_json") for c in trace_columns} | {"items"})
+        selected = _select_columns(_p4_source(ref, "src/jasmine_core/memory/store.py"),
+                                   "traces")
+        self.assertEqual(len(selected), 16)
+        self.assertEqual(set(CONTRACT["nested_fields"]["trace"]),
+                         {c.removesuffix("_json") for c in selected})
 
     def test_a_rename_in_p4_would_break_the_guard(self) -> None:
         """Falsify by mutating P4's source, not by mutating the expectation."""

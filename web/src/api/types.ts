@@ -729,32 +729,36 @@ export interface MemoryItemListRow extends MemoryItem {
   lifecycle: MemoryLifecycle
 }
 
-/** `memory_query_traces` row, with the four `_json` columns decoded. */
+/** A `memory_query_traces` **list** row: the 16 columns `store.traces()` selects. */
 export interface MemoryTrace {
-  trace_id: string
-  mode: string
-  status: string
-  project_id: string | null
-  task_id: string | null
-  session_id: string | null
   actor_id: string
-  query_sha256: string
-  query_length: number
-  requested_types: unknown[]
   banks: unknown[]
-  filtered: unknown[]
   budget_tokens: number | null
-  used_tokens: number
-  authority_refs: unknown[]
-  state_revision: number | null
-  error_code: string | null
-  safe_error_summary: string | null
   created_at: string
+  error_code: string | null
+  mode: string
+  project_id: string | null
+  query_length: number
+  query_sha256: string
+  requested_types: unknown[]
+  safe_error_summary: string | null
+  session_id: string | null
+  status: string
+  task_id: string | null
+  trace_id: string
+  used_tokens: number
 }
 
-/** The trace detail read adds `items`; the list row does not. */
+/**
+ * The trace **detail** read: `store.trace()` does `SELECT *` and joins `items`, so it
+ * carries four fields a list row does not. Recorded separately because the first
+ * version of this contract described one shape for both and over-reported the list.
+ */
 export interface MemoryTraceDetail extends MemoryTrace {
+  authority_refs: unknown[]
+  filtered: unknown[]
   items: unknown[]
+  state_revision: number | null
 }
 
 /** `health.report()` plus the handler's `non_authoritative`. */

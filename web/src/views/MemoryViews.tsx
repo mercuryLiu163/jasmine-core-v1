@@ -32,6 +32,7 @@ import type {
   MemoryJob,
   MemoryJobCounts,
   MemoryTrace,
+  MemoryTraceDetail,
 } from '../api/types'
 import { hrefFor, sourceHref } from '../app/router'
 import { useSession } from '../app/session'
@@ -45,6 +46,7 @@ import { formatTimestamp } from '../lib/text'
 import {
   Hash,
   MemoryDependencyPending,
+  MemoryNotFound,
   MemoryInvalidId,
   MemorySliceStatus,
   MemoryUnusedInvalidId,
@@ -108,9 +110,14 @@ function MemoryPanel<T>({
           <Loading what={what} />
         ) : null}
 
-        {badId === null && !pending && resource.error !== null && !isMemoryPending(resource.error) ? (
-          <ErrorPanel error={resource.error} what={what} onRetry={resource.reload} />
-        ) : null}
+        {/* A 404 is Core answering, not a failure: P4 uses it for "absent" and "not yours"
+            alike, so it gets its own state rather than an error banner with a retry that can
+            never succeed. Every other error is a real failure and says so. */}
+        {badId === null && !pending && resource.error !== null && !isMemoryPending(resource.error)
+          ? resource.error.kind === 'missing'
+            ? <MemoryNotFound what={what} />
+            : <ErrorPanel error={resource.error} what={what} onRetry={resource.reload} />
+          : null}
 
         {empty ? (
           <Empty what={what} hint={emptyHint ?? '这是一个空集,不是错误,也不是记录不存在。'} />
@@ -716,7 +723,7 @@ export function MemoryTracesView({ traceId }: { traceId: string | null }): JSX.E
   )
 }
 
-function MemoryTraceBody({ trace }: { trace: MemoryTrace }): JSX.Element {
+function MemoryTraceBody({ trace }: { trace: MemoryTraceDetail }): JSX.Element {
   return (
     <KeyValue
       rows={[

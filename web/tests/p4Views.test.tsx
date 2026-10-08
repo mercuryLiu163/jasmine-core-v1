@@ -213,17 +213,26 @@ describe('empty, not-found, refused and pending stay four different states', () 
     expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
   })
 
-  it('shows an unauthorised project as not_found, not as pending or an error banner', async () => {
-    // P4 answers `not_found` for a project the actor may not use; that is Core being
-    // correct, not a broken dependency and not a failure to render.
+  it('shows an unauthorised project as not_found, not as an error and not as pending', async () => {
+    // P4 answers `not_found` for a project the actor may not use, deliberately
+    // indistinguishable from "does not exist" so the Inspector cannot enumerate another
+    // project's work. So it must NOT be an error banner with a retry — that implies "try
+    // again and you might get it" and recreates the hint P4 removed — and not the
+    // dependency panel either, because Core answered.
     const user = userEvent.setup()
     await enter(user, '#/memory/items', {
       ...SIGNED_IN,
       'GET /v1/memory/items': coreError(404, 'not_found', 'project not found'),
     })
     const panel = await screen.findByRole('region', { name: /Memory Items/ })
-    await waitFor(() => expect(within(panel).getByRole('alert').textContent).toContain('not_found'))
+    const notFound = await within(panel).findByTestId('not-found')
+    expect(notFound.textContent).toContain('无权访问')
+    expect(within(panel).queryByRole('alert')).toBeNull()
     expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
+    // No error-styled retry: the *standing* re-read control every Memory view carries is
+    // not the same thing as a failure banner inviting a retry, which is what was wrong.
+    expect(within(panel).queryByRole('alert')).toBeNull()
+    expect(panel.textContent).not.toContain('失败')
   })
 
   it('shows a missing scope as Core refusal, not as the missing dependency', async () => {
@@ -237,15 +246,31 @@ describe('empty, not-found, refused and pending stay four different states', () 
     expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
   })
 
-  it('keeps an unknown id distinct from an unauthorised project', async () => {
+  it('renders an unknown id as the same not-found state, because P4 does not distinguish', async () => {
+    // The UI must not invent a distinction Core deliberately withholds — but it must still
+    // differ from the refused and pending states.
     const user = userEvent.setup()
     await enter(user, `#/memory/items/${UNKNOWN_ITEM}`, {
       ...SIGNED_IN,
       ['GET /v1/memory/items/' + UNKNOWN_ITEM]: coreError(404, 'not_found', 'memory not found'),
     })
     const panel = await screen.findByRole('region', { name: /Memory Item/ })
-    await waitFor(() => expect(within(panel).getByRole('alert').textContent).toContain('not_found'))
+    await waitFor(() => expect(within(panel).getByTestId('not-found')).toBeTruthy())
+    expect(within(panel).queryByRole('alert')).toBeNull()
     expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
+  })
+
+  it('still shows a genuine failure as an error banner with a retry', async () => {
+    // The control for the two tests above: a 500 is a real failure and must keep the
+    // banner, or "not an error banner" would have been achieved by removing error handling.
+    const user = userEvent.setup()
+    await enter(user, '#/memory/items', {
+      ...SIGNED_IN,
+      'GET /v1/memory/items': coreError(500, 'internal_error', 'boom'),
+    })
+    const panel = await screen.findByRole('region', { name: /Memory Items/ })
+    await waitFor(() => expect(within(panel).getByRole('alert')).toBeTruthy())
+    expect(within(panel).queryByTestId('not-found')).toBeNull()
   })
 })
 
@@ -355,29 +380,31 @@ describe('a real P4 read renders the record it was given', () => {
   })
 })
 
-describe('the view does not synthesise engine text Core withheld', () => {
-  it('renders a withheld safe_error_summary as nothing, not as a placeholder', async () => {
-    // P4 nulls `safe_error_summary` for a non-human actor and keeps the key. The UI must
-    // render the absence, not invent text and not leak a stale value from a previous read.
+describe('the view renders the engine text exactly as Core sent it', () => {
+  // These run on the job *detail*, which is where the field is rendered. The first version
+  // of this pair ran on the list, whose table never shows `safe_error_summary` at all, so
+  // changing the mocked value to non-null still passed — a vacuous test.
+  it('renders nothing where Core withheld the text', async () => {
     const user = userEvent.setup()
-    await enter(user, '#/memory/jobs', {
+    await enter(user, `#/memory/jobs/${JOB}`, {
       ...SIGNED_IN,
-      'GET /v1/memory/jobs': {
+      ['GET /v1/memory/jobs/' + JOB]: {
         body: {
-          jobs: [job({ status: 'FAILED', safe_error_summary: null, last_error_code: 'engine_unavailable' })],
-          count: 1,
-          counts: withKeys(contract.nested_fields.job_counts, { failed: 1 }),
+          job: job({ status: 'FAILED', safe_error_summary: null, last_error_code: 'engine_unavailable' }),
+          attempts: [],
         },
       },
     })
-    const panel = await screen.findByRole('region', { name: /Memory Jobs/ })
-    const table = await within(panel).findByTestId('memory-jobs')
-    expect(table.textContent).toContain('FAILED')
-    expect(table.textContent).not.toContain('simulated text')
+    const panel = await screen.findByRole('region', { name: /Memory Job/ })
+    await waitFor(() => expect(panel.textContent).toContain('engine_unavailable'))
+    // `RawText` renders its label only when it is mounted, so the label's absence is the
+    // signal that no engine text was invented to fill the withheld value.
+    expect(within(panel).queryByText('safe_error_summary')).toBeNull()
+    expect(panel.textContent).not.toContain('simulated text')
   })
 
-  it('shows the engine text when Core did send it', async () => {
-    // The control: without this, rendering nothing would look like success either way.
+  it('renders the sentinel Core actually sent', async () => {
+    // The control: if this passed with the text withheld, the test above would prove nothing.
     const user = userEvent.setup()
     await enter(user, `#/memory/jobs/${JOB}`, {
       ...SIGNED_IN,
@@ -390,6 +417,7 @@ describe('the view does not synthesise engine text Core withheld', () => {
     })
     const panel = await screen.findByRole('region', { name: /Memory Job/ })
     await waitFor(() => expect(panel.textContent).toContain('engine refused the retain'))
+    expect(within(panel).getByText('safe_error_summary')).toBeTruthy()
   })
 })
 

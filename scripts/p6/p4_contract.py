@@ -134,9 +134,15 @@ def _table_columns(source: str, table: str) -> list[str]:
 
 
 def _decode_columns(columns: list[str], json_columns: list[str]) -> list[str]:
-    """A table's columns with `x_json` replaced by the decoded `x` the reader exposes."""
-    out = [c for c in columns if c not in json_columns]
-    out += [c.removesuffix("_json") for c in json_columns]
+    """Columns with `x_json` replaced by the decoded `x` the reader exposes.
+
+    Only the `_json` columns actually present are decoded: adding a decoded name for a column
+    the query never selects is how the trace *list* row came to claim `filtered` and
+    `authority_refs`, which `store.traces()` does not read.
+    """
+    present = [c for c in json_columns if c in columns]
+    out = [c for c in columns if c not in present]
+    out += [c.removesuffix("_json") for c in present]
     return sorted(out)
 
 
@@ -164,6 +170,47 @@ def _dict_literal_keys(source: str, func_name: str) -> list[str]:
                 if keys:
                     return sorted(keys)
     raise SystemExit(f"could not find a dict literal returned by {func_name!r}")
+
+
+def _sql_text(node: ast.AST) -> str:
+    """The literal text of a SQL expression, however it is assembled.
+
+    P4 builds its list query from adjacent f-strings, which Python concatenates at compile
+    time; a regex over the source sees the fragment boundaries instead of the query. Joining
+    the literal parts reproduces what the database is actually sent.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        return "".join(_sql_text(part) if not isinstance(part, ast.FormattedValue) else "?"
+                       for part in node.values)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return _sql_text(node.left) + _sql_text(node.right)
+    return ""
+
+
+def _select_columns(source: str, func_name: str) -> list[str]:
+    """The columns a list query's `SELECT` names, in order.
+
+    A list row is not the whole table: P4's `traces()` selects 16 of the 19
+    `memory_query_traces` columns, so three fields the detail read returns are absent from
+    every list row. Recording one shape for both would over-report the list — which is what
+    the first version of this contract did, and why a trace-list row was described with
+    fields it never carries.
+    """
+    for outer in ast.walk(ast.parse(source)):
+        if not (isinstance(outer, ast.FunctionDef) and outer.name == func_name):
+            continue
+        for node in ast.walk(outer):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "execute" and node.args):
+                continue
+            sql = _sql_text(node.args[0])
+            match = re.search(r"SELECT\s+(.*?)\s+FROM", sql, re.S)
+            if match is None:
+                continue
+            return [column.strip() for column in match.group(1).split(",") if column.strip()]
+    raise SystemExit(f"could not find a SELECT in {func_name!r}")
 
 
 def _effective_dict_keys(source: str, func_name: str, var_name: str) -> list[str]:
@@ -332,9 +379,16 @@ def derive(ref: str) -> dict[str, Any]:
         "lifecycle": _dict_literal_keys(lifecycle, "lifecycle_summary"),
         "health": _dict_literal_keys(health, "report"),
         "health_items": _effective_dict_keys(store, "health_counts", "counts"),
+        # The trace *list* row is narrower than the detail: `traces()` selects 16 columns.
         "trace": _decode_columns(
-            trace_columns,
+            _select_columns(store, "traces"),
             ["requested_types_json", "banks_json", "filtered_json", "authority_refs_json"]),
+        # The detail read is `SELECT *` on the table plus the joined `items`.
+        "trace_detail": sorted(
+            _decode_columns(
+                trace_columns,
+                ["requested_types_json", "banks_json", "filtered_json", "authority_refs_json"])
+            + ["items"]),
     }
 
     # Spreads a handler resolves through a local or a call: map the producing expression to

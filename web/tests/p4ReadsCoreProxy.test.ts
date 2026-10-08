@@ -41,12 +41,15 @@ async function allowedWith(env: string | undefined): Promise<(path: string) => b
 }
 
 describe('the Vite proxy host gates the P4 reads like the static host', () => {
-  it.each([undefined, '', '0', 'no', 'off'])('refuses all seven when the flag is %j', async (env) => {
+  // The values include whitespace and mixed case because the static host is tested with
+  // them and the two hosts must accept the same set; dropping `.trim()` from this host's
+  // reader left both suites green until these cases existed.
+  it.each([undefined, '', ' ', '0', 'no', 'off', 'maybe'])('refuses all seven when the flag is %j', async (env) => {
     const allowed = await allowedWith(env)
     for (const path of PENDING) expect(allowed(path), `${env} ${path}`).toBe(false)
   })
 
-  it.each(['1', 'true', 'yes'])('forwards all seven when the flag is %j', async (env) => {
+  it.each(['1', 'true', 'yes', 'TRUE', ' yes ', 'Yes'])('forwards all seven when the flag is %j', async (env) => {
     const allowed = await allowedWith(env)
     for (const path of PENDING) expect(allowed(path), `${env} ${path}`).toBe(true)
   })

@@ -5,7 +5,7 @@
 This began as the task breakdown and dependency check the operator asked for before
 implementation. The operator then authorised b1, and E1–E5 below are built, tested and
 evidenced: contract pinned by full SHA, pending paths behind a default-off switch, a labelled
-simulated fixture, the seven read views, and 99 guards across three layers. The Gate evidence
+simulated fixture, the seven read views, and 106 guards across three layers. The Gate evidence
 is registered under the P6-03b1 section of `validation-runs/p6/P6-02B-INDEX.md`, which is where
 the current bundle and the superseded ones are listed — the directory is gitignored, so a
 specific timestamp here would rot the moment the Gate is re-run.
@@ -28,8 +28,8 @@ P6-03b is the **P4 (Memory)** inspector, split by operator decision:
 | Slice | Contents | Status |
 | --- | --- | --- |
 | P6-03a | Checkpoint / Context Pack / Resume (P3) | delivered, PARTIAL / DEPENDENCY_PENDING |
-| **P6-03b1** | **7 read endpoints** — health, jobs ×2, items ×2, traces ×2 | **planned only — this file** |
-| **P6-03b2** | **5 `memory:manage` writes + `reflect`** | planned, separate milestone, needs an audited-write Gate |
+| **P6-03b1** | **7 read endpoints** — health, jobs ×2, items ×2, traces ×2 | **delivered**, PARTIAL / DEPENDENCY_PENDING (this file) |
+| **P6-03b2** | **5 `memory:manage` writes + `reflect`** | **not started**, separate milestone, needs an audited-write Gate |
 | P6-03c | Validation inspector (P7-01) | not started |
 
 ## 1. Scope, as the taskbook defines it
@@ -143,10 +143,10 @@ labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
 | # | Item | Status |
 | --- | --- | --- |
 | E1 | `scripts/p6/p4_contract.py` pinned to the full SHA above, deriving the seven read routes' scopes, response field sets **and** the semantics in §2, frozen as `web/contracts/p4-memory-read.v1.json` | **built.** The drift check re-derives from the pinned commit and **exits 2** where it is absent — P6-03a skipped to 0, and review was right that this passes for the wrong reason |
-| E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts share one `flagEnabled` spelling; tests assert they agree, that P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
+| E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts accept the same value set and are tested on it — including `' yes '` and mixed case, because the helper is *duplicated* rather than shared and dropping `.trim()` from one host left both suites green until those cases existed. Tests also assert P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
 | E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | **built.** `X-P6-Fixture: simulated-p4-reads`; the fixture also serves the shell routes in their documented shapes after an earlier version crashed the overview |
 | E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
-| E5 | Component tests plus a Gate section | **built, 99 guards** (21 contract, 21 fixture, 32 view, 16 static-host, 9 Vite-host). Gate: 10/10 full twice, 4/4 scope |
+| E5 | Component tests plus a Gate section | **built, 106 guards** (22 contract, 21 fixture, 33 view, 16 static-host, 14 Vite-host). Gate: 10/10 full twice, 4/4 scope |
 
 **Still blocked until P4 is merged and independently validated:**
 
@@ -172,18 +172,26 @@ Falsifiable, each a test or a Gate record rather than a sentence.
 4. **Non-authoritative is visible.** Item, item-detail and health views state that Memory is
    non-authoritative, read from Core's own `non_authoritative` field rather than a hardcoded
    string.
-5. **Empty vs error vs refused vs not-found are four distinct states.** No grants → empty
-   list, not an error; unauthorised project → `not_found`, not an error banner and not the
-   dependency-pending panel; missing `memory:read` → Core's `forbidden_scope`; P4 absent →
-   the dependency-pending panel.
+5. **Empty vs error vs refused vs not-found vs pending are five distinct states.** No
+   grants → an empty list, not an error; `not_found` → its own state saying the object does
+   not exist *or* the actor may not see it, with **no error banner and no retry prompt**
+   (P4 refuses an unauthorised row with the same `not_found` it uses for an absent one,
+   deliberately, so the UI must not invent the distinction back and must not invite a retry
+   that cannot succeed); a genuine failure (5xx) → the error banner with a retry; missing
+   `memory:read` → Core's `forbidden_scope`; P4 absent → the dependency-pending panel. The
+   standing re-read control every view carries is unaffected — it is not an error retry.
 6. **Malformed ids are refused locally** with the right field named and **zero** requests sent.
 7. **Redaction is respected, at the layer this slice controls.** P4 withholds engine free
    text (`safe_error_summary`) from any actor that is not human or system, by nulling the
-   value and keeping the key (`_withhold_engine_text`). The fixture models that rule through
-   an `actor:agent` scope, and tests assert both directions: a human key sees the text, an
-   agent key does not, the key is still present, and the view renders the absence rather than
-   inventing text. P4's own actor-kind decision is server-side and is **not** re-implemented —
-   what is verified is that the UI does not undo the withholding.
+   value and keeping the key (`_withhold_engine_text`, applied inside `_respond`, so it covers
+   every handler). The fixture does the same on all seven reads, and tests assert both
+   directions: a human key sees the text, an agent key does not, the key is still present, and
+   the view renders the sentinel Core sent rather than inventing text where it was withheld.
+   **Two limits, stated rather than implied:** the fixture keys agent-ness on an
+   `actor:agent` scope, whereas the real Core decides from the actor record via
+   `core.actor_kind(...)` — the fixture has no actor registry, so it stands in rather than
+   reproduces that call; and P4's own decision is server-side, so what is verified here is
+   that the UI does not undo the withholding.
 8. **No forbidden affordance and no engine client exists.** No retain, no bank selector, no
    direct-engine call, no `reflect` control, no lifecycle button. Asserted structurally rather
    than by word search, because the first draft of this criterion said "a grep over the bundle
@@ -192,7 +200,9 @@ Falsifiable, each a test or a Gate record rather than a sentence.
    bundle carries no origin other than XML namespace URIs and React's error-decoder link; no
    engine credential identifier (`api_key`, `access_token`, `refresh_token`, `password=`,
    `client_secret`); every memory call is a same-origin `/memory/...` path; and no memory
-   module names an engine client.
+   module names an engine client. **The three bundle-level assertions skip when `web/dist` is
+   absent** (a fresh checkout has none), so they pass vacuously there; the endpoint-layer and
+   module assertions always run. Build before relying on the bundle checks.
 9. **Status.** The pages and the report say **PARTIAL / DEPENDENCY_PENDING** and state that
    the contract source is pinned while **P4 phase acceptance has not passed**; nothing claims
    P6 passed, and Memory is never presented as Truth.
@@ -217,9 +227,9 @@ the criterion claims. `R#` is a Gate record in `scripts/p6/browser_trace.mjs`.
 | 2 baseline untouched | `test_baseline_core_serves_none_of_the_seven_endpoints`, `test_pending_paths_are_not_in_the_live_read_allowlist`, `test_the_live_allowlist_is_unchanged_by_this_slice`, `test_every_live_path_is_a_real_baseline_route`; `refuses all seven on a baseline proxy`, `forwards all seven when the operator states the Core has P4`, `leaves the P6-03a switch independent`, `defaults to off…`; the Vite-host equivalents |
 | 3 the seven reads render | Gate records 1–4 — health; jobs list+detail; items list+detail; traces list+detail — screenshots 25–28. The traces list was missing until the criterion was audited, which is why the record now names both halves |
 | 4 `non_authoritative` from Core | `shows the marker when Core sends non_authoritative: true`, `does NOT claim it when Core does not send the field`, `shows the marker on an item detail`, `test_non_authoritative_is_present_where_p4_sends_it`; Gate R1 |
-| 5 four states distinct | `renders a grantless actor as an empty result, not an error`, `shows an unauthorised project as not_found…`, `shows a missing scope as Core refusal…`, `keeps an unknown id distinct from an unauthorised project`, `states PARTIAL / DEPENDENCY_PENDING on the view itself`; `test_a_grantless_token_gets_an_empty_list_not_an_error`, `test_an_unauthorised_project_is_not_found_rather_than_an_error`, `test_a_missing_scope_is_403_and_names_itself`, `test_an_unknown_id_is_not_found`; Gate R5 |
+| 5 five states distinct | `renders a grantless actor as an empty result, not an error`, `shows an unauthorised project as not_found, not as an error and not as pending`, `renders an unknown id as the same not-found state…`, `still shows a genuine failure as an error banner with a retry`, `shows a missing scope as Core refusal…`; `test_a_grantless_token_gets_an_empty_list_not_an_error`, `test_an_unauthorised_project_is_not_found_rather_than_an_error`, `test_a_missing_scope_is_403_and_names_itself`, `test_an_unknown_id_is_not_found`; Gate R5 |
 | 6 malformed id refused locally | the three `does not blame the missing P4 for a bad … id` cases; `test_a_malformed_id_is_400_not_a_silent_404`; Gate R6 |
-| 7 redaction respected | `test_a_human_key_sees_the_engine_text`, `test_an_agent_key_has_the_engine_text_withheld`, `test_withholding_does_not_drop_the_field`, `renders a withheld safe_error_summary as nothing…`, `shows the engine text when Core did send it` |
+| 7 redaction respected | `test_a_human_key_sees_the_engine_text`, `test_an_agent_key_has_the_engine_text_withheld`, `test_withholding_does_not_drop_the_field`, `renders nothing where Core withheld the text`, `renders the sentinel Core actually sent` — the last pair runs on the **detail** view, because the list table never renders the field and the first version of it was vacuous |
 | 8 no engine client | `test_the_bundle_can_only_talk_to_its_own_origin`, `test_the_bundle_carries_no_engine_credential_identifier`, `test_the_memory_endpoints_stay_under_the_same_origin_client`, `test_no_engine_client_exists_in_the_slice`, `test_the_memory_endpoint_layer_issues_get_only`, `test_absent_retain_and_bank_selector_routes`; `test_every_write_is_refused_because_writes_are_p6_03b2` |
 | 9 status | `test_snapshot_says_the_dependency_is_missing_and_acceptance_unpassed`; `states PARTIAL / DEPENDENCY_PENDING on the view itself`; the `%s offers only read controls` cases; Gate R7 |
 
@@ -262,14 +272,22 @@ Still open, for the operator:
 * **One unexplained behaviour.** Signing out and back in mid-Gate left the app rendering the
   previous route while the URL already carried the target hash; assigning the hash and
   dispatching `hashchange` did not fix it, so the scope check moved to its own run. The root
-  cause was not established. It is not recorded as a product defect because the component
-  tests drive the same transition through `render` and pass — but it is unexplained, and that
-  is stated rather than buried.
+  cause was not established. Independent review could not reproduce it in jsdom either (two
+  probes — sign-out→sign-in→navigate, and setting the target hash while signed out then
+  signing in — both rendered the target route), which is why it is not filed as a product
+  defect. **The wording here previously overstated that support**: it claimed the component
+  tests drive the same transition and pass, but no test signs out and back in mid-session —
+  `app.test.tsx` signs out and asserts the sign-in form, which is a different transition. The
+  honest position is: unexplained, not reproduced in jsdom by review, and **not covered by a
+  test either way**.
 
 ## 7. Standing status
 
-`P6-03b1: NOT STARTED, DEPENDENCY_PENDING` — contract pinned to
-`0c4f8f0e2118711ac9aa2a7006fddc6982962248`, P4 phase acceptance **not passed**, live proxy
-closed by default. `P6-03b2: NOT STARTED` and gated behind its own audited-write Gate. The
-baseline serves none of the thirteen routes, so no part of this slice is available, and none
-of it may be described as such until §4 has been executed against a real Core.
+`P6-03b1: DELIVERED, PARTIAL / DEPENDENCY_PENDING` — the seven read views, the pinned
+contract, the gated paths and the Gate are built and evidenced; contract pinned to
+`0c4f8f0e2118711ac9aa2a7006fddc6982962248`, **P4 phase acceptance not passed**, live proxy
+closed by default. This header said "NOT STARTED" for five commits after the implementation
+landed, which a reader could have taken either as "nothing to review" or as a reason to skip
+the acceptance caveats. `P6-03b2: NOT STARTED` and gated behind its own audited-write Gate.
+The baseline serves none of the thirteen routes, so no part of this slice is available, and
+none of it may be described as such until §4 has been executed against a real Core.

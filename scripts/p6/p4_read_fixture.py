@@ -225,17 +225,32 @@ def trace_row(contract: dict[str, Any], *, ident: str, mode: str = "recall") -> 
         "query_length": 42,
         "requested_types": ["VERIFIED_OUTCOME"],
         "banks": [f"bank_{ID_BODY}"],
-        "filtered": [],
         "budget_tokens": 512,
         "used_tokens": 128,
-        "authority_refs": [],
-        "state_revision": 7,
         "error_code": None,
         "safe_error_summary": None,
         "created_at": "2026-10-07T12:03:00Z",
     })
-    assert set(trace) == set(contract["nested_fields"]["trace"]), "fixture trace shape drifted"
+    assert set(trace) == set(contract["nested_fields"]["trace"]), (
+        "fixture trace-list shape drifted from the frozen contract")
     return trace
+
+
+def trace_detail_row(contract: dict[str, Any], *, ident: str = TRACE) -> dict[str, Any]:
+    """The detail read: `SELECT *` plus the joined `items`.
+
+    Four fields a list row does not carry, because P4's list query selects 16 of the 19
+    table columns and does not join the results.
+    """
+    detail = {**trace_row(contract, ident=ident),
+              "filtered": [],
+              "authority_refs": [],
+              "state_revision": 7,
+              "items": [{"result_id": f"mqr_{ID_BODY}", "rank": 1,
+                         "memory_id": ITEM, "score": 0.9}]}
+    assert set(detail) == set(contract["nested_fields"]["trace_detail"]), (
+        "fixture trace-detail shape drifted from the frozen contract")
+    return detail
 
 
 def jobs_payload(contract: dict[str, Any], *, empty: bool) -> dict[str, Any]:
@@ -309,11 +324,7 @@ def traces_payload(contract: dict[str, Any], *, empty: bool) -> dict[str, Any]:
 
 
 def trace_payload(contract: dict[str, Any]) -> dict[str, Any]:
-    trace = trace_row(contract, ident=TRACE)
-    # The detail read carries `items`; the list row does not.
-    trace = {**trace, "items": [{"result_id": f"mqr_{ID_BODY}", "rank": 1,
-                                 "memory_id": ITEM, "score": 0.9}]}
-    payload = {"trace": trace}
+    payload = {"trace": trace_detail_row(contract)}
     assert set(payload) == set(contract_field_sets(contract)["trace"]), (
         "fixture trace-detail shape drifted from the frozen contract")
     return payload
@@ -322,17 +333,21 @@ def trace_payload(contract: dict[str, Any]) -> dict[str, Any]:
 #: The one field P4 treats as engine free text (`_ENGINE_TEXT_KEY`), from the pinned commit.
 ENGINE_TEXT_KEY = "safe_error_summary"
 
-#: A token carrying this scope is treated as a non-human actor, which is how P4 decides.
+#: A token carrying this scope is treated as a non-human actor.
+#:
+#: This is the fixture's stand-in, **not** P4's rule: the real Core decides from the actor
+#: record (`core.actor_kind(principal.actor_id)`), not from a scope. The fixture has no actor
+#: registry, so it keys on a scope and says so rather than implying it reproduces that call.
 AGENT_SCOPE = "actor:agent"
 
 
 def for_actor(payload: Any, *, agent: bool) -> Any:
     """P4's `_withhold_engine_text`: null the engine free text wherever it is nested.
 
-    Mirrors the pinned commit rather than inventing a rule: for a human or system actor the
-    payload is returned unchanged, and for anyone else `safe_error_summary` becomes None —
-    the key stays, its value does not. The walk is recursive for the same reason P4's is: the
-    same job appears at the top level, inside `attempts`, and inside `items`.
+    Mirrors the pinned commit's *behaviour*: for a human or system actor the payload is
+    returned unchanged, and for anyone else `safe_error_summary` becomes None — the key stays,
+    its value does not. The walk is recursive and applied to every reply, for the same reasons
+    P4's is: the field appears at several nestings, and `_respond` wraps every handler.
     """
     if not agent:
         return payload
@@ -363,8 +378,10 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: Any) -> None:  # keep the fixture quiet-ish
         sys.stderr.write("p4-fixture: " + (fmt % args) + "\n")
 
-    def _send(self, status: int, payload: Any) -> None:
-        body = json.dumps(payload).encode()
+    def _send(self, status: int, payload: Any, *, agent: bool = False) -> None:
+        # P4 applies `_withhold_engine_text` inside `_respond`, so it covers every handler.
+        # Applying it to only some routes would leave a leak path the real Core does not have.
+        body = json.dumps(for_actor(payload, agent=agent)).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -460,14 +477,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/v1/memory/health":
             if not self._require_route(scopes, r"^/v1/memory/health$"):
                 return
-            self._send(200, health_payload(self.contract))
+            self._send(200, health_payload(self.contract), agent=self._agent(scopes))
             return
 
         if path == "/v1/memory/jobs":
             if not self._require_route(scopes, r"^/v1/memory/jobs$"):
                 return
-            self._send(200, for_actor(jobs_payload(self.contract, empty=grantless),
-                                   agent=self._agent(scopes)))
+            self._send(200, jobs_payload(self.contract, empty=grantless), agent=self._agent(scopes))
             return
 
         job = re.fullmatch(r"/v1/memory/jobs/([^/]+)", path)
@@ -481,8 +497,7 @@ class Handler(BaseHTTPRequestHandler):
             if ident not in (JOB, JOB_2):
                 self._error(404, "not_found", f"memory_job {ident} not found")
                 return
-            self._send(200, for_actor(job_payload(self.contract, ident=ident),
-                                      agent=self._agent(scopes)))
+            self._send(200, job_payload(self.contract, ident=ident), agent=self._agent(scopes))
             return
 
         if path == "/v1/memory/items":
@@ -494,7 +509,7 @@ class Handler(BaseHTTPRequestHandler):
                 # cannot enumerate another project's work.
                 self._error(404, "not_found", f"project {project} not found")
                 return
-            self._send(200, items_payload(self.contract, empty=grantless))
+            self._send(200, items_payload(self.contract, empty=grantless), agent=self._agent(scopes))
             return
 
         item = re.fullmatch(r"/v1/memory/items/([^/]+)", path)
@@ -508,14 +523,13 @@ class Handler(BaseHTTPRequestHandler):
             if ident not in (ITEM, ITEM_2):
                 self._error(404, "not_found", f"memory {ident} not found")
                 return
-            self._send(200, for_actor(item_payload(self.contract),
-                                   agent=self._agent(scopes)))
+            self._send(200, item_payload(self.contract), agent=self._agent(scopes))
             return
 
         if path == "/v1/memory/traces":
             if not self._require_route(scopes, r"^/v1/memory/traces$"):
                 return
-            self._send(200, traces_payload(self.contract, empty=grantless))
+            self._send(200, traces_payload(self.contract, empty=grantless), agent=self._agent(scopes))
             return
 
         trace = re.fullmatch(r"/v1/memory/traces/([^/]+)", path)
@@ -529,7 +543,7 @@ class Handler(BaseHTTPRequestHandler):
             if ident not in (TRACE, TRACE_2):
                 self._error(404, "not_found", f"memory_trace {ident} not found")
                 return
-            self._send(200, trace_payload(self.contract))
+            self._send(200, trace_payload(self.contract), agent=self._agent(scopes))
             return
 
         self._error(404, "not_found", f"no route for {path}")
