@@ -781,7 +781,17 @@ function RunDetailBody({ run }: { run: ValidationRunDetail }): JSX.Element {
           { label: 'run_id', value: <code>{dash(run.run_id)}</code> },
           { label: 'stage', value: <code>{dash(run.stage)}</code> },
           { label: 'created_at', value: formatTimestamp(run.created_at) },
-          { label: 'verdict(按记录)', value: run.verdict ? <StatusBadge kind="validation" status={run.verdict} /> : <span className="muted">—</span> },
+          {
+            label: 'verdict(按记录)',
+            // The run's own verdict gets a stable hook: every case card renders the same human
+            // label, so a reader (or a harness) selecting by label alone can pick up a case's
+            // verdict as the run's.
+            value: (
+              <span data-testid="run-verdict">
+                {run.verdict ? <StatusBadge kind="validation" status={run.verdict} /> : <span className="muted">—</span>}
+              </span>
+            ),
+          },
           {
             label: 'verdict_consistent',
             value: (

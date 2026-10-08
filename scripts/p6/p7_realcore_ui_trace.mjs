@@ -282,12 +282,23 @@ async function main() {
           contextPackText: card.querySelector('[data-testid=context-pack-present]')?.textContent ?? null,
         }
       })
+      // The run's verdict, from the hook the run-detail row carries. Selecting by the human
+      // label alone took the LAST match, and every case card renders the same label, so a run
+      // whose run-level verdict differs from its last case recorded the case's verdict as the
+      // run's. The label is still accepted as a fallback, but only when the hook is absent.
       let verdict = null
-      for (const list of document.querySelectorAll('dl.kv')) {
-        for (const row of list.querySelectorAll(':scope > div')) {
-          if (((row.querySelector('dt')?.textContent) ?? '').trim() === 'verdict(按记录)') {
-            verdict = row.querySelector('[data-status]')?.getAttribute('data-status') ?? null
+      const hooked = document.querySelector('[data-testid="run-verdict"] [data-status]')
+      if (hooked) {
+        verdict = hooked.getAttribute('data-status') ?? null
+      } else {
+        for (const list of document.querySelectorAll('dl.kv')) {
+          for (const row of list.querySelectorAll(':scope > div')) {
+            if (((row.querySelector('dt')?.textContent) ?? '').trim() === 'verdict(按记录)') {
+              verdict = row.querySelector('[data-status]')?.getAttribute('data-status') ?? null
+              break
+            }
           }
+          if (verdict !== null) break
         }
       }
       return {

@@ -36,6 +36,9 @@ import tempfile
 import time
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from p7_realcore_ui import DEFAULT_REAL_RUNS  # noqa: E402
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 
@@ -75,8 +78,13 @@ def build_synthetic_root(destination: Path, real_runs: Path) -> tuple[Path, list
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--real-runs", type=Path,
-                        default=ROOT / "validation-runs", dest="real_runs",
-                        help="the operator's records tree, used read-only as the source to copy")
+                        # Same default as the driver: the operator's records tree. It used to
+                        # default to this worktree's own gitignored tree, which the guard below
+                        # then always rejected, so this script could never run without an explicit
+                        # path.
+                        default=DEFAULT_REAL_RUNS, dest="real_runs",
+                        help="the operator's records tree, used read-only as the source to copy "
+                             "(default: the same tree the driver reads)")
     parser.add_argument("--ref", default=None, help="P7-01 ref to extract (default: the driver's)")
     parser.add_argument("--repo", type=Path, default=None, help="the P7-01 worktree")
     parser.add_argument("--keep-temp", action="store_true")
@@ -85,10 +93,14 @@ def main(argv: list[str] | None = None) -> int:
     # The operator's tree for this run is the *synthetic* copy. The real tree is read once, to
     # copy from, and never written.
     source_root = args.real_runs
-    if source_root.name == "validation-runs" and (source_root / "p6").is_dir():
-        # The caller pointed at the dashboard's own (gitignored) tree; take the P7-01 records.
-        raise SystemExit("point --real-runs at the P7-01 records tree "
-                         "(jasmine-core-v1/validation-runs), not the dashboard's")
+    # Precise guards, not a name heuristic: the tree must hold run records, and it must not be a
+    # tree inside this worktree (the dashboard keeps its own gitignored validation-runs/).
+    if not source_root.is_dir() or not any(source_root.rglob("run-*.json")):
+        raise SystemExit(f"--real-runs {source_root} holds no run-*.json; point it at the "
+                         f"operator's records tree")
+    if ROOT.resolve() in source_root.resolve().parents:
+        raise SystemExit(f"--real-runs {source_root} is inside this worktree; point it at the "
+                         f"operator's records tree")
 
     stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     # Deliberately NOT named like an acceptance bundle: this one is falsified on purpose, and it

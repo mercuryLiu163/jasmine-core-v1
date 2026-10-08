@@ -443,7 +443,10 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
         "",
         "**This drill-down does not make P6 or P7 PASS.** P7-01's acceptance criterion 1 "
         "(read an existing real FAIL Run, classified, raw output traceable) is BLOCKED on the "
-        "operator's own records: the census below finds 0 FAIL cases, 0 `failure_class` and 0 "
+        "operator's own records: the census below reports "
+        f"{census['fail_cases']} FAIL cases, "
+        f"{census['failure_class_non_null']} `failure_class` and "
+        f"{census['failure_output_non_null']} "
         "`failure_output`. The FAIL code path is exercised only by the clearly-labelled synthetic "
         "fixture, which is not evidence and counts toward no criterion.",
         "",
@@ -462,17 +465,24 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
         lines.append(f"| {record['step']} | {mark} | `click-trace.jsonl` — {detail} |")
     lines += [
         "",
-        "## Criterion 1 — independently confirmed BLOCKED",
+        f"## Criterion 1 — {census['criterion_1']}",
         "",
-        f"Nine real records under the operator's tree ({census['real_runs_root']}); run verdicts "
-        f"{census['run_verdicts']}; {census['cases']} cases with verdicts "
-        f"{census['case_verdicts']}; **{census['fail_cases']} FAIL cases, "
+        f"{census['records']} real records under the operator's tree "
+        f"({census['real_runs_root']}); run verdicts {census['run_verdicts']}; "
+        f"{census['cases']} cases with verdicts {census['case_verdicts']}; "
+        # Derived, never hard-coded: a real FAIL run must not produce a result.md whose prose
+        # contradicts its own machine-readable fields (and the exit code).
+        f"**{census['fail_cases']} FAIL cases, "
         f"{census['failure_class_non_null']} non-null `failure_class`, "
-        f"{census['failure_output_non_null']} non-null `failure_output`**. The real-FAIL-run path "
-        "is **unmet**; it is exercised only by the fixture run `run-20260101T000002Z`, which "
-        "carries `synthetic: true` and a note saying it is not evidence. This drill-down is "
-        "`P6-T06` evidence for the read slice and does **not** close criterion 1 and does **not** "
-        "make the P6 or P7 phase PASS.",
+        f"{census['failure_output_non_null']} non-null `failure_output`**."
+        + (" The real-FAIL-run path is **unmet**; it is exercised only by the fixture run "
+           "`run-20260101T000002Z`, which carries `synthetic: true` and a note saying it is not "
+           "evidence. This drill-down is `P6-T06` evidence for the read slice and does **not** "
+           "close criterion 1 and does **not** make the P6 or P7 phase PASS."
+           if census["criterion_1"] == "BLOCKED" else
+           " The census finds a FAIL case on the operator's tree, so the real-FAIL-run path is "
+           "**met by the data**: this run reads it, and criterion 1 can be assessed against it "
+           "rather than against a fixture."),
         "",
         "## Verdict integrity (disk vs Core vs page)",
         "",
@@ -761,8 +771,14 @@ def main(argv: list[str] | None = None) -> int:
             "census_run_ids": real_ids,
             "fixture_ids_inside_census": overlap,
             "counted_toward_criterion_1": bool(overlap),
-            "measurement": "the shipped fixture ids are disjoint from the ids the census read from "
-                           "--real-runs, so no fixture record can contribute to criterion 1",
+            # Derived, so the sentence cannot disagree with the fields beside it (it did in the
+            # falsified negative, where the overlap is deliberately non-empty).
+            "measurement": (
+                "the shipped fixture ids are disjoint from the ids the census read from "
+                "--real-runs, so no fixture record can contribute to criterion 1"
+                if not overlap else
+                f"the census read the fixture id(s) {overlap} from --real-runs, so a fixture record "
+                f"IS counted toward criterion 1 in this run"),
         }
         (out / "fixture-census.json").write_text(json.dumps(fixture_census_note, indent=2) + "\n",
                                                  encoding="utf-8")
