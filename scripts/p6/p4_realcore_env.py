@@ -230,6 +230,22 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     for report in failing_worker.run(max_ticks=args.max_ticks, log=log):
         log(f"failing-pass tick: {report.as_dict()}")
 
+    # Two more sources are enqueued and deliberately not worked: one stays PENDING, one is claimed
+    # to RUNNING through P4's own claim path (a real lease, not a fabricated status), so the retry
+    # acceptance can exercise both refusals against rows P4 itself put in those states.
+    for title in ("pending path", "running path"):
+        other_task = seed.task(project_id, title=title)
+        seed.verified_step(project_id=project_id, task_id=other_task)
+    jobs_module.JobStore(conn, store).enqueue_from_sources(SourceRegistry(), limit=100,
+                                                           max_attempts=3)
+    pending_rows = conn.execute("SELECT job_id FROM memory_jobs WHERE status='PENDING'"
+                                " ORDER BY created_at").fetchall()
+    claimed = None
+    if pending_rows:
+        claimed_job = jobs_module.JobStore(conn, store).claim_due(owner="p6-realcore-env",
+                                                                 lease_seconds=3600)
+        claimed = claimed_job.job["job_id"] if claimed_job is not None else None
+
     items = conn.execute("SELECT memory_id, status, revision, pinned, memory_type, project_id,"
                          " engine_state, last_error_code, safe_error_summary"
                          " FROM memory_items").fetchall()
@@ -266,6 +282,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
                    "failed_step_id": failed_step, "failure_task_id": failure_task_id},
         "scan": scan,
         "worker_ticks": ticks,
+        "claimed_running_job": claimed,
         "items": [dict(row) for row in items],
         "jobs": [dict(row) for row in jobs],
         "traces": [dict(row) for row in traces],
