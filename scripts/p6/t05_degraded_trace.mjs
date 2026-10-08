@@ -200,36 +200,48 @@ async function main() {
       `document.querySelectorAll('[data-testid="memory-traces"] tbody tr').length > 0`)
     const traces = {
       rows: await rowsIn('memory-traces'),
-      failed: (await pageText()).includes('FAILED') || (await pageText()).includes('failed'),
+      // The status cell renders Core's own `status` verbatim; read the row rather than guessing the
+      // word, and require it to look like a failure or a degradation — never a success.
+      firstRow: await evaluate(cdp,
+        `(document.querySelector('[data-testid="memory-traces"] tbody tr')?.textContent ?? '').trim()`),
       pending: await pending(),
       alerts: await alerts(),
     }
     trace.record('the degraded attempt is recorded as history, not hidden',
-      traces.rows > 0 && traces.failed && traces.pending === false && traces.alerts.length === 0,
+      traces.rows > 0 && /(failed|degraded|error)/i.test(traces.firstRow) &&
+        !/(success|ok\b|done)/i.test(traces.firstRow) &&
+        traces.pending === false && traces.alerts.length === 0,
       JSON.stringify(traces))
     await trace.screenshot(cdp, 't05-03-memory-traces')
 
     // --- 3. the P1 views are untouched: no dependency panel, no alert, real data ----------------
+    // Each P1 view gets the marker its own panel renders, plus a check that the Core read behind it
+    // really answered 200 — "the page rendered" alone would not show the outage stayed contained.
+    const apiStatuses = (prefix) => requests.filter((entry) => entry.path.startsWith(prefix))
+      .map((entry) => responses.get(entry.requestId))
     const p1 = {}
-    for (const [name, hash, marker] of [
-      ['overview', 'overview', 'Core 健康与 Schema'],
-      ['task', `task/${task}`, 'Task 状态'],
-      ['conversation', `conversation?project_id=${project}&task_id=${task}`, 'Sessions'],
-      ['rules', `rules?project_id=${project}&task_id=${task}&rule_id=${rule}`, 'ACTIVE Rule'],
-      ['evidence', `evidence?evidence_id=${evidence}`, 'Evidence'],
+    for (const [name, hash, marker, prefix] of [
+      ['overview', 'overview', 'Core 健康与 Schema', '/v1/projects'],
+      ['task', `task/${task}`, 'Task 状态', `/v1/tasks/${task}`],
+      ['conversation', `conversation?project_id=${project}&task_id=${task}`, 'Sessions',
+       '/v1/events'],
+      ['rules', `rules?project_id=${project}&task_id=${task}&rule_id=${rule}`, 'ACTIVE Rule',
+       '/v1/rules'],
+      ['evidence', `evidence?evidence_id=${evidence}`, 'Evidence', '/v1/evidence'],
     ]) {
       await goto(hash, `P1 ${name}`,
-        `document.body.textContent.includes(${JSON.stringify(marker)}) && ` +
-        `document.querySelectorAll('dl.kv > div').length > 0`)
+        `document.body.textContent.includes(${JSON.stringify(marker)})`)
+      const statuses = apiStatuses(prefix)
       p1[name] = {
-        rows: await evaluate(cdp, `document.querySelectorAll('dl.kv > div').length`),
+        marker: true,
+        api: statuses.length ? statuses : null,
         pending: await pending(),
         alerts: await alerts(),
       }
     }
     trace.record('the P1 views are unaffected by the Memory outage: no dependency panel, no alert',
       Object.values(p1).every((view) => view.pending === false && view.alerts.length === 0 &&
-        view.rows > 0),
+        view.api !== null && view.api.every((status) => status === 200)),
       JSON.stringify(p1))
     await trace.screenshot(cdp, 't05-04-p1-overview')
 
