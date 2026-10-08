@@ -167,8 +167,15 @@ documentation and harness tooling:
 
 * tracked docs: this file, `web/TASK-p4-interpreter-symlink.md`, and the status text in
   `web/P6-03A-COMPLIANCE.md` / `web/REAL-CORE-ACCEPTANCE-PLAN.md`;
-* harness tooling: `scripts/p6/bundle_conformance.py` (the taskbook-§8 renderer described in the next-minimal-delivery section) and
-  `tests/p6/test_bundle_conformance.py` (13 hermetic tests).
+* harness tooling: `scripts/p6/bundle_conformance.py` (the taskbook-§8 renderer described in the
+  next-minimal-delivery section) and `tests/p6/test_bundle_conformance.py` — **20** hermetic tests
+  after the operator reproduced three defects in the first version and they were fixed: a symlink at
+  a derived-file name could write **through** to a source file (now refused; files are staged and
+  installed with `os.replace`, which cannot follow a link), an interrupted write could leave a
+  half-written output (a fresh output now appears by one atomic rename, and a failed refresh restores
+  the previous derivation), and non-empty request bodies plus nested sub-run records were dropped
+  without a note (every field of every record is now carried, with
+  `manifest.json.field_accounting.not_carried` proving it). No verdict and no Gate result changes.
 
 The exact diff list against the acceptance commit is
 `git diff --name-only f323c779… HEAD`: those six paths and nothing else, with **no `src/`, schema or
