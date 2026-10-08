@@ -363,6 +363,67 @@ def digests_of(out: Path, exclude: set[str]) -> list[dict[str, Any]]:
 # -- reporting ------------------------------------------------------------------------------------
 
 
+def check_exit_code(*, trace_exit: int, trace_records: list[dict[str, Any]],
+                    python_checks: list[dict[str, Any]], real_tree_unchanged: bool,
+                    leaked: list[str], no_verdict_upgraded: bool) -> tuple[int, list[str]]:
+    """The process exit code, derived only from recorded checks.
+
+    Every check this run records must decide the exit code, or the code is not a gate. The
+    original form consulted `trace_exit`, the tree comparison, the token scan and
+    `no_verdict_upgraded` but **not** `python_checks`, so a run whose python checks failed
+    still exited 0 (`result.md` and `manifest.json` recorded the FAIL, but a caller watching
+    only the exit code saw success).
+
+    Every check is one of three states, and they are not interchangeable:
+
+    * `ok is True` — it passed;
+    * `ok is False` — it **failed**, and the run must exit non-zero;
+    * `ok is None` — it is **BLOCKED**, i.e. it could not be decided or the data itself is the
+      finding (P7-01 criterion 1: there is no real FAIL run to read). A block the check declares
+      in advance with `blocked_is_expected: True` is the documented outcome, so it does not fail
+      the run — but it is reported, never silently counted as a pass. A block that was *not*
+      declared is an unexpected one and does fail the run.
+
+    Returns `(code, failures)`: `0` only when every browser record and every python check is a
+    pass or a declared block and the preconditions hold; `1` otherwise, with one line per
+    failure so the caller can print them.
+    """
+    def unresolved(entry: dict[str, Any]) -> str | None:
+        """`None` if the entry is a pass or a declared block, else the failure description."""
+        state = entry.get("ok")
+        if state is True:
+            return None
+        name = entry.get("step", "<unnamed>")
+        if state is None:
+            if entry.get("blocked_is_expected") is True:
+                return None
+            return f"BLOCKED (not declared in advance): {name}"
+        return f"FAIL: {name}"
+
+    failures: list[str] = []
+    if trace_exit != 0:
+        failures.append(f"the browser trace process exited {trace_exit}")
+    for record in trace_records:
+        problem = unresolved(record)
+        if problem is not None:
+            failures.append(f"browser check {problem}")
+    if not trace_records:
+        failures.append("the browser trace recorded no checks at all")
+    for check in python_checks:
+        problem = unresolved(check)
+        if problem is not None:
+            failures.append(f"python check {problem}")
+    if not python_checks:
+        failures.append("no python checks were recorded")
+    if not real_tree_unchanged:
+        failures.append("the operator's real run tree changed during the run")
+    if leaked:
+        failures.append(f"a bearer token reached the bundle: {leaked}")
+    if not no_verdict_upgraded:
+        failures.append("a recorded verdict was upgraded")
+    return (0 if not failures else 1), failures
+
+
 def render_result(out: Path, *, trace_records: list[dict[str, Any]],
                   python_checks: list[dict[str, Any]], census: dict[str, Any],
                   verdicts: dict[str, Any], real_tree: dict[str, Any],
@@ -757,7 +818,12 @@ def main(argv: list[str] | None = None) -> int:
              "evidence": "real-tree-before.json, real-tree-after.json, real-tree-comparison.json"},
             {"step": "criterion 1 census: 0 FAIL cases, 0 failure_class, 0 failure_output on the "
                      "real tree",
+             # BLOCKED is the documented finding (there is no real FAIL run to read), so it is
+             # declared here as the expected outcome. It still prints as BLOCKED in result.md and
+             # is never counted as a pass; the exit code stays 0 for a run whose only non-pass is
+             # this declared block.
              "ok": None if census["criterion_1"] == "BLOCKED" else False,
+             "blocked_is_expected": census["criterion_1"] == "BLOCKED",
              "evidence": "criterion1-census.json (BLOCKED is the finding, not a pass)"},
             {"step": "every verdict matches disk, and no PASS appears where the file says BLOCKED",
              "ok": verdicts["pagination_union_is_nine"] and verdicts["no_verdict_upgraded"]
@@ -856,8 +922,19 @@ def main(argv: list[str] | None = None) -> int:
         # the manifest that binds it.
         print(f"p6-03c: bundle {out} — {len(manifest['files'])} files bound by manifest.json, "
               f"trace exit {trace_exit}, criterion 1 {census['criterion_1']}", flush=True)
-        return 0 if (trace_exit == 0 and real_tree["unchanged"] and not leaked
-                     and verdicts["no_verdict_upgraded"]) else 1
+        code, failures = check_exit_code(
+            trace_exit=trace_exit, trace_records=trace_records, python_checks=python_checks,
+            real_tree_unchanged=real_tree["unchanged"], leaked=leaked,
+            no_verdict_upgraded=verdicts["no_verdict_upgraded"])
+        if failures:
+            # Console only, like the line above: nothing may be written to the bundle after the
+            # manifest that binds it. The same failures are in result.md.
+            print(f"p6-03c: FAILING — {len(failures)} check(s) did not pass:", flush=True)
+            for failure in failures:
+                print(f"p6-03c:   - {failure}", flush=True)
+        else:
+            print("p6-03c: every recorded check passed", flush=True)
+        return code
     finally:
         if proxy is not None:
             proxy.stop()
