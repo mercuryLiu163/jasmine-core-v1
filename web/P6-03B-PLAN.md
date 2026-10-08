@@ -156,6 +156,27 @@ labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
   independent permission-and-audit Gate before any UI ships them;
 * any statement that the Memory inspector works, or that Memory is wired.
 
+### Reachability, and why there is no navigation entry
+
+The seven Memory views have **no nav entry**, and nothing in the app links to them. That is
+deliberate and matches P6-03a, whose Checkpoint / Context Pack / Resume views are also reached
+only by their `#/…` hash: a nav item is an advertisement of availability, and these views are
+`PARTIAL / DEPENDENCY_PENDING` against an unmerged dependency. The nav's `领域(未接入)` menu
+describes what is missing instead.
+
+They are reachable, and the Gate uses these URLs:
+
+| View | Hash |
+| --- | --- |
+| health | `#/memory/health` |
+| jobs list / detail | `#/memory/jobs`, `#/memory/jobs/{mjb}` |
+| items list / detail | `#/memory/items`, `#/memory/items/{mem}` |
+| traces list / detail | `#/memory/traces`, `#/memory/traces/{mtr}` |
+
+Each one states the slice status on arrival, so a deep link cannot be mistaken for a working
+capability. If the operator later wants them in the nav, that is a product decision to take when
+P4 lands — not something to slip in while the dependency is pending.
+
 ## 4. Acceptance criteria
 
 Falsifiable, each a test or a Gate record rather than a sentence.
