@@ -86,9 +86,15 @@ def banner(ref: str, out: Path) -> None:
     print("=" * 78, file=sys.stderr)
 
 
-def extract_core(ref: str, destination: Path) -> None:
+def extract_core(ref: str, destination: Path, repo: Path | None = None) -> None:
+    """Extract `ref` from `repo` (default: this worktree's repository).
+
+    `--repo` exists so an acceptance run can be rehearsed against a **synthetic merge** that lives
+    only in a throwaway clone: the Core still comes from `git archive` of a commit, just not from
+    the repository the harness is checked out in.
+    """
     destination.mkdir(parents=True, exist_ok=True)
-    archive = subprocess.run(["git", "-C", str(REPO_ROOT), "archive", ref],
+    archive = subprocess.run(["git", "-C", str(repo or REPO_ROOT), "archive", ref],
                              check=True, capture_output=True)
     subprocess.run(["tar", "-x", "-C", str(destination)], input=archive.stdout, check=True)
     if not (destination / "src" / "jasmine_core" / "memory").is_dir():

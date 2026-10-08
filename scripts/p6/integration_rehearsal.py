@@ -161,6 +161,8 @@ def main(argv: list[str] | None = None) -> int:
             log(f"{ref} tip suite: {tip_suites[ref]['verdict']}")
         git(clone, "checkout", "-q", "rehearsal")
 
+        core_runs = run_core_acceptances(clone)
+
         web: dict[str, Any] = {"skipped": True}
         if not args.skip_web and args.node_modules.is_dir():
             os.symlink(args.node_modules, clone / "web" / "node_modules")
@@ -176,7 +178,7 @@ def main(argv: list[str] | None = None) -> int:
 
         evidence = {"source": before, "merged_ref": merged_ref, "merges": merges,
                     "contracts": contracts, "merged_suite": merged_suite,
-                    "tip_suites": tip_suites, "web": web}
+                    "tip_suites": tip_suites, "web": web, "core_runs": core_runs}
         (out / "evidence.json").write_text(json.dumps(evidence, indent=2), encoding="utf-8")
         write_readme(out, evidence)
         (out / "plan.md").write_text(
@@ -201,6 +203,46 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def run_core_acceptances(clone: Path) -> dict[str, Any]:
+    """Run the two real-Core acceptances at the merged ref, from the clone's own scripts.
+
+    The unit suites say the code merges; these say the **Core behaves** the same way at the merged
+    baseline — which is what a final integration commit would have to demonstrate. Each runs into a
+    temporary directory of its own and its summary is kept; its bundle is not (the rehearsal's own
+    bundle records the result).
+    """
+    results: dict[str, Any] = {}
+    for name, command in (
+        ("p4-core-matrix", ["scripts/p6/p4_realcore_accept.py"]),
+        ("p3-core-and-ui", ["scripts/p6/run_p3_realcore.py"]),
+    ):
+        work = clone / "rehearsal-run" / name
+        work.mkdir(parents=True, exist_ok=True)
+        argv = [sys.executable, *command, "--repo", str(clone), "--out", str(work),
+                "--no-freeze"]
+        if name == "p3-core-and-ui":
+            argv += ["--dashboard-ref", "HEAD"]
+        log(f"core acceptance {name} at the merged ref")
+        finished = subprocess.run(argv, cwd=clone, capture_output=True, text=True)
+        evidence_file = work / "evidence.json"
+        summary: dict[str, Any] = {"exit": finished.returncode}
+        if evidence_file.is_file():
+            payload = json.loads(evidence_file.read_text())
+            if "summary" in payload:
+                summary["summary"] = payload["summary"]
+            else:
+                ui = payload.get("ui_records", [])
+                summary["summary"] = payload.get("summary", {
+                    "core_checks": len(payload.get("core_entries", [])),
+                    "ui_records": len(ui),
+                })
+        else:
+            summary["tail"] = (finished.stdout + finished.stderr).strip().splitlines()[-3:]
+        results[name] = summary
+        shutil.rmtree(work, ignore_errors=True)
+    return results
 
 
 def write_readme(out: Path, evidence: dict[str, Any]) -> None:
@@ -260,7 +302,19 @@ def write_readme(out: Path, evidence: dict[str, Any]) -> None:
     else:
         lines.append(f"* dashboard at the merged ref: `tsc --noEmit` exit {web['tsc_exit']}, "
                      f"vitest exit {web['vitest_exit']} — {', '.join(web['counts']) or 'no counts'}")
+    lines += ["", "## Real-Core acceptances at the merged ref", "",
+              "| Acceptance | Exit | Result |", "| --- | --- | --- |"]
+    for name, run in evidence.get("core_runs", {}).items():
+        summary = run.get("summary", {})
+        text = ", ".join(f"{key}={value}" for key, value in summary.items()) or \
+            " | ".join(run.get("tail", []))
+        lines.append(f"| `{name}` | {run['exit']} | {text} |")
     lines += [
+        "",
+        "These run the isolated real-Core acceptances (P4's Core matrix; P3's Core matrix and browser",
+        "pass) **from the clone**, so the Core is extracted from the merged ref and the dashboard is",
+        "built from the same tree. A blocked row here is the same kind of statement as anywhere else:",
+        "a missing precondition, with its reason.",
         "",
         "### Failures that are the environment's, not the integration's",
         "",

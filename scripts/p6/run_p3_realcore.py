@@ -91,6 +91,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--ref", default=None, help="the pinned P3 commit")
     parser.add_argument("--keep", action="store_true")
+    parser.add_argument("--repo", type=Path, default=None,
+                        help="repository for the Core ref and the dashboard archive "
+                             "(default: this worktree)")
+    parser.add_argument("--dashboard-ref", default="HEAD",
+                        help="ref whose archive the dashboard is built from (default HEAD)")
+    parser.add_argument("--no-freeze", action="store_true")
     args = parser.parse_args(argv)
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -120,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
                        "build", "--out", str(env_dir), "--port", str(core_port)]
         if args.ref:
             env_command += ["--ref", args.ref]
+        if args.repo:
+            env_command += ["--repo", str(args.repo)]
         env_log = (out / "env.stderr.txt").open("w")
         procs.append(subprocess.Popen(env_command, stdout=subprocess.DEVNULL, stderr=env_log))
         if not wait_for(f"http://127.0.0.1:{core_port}/v1/health"):
@@ -201,8 +209,8 @@ def main(argv: list[str] | None = None) -> int:
 
         # --- the dashboard against the same Core -------------------------------------------------
         web_work.mkdir(parents=True, exist_ok=True)
-        archive = subprocess.run(["git", "-C", str(REPO_ROOT), "archive", "HEAD"],
-                                 check=True, capture_output=True)
+        archive = subprocess.run(["git", "-C", str(args.repo or REPO_ROOT), "archive",
+                                  args.dashboard_ref], check=True, capture_output=True)
         subprocess.run(["tar", "-x", "-C", str(web_work)], input=archive.stdout, check=True)
         os.symlink(REPO_ROOT / "web" / "node_modules", web_work / "web" / "node_modules")
         subprocess.run(["npx", "vite", "build"], cwd=web_work / "web", check=True,
@@ -272,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
         assert_no_token(out, tokens)
         log(f"{evidence['summary']['passed']} passed, {evidence['summary']['failed']} failed, "
             f"{evidence['summary']['blocked']} blocked")
-        if not failed and trace.returncode == 0:
+        if not failed and trace.returncode == 0 and not args.no_freeze:
             freeze(out, descriptor["ref"])
         return 1 if (failed or trace.returncode != 0) else 0
     finally:

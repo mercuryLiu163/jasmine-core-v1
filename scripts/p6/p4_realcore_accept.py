@@ -518,7 +518,8 @@ def run(args: argparse.Namespace) -> int:
     env_log = (out / "env.stderr.txt").open("w")
     env = subprocess.Popen([sys.executable, str(REPO_ROOT / "scripts" / "p6" / "p4_realcore_env.py"),
                             "build", "--out", str(env_dir), "--ref", args.ref,
-                            "--port", str(core_port), "--max-ticks", "8"],
+                            "--port", str(core_port), "--max-ticks", "8"]
+                           + (["--repo", str(args.repo)] if args.repo else []),
                            stdout=subprocess.DEVNULL, stderr=env_log)
     origin = f"http://127.0.0.1:{core_port}"
     try:
@@ -595,7 +596,7 @@ def run(args: argparse.Namespace) -> int:
         assert_no_token_in_bundle(out, tokens)
         log(f"{summary['passed']}/{summary['checks']} passed, {summary['failed']} failed, "
             f"{summary['blocked']} blocked")
-        if not failed and args.freeze:
+        if not failed and args.freeze and not args.no_freeze:
             freeze(out, args.ref, summary["checks"])
         return 1 if failed else 0
     finally:
@@ -616,6 +617,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ref", default=DEFAULT_REF, help="the pinned P4 commit")
     parser.add_argument("--port", type=int, help="loopback port for the isolated Core")
     parser.add_argument("--env-dir", type=Path, help="reuse an environment directory")
+    parser.add_argument("--repo", type=Path, default=None,
+                        help="repository to extract --ref from (default: this worktree)")
+    parser.add_argument("--no-freeze", action="store_true",
+                        help="do not write BUNDLE-FROZEN.json (a sub-run of another bundle)")
     parser.add_argument("--reuse-env", action="store_true", help="do not wipe --env-dir")
     parser.add_argument("--freeze", action="store_true",
                         help="write BUNDLE-FROZEN.json when every check passed")

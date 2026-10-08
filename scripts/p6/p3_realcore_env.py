@@ -72,9 +72,15 @@ def banner(ref: str, out: Path) -> None:
     print("=" * 78, file=sys.stderr)
 
 
-def extract_core(ref: str, destination: Path) -> None:
+def extract_core(ref: str, destination: Path, repo: Path | None = None) -> None:
+    """Extract `ref` from `repo` (default: this worktree's repository).
+
+    `--repo` exists so an acceptance run can be rehearsed against a **synthetic merge** that lives
+    only in a throwaway clone: the Core still comes from `git archive` of a commit, just not from
+    the repository the harness is checked out in.
+    """
     destination.mkdir(parents=True, exist_ok=True)
-    archive = subprocess.run(["git", "-C", str(REPO_ROOT), "archive", ref],
+    archive = subprocess.run(["git", "-C", str(repo or REPO_ROOT), "archive", ref],
                              check=True, capture_output=True)
     subprocess.run(["tar", "-x", "-C", str(destination)], input=archive.stdout, check=True)
     if not (destination / "src" / "jasmine_core" / "continuity.py").is_file():
@@ -88,7 +94,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     p3 = out / "p3"
     if not (p3 / "src" / "jasmine_core").is_dir():
-        extract_core(args.ref, p3)
+        extract_core(args.ref, p3, args.repo)
     workspace = out / "workspace"
     workspace.mkdir(exist_ok=True)
     (workspace / "source.txt").write_text("initial\n", encoding="utf-8")
@@ -266,6 +272,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("command", choices=["build"])
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--ref", default=DEFAULT_REF)
+    parser.add_argument("--repo", type=Path, default=None,
+                        help="repository to extract --ref from (default: this worktree)")
     parser.add_argument("--port", type=int, default=8792)
     parser.add_argument("--seed-only", action="store_true")
     parser.add_argument("--reuse", action="store_true")
