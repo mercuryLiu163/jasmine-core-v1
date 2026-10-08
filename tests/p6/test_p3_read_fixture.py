@@ -68,6 +68,43 @@ class PayloadShapes(unittest.TestCase):
             source=fixture.SOURCE_EVENT, command=fixture.COMMAND_EVENT, note=None)
         self.assertIsNone(without["note"])
 
+    def test_the_nested_shapes_mirrored_from_p3_carry_its_keys(self) -> None:
+        """The fixture has no Truth store, so it cannot serve P3's *values*.
+
+        It can still serve P3's *shapes*, and for the nested documents the UI actually
+        renders it must: the first cut sent `next_actions` as a list of strings where P3
+        returns a list of objects, which exercised a branch real P3 never reaches. These
+        key sets are read from P3's source (`continuity.next_actions`,
+        `continuity._comparison`, `context.renderer.render`); if P3 changes one, this test
+        is the place that notices.
+        """
+        resume = fixture.resume_payload(CONTRACT)
+        # continuity.next_actions: `{'kind': ...}` when reconciliation is required, and
+        # `{'kind', 'step_id', 'status'}` otherwise. Never a string.
+        self.assertEqual(resume["next_actions"], [{"kind": "RECONCILE_CURRENT_TRUTH"}])
+        # continuity._comparison
+        self.assertEqual(
+            set(resume["comparison"]),
+            {"checkpoint_freshness", "workspace", "warnings", "reconciliation_required", "diff"})
+        self.assertEqual(
+            set(resume["comparison"]["diff"]),
+            {"added", "removed", "changed", "evidence_changed", "workspace_paths"})
+        self.assertEqual(set(resume["comparison"]["diff"]["workspace_paths"]),
+                         {"added", "removed", "changed"})
+
+        pack = fixture.context_payload(CONTRACT)
+        # context.renderer.render -> section_metrics
+        for metric in pack["section_metrics"]:
+            self.assertEqual(
+                set(metric),
+                {"section", "utf8_start", "utf8_end", "sha256", "standalone_tokens",
+                 "cumulative_prefix_tokens", "prefix_delta_tokens"})
+        # context.renderer.render -> omissions
+        for omission in pack["omissions"]:
+            self.assertEqual(
+                set(omission),
+                {"section", "item_id", "reason", "standalone_tokens", "source_ids"})
+
     def test_the_resume_note_denies_its_own_authority(self) -> None:
         note = fixture.resume_payload(CONTRACT)["note"]
         self.assertIs(note["authority"], False)

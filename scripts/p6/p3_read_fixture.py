@@ -190,8 +190,19 @@ def context_payload(contract: dict[str, Any]) -> dict[str, Any]:
         "rendered_utf8_bytes": 48,
         "renderer_version": "jasmine.context-renderer.v1",
         "token_count": 21,
-        "section_metrics": [{"section": "task", "tokens": 8}, {"section": "events", "tokens": 13}],
-        "omissions": [{"section": "memory", "reason": "budget"}],
+        # `section_metrics` and `omissions` mirror P3's `context.renderer.render` key for
+        # key (`renderer.py`): a metric carries the byte span and both token counts, and an
+        # omission names the item and why it was dropped. The values are the fixture's; the
+        # shapes are P3's, so the view is not exercised against a shape P3 cannot emit.
+        "section_metrics": [
+            {"section": "task", "utf8_start": 0, "utf8_end": 20, "sha256": "5" * 64,
+             "standalone_tokens": 8, "cumulative_prefix_tokens": 8, "prefix_delta_tokens": 8},
+            {"section": "events", "utf8_start": 20, "utf8_end": 48, "sha256": "6" * 64,
+             "standalone_tokens": 13, "cumulative_prefix_tokens": 21, "prefix_delta_tokens": 13},
+        ],
+        "omissions": [{"section": "memory", "item_id": "mem_" + ID_BODY,
+                       "reason": "optional_budget", "standalone_tokens": 40,
+                       "source_ids": [SOURCE_EVENT]}],
         "selected_optional_ids": ["mem_" + ID_BODY],
     }
     assert set(payload) == set(contract["response_fields"]["context"]), (
