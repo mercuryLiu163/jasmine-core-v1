@@ -1907,8 +1907,11 @@ async function main() {
 
         // Signing in re-renders the route the hash already points at, so go to a *detail*
         // first and then to the list: that is the exact detail->list transition that failed.
+        // Wait for something the *detail* view renders, not `textContent.length > 0`: that
+        // always passes, so it would not prove the detail loaded and the detail->list
+        // transition would go untested.
         await gotoMemory(`memory/items/${MITEM}`, 'memory item with the narrow token',
-          `document.body.textContent.length > 0`)
+          `document.querySelector('section[aria-label="Memory Item"]') !== null`)
         const beforeScope = requests.length
         await gotoMemory('memory/items', 'memory items without the scope',
           `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('forbidden_scope'))`)

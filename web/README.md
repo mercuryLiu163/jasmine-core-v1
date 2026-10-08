@@ -229,7 +229,9 @@ the two caveats the validator recorded). It is **not** `P6` done: P6-02's
 audited human writes are implemented but not yet independently reviewed, P6-02's
 manual reapply and the Task/Step/Evidence writes are not delivered, and
 P6-03a is delivered only as PARTIAL/DEPENDENCY_PENDING (P3 is not merged, so its views were
-exercised against a simulated fixture) while P6-03b/c (P4/P7-01 inspectors) are not delivered,
+exercised against a simulated fixture), P6-03b1 (the P4 read slice) is likewise delivered only as
+PARTIAL/DEPENDENCY_PENDING against an unmerged P4, while P6-03b2 (the P4 writes) and P6-03c
+(P7-01) are not delivered,
 no Gate ran against the operator's own Core or a real captured conversation, and
 throttling plus an automated contrast sweep remain uncovered. See the run
 directories under `validation-runs/p6/` for raw evidence.

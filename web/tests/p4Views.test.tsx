@@ -86,13 +86,30 @@ function lifecycle(overrides: Record<string, unknown> = {}): Record<string, unkn
   })
 }
 
+/**
+ * A trace **list** row: exactly the contract's 16 keys.
+ *
+ * This used to also carry `filtered` and `authority_refs`, which the list row does not have —
+ * so the fixture described an 18-key row while the contract and the fixture said 16, and the
+ * 16-vs-20 split was guarded only at the Python layer.
+ */
 function trace(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return withKeys(contract.nested_fields.trace, {
     trace_id: TRACE, mode: 'recall', status: 'ok', project_id: PROJECT, task_id: TASK,
     actor_id: `act_${ID}`, query_sha256: 'c'.repeat(64), query_length: 42,
-    requested_types: [], banks: [], filtered: [], used_tokens: 128, authority_refs: [],
+    requested_types: [], banks: [], used_tokens: 128,
     created_at: '2026-10-07T12:03:00Z', ...overrides,
   })
+}
+
+/** A trace **detail**: the list row plus the four fields only `SELECT *` + the join carries. */
+function traceDetail(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    ...trace(),
+    filtered: [], authority_refs: [], state_revision: 7,
+    items: [{ result_id: `mqr_${ID}`, rank: 1, memory_id: ITEM, score: 0.9 }],
+    ...overrides,
+  }
 }
 
 function health(): Record<string, unknown> {
@@ -176,7 +193,7 @@ describe('a refused P4 read is shown as a missing dependency', () => {
         engine_claim: 'x', non_authoritative: true,
       },
       '/v1/memory/traces': { traces: [trace()], count: 1 },
-      [`/v1/memory/traces/${TRACE}`]: { trace: { ...trace(), filtered: [], authority_refs: [], state_revision: 7, items: [] } },
+      [`/v1/memory/traces/${TRACE}`]: { trace: traceDetail() },
     }
     const user = userEvent.setup()
     await enter(user, hash, { ...SIGNED_IN, ['GET ' + route]: { body: bodies[route] } })
@@ -386,7 +403,7 @@ describe('a real P4 read renders the record it was given', () => {
     const user = userEvent.setup()
     await enter(user, `#/memory/traces/${TRACE}`, {
       ...SIGNED_IN,
-      ['GET /v1/memory/traces/' + TRACE]: { body: { trace: { ...trace(), items: [] } } },
+      ['GET /v1/memory/traces/' + TRACE]: { body: { trace: traceDetail() } },
     })
     const panel = await screen.findByRole('region', { name: /Memory Trace/ })
     await waitFor(() => expect(panel.textContent).toContain(TRACE))
@@ -490,6 +507,22 @@ describe('the view renders the engine text exactly as Core sent it', () => {
   })
 })
 
+describe('the test fixtures match the contract they exercise', () => {
+  it('builds a trace list row of 16 keys and a detail of 20', async () => {
+    // Without this the view fixtures can drift from the contract while every other test still
+    // passes — a list row carrying detail-only fields describes a shape P4 never sends.
+    expect(Object.keys(trace()).sort()).toEqual([...contract.nested_fields.trace].sort())
+    expect(Object.keys(traceDetail()).sort()).toEqual([...contract.nested_fields.trace_detail].sort())
+    expect(Object.keys(traceDetail()).length - Object.keys(trace()).length).toBe(4)
+  })
+
+  it('builds job, item and lifecycle fixtures of the contract size', () => {
+    expect(Object.keys(job()).sort()).toEqual([...contract.nested_fields.job].sort())
+    expect(Object.keys(item()).sort()).toEqual([...contract.nested_fields.item].sort())
+    expect(Object.keys(lifecycle()).sort()).toEqual([...contract.nested_fields.lifecycle].sort())
+  })
+})
+
 describe('this slice has no write affordance', () => {
   /**
    * The only interactive controls a read-only Memory view may offer, each named so a new
@@ -516,7 +549,7 @@ describe('this slice has no write affordance', () => {
         engine_claim: 'x', non_authoritative: true,
       },
       '/v1/memory/traces': { traces: [trace()], count: 1 },
-      [`/v1/memory/traces/${TRACE}`]: { trace: { ...trace(), items: [] } },
+      [`/v1/memory/traces/${TRACE}`]: { trace: traceDetail() },
     }
     const user = userEvent.setup()
     await enter(user, hash, { ...SIGNED_IN, ['GET ' + route]: { body: bodies[route] } })

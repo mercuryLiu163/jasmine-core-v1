@@ -85,7 +85,11 @@ export function usePagedResource<T>(
     loaderRef.current = loader
   })
 
-  const signature = signatureOf(deps)
+  // Same term as `useResource`: a loader appearing or disappearing is a state change even when
+  // `deps` do not move. No call site reaches that shape today — every paged view passes a
+  // non-null loader — but the two hooks exist for the same job, and fixing one and not the
+  // other is how the next view inherits the bug.
+  const signature = `${loader === null ? 'none' : 'loader'}\u0000${signatureOf(deps)}`
   const [nonce, setNonce] = useState(0)
   const [state, setState] = useState<Internal<T>>(EMPTY<T>)
 

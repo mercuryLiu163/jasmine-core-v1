@@ -17,6 +17,7 @@ import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 
+import { usePagedResource, type Cursor, type PageResult } from '../src/app/usePagedResource'
 import { useResource } from '../src/app/useResource'
 
 /** A component that switches between "no loader" and "a loader", like list <-> detail. */
@@ -85,5 +86,33 @@ describe('a loader disappearing clears the state', () => {
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('idle'))
     // The previous read's data must not linger once the loader is gone.
     expect(screen.getByTestId('data').textContent).toBe('')
+  })
+})
+
+
+describe('the paged hook carries the same term', () => {
+  // Not reachable at any current call site — every paged view passes a non-null loader — but the
+  // two hooks do the same job, and fixing one and not the other is how the next view inherits
+  // the bug. Behavioural on purpose: asserting the source string would pass on a rewrite that
+  // reintroduces the defect elsewhere.
+  function PagedSwitcher({ loader }: { loader: (cursor: Cursor | null, signal: AbortSignal) => Promise<PageResult<string>> }): JSX.Element {
+    const [enabled, setEnabled] = useState(false)
+    const paged = usePagedResource(enabled ? loader : null, [])
+    return (
+      <div>
+        <button type="button" onClick={() => setEnabled(true)}>enable</button>
+        <span data-testid="items">{paged.items.join(',')}</span>
+      </div>
+    )
+  }
+
+  it('fetches when a paged loader appears, even with constant deps', async () => {
+    const loader = vi.fn(async (): Promise<PageResult<string>> => ({ items: ['page-one'], count: 1, nextCursor: null, complete: true }))
+    const user = userEvent.setup()
+    render(<PagedSwitcher loader={loader} />)
+    expect(loader).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'enable' }))
+    await waitFor(() => expect(screen.getByTestId('items').textContent).toBe('page-one'))
+    expect(loader).toHaveBeenCalledTimes(1)
   })
 })

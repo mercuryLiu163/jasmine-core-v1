@@ -157,7 +157,7 @@ labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
 | E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts accept the same value set and are tested on it — including `' yes '` and mixed case, because the helper is *duplicated* rather than shared and dropping `.trim()` from one host left both suites green until those cases existed. Tests also assert P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
 | E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | **built.** `X-P6-Fixture: simulated-p4-reads`; the fixture also serves the shell routes in their documented shapes after an earlier version crashed the overview |
 | E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
-| E5 | Component tests plus a Gate section | **built, 121 guards** (25 contract, 21 fixture, 42 view, 16 static-host, 14 Vite-host, 3 shared-hook). Gate: 10/10 full twice, 4/4 scope |
+| E5 | Component tests plus a Gate section | **built, 121 guards** (25 contract, 21 fixture, 42 view, 16 static-host, 14 Vite-host, 3 shared-hook). Gate: 11/11, twice with identical step sequences, in a single run |
 
 **Still blocked until P4 is merged and independently validated:**
 
@@ -298,9 +298,15 @@ Still open, for the operator:
 
 * **P6-03b2** is not started and needs its own frozen payload/permission table and an
   audited-write Gate before any of it ships.
-* **Independent review of the b1 implementation** has not run at the time of writing; the
-  bundle is frozen and the slices are green, but no third party has yet reviewed the b1 code
-  or reproduced the Gate.
+* **Independent review: done, three pairs of passes.** Two adversarial passes (source review +
+  clean-archive validation) ran first, each returning PASS-WITH-CAVEATS; their 12 findings are fixed
+  at `c1113c5`, `108f699` and `bbdbf7f`. A further pair then reviewed the fix rounds and found a
+  same-class latent bug in `usePagedResource`, a stale Gate count in this file, a stale
+  "review has not run" line, a wrong labelled-response count in the bundle README, an
+  unbackticked-citation hole in the mapping self-check, and a web test fixture carrying
+  detail-only fields — all fixed after that. Validation reproduced every suite, the contract
+  check, the build digests and 11/11 on the Gate from a clean archive, and confirmed the
+  `useResource` fix is load-bearing by reverting it and watching the Gate fail at record 8.
 * **RESOLVED — the "route anomaly" was a real defect, and my first framing of it was wrong.**
   The Gate used to time out after 退出 and re-signing in with a narrower token, when navigating
   from a Memory *detail* to its *list*. I first recorded it as unexplained, not reproduced in
