@@ -374,12 +374,18 @@ Recorded as open follow-ups rather than fixed here: no unit test covers the P4 U
 `build_dashboard` or encodes the out-of-scope-`args` sweep; no unit test covers the marker
 derivation, and its `480`-character window is still a hand-copied duplicate of `RawText.tsx`.
 
-**Documentation sync.** The status text in this file and in `web/P6-03A-COMPLIANCE.md` was updated in
-documentation-only commits: `8c153b3` and `fd0e1f8` after the first battery, then `8f393db`,
-`6bdc52d` and any later one after the post-review battery. Each changed only those two Markdown
-files, so the checkable form of "the documentation did not move the code" is
-`git diff --name-only f323c779bc91893b5908218d8c5c148619159180… HEAD`, which lists exactly them.
-This text names the acceptance commit rather than the tip on purpose: a commit that named its own
-tip would go stale the moment it was committed. The earlier `e7f322ae…` battery is a separate
-binding with its own bundles, and the harness commit `caeb947` sits between it and the current code
-— its battery was re-run, not assumed.
+**Documentation sync, and what changed after the acceptance commit.** The status text in this file
+and in `web/P6-03A-COMPLIANCE.md`, plus the two follow-up documents `web/P6-REMAINING-TASKS.md` (the
+whole-P6 remaining list, including two historical limitations that must not be merged away) and
+`web/TASK-p4-interpreter-symlink.md` (the nine failing P4 tests registered as an independent fix
+task), are documentation-only. The tree also gained `scripts/p6/bundle_conformance.py` and
+`tests/p6/test_bundle_conformance.py` — tooling that renders the taskbook-§8 file names out of
+already-frozen bundles into a separate derived directory; it re-runs nothing, writes into no bundle
+and changes no verdict, and a complete file set is not acceptance. The exact diff against the
+acceptance commit is `git diff --name-only f323c779bc91893b5908218d8c5c148619159180… HEAD`: those six
+paths and nothing else, with **no `src/`, schema or `web/` product path** among them, so the batteries
+above still bind the same product code. This text names the acceptance commit rather than the tip, and
+states the command rather than the list, on purpose: a commit that named its own tip or its own file
+list would go stale the moment it was committed. The earlier `e7f322ae…` battery is a separate
+binding with its own bundles, and the harness commit `caeb947` sits between it and the current code —
+its battery was re-run, not assumed.
