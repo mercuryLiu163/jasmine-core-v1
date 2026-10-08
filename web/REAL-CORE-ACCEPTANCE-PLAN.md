@@ -182,7 +182,7 @@ not overwrite the simulated-slice records; those stay as they are.
 | # | Precondition | State |
 | --- | --- | --- |
 | P1 | The pinned P4 commit is present locally | yes (`git cat-file -e 0c4f8f0e…` verified) |
-| P2 | P4's Core runs standalone from an archive (stdlib only, `migrate` on `serve`) | yes (`api/server.py::serve` calls `migrate`; the baseline runs the same way) |
+| P2 | P4's Core runs standalone from an archive | **probed, not assumed.** `git archive 0c4f8f0e… \| tar -x -C <temp>` then `PYTHONPATH=src python3.13 -m jasmine_core.cli migrate --db <temp>/core.db` applied `m0001_baseline` … `m0011_memory` and reported `schema_version: 11`, `drift: []`; `schema` agreed. `PYTHONPATH=src:tests python3.13 -c "import memory_support"` worked with no extra dependencies, and `StubHindsightServer()` exposes `base_url` and `stop` (it binds `127.0.0.1:0`) |
 | P3 | An **engine** | **absent.** Plan uses P4's `StubHindsightServer` wire double and labels every result. A real deployment would upgrade the affected rows from `BLOCKED`/`boundary-fake` to `real`; that is the operator's call |
 | P4 | Free loopback ports | chosen free at start-up |
 | P5 | Whether the real-Core pass should also re-cut the contracts at the *final integration* commit (the operator's step 2) | proposed after the fixed-SHA pass, so a contract change is attributable to the commit rather than the environment |
