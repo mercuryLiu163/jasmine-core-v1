@@ -272,6 +272,13 @@ before); the enum test keeps the "never name a type Core cannot emit" direction 
 completeness against the **pinned baseline's** enum read from Git, so a later baseline adding types
 is an improvement rather than a failure. The re-run's result is in the newer rehearsal bundle.
 
+**The real-Core acceptances run at the merged ref too.** The rehearsal now executes both isolated
+acceptances from inside the clone — P4's Core matrix, and P3's Core matrix plus browser pass — with
+the Core extracted from the merged commit and the dashboard built from the same tree. Results:
+P4 **35/35, 0 failed, 0 blocked**; P3 **23 passed, 0 failed, 3 blocked** (the Context Pack, for the
+pinned-tokenizer reason above). So at a synthetic integration baseline every claim this plan makes
+about behaviour holds, not only the suites.
+
 A wording correction, recorded rather than silently amended: the commit that added the rehearsal
 said "12 appear only when merged", conflating failing *assertions* with unique tests. The precise
 figures are the ones above and the ones in the bundle's `README.md` and `evidence.json`, which are
