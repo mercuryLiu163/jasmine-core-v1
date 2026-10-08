@@ -205,6 +205,24 @@ Falsifiable, each a test or a Gate record rather than a sentence.
     a Context build.
 12. A retry does not duplicate a retain.
 
+### Every criterion names the test that checks it
+
+Two criteria (7 and 8) were found false as written precisely because nothing verified them. So
+each one names its checker, and a reviewer can follow any row and see whether the test does what
+the criterion claims. `R#` is a Gate record in `scripts/p6/browser_trace.mjs`.
+
+| Criterion | Checked by |
+| --- | --- |
+| 1 contract + drift + loud absence | `test_snapshot_still_matches_the_pinned_commit`, `test_check_exits_two_when_the_commit_is_absent`, `test_source_is_a_pinned_full_sha_not_a_branch`, `test_snapshot_says_the_dependency_is_missing_and_acceptance_unpassed`, `test_every_payload_matches_the_frozen_field_set`, `test_row_keys_come_from_the_p4_tables`, `test_a_rename_in_p4_would_break_the_guard`, `test_interfaces_carry_exactly_the_contract_fields` |
+| 2 baseline untouched | `test_baseline_core_serves_none_of_the_seven_endpoints`, `test_pending_paths_are_not_in_the_live_read_allowlist`, `test_the_live_allowlist_is_unchanged_by_this_slice`, `test_every_live_path_is_a_real_baseline_route`; `refuses all seven on a baseline proxy`, `forwards all seven when the operator states the Core has P4`, `leaves the P6-03a switch independent`, `defaults to off…`; the Vite-host equivalents |
+| 3 the seven reads render | Gate records 1–4 (health, jobs, items, traces), screenshots 25–28 |
+| 4 `non_authoritative` from Core | `shows the marker when Core sends non_authoritative: true`, `does NOT claim it when Core does not send the field`, `shows the marker on an item detail`, `test_non_authoritative_is_present_where_p4_sends_it`; Gate R1 |
+| 5 four states distinct | `renders a grantless actor as an empty result, not an error`, `shows an unauthorised project as not_found…`, `shows a missing scope as Core refusal…`, `keeps an unknown id distinct from an unauthorised project`, `states PARTIAL / DEPENDENCY_PENDING on the view itself`; `test_a_grantless_token_gets_an_empty_list_not_an_error`, `test_an_unauthorised_project_is_not_found_rather_than_an_error`, `test_a_missing_scope_is_403_and_names_itself`, `test_an_unknown_id_is_not_found`; Gate R5 |
+| 6 malformed id refused locally | the three `does not blame the missing P4 for a bad … id` cases; `test_a_malformed_id_is_400_not_a_silent_404`; Gate R6 |
+| 7 redaction respected | `test_a_human_key_sees_the_engine_text`, `test_an_agent_key_has_the_engine_text_withheld`, `test_withholding_does_not_drop_the_field`, `renders a withheld safe_error_summary as nothing…`, `shows the engine text when Core did send it` |
+| 8 no engine client | `test_the_bundle_can_only_talk_to_its_own_origin`, `test_the_bundle_carries_no_engine_credential_identifier`, `test_the_memory_endpoints_stay_under_the_same_origin_client`, `test_no_engine_client_exists_in_the_slice`, `test_the_memory_endpoint_layer_issues_get_only`, `test_absent_retain_and_bank_selector_routes`; `test_every_write_is_refused_because_writes_are_p6_03b2` |
+| 9 status | `test_snapshot_says_the_dependency_is_missing_and_acceptance_unpassed`; `states PARTIAL / DEPENDENCY_PENDING on the view itself`; the `%s offers only read controls` cases; Gate R7 |
+
 ## 5. Non-goals
 
 * No retain, no bank selection, no direct Hindsight access, no engine credential in the
