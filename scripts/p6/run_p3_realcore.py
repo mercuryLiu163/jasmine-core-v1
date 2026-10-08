@@ -313,7 +313,7 @@ def main(argv: list[str] | None = None) -> int:
         log(f"{evidence['summary']['passed']} passed, {evidence['summary']['failed']} failed, "
             f"{evidence['summary']['blocked']} blocked")
         if not failed and trace.returncode == 0 and not args.no_freeze:
-            freeze(out, descriptor["ref"])
+            freeze(out, descriptor["ref"], evidence)
         return 1 if (failed or trace.returncode != 0) else 0
     finally:
         for process in procs:
@@ -336,11 +336,16 @@ def write_readme(out: Path, evidence: dict[str, Any]) -> None:
     # now read from the run.
     scan_mode = str(evidence["mode"].get("workspace_scan", "unknown"))
     if summary["context_pack"] == "BLOCKED":
+        # The reason comes from the run's own C8 row. An earlier version of this branch asserted the
+        # pinned tokenizer as the cause, which a workspace-scan refusal would have made false — an
+        # independent review caught it.
+        c8 = next((row for row in evidence["core_entries"] if row["id"] == "C8.context_pack"), {})
+        detail = c8.get("detail") or {}
         pack_bullets = [
-            "* **The Context Pack row is BLOCKED, not passed.** P3's `ContextBuilder` needs its pinned",
-            "  tokenizer (`tiktoken` plus a BPE asset whose SHA-256 `context/tokens.py` fixes); neither",
-            "  is present in this environment, so no Context Pack exists and **nothing was fabricated**",
-            "  in its place. Its shape remains covered by the frozen contract and the simulated fixture.",
+            "* **The Context Pack row is BLOCKED, not passed.** P3's own `ContextBuilder` refused it in",
+            f"  this environment: `{detail.get('error_type', 'unknown')}` — {detail.get('reason', 'no reason recorded')}.",
+            "  No Context Pack exists and **nothing was fabricated** in its place; the refusal above is",
+            "  the Core's, quoted from this run's `evidence.json`.",
         ]
     else:
         pack_bullets = [
@@ -348,8 +353,9 @@ def write_readme(out: Path, evidence: dict[str, Any]) -> None:
             "  `scan_workspace` walked an isolated git workspace. Row `C9.tokenizer_identity` records",
             "  what the isolated toolchain installed beside what `context/tokens.py` pins — the",
             "  `tiktoken` version and the BPE asset's cache name, byte size and SHA-256 — and the",
-            "  browser record asserts a literal slice of *this* Core's `rendered_content` is on screen,",
-            "  not the fixture's title.",
+            "  browser record asserts a literal slice of *this* Core's `rendered_content` is on screen",
+            "  (the `task_id` out of the rendered header JSON, or a recorded fallback line), not the",
+            "  fixture's title.",
         ]
     if scan_mode.startswith("real"):
         scan_bullets = [
@@ -426,15 +432,28 @@ def assert_no_token(out: Path, tokens: dict[str, str]) -> None:
             raise SystemExit(f"REFUSING TO FREEZE: token {name} appears in {found}")
 
 
-def freeze(out: Path, ref: str) -> None:
+def freeze(out: Path, ref: str, evidence: dict[str, Any]) -> None:
     commit = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"], check=True,
                             capture_output=True, text=True).stdout.strip()
+    # The manifest's consequential sentence is derived from *this* run's evidence. It used to be a
+    # literal claiming the Context Pack row was BLOCKED and the scanner a stand-in, which a run whose
+    # pack built and whose scan was real shipped verbatim into its own `BUNDLE-FROZEN.json` — a
+    # manifest contradicting the evidence beside it. An independent review caught it.
+    summary = evidence["summary"]
+    scan_mode = str(evidence["mode"].get("workspace_scan", "unknown"))
+    consequence = "the Core and the rows are real P3 code; "
+    consequence += ("the Context Pack was built by P3's own ContextBuilder" if
+                    summary["context_pack"] != "BLOCKED" else
+                    "the Context Pack row is BLOCKED, with the Core's own refusal recorded in "
+                    "evidence.json")
+    consequence += (f"; the workspace scan is P3's own scan_workspace ({scan_mode})"
+                    if scan_mode.startswith("real") else
+                    f"; the workspace scanner is the labelled component stand-in ({scan_mode})")
+    consequence += ", so this is not a P3 Gate verdict"
     dependency = json.dumps({
         "name": "P3 continuity slice", "status": "NOT MERGED", "source_ref": ref,
         "acceptance": "P3 phase acceptance NOT passed",
-        "consequence": "the Core and the rows are real P3 code; the Context Pack row is BLOCKED "
-                       "(no pinned tokenizer here) and the workspace scanner is a component "
-                       "stand-in, so this is not a P3 Gate verdict",
+        "consequence": consequence,
     })
     subprocess.run([sys.executable, str(FREEZE), "--freeze", str(out), "--commit", commit,
                     "--kind", "real-core acceptance (isolated real P3 Core)",

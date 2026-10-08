@@ -54,7 +54,7 @@ def build_manifest(bundle: Path, *, commit: str, kind: str, asset: str | None,
                    asset_sha256: str | None, tree_sha256: str | None,
                    fixture_header: str | None, fixture_value: str | None,
                    runs: str | None, supersedes: str | None,
-                   dependency: dict | None) -> dict:
+                   dependency: dict | None, ran_from: str | None = None) -> dict:
     files = [
         {
             "path": path.relative_to(bundle).as_posix(),
@@ -67,7 +67,13 @@ def build_manifest(bundle: Path, *, commit: str, kind: str, asset: str | None,
         "frozen_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "commit": commit,
         "kind": kind,
-        "ran_from": "an isolated git archive of the commit, its own fixture and proxy",
+        # Caller-supplied, with a deliberately neutral default. An earlier version wrote "an isolated
+        # git archive of the commit, its own fixture and proxy" for every bundle, which was false for
+        # runs made in a worktree (the suites, the failure attributions) — an independent review
+        # caught a manifest contradicting its own README. A manifest must not assert a provenance the
+        # caller did not state.
+        "ran_from": ran_from or "not stated by the caller — the bundle's own README says where the "
+                                "run happened",
     }
     if runs:
         manifest["runs"] = runs
@@ -141,6 +147,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--fixture-header", default="X-P6-Fixture")
     parser.add_argument("--fixture-value", help="the simulation label stamped on every reply")
     parser.add_argument("--dependency-json", help="JSON object describing the dependency status")
+    parser.add_argument("--ran-from", dest="ran_from",
+                        help="where the run happened, stated by the caller; the manifest must not "
+                             "invent a provenance (see the default in `build_manifest`)")
     args = parser.parse_args(argv)
 
     bundle: Path = args.bundle
@@ -163,6 +172,7 @@ def main(argv: list[str] | None = None) -> int:
         runs=args.runs,
         supersedes=args.supersedes,
         dependency=dependency,
+        ran_from=args.ran_from,
     )
     (bundle / MANIFEST).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     print(f"froze {len(manifest['files'])} files in {bundle}")

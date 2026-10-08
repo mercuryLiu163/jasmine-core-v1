@@ -12,10 +12,13 @@ code from the pinned commit and lets P3's own stores create the rows:
 * **No engine.** P3's context builder reaches Memory through `MemoryProvider.from_deployment()`,
   which is the off slot when no deployment is configured; that is P3's own documented "absent"
   state, not a stand-in.
-* **A labelled component stand-in for the workspace scan.** `ContinuityStore` takes a scanner; the
-  real one walks a workspace and fingerprints it. This environment passes a component scan that
-  returns a fixed partial fingerprint, exactly as P3's own continuity tests do, and says so in the
-  descriptor: workspace snapshots in these rows are **not** a real workspace capture.
+* **The workspace scan is P3's own, unless it refuses.** `ContinuityStore` takes a scanner; the real
+  one walks a workspace and fingerprints it. This environment passes P3's own `scan_workspace` over
+  an isolated git workspace, and only if that refuses does it fall back to a component scan that
+  returns a fixed partial fingerprint, exactly as P3's own continuity tests do. Which one ran is
+  recorded in `mode.workspace_scan` (`real (isolated git workspace)` or `component-stand-in`) and in
+  `mode.workspace_scan_fallback`, and the banner says the same thing: an operator never has to read
+  the code to know whether a workspace snapshot in these rows is a real capture.
 * **Isolation.** Own directory, database, workspace and port; loopback only; keys minted in-process
   by P3's own `auth.issue_key` and written only into the isolated tree at mode 600. It never reads
   the operator's database, hooks, global config or accounts.
@@ -32,6 +35,7 @@ import argparse
 import copy
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -101,17 +105,27 @@ def tokenizer_check(pack: dict[str, Any] | None) -> dict[str, Any]:
     return result
 
 
-def rendered_content_marker(rendered: str, sections: list[str]) -> str:
+def rendered_content_marker(rendered: str, sections: list[str]) -> tuple[str, str]:
     """A literal slice of `rendered` that the Context Pack page shows without expanding it.
 
-    The P6-03a browser record used to assert the fixture's own task title, which a real Core does
-    not render. This derives the marker from the pack the real Core just built: the longest line of
-    the collapsed prefix that is not a section name (the page renders those from `section_metrics`
-    too, so asserting one would not prove the rendered text is on screen) and carries no JSON
-    punctuation (a JSON line can be cut in half by the collapse). Failing loudly here is deliberate:
-    a marker that cannot be found would silently weaken the record.
+    Returns ``(marker, how)``: the marker, and which rule produced it — the record's evidence keeps
+    both, so a reviewer can see whether it was a content-bearing slice or a fallback.
+
+    The P6-03a browser record used to assert the fixture's own task title, which a real Core does not
+    render. This derives the marker from the pack the real Core just built, and **prefers the
+    ``task_id`` out of the rendered header JSON**: that is a literal slice of *this* pack's rendered
+    content, so the record passes only if the page really shows this Core's pack. The fallback — the
+    longest line of the collapsed prefix that is not a section name (the page renders those from
+    `section_metrics` too) and carries no JSON punctuation (a JSON line can be cut by the collapse) —
+    is weaker: with this renderer the renderer's constant header line can win, which an independent
+    review pointed out. It is kept only so a pack without a header JSON still yields a marker, and
+    the returned ``how`` says when it was used. Failing loudly is deliberate either way: a marker
+    that cannot be found would silently weaken the record.
     """
     window = rendered[:RAW_TEXT_COLLAPSED]
+    task = re.search(r'"task_id":"[^"]+"', window)
+    if task:
+        return task.group(0), "task_id slice of the rendered header JSON"
     lines = window.splitlines()
     if len(rendered) > len(window) and lines:
         lines = lines[:-1]  # the last line may be cut by the collapse
@@ -123,7 +137,7 @@ def rendered_content_marker(rendered: str, sections: list[str]) -> str:
     if not candidates:
         raise SystemExit("no line of the collapsed rendered_content can serve as the browser "
                          f"record's marker; first line was {window.splitlines()[:1]!r}")
-    return max(candidates, key=len)
+    return max(candidates, key=len), "longest non-section, non-JSON line of the collapsed prefix"
 
 
 def banner(ref: str, out: Path) -> None:
@@ -133,7 +147,11 @@ def banner(ref: str, out: Path) -> None:
     print(f"  Core from commit {ref} (git archive), extracted into {out / 'p3'}", file=sys.stderr)
     print("  Checkpoints, Context Packs and Resumes are created by P3's own ContinuityStore and",
           file=sys.stderr)
-    print("  ContextBuilder; the workspace scanner is a labelled component stand-in.",
+    print("  ContextBuilder. The workspace scan is P3's own scan_workspace over an isolated git",
+          file=sys.stderr)
+    print("  workspace; if it refuses, a labelled component stand-in is used instead, and both",
+          file=sys.stderr)
+    print("  this log and descriptor.json state which one ran — never the other way round.",
           file=sys.stderr)
     print("  Nothing here touches the operator's Core, database, hooks, config or accounts.",
           file=sys.stderr)
@@ -274,6 +292,10 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         log(f"real workspace scan refused ({scan_fallback}); using the labelled stand-in")
 
     continuity = ContinuityStore(conn, schema_version=SCHEMA_VERSION, scanner=scanner)
+    # The outcome, stated on stderr next to the descriptor field: the banner above describes the
+    # procedure, this line says what actually happened.
+    log(f"workspace scan: {scan_mode}"
+        + (f" (real scan refused: {scan_fallback})" if scan_fallback else ""))
     # The builder takes the same scanner and hands it to its own ContinuityStore, so the Context
     # Pack's workspace snapshot is produced the same way as the checkpoint's — with the real
     # scanner when it works, and with the labelled stand-in when it does not.
@@ -327,6 +349,14 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
                                     actor_id=human_id)["checkpoint"]
     empty_project = project("p6 p3 realcore empty")
     empty_task = task(empty_project, "without continuity")
+
+    # The browser record's marker, derived from the pack this Core just built (see the function).
+    marker: str | None = None
+    marker_source: str | None = None
+    if context is not None:
+        marker, marker_source = rendered_content_marker(
+            context["rendered_content"],
+            [metric.get("section", "") for metric in context.get("section_metrics", [])])
 
     descriptor = {
         "environment": "isolated real P3 Core",
@@ -382,10 +412,10 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             "status": "built",
             "context_id": context.get("context_pack_id") or context.get("context_id"),
             # The browser record asserts a literal slice of *this* Core's rendered content is on
-            # screen; derived here, from the pack P3's own builder just produced.
-            "rendered_content_marker": rendered_content_marker(
-                context["rendered_content"],
-                [metric.get("section", "") for metric in context.get("section_metrics", [])]),
+            # screen; derived here, from the pack P3's own builder just produced. The `_source`
+            # field records which rule produced the marker, because the fallback rule is weaker.
+            "rendered_content_marker": marker,
+            "rendered_content_marker_source": marker_source,
             "rendered_utf8_bytes": context["rendered_utf8_bytes"],
         },
     }
