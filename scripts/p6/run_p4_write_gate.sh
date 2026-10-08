@@ -9,8 +9,11 @@
 # `git rev-parse HEAD` and a fresh `git archive`, so the evidence cannot come from anything else.
 #
 # It never touches the operator's Core, database or config: the "Core" is the simulated P4 write
-# fixture, on its own loopback port, with randomly generated throwaway tokens that are written
-# only into the temporary copy and never into the bundle.
+# fixture, on its own loopback port, with randomly generated throwaway tokens that are written only
+# into the temporary copy. That last clause is **enforced**, not hoped for: the fixture masks the
+# tokens in the banner this script captures, and the script refuses to freeze a bundle containing
+# any token it generated. An earlier version captured the banner verbatim and put all three
+# cleartext tokens into a frozen bundle while claiming otherwise.
 #
 # The fixture is restarted between the two ON runs, because this Gate *mutates* the fixture (pin,
 # obsolete, delete). Two runs against one process would see different starting states and could not
