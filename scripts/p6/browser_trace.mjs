@@ -1692,6 +1692,27 @@ async function main() {
       const MTRACE = 'mtr_01M4B6VGC29ESRDRQR62DX8AK8'
       const MUNKNOWN = 'mem_01M4B6VGC29ESRDRQR62DX8AK7'
 
+      // The slice run skipped the standard walkthrough, so this section signs in itself —
+      // the P4 fixture serves `/v1/projects`, which is what sign-in validates against.
+      const signInMemory = async (value) => {
+        await evaluate(cdp, `(() => {
+          const el = document.querySelector('input[type=password]')
+          if (!el) return false
+          const setter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value').set
+          setter.call(el, ${JSON.stringify('')})
+          el.dispatchEvent(new Event('input', { bubbles: true }))
+          return true
+        })()`)
+        await typeInto(cdp, 'input[type=password]', value)
+        await clickByText(cdp, 'button', '使用此 token')
+        await waitFor(cdp, `document.querySelector('input[type=password]') === null`,
+          { label: 'signed in to the P4 fixture' })
+      }
+      await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
+        { label: 'P4 fixture sign-in form' })
+      await signInMemory(token)
+
       const gotoMemory = async (hash, label, waitForText) => {
         await cdp.send('Page.navigate', { url: `${args.ui}/#/${hash}` })
         await waitFor(cdp, waitForText, { label })
