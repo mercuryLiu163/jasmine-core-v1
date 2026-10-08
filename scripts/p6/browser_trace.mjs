@@ -2423,7 +2423,7 @@ async function main() {
           await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '被拒绝')
           const agentEvidence = await evidenceFor('/pin')
           trace.record(
-            'permission: a non-human actor is refused with ForbiddenActorKind, not a UI pretence',
+            'permission: a non-human actor is refused with forbidden_actor_kind, not a UI pretence',
             agentEvidence?.status === 403 && agentEvidence?.responseBody?.error?.code === 'forbidden_actor_kind' &&
               JSON.stringify(agentEvidence?.responseBody ?? {}).includes('human'),
             JSON.stringify({ status: agentEvidence?.status, code: agentEvidence?.responseBody?.error?.code }))
@@ -2471,7 +2471,7 @@ async function main() {
           entry.status === 409 && entry.code === 'revision_conflict' && entry.shownOnPage &&
           entry.draftKept && entry.noAutoRetry)
         trace.record(
-          'conflict: all four lifecycle commands answer Core 409 RevisionConflict, keep the draft, show Core current revision, and never auto-retry',
+          'conflict: all four lifecycle commands answer Core 409 revision_conflict, keep the draft, show Core current revision, and never auto-retry',
           conflictsOk, JSON.stringify(conflictMatrix))
         await trace.screenshot(cdp, '34-memory-revision-conflict')
 

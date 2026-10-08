@@ -212,6 +212,131 @@ if failures:
     raise SystemExit(1)
 PY
 
+# --- 8. the bundle README, written from the run's own artifacts --------------------------------
+# Written *before* the freeze so the manifest covers it: a README added afterwards would either
+# invalidate the manifest or force an edit to a frozen file. Every number below is read from the
+# run's own click-trace files, and the asset digests are the ones the freeze records.
+"$PYTHON" - "$OUT" "$COMMIT" "$ASSET" "$ASSET_SHA" "$TREE_SHA" <<'READMEPY'
+import json, sys
+from pathlib import Path
+
+out, commit, asset, asset_sha, tree_sha = sys.argv[1:6]
+root = Path(out)
+
+
+def rows(path):
+    return [json.loads(line) for line in (root / path).read_text(encoding="utf-8").splitlines()]
+
+
+on = rows("click-trace.jsonl")
+on2 = rows("stability/click-trace.jsonl")
+off = rows("writes-off/click-trace.jsonl")
+same = [(e["step"], e["ok"]) for e in on] == [(e["step"], e["ok"]) for e in on2]
+
+lines = [
+    "# P6-03b2 browser click-through — Memory writes (retry / lifecycle / reflect)",
+    "",
+    f"Commit `{commit}` (see `BUNDLE-FROZEN.json`). Product asset `{asset}` / `{asset_sha}`.",
+    "",
+    f"Result: **{sum(1 for e in on if e['ok'])}/{len(on)}** with the write switch ON, run twice"
+    f"{' with identical step sequences' if same else ' AND THE TWO RUNS DIFFER'}; "
+    f"**{sum(1 for e in off if e['ok'])}/{len(off)}** with the switch OFF. The fixture is restarted"
+    " between the two ON runs, because this Gate mutates it.",
+    "",
+    "## What this proves, and what it does not",
+    "",
+    "P4 is **not merged**: baseline `850fbec` (schema 8) has no `src/jasmine_core/memory/`, and the",
+    "contract is pinned to `0c4f8f0e2118711ac9aa2a7006fddc6982962248`, whose phase acceptance has",
+    "**not** passed. The Core behind this proxy was the **simulated P4 write fixture**",
+    "`scripts/p6/p4_write_fixture.py`, which stamps every reply `X-P6-Fixture: simulated-p4-writes`.",
+    "",
+    "* It proves: the six write routes send the frozen payloads, Core's own refusals are what the",
+    "  pages show, a conflict is not auto-retried, a replay is rendered as a replay with no second",
+    "  transition, each write is read back from the object's own row, and `reflect` is an explicit",
+    "  request marked non-authoritative from Core's field.",
+    "* It does **not** prove: that P4 works, that its acceptance has passed, or that any of this",
+    "  would behave identically against a real P4 Core. Nothing here was served by P4 code.",
+    "* It does **not** prove the fixture's values are P4's. The fixture's docstring lists exactly",
+    "  what it cannot reproduce (no Truth store, engine or real jobs; the actor kind is a scope",
+    "  stand-in; its replay identity is `(object_id, command)` while P4 hashes the command payload;",
+    "  the nested command `event` shape is fixture-invented; `job` is always null on a lifecycle",
+    "  reply).",
+    "",
+    "## The two invocations",
+    "",
+    "| Bundle | Proxy | Records |",
+    "| --- | --- | --- |",
+    f"| this directory | `P6_ENABLE_P4_READS=1 P6_ENABLE_P4_WRITES=1` | {sum(1 for e in on if e['ok'])}/{len(on)} |",
+    f"| `stability/` | the same, after restarting the fixture | {sum(1 for e in on2 if e['ok'])}/{len(on2)} |",
+    f"| `writes-off/` | `P6_ENABLE_P4_READS=1` only | {sum(1 for e in off if e['ok'])}/{len(off)} |",
+    "",
+    "## The ON records",
+    "",
+    "| # | Record |",
+    "| --- | --- |",
+]
+for index, entry in enumerate(on, start=1):
+    mark = "PASS" if entry["ok"] else "**FAIL**"
+    lines.append(f"| {index} | {mark} {entry['step']} |")
+lines += ["", "## The OFF record", "", "| # | Record |", "| --- | --- |"]
+for index, entry in enumerate(off, start=1):
+    mark = "PASS" if entry["ok"] else "**FAIL**"
+    lines.append(f"| {index} | {mark} {entry['step']} |")
+lines += [
+    "",
+    "## What the recorded traffic does and does not contain",
+    "",
+    "`browser-write-responses.jsonl` records, for each asserted write: the method and path, the",
+    "status, the fixture label, **the request body** and **the response body**. That is what makes",
+    "the payload and the withholding assertions checkable from the frozen evidence rather than only",
+    "from the click-trace's prose — the P6-03b1 bundle could not evidence its redaction rule because",
+    "it recorded no bodies.",
+    "",
+    "`browser-requests.jsonl` records Authorization only as `present(redacted)`/`absent`; no token",
+    "appears in any bundle file. The tokens are generated per run, written to the isolated tree only",
+    "(mode 600) and deleted with it.",
+    "",
+    "## The artificial keys, stated rather than glossed",
+    "",
+    "* The **agent** key carries `memory:manage` and `memory:reflect` as well as `actor:agent`. Real",
+    "  P4 key issuance would not give an agent those scopes; the fixture's actor kind is a scope",
+    "  stand-in, and without the scopes Core's scope check would fire first and the",
+    "  `forbidden_actor_kind` refusal would be unobservable.",
+    "* The **read-only** key carries `memory:read` only, which is what makes `forbidden_scope` the",
+    "  answer on all six routes.",
+    "",
+    "## The fixture's control routes (not product surface)",
+    "",
+    "`/v1/_p6_fixture/state`, `/drift`, `/drop-next` and `/set-job-status` are called **directly on",
+    "the fixture's port**, never through the dashboard proxy, and are not in the frozen contract or",
+    "any allowlist. They exist because a browser cannot make another actor change an item mid-flight",
+    "(`drift`), cannot make a reply vanish after it was applied (`drop-next`), and cannot put a job",
+    "into `DONE`/`RUNNING`/`PENDING` (`set-job-status`) — the states whose refusals the Gate must",
+    "observe.",
+    "",
+    "## Determinism of the asset",
+    "",
+    "Built with `vite build` from an isolated `git archive` of the commit (dependencies borrowed",
+    "read-only from the worktree; the build log is `vite-build.log`). The tree digest over the sorted",
+    "`sha256  ./relative/path` lines:",
+    "",
+    "```",
+    tree_sha,
+    "```",
+    "",
+    "## Scope limits",
+    "",
+    "* Nothing here exercises real P4 code, a merged P4, or a live engine.",
+    "* `P6_ENABLE_P4_WRITES` defaults **off**; the live read allowlist is unchanged at 25 paths and",
+    "  the always-on milestone-B write list is unchanged at 4.",
+    "* Status is **PARTIAL / DEPENDENCY_PENDING**, P4 phase acceptance has **not** passed, and the",
+    "  real-P4 verification remains a separate outstanding item.",
+    "",
+]
+(root / "README.md").write_text("\n".join(lines), encoding="utf-8")
+print(f"README written from {len(on)} ON and {len(off)} OFF records", file=sys.stderr)
+READMEPY
+
 # --- 8. freeze ---------------------------------------------------------------------------------
 rm -f "$OUT/BUNDLE-FROZEN.json" "$OUT/stability/BUNDLE-FROZEN.json"
 "$PYTHON" "$WORK/scripts/p6/freeze_bundle.py" \
