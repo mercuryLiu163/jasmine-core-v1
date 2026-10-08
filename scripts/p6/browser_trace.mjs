@@ -1720,8 +1720,10 @@ async function main() {
       }
 
       // --- health, and Memory marked non-authoritative by Core's own field ------------
+      // Wait for a *data-dependent* string, not the panel title: the title renders before
+      // the payload arrives, and asserting too early read the marker as absent.
       await gotoMemory('memory/health', 'memory health',
-        `document.body.textContent.includes('Memory 健康')`)
+        `document.body.textContent.includes('core_impact')`)
       const health = {
         nonAuthoritative: await evaluate(cdp,
           `document.querySelector('[data-testid="non-authoritative"]') !== null`),

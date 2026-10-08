@@ -55,9 +55,11 @@ SESSION = f"ses_{ID_BODY}"
 EVENT = f"evt_{ID_BODY}"
 TASK = f"tsk_{ID_BODY}"
 
-#: A valid-shaped id that the fixture does not hold, so `not_found` can be exercised without
-#: faking a malformed id (which the views refuse locally).
+#: Valid-shaped ids the fixture does not hold, so `not_found` can be exercised without
+#: faking a malformed id (which the views refuse locally with a different status).
 UNKNOWN = f"mem_{'01M4B6VGC29ESRDRQR62DX8AK7'}"
+JOB_UNKNOWN = f"mjb_{'01M4B6VGC29ESRDRQR62DX8AK7'}"
+TRACE_UNKNOWN = f"mtr_{'01M4B6VGC29ESRDRQR62DX8AK7'}"
 
 ID_RE = re.compile(r"^[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$")
 
@@ -378,6 +380,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/v1/hosts":
             self._require(self._scopes(), "objects:read")
             self._send(200, {"hosts": [{"host_id": HOST, "display_name": "p4-fixture-host"}]})
+            return True
+        # The dashboard shell reads these on its way to any view. Serving them keeps the
+        # shell from failing before a Memory view is reached — an unfaithful stub once
+        # crashed the overview and made a Gate look like a product failure.
+        if path == "/v1/meta/schema":
+            self._require(self._scopes(), "objects:read")
+            self._send(200, {"schema_version": 11, "core_version": "p4-fixture"})
+            return True
+        if path == "/v1/actors":
+            self._require(self._scopes(), "objects:read")
+            self._send(200, {"actors": [{"actor_id": ACTOR, "display_name": "p4-fixture-actor",
+                                         "kind": "human"}]})
             return True
         return False
 
