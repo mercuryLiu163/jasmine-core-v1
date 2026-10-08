@@ -301,6 +301,26 @@ describe('a real P4 read renders the record it was given', () => {
     expect(within(table).getByRole('link', { name: /source Event/i })).toBeTruthy()
   })
 
+  it('lists traces with their mode, status and token spend', async () => {
+    // The traces *list* is a separate read from the detail; without this the list could
+    // render nothing and every other test would still pass.
+    const user = userEvent.setup()
+    await enter(user, '#/memory/traces', {
+      ...SIGNED_IN,
+      'GET /v1/memory/traces': {
+        body: { traces: [trace(), trace({ trace_id: `mtr_${'01M4B6VGC29ESRDRQR62DX8AK9'}`, mode: 'reflect' })], count: 2 },
+      },
+    })
+    const panel = await screen.findByRole('region', { name: /Memory Traces/ })
+    const table = await within(panel).findByTestId('memory-traces')
+    const rows = table.querySelectorAll('tbody tr')
+    expect(rows).toHaveLength(2)
+    expect(table.textContent).toContain(TRACE)
+    expect(table.textContent).toContain('recall')
+    expect(table.textContent).toContain('reflect')
+    expect(table.textContent).toContain('128')
+  })
+
   it('shows a trace query hash and length, and never invents the query text', async () => {
     // P4 stores the hash and the length, not the query. Rendering a "query" field would be
     // inventing one.

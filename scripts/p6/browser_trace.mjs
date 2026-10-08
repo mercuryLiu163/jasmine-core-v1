@@ -1804,7 +1804,17 @@ async function main() {
         JSON.stringify({ ...itemsList, ...itemDetail }))
       await trace.screenshot(cdp, '27-memory-items')
 
-      // --- traces: the query hash and length, never the query text --------------------
+      // --- traces: the list, then the detail's query hash and length ----------------
+      // The list is a separate read from the detail, so it gets its own navigation: record 4
+      // claimed to cover "the seven reads" while visiting only six of them.
+      await gotoMemory('memory/traces', 'memory traces list',
+        `document.querySelector('[data-testid="memory-traces"]') !== null`)
+      const tracesList = {
+        rows: await evaluate(cdp,
+          `document.querySelectorAll('[data-testid="memory-traces"] tbody tr').length`),
+        pending: await evaluate(cdp,
+          `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+      }
       await gotoMemory(`memory/traces/${MTRACE}`, 'memory trace detail',
         `document.body.textContent.includes('query_sha256')`)
       const traceView = {
@@ -1813,9 +1823,10 @@ async function main() {
         // P4 does not store the query text; a "query" row would be inventing one.
         queryText: /(^|[^_])query_text/.test(await pageText()),
       }
-      trace.record('a memory trace shows the query hash and length, and never a query text',
-        traceView.hash && traceView.length && traceView.queryText === false,
-        JSON.stringify(traceView))
+      trace.record('the traces list and detail render, with the query hash and never a query text',
+        tracesList.rows >= 1 && tracesList.pending === false && traceView.hash &&
+          traceView.length && traceView.queryText === false,
+        JSON.stringify({ ...tracesList, ...traceView }))
       await trace.screenshot(cdp, '28-memory-traces')
 
       // --- an unknown id is Core's not_found, not the missing dependency --------------

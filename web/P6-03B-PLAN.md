@@ -5,7 +5,7 @@
 This began as the task breakdown and dependency check the operator asked for before
 implementation. The operator then authorised b1, and E1–E5 below are built, tested and
 evidenced: contract pinned by full SHA, pending paths behind a default-off switch, a labelled
-simulated fixture, the seven read views, and 98 guards across three layers. The Gate evidence
+simulated fixture, the seven read views, and 99 guards across three layers. The Gate evidence
 is registered under the P6-03b1 section of `validation-runs/p6/P6-02B-INDEX.md`, which is where
 the current bundle and the superseded ones are listed — the directory is gitignored, so a
 specific timestamp here would rot the moment the Gate is re-run.
@@ -146,7 +146,7 @@ labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
 | E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts share one `flagEnabled` spelling; tests assert they agree, that P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
 | E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | **built.** `X-P6-Fixture: simulated-p4-reads`; the fixture also serves the shell routes in their documented shapes after an earlier version crashed the overview |
 | E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
-| E5 | Component tests plus a Gate section | **built, 98 guards** (21 contract, 21 fixture, 31 view, 16 static-host, 9 Vite-host). Gate: 10/10 full twice, 4/4 scope |
+| E5 | Component tests plus a Gate section | **built, 99 guards** (21 contract, 21 fixture, 32 view, 16 static-host, 9 Vite-host). Gate: 10/10 full twice, 4/4 scope |
 
 **Still blocked until P4 is merged and independently validated:**
 
@@ -215,7 +215,7 @@ the criterion claims. `R#` is a Gate record in `scripts/p6/browser_trace.mjs`.
 | --- | --- |
 | 1 contract + drift + loud absence | `test_snapshot_still_matches_the_pinned_commit`, `test_check_exits_two_when_the_commit_is_absent`, `test_source_is_a_pinned_full_sha_not_a_branch`, `test_snapshot_says_the_dependency_is_missing_and_acceptance_unpassed`, `test_every_payload_matches_the_frozen_field_set`, `test_row_keys_come_from_the_p4_tables`, `test_a_rename_in_p4_would_break_the_guard`, `test_interfaces_carry_exactly_the_contract_fields` |
 | 2 baseline untouched | `test_baseline_core_serves_none_of_the_seven_endpoints`, `test_pending_paths_are_not_in_the_live_read_allowlist`, `test_the_live_allowlist_is_unchanged_by_this_slice`, `test_every_live_path_is_a_real_baseline_route`; `refuses all seven on a baseline proxy`, `forwards all seven when the operator states the Core has P4`, `leaves the P6-03a switch independent`, `defaults to off…`; the Vite-host equivalents |
-| 3 the seven reads render | Gate records 1–4 (health, jobs, items, traces), screenshots 25–28 |
+| 3 the seven reads render | Gate records 1–4 — health; jobs list+detail; items list+detail; traces list+detail — screenshots 25–28. The traces list was missing until the criterion was audited, which is why the record now names both halves |
 | 4 `non_authoritative` from Core | `shows the marker when Core sends non_authoritative: true`, `does NOT claim it when Core does not send the field`, `shows the marker on an item detail`, `test_non_authoritative_is_present_where_p4_sends_it`; Gate R1 |
 | 5 four states distinct | `renders a grantless actor as an empty result, not an error`, `shows an unauthorised project as not_found…`, `shows a missing scope as Core refusal…`, `keeps an unknown id distinct from an unauthorised project`, `states PARTIAL / DEPENDENCY_PENDING on the view itself`; `test_a_grantless_token_gets_an_empty_list_not_an_error`, `test_an_unauthorised_project_is_not_found_rather_than_an_error`, `test_a_missing_scope_is_403_and_names_itself`, `test_an_unknown_id_is_not_found`; Gate R5 |
 | 6 malformed id refused locally | the three `does not blame the missing P4 for a bad … id` cases; `test_a_malformed_id_is_400_not_a_silent_404`; Gate R6 |
