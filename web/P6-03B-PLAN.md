@@ -1,7 +1,10 @@
 # P6-03b — scope, dependency check, and acceptance criteria
 
-**Status: P6-03b1 DELIVERED as PARTIAL / DEPENDENCY_PENDING; P6-03b2 SPECIFICATION FROZEN,
-NOT IMPLEMENTED** — see [`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md).
+**Status: P6-03b1 DELIVERED as PARTIAL / DEPENDENCY_PENDING; P6-03b2 IMPLEMENTED behind a
+default-off switch, also PARTIAL / DEPENDENCY_PENDING** — the six writes exist and are exercised
+only against a simulated P4 fixture, never a real one. Per-criterion state:
+[`P6-03B2-COMPLIANCE.md`](P6-03B2-COMPLIANCE.md); specification:
+[`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md).
 
 This began as the task breakdown and dependency check the operator asked for before
 implementation. The operator then authorised b1, and E1–E5 below are built, tested and
@@ -30,7 +33,7 @@ P6-03b is the **P4 (Memory)** inspector, split by operator decision:
 | --- | --- | --- |
 | P6-03a | Checkpoint / Context Pack / Resume (P3) | delivered, PARTIAL / DEPENDENCY_PENDING |
 | **P6-03b1** | **7 read endpoints** — health, jobs ×2, items ×2, traces ×2 | **delivered**, PARTIAL / DEPENDENCY_PENDING (this file) |
-| **P6-03b2** | **5 `memory:manage` writes + `reflect`** | **specification frozen, not implemented**; separate milestone, needs an audited-write Gate ([`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md)) |
+| **P6-03b2** | **5 `memory:manage` writes + `reflect`** | **implemented, default-off, verified against the simulated fixture only**; PARTIAL / DEPENDENCY_PENDING ([`P6-03B2-COMPLIANCE.md`](P6-03B2-COMPLIANCE.md)) |
 | P6-03c | Validation inspector (P7-01) | not started |
 
 ## 1. Scope, as the taskbook defines it
@@ -304,13 +307,14 @@ Still open:
 
 Both are settled: **Q3** — the dependency-pending views land now, with simulation labelled,
 the pending paths isolated from the live allowlist and forwarding off by default. **Q4** —
-E1–E5 are authorised and built; P6-03b2 is frozen on paper in
-`P6-03B2-WRITE-SPEC.md` and nothing of it is implemented.
+E1–E5 are authorised and built; P6-03b2 is built behind its own default-off switch
+(`P6_ENABLE_P4_WRITES`), deep-link only, and verified against the simulated fixture alone.
 
 Still open, for the operator:
 
-* **P6-03b2** is not started and needs its own frozen payload/permission table and an
-  audited-write Gate before any of it ships.
+* **P6-03b2** is built and has its own payload/permission Gate, but that Gate ran against a
+  simulated Core: real-P4 verification is the outstanding item, and the switch stays off by
+  default until it is done.
 * **Independent review: done, three pairs of passes.** Two adversarial passes (source review +
   clean-archive validation) ran first, each returning PASS-WITH-CAVEATS; their 12 findings are fixed
   at `c1113c5`, `108f699` and `bbdbf7f`. A further pair then reviewed the fix rounds and found a
@@ -349,6 +353,8 @@ contract, the gated paths and the Gate are built and evidenced; contract pinned 
 `0c4f8f0e2118711ac9aa2a7006fddc6982962248`, **P4 phase acceptance not passed**, live proxy
 closed by default. This header said "NOT STARTED" for five commits after the implementation
 landed, which a reader could have taken either as "nothing to review" or as a reason to skip
-the acceptance caveats. `P6-03b2: SPECIFICATION FROZEN, NOT IMPLEMENTED` and gated behind its own audited-write Gate.
+the acceptance caveats. `P6-03b2: IMPLEMENTED, DEFAULT-OFF, PARTIAL / DEPENDENCY_PENDING` — the six writes are built and
+gated behind their own switch, and every one of them was verified against a simulated P4 fixture,
+never a real one.
 The baseline serves none of the thirteen routes, so no part of this slice is available, and
 none of it may be described as such until §4 has been executed against a real Core.
