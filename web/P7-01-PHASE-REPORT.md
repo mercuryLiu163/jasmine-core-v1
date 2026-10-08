@@ -200,7 +200,10 @@ run records were only ever read (their mtimes are unchanged).
    per-case grade.
 4. **The manifest is unauthenticated.** `frozen_at`, `mode` and `credential_shaped` are self-declared; the
    API reports `manifest_authentication: "unauthenticated"` rather than implying otherwise.
-5. **`P6-T06` remains a separate P6 browser drill-down**, and the dashboard proxy allowlist for
-   `/v1/validation/…` (a `p7_pending_paths` list plus a `P6_ENABLE_P7_READS` flag in
-   `web/server/core-paths.json`, exactly as P3 and P4 did) is P6-03c's change, requested in the proposal's
-   §11.
+5. **The dashboard proxy allowlist is delivered; `P6-T06` is not.** The handoff requested in the
+   proposal's §11 landed in the P6 worktree as commit
+   `f811f584f26a0fff34a2045a29a06eca596973d1` (branch `p6-01-readonly-dashboard`): a `p7_pending_paths`
+   list plus the `P6_ENABLE_P7_READS` switch, gated identically in the Vite dev proxy and the static host,
+   with the five patterns pinned to this contract and the frozen contract copied across. What remains for
+   P6-03c is its own slice: the Validation Inspector views and the real-browser `P6-T06` drill-down, whose
+   acceptance must use this read chain rather than a fixture.
