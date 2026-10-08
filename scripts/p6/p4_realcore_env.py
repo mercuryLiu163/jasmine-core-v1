@@ -41,8 +41,11 @@ import argparse
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -123,7 +126,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     os.environ["JASMINE_MEMORY_DEPLOYMENT_MODE"] = "single_user"
     os.environ.pop("JASMINE_HINDSIGHT_URL", None)
 
-    from jasmine_core import SCHEMA_VERSION, auth, db, registry
+    from jasmine_core import SCHEMA_VERSION, auth, clock, db, registry
     from jasmine_core.ids import new_id
     from jasmine_core.memory import hindsight as hindsight_module
     from jasmine_core.memory import jobs as jobs_module
@@ -204,7 +207,32 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         failed_step = None
 
     # The engine, and the real worker over a real socket.
-    engine = memory_support.StubHindsightServer()
+    #
+    # In the `unavailable` state the engine port is **pinned** by a shim around the stdlib server the
+    # stub uses, because the recovery half of the T05 slice needs the engine to come back on the
+    # *same address*: P4 builds its transport once per process (`memory/api.py`: "so a credential
+    # cannot be rotated underneath an in-flight request"), so a recovery that moved the engine to a
+    # new port would require restarting the Core — and would not be the operator's actual situation
+    # when Hindsight returns. The shim touches nothing in P4's file: it is a harness-level partial.
+    engine_port: int | None = None
+    if args.engine_state == "unavailable":
+        with socket.socket() as reservation:
+            reservation.bind(("127.0.0.1", 0))
+            engine_port = int(reservation.getsockname()[1])
+        original_server = memory_support.ThreadingHTTPServer
+        # A partial would *prepend*, not replace: the stub passes its own address first, so the shim
+        # ignores it and binds the pinned port instead. (The first version used partial and produced
+        # `TypeError: 'tuple' object is not callable` in the stub's handler dispatch.)
+        memory_support.ThreadingHTTPServer = (
+            lambda _address, *rest, **kwargs: original_server(("127.0.0.1", int(engine_port)),
+                                                              *rest, **kwargs))
+        try:
+            engine = memory_support.StubHindsightServer()
+        finally:
+            memory_support.ThreadingHTTPServer = original_server
+        log(f"engine port pinned to {engine_port} so it can return on the same address")
+    else:
+        engine = memory_support.StubHindsightServer()
     os.environ["JASMINE_HINDSIGHT_URL"] = engine.base_url
     transport = hindsight_module.HindsightTransport(hindsight_module.config_from_env())
     store = MemoryStore(conn, schema_version=SCHEMA_VERSION)
@@ -232,8 +260,6 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         failed_step = seed.verified_step(project_id=project_id, task_id=failure_task)
         # The engine's own `unreachable` knob only covers recall, so the failure is produced the way a
         # real outage produces it: a transport pointed at a port nothing is listening on.
-        import socket
-
         probe = socket.socket()
         probe.bind(("127.0.0.1", 0))
         dead_port = probe.getsockname()[1]
@@ -251,18 +277,26 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     # Two more sources are enqueued and deliberately not worked: one stays PENDING, one is claimed
     # to RUNNING through P4's own claim path (a real lease, not a fabricated status), so the retry
     # acceptance can exercise both refusals against rows P4 itself put in those states.
-    for title in ("pending path", "running path"):
-        other_task = seed.task(project_id, title=title)
-        seed.verified_step(project_id=project_id, task_id=other_task)
-    jobs_module.JobStore(conn, store).enqueue_from_sources(SourceRegistry(), limit=100,
-                                                           max_attempts=3)
-    pending_rows = conn.execute("SELECT job_id FROM memory_jobs WHERE status='PENDING'"
-                                " ORDER BY created_at").fetchall()
     claimed = None
-    if pending_rows:
-        claimed_job = jobs_module.JobStore(conn, store).claim_due(owner="p6-realcore-env",
-                                                                 lease_seconds=3600)
-        claimed = claimed_job.job["job_id"] if claimed_job is not None else None
+    if args.engine_state == "unavailable":
+        # No PENDING/RUNNING rows are left behind in this state: they exist so the retry acceptance
+        # can exercise P4's refusals (that is the default mode's run), and here they would keep the
+        # health report at `degraded` after the engine returns, hiding the recovery this slice exists
+        # to show. With only DONE rows, a successful operation after the engine comes back reaches
+        # `ok`.
+        log("engine-state unavailable: skipping the pending/running seeding")
+    else:
+        for title in ("pending path", "running path"):
+            other_task = seed.task(project_id, title=title)
+            seed.verified_step(project_id=project_id, task_id=other_task)
+        jobs_module.JobStore(conn, store).enqueue_from_sources(SourceRegistry(), limit=100,
+                                                               max_attempts=3)
+        pending_rows = conn.execute("SELECT job_id FROM memory_jobs WHERE status='PENDING'"
+                                    " ORDER BY created_at").fetchall()
+        if pending_rows:
+            claimed_job = jobs_module.JobStore(conn, store).claim_due(owner="p6-realcore-env",
+                                                                     lease_seconds=3600)
+            claimed = claimed_job.job["job_id"] if claimed_job is not None else None
 
     items = conn.execute("SELECT memory_id, status, revision, pinned, memory_type, project_id,"
                          " engine_state, last_error_code, safe_error_summary"
@@ -282,19 +316,14 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     engine_state = "wire-double (engine up)"
     health_at_build: dict[str, Any] | None = None
     engine_url = engine.base_url
+    engine_events: list[dict[str, Any]] = []
     if args.engine_state == "unavailable":
-        import socket as socket_module
-
         from jasmine_core.memory import health as health_module
         from jasmine_core.memory.worker import record_engine_probe
 
+        engine_url = engine.base_url  # the pinned address; it is what the Core keeps pointing at
         engine.stop()
-        probe_socket = socket_module.socket()
-        probe_socket.bind(("127.0.0.1", 0))
-        dead_port = probe_socket.getsockname()[1]
-        probe_socket.close()
-        engine_url = f"http://127.0.0.1:{dead_port}"
-        os.environ["JASMINE_HINDSIGHT_URL"] = engine_url
+        engine = None
         dead_transport = hindsight_module.HindsightTransport(
             hindsight_module.HindsightConfig(engine_url))
         probed = record_engine_probe(conn, store, dead_transport)
@@ -302,11 +331,109 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             conn, store, dead_transport, jobs_module.JobStore(conn, store), probe=False)
         engine_state = (f"unavailable (wire double stopped and probe failed: "
                         f"{probed.get('error_code')})")
+        engine_events.append({"at": clock.now_rfc3339(), "action": "stop",
+                              "engine_url": engine_url, "probe_error_code": probed.get("error_code"),
+                              "health_status": health_at_build["status"],
+                              "degraded": health_at_build["degraded"],
+                              "core_impact": health_at_build["core_impact"]})
         log(f"engine stopped; probe recorded {probed.get('error_code')}; health status "
             f"{health_at_build['status']}, degraded={health_at_build['degraded']}, "
             f"core_impact={health_at_build['core_impact']}")
-        # The engine object is stopped; the caller must not try to stop it again.
-        engine = None
+
+    # The control channel the recovery half uses. It is a harness control plane on its own loopback
+    # port — never the Core API, never allowlisted by the dashboard proxy — and every action it takes
+    # is recorded in `engine_events` so the outage and the recovery are both in the evidence.
+    engine_control = None
+    if args.engine_state == "unavailable":
+        control_state: dict[str, Any] = {"engine": None, "port": engine_port}
+
+        def start_engine() -> dict[str, Any]:
+            original_server = memory_support.ThreadingHTTPServer
+            memory_support.ThreadingHTTPServer = (
+                lambda _address, *rest, **kwargs: original_server(
+                    ("127.0.0.1", int(control_state["port"])), *rest, **kwargs))
+            try:
+                return memory_support.StubHindsightServer()
+            finally:
+                memory_support.ThreadingHTTPServer = original_server
+
+        def connection() -> Any:
+            # SQLite connections are bound to the thread that created them, and this control channel
+            # runs on its own thread; each request opens its own connection so the probe and the
+            # health read are real writes/reads rather than a cross-thread misuse.
+            return db.connect(db_path)
+
+        def health_with(conn_now: Any) -> dict[str, Any]:
+            store_now = MemoryStore(conn_now, schema_version=SCHEMA_VERSION)
+            transport_now = hindsight_module.HindsightTransport(
+                hindsight_module.HindsightConfig(engine_url))
+            return health_module.report(conn_now, store_now, transport_now,
+                                        jobs_module.JobStore(conn_now, store_now), probe=False)
+
+        def health_now() -> dict[str, Any]:
+            conn_now = connection()
+            try:
+                return health_with(conn_now)
+            finally:
+                conn_now.close()
+
+        class ControlHandler(BaseHTTPRequestHandler):
+            def log_message(self, fmt: str, *fmt_args: Any) -> None:  # keep the log ours
+                return
+
+            def _send(self, payload: dict[str, Any], status: int = 200) -> None:
+                body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self) -> None:  # noqa: N802 - http.server's spelling
+                if self.path != "/status":
+                    self._send({"error": "not_found"}, 404)
+                    return
+                self._send({"engine_url": engine_url, "engine_up": control_state["engine"] is not None,
+                            "health": health_now(), "events": engine_events})
+
+            def do_POST(self) -> None:  # noqa: N802 - http.server's spelling
+                if self.path != "/restore":
+                    self._send({"error": "not_found"}, 404)
+                    return
+                if control_state["engine"] is not None:
+                    self._send({"restored": False, "reason": "already up",
+                                "health": health_now()})
+                    return
+                control_state["engine"] = start_engine()
+                conn_now = connection()
+                try:
+                    store_now = MemoryStore(conn_now, schema_version=SCHEMA_VERSION)
+                    transport_now = hindsight_module.HindsightTransport(
+                        hindsight_module.HindsightConfig(engine_url))
+                    probed_now = record_engine_probe(conn_now, store_now, transport_now)
+                    health = health_with(conn_now)
+                finally:
+                    conn_now.close()
+                engine_events.append({"at": clock.now_rfc3339(), "action": "restore",
+                                      "engine_url": engine_url,
+                                      "probe_reachable": probed_now.get("reachable"),
+                                      "probe_error_code": probed_now.get("error_code"),
+                                      "health_status": health["status"],
+                                      "degraded": health["degraded"],
+                                      "core_impact": health["core_impact"]})
+                log(f"engine restored on {engine_url}; probe reachable="
+                    f"{probed_now.get('reachable')}; health status {health['status']}")
+                self._send({"restored": True, "health": health, "probe": probed_now})
+
+        control_httpd = ThreadingHTTPServer(("127.0.0.1", 0), ControlHandler)
+        control_httpd.daemon_threads = True
+        control_thread = threading.Thread(target=control_httpd.serve_forever,
+                                          kwargs={"poll_interval": 0.05}, daemon=True)
+        control_thread.start()
+        engine_control = {"httpd": control_httpd, "thread": control_thread,
+                          "url": f"http://127.0.0.1:{control_httpd.server_address[1]}",
+                          "state": control_state}
+        log(f"engine control on {engine_control['url']} (harness only; not the Core API)")
 
     descriptor = {
         "environment": "isolated real P4 Core with a wire-double engine",
@@ -326,6 +453,13 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         "db": str(db_path),
         "workspace": str(workspace),
         "engine_url": engine_url,
+        "engine_port": engine_port,
+        "engine_control_url": engine_control["url"] if engine_control else None,
+        "engine_control_note": ("a harness control plane on its own loopback port, never the Core "
+                                "API and never in the dashboard proxy's allowlist; used only to "
+                                "bring the wire double back on the same address"
+                                ) if engine_control else None,
+        "engine_events": engine_events,
         "health_at_build": health_at_build,
         "core_origin": f"http://127.0.0.1:{args.port}",
         "host_id": host_id,
@@ -350,7 +484,8 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     os.chmod(out / "tokens.json", 0o600)
     (out / "descriptor.json").write_text(json.dumps(descriptor, indent=2), encoding="utf-8")
     os.chmod(out / "descriptor.json", 0o600)
-    return {"descriptor": descriptor, "engine": engine, "db_path": db_path}
+    return {"descriptor": descriptor, "engine": engine, "db_path": db_path,
+            "engine_control": engine_control}
 
 
 def _has_table(conn: Any, name: str) -> bool:
@@ -401,6 +536,9 @@ def main(argv: list[str] | None = None) -> int:
         log(f"seed-only: descriptor at {args.out / 'descriptor.json'}; engine stopped")
         if built["engine"] is not None:
             built["engine"].stop()
+        control = built["engine_control"]
+        if control is not None:
+            control["httpd"].shutdown()
         return 0
 
     from jasmine_core.api.server import serve
@@ -414,6 +552,11 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if built["engine"] is not None:
             built["engine"].stop()
+        control = built["engine_control"]
+        if control is not None:
+            control["httpd"].shutdown()
+            if control["state"]["engine"] is not None:
+                control["state"]["engine"].stop()
     return 0
 
 

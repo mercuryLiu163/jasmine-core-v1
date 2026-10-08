@@ -1,24 +1,26 @@
 /**
- * P6-T05 degraded slice — the browser half: Memory unavailable, Core (and the P1 views) still up.
+ * P6-T05 degraded slice — the browser half: Memory unavailable (and then recovered), P1 untouched.
  *
- * Read `scripts/p6/run_t05_degraded.py` and `web/P6-REMAINING-TASKS.md`. The isolated real P4 Core in
- * this run is built with `--engine-state unavailable`: the wire-double engine is **stopped** and P4's
- * own probe recorded the refusal, so `GET /v1/memory/health` reports `unreachable` with
- * `core_impact: memory_paused` while `GET /v1/health` still says `ok`. That is P4's own documented
- * design ("Hindsight unavailable → long-term Memory pauses; Rules/State/Evidence/Checkpoint continue
- * normally"), and this pass checks the dashboard renders exactly that and nothing softer:
+ * Read `scripts/p6/run_t05_degraded.py`. The isolated real P4 Core is built with
+ * `--engine-state unavailable`: the wire-double engine is **stopped** and P4's own probe recorded the
+ * refusal, so `/v1/memory/health` reports `unreachable` with `core_impact: memory_paused` while
+ * `/v1/health` still says `ok`. The runner then restarts the engine on the same address and this pass
+ * re-reads the pages to show the recovery.
  *
- * * the Memory health panel states the status, `degraded: true`, `memory_paused` **and** the
- *   sentence that Core itself is still working — the panel must not turn "Memory is down" into
- *   "everything is down", and must not render the outage as an empty healthy set;
- * * the Memory job and trace lists still show Core's own rows (a paused engine is not a blank table);
- * * the P1 views (Overview, Task, Conversation, Rules, Evidence) still render real Core data with
- *   **no** dependency-pending panel and **no** alert: a Memory outage must not cascade;
- * * the traffic is against the real Core; the engine boundary is a labelled wire double, so
- *   `mode: boundary-fake` and no real Hindsight behaviour is claimed.
+ * Assertions, and why they are shaped this way (the operator's second review found the first version's
+ * checks could pass on historical traffic or on a panel title alone):
  *
- * The browser helpers are imported from `browser_trace.mjs` rather than copied, so the passes cannot
- * drift in how they click, wait or read a page.
+ * * every view's data assertion requires a **request issued after that view was navigated to** to
+ *   have been observed with a 200 — a 200 captured earlier in the pass cannot satisfy it;
+ * * every P1 view must additionally show **the object the page is about** (the project id, the task
+ *   id, an event's `data-event-id`, the rule id, the evidence id), so "the panel rendered" is not
+ *   enough;
+ * * the Memory health panel must state the pause and that Core keeps working, and after recovery must
+ *   state the recovery — never an empty healthy set for an outage, and never a success word for the
+ *   `degraded` reflect payload;
+ * * the P1 views must show no dependency-pending panel and no alert that names a dependency failure
+ *   (the Rules page also renders the audited write forms, whose empty-field hints are `role=alert`;
+ *   every alert is recorded verbatim so nothing is filtered away silently).
  */
 
 import { spawn } from 'node:child_process'
@@ -39,7 +41,7 @@ import {
 } from './browser_trace.mjs'
 
 function parseArgs(argv) {
-  const args = { width: 1440, height: 1000, headful: false }
+  const args = { width: 1440, height: 1000, headful: false, controlState: 'not-available' }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]
     const next = argv[index + 1]
@@ -47,12 +49,14 @@ function parseArgs(argv) {
       case '--ui': args.ui = next; index += 1; break
       case '--tokens': args.tokens = next; index += 1; break
       case '--descriptor': args.descriptor = next; index += 1; break
+      case '--expect': args.expect = next; index += 1; break
+      case '--control-state': args.controlState = next; index += 1; break
       case '--out': args.out = next; index += 1; break
       case '--headful': args.headful = true; index += 1; break
       default: throw new Error(`unknown argument ${flag}`)
     }
   }
-  for (const required of ['ui', 'tokens', 'descriptor', 'out']) {
+  for (const required of ['ui', 'tokens', 'descriptor', 'expect', 'out']) {
     if (!args[required]) throw new Error(`--${required} is required`)
   }
   return args
@@ -62,6 +66,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const tokens = JSON.parse(readFileSync(args.tokens, 'utf8'))
   const descriptor = JSON.parse(readFileSync(args.descriptor, 'utf8'))
+  const expect = JSON.parse(readFileSync(args.expect, 'utf8'))
   const token = tokens.human_manage ?? Object.values(tokens)[0]
   const project = descriptor.seeded.project_id
   const task = descriptor.seeded.task_id
@@ -134,7 +139,20 @@ async function main() {
       }
       return null
     })()`)
+    // Requests issued *after* the mark, so a view cannot be credited with an earlier view's traffic.
+    const freshStatuses = (prefix, mark) => requests.slice(mark)
+      .filter((entry) => entry.path.startsWith(prefix))
+      .map((entry) => responses.get(entry.requestId) ?? null)
+    const waitForFresh = async (prefix, mark, label) => {
+      for (let attempt = 0; attempt < 100; attempt += 1) {
+        const statuses = freshStatuses(prefix, mark)
+        if (statuses.some((status) => status === 200)) return statuses
+        await new Promise((resolve) => setTimeout(resolve, 100))
+      }
+      throw new Error(`no fresh 200 observed for ${prefix} after navigating to ${label}`)
+    }
     const goto = async (hash, label, readyExpression) => {
+      const mark = requests.length
       await evaluate(cdp, `(() => {
         const next = '#/' + ${JSON.stringify(hash)}
         if (location.hash !== next) location.hash = next
@@ -143,6 +161,7 @@ async function main() {
       })()`)
       await waitFor(cdp, `location.hash === ${JSON.stringify('#/' + hash)}`, { label: `${label} hash` })
       await waitFor(cdp, readyExpression, { label })
+      return mark
     }
     const signIn = async (value) => {
       await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
@@ -152,16 +171,18 @@ async function main() {
       await waitFor(cdp, `document.querySelector('input[type=password]') === null`,
         { label: 'signed in' })
     }
+    const dependencyAlerts = (list) => list.filter((text) =>
+      /未接入|dependency|proxy|unreachable|not_found|forbidden/i.test(text))
 
     await cdp.send('Page.navigate', { url: `${args.ui}/#/overview` })
     await signIn(token)
 
-    // --- 1. the Memory health panel states the outage, and that Core keeps working --------------
-    // Wait for the *data*, not the panel title: the rows are what the record asserts, and the
-    // first version read them while `/v1/memory/health` was still in flight (all-null detail).
-    await goto('memory/health', 'memory health',
+    // === OUTAGE PHASE =========================================================================
+    const markHealth = await goto('memory/health', 'memory health',
       `[...document.querySelectorAll('dl.kv dt')].some((n) => (n.textContent ?? '').trim() === 'status')`)
+    const healthFresh = await waitForFresh('/v1/memory/health', markHealth, 'memory health')
     const health = {
+      fresh: healthFresh,
       status: await kvRow('status'),
       degraded: await kvRow('degraded'),
       coreImpact: await kvRow('core_impact'),
@@ -178,30 +199,33 @@ async function main() {
         (health.coreImpact ?? '').startsWith('memory_paused') && health.configured === 'true' &&
         health.reachable === 'false' && health.lastError === 'engine_unreachable' &&
         health.pausedSentence && health.nonAuthoritative &&
-        health.pending === false && health.alerts.length === 0,
+        health.pending === false && health.alerts.length === 0 &&
+        health.fresh.includes(200),
       JSON.stringify(health))
-    await trace.screenshot(cdp, 't05-01-memory-health')
+    await trace.screenshot(cdp, 't05-01-memory-health-outage')
 
-    // --- 2. the job and trace lists still show Core's own rows, not blank tables ----------------
-    await goto('memory/jobs', 'memory jobs',
+    const markJobs = await goto('memory/jobs', 'memory jobs',
       `document.querySelectorAll('[data-testid="memory-jobs"] tbody tr').length > 0`)
+    const jobsFresh = await waitForFresh('/v1/memory/jobs', markJobs, 'memory jobs')
     const jobs = {
+      fresh: jobsFresh,
       rows: await rowsIn('memory-jobs'),
       statuses: (await pageText()).includes('DONE') || (await pageText()).includes('PENDING'),
       pending: await pending(),
       alerts: await alerts(),
     }
     trace.record('Memory jobs still renders Core rows while the engine is down',
-      jobs.rows > 0 && jobs.statuses && jobs.pending === false && jobs.alerts.length === 0,
+      jobs.rows > 0 && jobs.statuses && jobs.fresh.includes(200) &&
+        jobs.pending === false && jobs.alerts.length === 0,
       JSON.stringify(jobs))
     await trace.screenshot(cdp, 't05-02-memory-jobs')
 
-    await goto('memory/traces', 'memory traces',
+    const markTraces = await goto('memory/traces', 'memory traces',
       `document.querySelectorAll('[data-testid="memory-traces"] tbody tr').length > 0`)
+    const tracesFresh = await waitForFresh('/v1/memory/traces', markTraces, 'memory traces')
     const traces = {
+      fresh: tracesFresh,
       rows: await rowsIn('memory-traces'),
-      // The status cell renders Core's own `status` verbatim; read the row rather than guessing the
-      // word, and require it to look like a failure or a degradation — never a success.
       firstRow: await evaluate(cdp,
         `(document.querySelector('[data-testid="memory-traces"] tbody tr')?.textContent ?? '').trim()`),
       pending: await pending(),
@@ -209,74 +233,101 @@ async function main() {
     }
     trace.record('the degraded attempt is recorded as history, not hidden',
       traces.rows > 0 && /(failed|degraded|error)/i.test(traces.firstRow) &&
-        !/(success|ok\b|done)/i.test(traces.firstRow) &&
+        !/(success|ok\b|done)/i.test(traces.firstRow) && traces.fresh.includes(200) &&
         traces.pending === false && traces.alerts.length === 0,
       JSON.stringify(traces))
-    await trace.screenshot(cdp, 't05-03-memory-traces')
 
-    // --- 3. the P1 views are untouched: no dependency panel, no alert, real data ----------------
-    // Each P1 view gets the marker its own panel renders, plus a check that the Core read behind it
-    // really answered 200 — "the page rendered" alone would not show the outage stayed contained.
-    // `?? null` matters: an unobserved response must read as "not seen yet", not as `undefined`,
-    // which the failure test below would count as a failed read.
-    const apiStatuses = (prefix) => requests.filter((entry) => entry.path.startsWith(prefix))
-      .map((entry) => responses.get(entry.requestId) ?? null)
-    // Wait for the read behind a view to be *observed* answered, so the containment assertion does
-    // not race the request: a view can render its panel before its data arrives.
-    const waitForStatus = async (prefix, label) => {
-      for (let attempt = 0; attempt < 100; attempt += 1) {
-        const statuses = apiStatuses(prefix)
-        if (statuses.some((status) => status === 200)) return statuses
-        await new Promise((resolve) => setTimeout(resolve, 100))
-      }
-      throw new Error(`no 200 observed for ${prefix} (${label})`)
-    }
+    // Each P1 view: a **fresh** 200 behind it, the object it is about on the page, no dependency
+    // panel, no dependency-failure alert.
     const p1 = {}
-    for (const [name, hash, marker, prefix] of [
-      ['overview', 'overview', 'Core 健康与 Schema', '/v1/projects'],
-      ['task', `task/${task}`, 'Task 状态', `/v1/tasks/${task}`],
+    for (const [name, hash, marker, prefix, shownBy] of [
+      ['overview', 'overview', 'Core 健康与 Schema', '/v1/projects', `text:${expect.project_id}`],
+      ['task', `task/${task}`, 'Task 状态', `/v1/tasks/${task}`, `text:${expect.task_id}`],
       ['conversation', `conversation?project_id=${project}&task_id=${task}`, 'Sessions',
-       '/v1/events'],
+       '/v1/events', expect.event_id ? `selector:[data-event-id="${expect.event_id}"]`
+                                     : `text:${expect.task_id}`],
       ['rules', `rules?project_id=${project}&task_id=${task}&rule_id=${rule}`, 'ACTIVE Rule',
-       '/v1/rules'],
-      ['evidence', `evidence?evidence_id=${evidence}`, 'Evidence', '/v1/evidence'],
+       '/v1/rules', `text:${expect.rule_id}`],
+      ['evidence', `evidence?evidence_id=${evidence}`, 'Evidence', '/v1/evidence',
+       `text:${expect.evidence_id}`],
     ]) {
-      await goto(hash, `P1 ${name}`,
+      const mark = await goto(hash, `P1 ${name}`,
         `document.body.textContent.includes(${JSON.stringify(marker)})`)
-      const statuses = await waitForStatus(prefix, name)
-      const shown = await alerts()
-      p1[name] = {
-        marker: true,
-        // `null` is a request the capture had not seen answered yet; a non-200 is a real failure.
-        api: statuses.length ? statuses : null,
-        apiFailed: statuses.some((status) => status !== null && status !== 200),
-        pending: await pending(),
-        // The Rules page also renders the audited write forms, whose empty-field hints are
-        // `role=alert` too. Those are not dependency failures, so the assertion below looks for a
-        // dependency-failure *word* and records every alert verbatim instead of counting them.
-        alerts: shown,
-        dependencyAlerts: shown.filter((text) =>
-          /未接入|dependency|proxy|unreachable|not_found|forbidden/i.test(text)),
-      }
+      const fresh = await waitForFresh(prefix, mark, name)
+      const shown = shownBy.startsWith('selector:')
+        ? await evaluate(cdp,
+            `document.querySelector(${JSON.stringify(shownBy.slice('selector:'.length))}) !== null`)
+        : (await pageText()).includes(shownBy.slice('text:'.length))
+      const list = await alerts()
+      p1[name] = { fresh, shown, pending: await pending(), alerts: list,
+                   dependencyAlerts: dependencyAlerts(list) }
     }
-    trace.record('the P1 views are unaffected by the Memory outage: no dependency failure, no alert',
-      Object.values(p1).every((view) => view.pending === false && view.apiFailed === false &&
-        view.api !== null && view.api.includes(200) && view.dependencyAlerts.length === 0),
+    trace.record('the P1 views are unaffected by the Memory outage: fresh data, no dependency failure',
+      Object.values(p1).every((view) => view.shown === true && view.fresh.includes(200) &&
+        view.fresh.every((status) => status === null || status === 200) &&
+        view.pending === false && view.dependencyAlerts.length === 0),
       JSON.stringify(p1))
-    await trace.screenshot(cdp, 't05-04-p1-overview')
+    await trace.screenshot(cdp, 't05-03-p1-during-outage')
 
-    // --- 4. the traffic really went to the Core, whose own health is ok -------------------------
-    const requested = (path) => requests.filter((entry) => entry.path === path)
-    const healthCalls = requested('/v1/health')
-    const memoryCalls = requests.filter((entry) => entry.path.startsWith('/v1/memory/'))
+    const healthCalls = requests.filter((entry) => entry.path === '/v1/health')
     trace.record('every page read the real Core, and Core health answered 200 while Memory was down',
-      healthCalls.length > 0 && memoryCalls.length > 0 &&
-        healthCalls.every((entry) => responses.get(entry.requestId) === 200) &&
-        memoryCalls.every((entry) => responses.get(entry.requestId) === 200),
-      JSON.stringify({ health: healthCalls.length, memory: memoryCalls.length,
+      healthCalls.length > 0 && healthCalls.every((e) => responses.get(e.requestId) === 200),
+      JSON.stringify({ health: healthCalls.length,
                        healthStatuses: healthCalls.map((e) => responses.get(e.requestId)) }))
 
-    // --- 5. no unexpected console errors (a 403/404 the UI provokes is not one) ----------------
+    // === RECOVERY PHASE (the runner restarted the engine on the same address) ==================
+    if (args.controlState === 'restored') {
+      const markRecovered = await goto('memory/health', 'memory health after recovery',
+        `[...document.querySelectorAll('dl.kv dt')].some((n) => (n.textContent ?? '').trim() === 'status')`)
+      const recoveredFresh = await waitForFresh('/v1/memory/health', markRecovered,
+                                                'memory health after recovery')
+      const recovered = {
+        fresh: recoveredFresh,
+        status: await kvRow('status'),
+        degraded: await kvRow('degraded'),
+        coreImpact: await kvRow('core_impact'),
+        reachable: await kvRow('reachable'),
+        lastError: await kvRow('last_error_code'),
+        pausedSentence: (await pageText()).includes('Memory 已暂停'),
+        pending: await pending(),
+        alerts: await alerts(),
+      }
+      trace.record('after the engine returns on the same address, the panel states the recovery',
+        (recovered.status === 'idle' || recovered.status === 'ok') &&
+          recovered.degraded === 'false' && (recovered.coreImpact ?? '').startsWith('none') &&
+          recovered.reachable === 'true' && recovered.lastError === '—' &&
+          recovered.pausedSentence === false && recovered.fresh.includes(200) &&
+          recovered.pending === false && recovered.alerts.length === 0,
+        JSON.stringify(recovered))
+      await trace.screenshot(cdp, 't05-04-memory-health-recovered')
+
+      const markTaskAfter = await goto(`task/${task}`, 'P1 task after recovery',
+        `document.body.textContent.includes('Task 状态')`)
+      const taskFresh = await waitForFresh(`/v1/tasks/${task}`, markTaskAfter, 'task after recovery')
+      const taskShown = (await pageText()).includes(expect.task_id)
+      const taskAlerts = await alerts()
+      trace.record('a P1 view re-reads the same Core after the Memory recovery',
+        taskShown && taskFresh.includes(200) &&
+          taskFresh.every((status) => status === null || status === 200) &&
+          (await pending()) === false && dependencyAlerts(taskAlerts).length === 0,
+        JSON.stringify({ taskFresh, taskShown, alerts: taskAlerts }))
+      await trace.screenshot(cdp, 't05-05-p1-after-recovery')
+
+      const markTracesAfter = await goto('memory/traces', 'memory traces after recovery',
+        `document.querySelectorAll('[data-testid="memory-traces"] tbody tr').length > 0`)
+      const tracesAfterFresh = await waitForFresh('/v1/memory/traces', markTracesAfter,
+                                                 'memory traces after recovery')
+      const tracesAfter = {
+        fresh: tracesAfterFresh,
+        rows: await rowsIn('memory-traces'),
+        outageStillRecorded: (await pageText()).includes('failed') ||
+          (await pageText()).includes('degraded'),
+      }
+      trace.record('the outage attempt is still history after recovery, and the list re-read',
+        tracesAfter.rows >= 1 && tracesAfter.fresh.includes(200) &&
+          tracesAfter.outageStillRecorded, JSON.stringify(tracesAfter))
+    }
+
     const expected = consoleErrors.filter((line) => /Failed to load resource/.test(line))
     const unexpected = consoleErrors.filter((line) => !expected.includes(line))
     trace.record('no unexpected console errors during the degraded walkthrough',
@@ -293,7 +344,7 @@ async function main() {
         method: entry.method, path: entry.path, status: responses.get(entry.requestId) ?? null,
       })).join('\n') + '\n')
     await writeFile(join(args.out, 'browser-trace.md'),
-      ['# P6-T05 degraded slice — browser pass', '',
+      ['# P6-T05 degraded slice — browser pass (outage and recovery)', '',
         ...trace.steps.map((step) =>
           `- ${step.ok === null ? 'BLKD' : step.ok ? 'PASS' : 'FAIL'} ${step.step}` +
           (step.detail ? ` — \`${step.detail}\`` : '')),
