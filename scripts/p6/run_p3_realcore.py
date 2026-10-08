@@ -148,9 +148,16 @@ def main(argv: list[str] | None = None) -> int:
         origin = f"http://127.0.0.1:{core_port}"
 
         status, health = direct("GET", "/v1/health", None, None)
-        record("C0.core-is-real-p3", "the Core reports P3's schema version",
-               status == 200 and health.get("schema_version") == descriptor["schema_version"] == 10,
-               {"schema_version": health.get("schema_version")})
+        # P3's own build is schema 10; the **integration** baseline is 11, because P4's migration is
+        # there too. What this check is for is "a real build with the continuity migrations answered",
+        # not a particular number, so it asserts the Core agrees with the descriptor and is at least
+        # P3's version — the earlier `== 10` was true only of the P3-only build.
+        record("C0.core-is-real-p3", "the Core is a real build with P3's migrations applied",
+               status == 200 and health.get("schema_version") == descriptor["schema_version"]
+               and isinstance(health.get("schema_version"), int)
+               and health["schema_version"] >= 10,
+               {"schema_version": health.get("schema_version"),
+                "descriptor": descriptor["schema_version"]})
 
         for ident, path, key in (
             ("C1.checkpoint", f"/v1/checkpoints/{seeded['checkpoint_id']}", "checkpoint"),
@@ -248,6 +255,10 @@ def main(argv: list[str] | None = None) -> int:
                       "--p3-route-scope-token", tokens["route_scope"]]
         if pack["status"] == "BLOCKED":
             trace_args.append("--p3-no-context")
+        else:
+            # Without this the walkthrough navigates to the fixture's context id, which a real Core
+            # does not have: the pack must be read by the id P3's own builder produced.
+            trace_args += ["--p3-context", pack["context_id"]]
         trace_log = (out / "trace.stdout.txt").open("w")
         trace = subprocess.run(trace_args, stdout=trace_log, stderr=subprocess.STDOUT, text=True)
         trace_log.close()
