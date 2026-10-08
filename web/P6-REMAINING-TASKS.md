@@ -85,7 +85,7 @@ they are re-asserted in every bundle by the credential check.
 | P6-T02 permissions & secrets | **D** (PASS) | same |
 | P6-T03 audited manual maintenance | **B** (real chain) | nine writes + audit readback gated against fixtures and real P4; real P2 conversation chain not run |
 | P6-T04 actual Context (incl. injection receipt) | **B** (receipt) | real P3 pack/rendered content verified; no receipt exists to match |
-| P6-T05 Memory degradation | **P** | both halves now have evidence: real P4 jobs/retry/withholding in the real-Core matrix, and `Hindsight unavailable ⇒ degraded, P1 unaffected` in `20261008T123611Z-p6-t05-degraded/` (**12/12**, frozen at `0b6f737…`). Still **P**, not PASS: the engine is a labelled wire double, so no real Hindsight outage is claimed |
+| P6-T05 Memory degradation | **P** | three quarters now have evidence: real P4 jobs/retry/withholding in the real-Core matrix; the outage (`Hindsight unavailable ⇒ degraded, P1 unaffected`) **and the same-environment recovery** in `20261008T130315Z-p6-t05-degraded/` (**19/19** — 9 Core checks + 10 browser records across two phases — frozen at `31d738f…`). Still **P**, not PASS: the engine is a labelled wire double stopped and restarted on the same pinned port, so no real Hindsight outage is claimed |
 | P6-T06 Validation drill-down | **B** | blocked on P7-01 |
 | P6-T07 maintainability | **D** (PASS) | P6-01 r3 |
 
@@ -99,7 +99,7 @@ Negative cases (§7), which ones are actually covered:
 | project A slow response arriving after switching to B; same id, different revision | **covered** — T07 (the rapid-switch phase was falsified and fixed) + `revision_conflict` |
 | API 404/401/403/422/503, disconnection, unknown enum, truncated paging | **covered** across the P1/P6-01/P6-02/P6-03 Gates |
 | secret-looking raw text, HTML/script, artifact path traversal, external links | **covered for text/protocol** (T02, proxy allowlist); artifact traversal is N/A until P6-03c |
-| **Memory unavailable / stale Memory vs Authority conflict / old Checkpoint / Context over budget** | **partly covered now**: "Memory unavailable ⇒ degraded, P1 unaffected" is covered by `20261008T123611Z-p6-t05-degraded/` (the engine is stopped and P4's own probe records `unreachable`; Core stays `ok`, the P1 reads and views are unaffected, and a 200-with-`degraded`-payload `reflect` is recorded as a degradation, not a success). **Still not covered**: stale Memory vs current Authority, an old/atypical Checkpoint, and an over-budget Context |
+| **Memory unavailable / stale Memory vs Authority conflict / old Checkpoint / Context over budget** | **partly covered now**: the outage *and the same-environment recovery* are covered by `20261008T130315Z-p6-t05-degraded/` — the engine is stopped (P4's own probe records `unreachable`, Core stays `ok`, the P1 reads and views are unaffected, and a 200-with-`degraded`-payload `reflect` is recorded as a degradation, not a success), then restarted on the **same address** without restarting the Core, after which health reports `degraded: false` / `core_impact: none` and a real `reflect` reaches the engine. **Still not covered**: stale Memory vs current Authority, an old/atypical Checkpoint, and an over-budget Context |
 | Validation missing Context or Agent transcript / mocked response | N/A until P6-03c |
 
 ## 5. §8 bundle format and merge gate
@@ -170,11 +170,19 @@ documentation and harness tooling:
 * the **T05 degraded slice** (the runner-up in §6, now delivered): `scripts/p6/p4_realcore_env.py`
   gained `--engine-state unavailable` (default unchanged), and
   `scripts/p6/run_t05_degraded.py` + `scripts/p6/t05_degraded_trace.mjs` run and freeze it. The
-  bundle `20261008T123611Z-p6-t05-degraded/` is **12/12** (6 Core checks + 6 browser records), frozen
-  at `0b6f737681eb9a6e7ad0c76b8b4be54409e12ac4`, and keeps the labels straight: `mode: boundary-fake`
+  bundle `20261008T130315Z-p6-t05-degraded/` is **19/19** (9 Core checks + 10 browser records, in an
+  outage phase and a recovery phase separated by the restore), frozen at
+  `31d738f08e9613bb8d8071197a67c77633d675b1`, and keeps the labels straight: `mode: boundary-fake`
   means real Core with a simulated engine boundary, the "unavailable" engine is a **stopped loopback
-  wire double** (not a real Hindsight outage), and `POST /v1/memory/reflect`'s **HTTP 200 with a
-  `degraded` payload** is recorded as a degradation, never as a success. No product path changed;
+  wire double** restarted on the same pinned port (not a real Hindsight outage), and
+  `POST /v1/memory/reflect`'s **HTTP 200 with a `degraded` payload** is recorded as a degradation,
+  never as a success. Three gaps an independent review reproduced were closed: the revision check now
+  reads `task.revision`/`rule.revision` from the layer they live in and **fails on a missing field**
+  instead of comparing two nulls (with unit tests); every browser view requires a **freshly observed**
+  200 plus **the object the page is about** (project/task/event/rule/evidence id) instead of any
+  earlier 200 and a panel title; and the recovery half now exists at all (pinned engine port,
+  loopback-only control channel, `engine_events` log read after the restore). The earlier
+  `20261008T123611Z-…` bundle stays as written and is superseded by this one. No product path changed;
 * harness tooling: `scripts/p6/bundle_conformance.py` (the taskbook-§8 renderer described in the
   next-minimal-delivery section) and `tests/p6/test_bundle_conformance.py` — **20** hermetic tests
   after the operator reproduced three defects in the first version and they were fixed: a symlink at
