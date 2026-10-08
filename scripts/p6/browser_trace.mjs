@@ -1723,6 +1723,11 @@ async function main() {
         await evaluate(cdp, `(() => {
           const next = '#/' + ${JSON.stringify(hash)}
           if (location.hash !== next) location.hash = next
+          // Dispatch unconditionally: after a sign-out and sign-in the URL can already
+          // carry the target hash while the app still renders the previous route, in which
+          // case assigning it is a no-op and no event fires. The app's listener is
+          // idempotent, so a redundant event costs nothing.
+          dispatchEvent(new HashChangeEvent('hashchange'))
           return location.hash
         })()`)
         await waitFor(cdp, `(() => { const h = ${JSON.stringify('#/' + hash)}; return location.hash === h })()`,
