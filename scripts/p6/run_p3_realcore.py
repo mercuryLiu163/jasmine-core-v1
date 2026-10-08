@@ -97,6 +97,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dashboard-ref", default="HEAD",
                         help="ref whose archive the dashboard is built from (default HEAD)")
     parser.add_argument("--no-freeze", action="store_true")
+    parser.add_argument("--node-modules", type=Path, default=REPO_ROOT / "web" / "node_modules",
+                        help="an existing node_modules to build the dashboard with (a fresh "
+                             "worktree has none)")
     args = parser.parse_args(argv)
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -212,7 +215,7 @@ def main(argv: list[str] | None = None) -> int:
         archive = subprocess.run(["git", "-C", str(args.repo or REPO_ROOT), "archive",
                                   args.dashboard_ref], check=True, capture_output=True)
         subprocess.run(["tar", "-x", "-C", str(web_work)], input=archive.stdout, check=True)
-        os.symlink(REPO_ROOT / "web" / "node_modules", web_work / "web" / "node_modules")
+        os.symlink(args.node_modules, web_work / "web" / "node_modules")
         subprocess.run(["npx", "vite", "build"], cwd=web_work / "web", check=True,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         ui_env = dict(os.environ, P6_CORE_ORIGIN=origin, P6_ENABLE_P3_READS="1")

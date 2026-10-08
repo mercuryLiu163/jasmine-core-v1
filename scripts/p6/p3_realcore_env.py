@@ -101,8 +101,24 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     db_path = out / "core.db"
 
     sys.path.insert(0, str(p3 / "src"))
+    sys.path.insert(0, str(p3 / "tests"))
     os.environ["JASMINE_CORE_WORKSPACE_ROOT"] = str(workspace)
+    # `scan_workspace` runs its scan in a **child process** (`python -m
+    # jasmine_core.continuity_scan`), which inherits the environment but not this process's
+    # `sys.path` — so without PYTHONPATH the child cannot import the package and the scan fails as
+    # `checkpoint_scan_failed: worker returned invalid JSON`. That is what blocked the Context Pack
+    # even after the tokenizer was installed.
+    existing = os.environ.get("PYTHONPATH")
+    os.environ["PYTHONPATH"] = f"{p3 / 'src'}:{p3 / 'tests'}" + (f":{existing}" if existing else "")
     os.environ.pop("JASMINE_CORE_MEMORY_CONFIG", None)
+    # The scan fingerprints a workspace; a git repo with one commit gives it a real `git_head`.
+    if not (workspace / ".git").exists():
+        subprocess.run(["git", "init", "-q", str(workspace)], check=True)
+        subprocess.run(["git", "-C", str(workspace), "-c", "user.name=p6-realcore",
+                        "-c", "user.email=p6-realcore@local.invalid", "add", "-A"], check=True)
+        subprocess.run(["git", "-C", str(workspace), "-c", "user.name=p6-realcore",
+                        "-c", "user.email=p6-realcore@local.invalid", "commit", "-q",
+                        "-m", "isolated workspace for the acceptance scan"], check=True)
 
     from jasmine_core import SCHEMA_VERSION, auth, clock, db, ids, registry
     from jasmine_core.context.builder import ContextBuilder
@@ -154,9 +170,18 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             project_id=project_id, task_id=task_id, payload={"text": text}))
         return stored["event_id"]
 
-    # The workspace scan is a component stand-in, and the descriptor says so. P3's own continuity
-    # tests use exactly this shape.
+    # Prefer P3's **real** workspace scan. The stand-in below is used only if it refuses, and then
+    # the descriptor says which one produced the rows — a workspace snapshot is part of what these
+    # rows mean, so "which scanner" is not a detail.
+    from jasmine_core.continuity_scan import Budget as _Budget, scan_workspace
+
     scan_calls = {"count": 0}
+    scan_mode = "real (isolated git workspace)"
+    scan_fallback: str | None = None
+
+    def counted_real_scan(budget: Any, *, conn: Any) -> dict[str, Any]:
+        scan_calls["count"] += 1
+        return scan_workspace(budget, conn=conn)
 
     def component_scan(budget: Any, *, conn: Any) -> dict[str, Any]:
         assert not conn.in_transaction, "the scanner must not run inside a transaction"
@@ -167,9 +192,25 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
                              "manifest_sha256": "0" * 64, "git_head": None},
                 "sample_window": {"started_at_unix": 1, "finished_at_unix": 2}}
 
-    continuity = ContinuityStore(conn, schema_version=SCHEMA_VERSION, scanner=component_scan)
+    scanner = counted_real_scan
+    try:
+        probe = db.connect(db_path)
+        try:
+            counted_real_scan(_Budget(), conn=probe)
+        finally:
+            probe.close()
+    except Exception as error:  # noqa: BLE001 - the refusal decides which scanner is used
+        scanner = component_scan
+        scan_mode = "component-stand-in"
+        scan_fallback = f"{error.__class__.__name__}: {error}"[:200]
+        log(f"real workspace scan refused ({scan_fallback}); using the labelled stand-in")
+
+    continuity = ContinuityStore(conn, schema_version=SCHEMA_VERSION, scanner=scanner)
+    # The builder takes the same scanner and hands it to its own ContinuityStore, so the Context
+    # Pack's workspace snapshot is produced the same way as the checkpoint's — with the real
+    # scanner when it works, and with the labelled stand-in when it does not.
     builder = ContextBuilder(conn, schema_version=SCHEMA_VERSION,
-                             memory=MemoryProvider.from_deployment())
+                             memory=MemoryProvider.from_deployment(), scanner=scanner)
 
     project_id = project("p6 p3 realcore")
     task_id = task(project_id, "with continuity")
@@ -223,10 +264,15 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         "environment": "isolated real P3 Core",
         "mode": {
             "core": "real-p3",
-            "workspace_scan": "component-stand-in",
-            "workspace_scan_note": "ContinuityStore's scanner returns a fixed partial fingerprint, "
-                                   "as P3's own continuity tests do; workspace snapshots in these "
-                                   "rows are not a real workspace capture",
+            "workspace_scan": scan_mode,
+            "workspace_scan_note": ("P3's own scan_workspace over an isolated git workspace with "
+                                    "one commit — a real scan of a tiny throwaway tree, not of any "
+                                    "operator project")
+                                   if scan_mode.startswith("real") else
+                                   ("ContinuityStore's scanner returns a fixed partial fingerprint, "
+                                    "as P3's own continuity tests do; workspace snapshots in these "
+                                    "rows are not a real workspace capture"),
+            "workspace_scan_fallback": scan_fallback,
         },
         "ref": args.ref,
         "schema_version": SCHEMA_VERSION,
@@ -249,13 +295,15 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
                    "checkpoint_2_id": checkpoint2["checkpoint_id"],
                    "checkpoint_2_revision": checkpoint2["task_revision"],
                    "checkpoint_2_note": checkpoint2["note"]["text"],
-                   "context_id": context["context_id"] if context else None,
+                   "context_id": (context.get("context_pack_id") or context.get("context_id"))
+                                 if context else None,
                    "resume_id": resume["resume_id"],
                    "empty_project_id": empty_project, "empty_task_id": empty_task,
                    "unknown_checkpoint_id": ids.new_id("ckp")},
         "scan_calls": scan_calls["count"],
-        "context_pack": context_blocked or {"status": "built",
-                                            "context_id": context["context_id"]},
+        "context_pack": context_blocked or {
+            "status": "built",
+            "context_id": context.get("context_pack_id") or context.get("context_id")},
     }
     (out / "tokens.json").write_text(
         json.dumps({name: record["token"] for name, record in issued.items()}, indent=2),

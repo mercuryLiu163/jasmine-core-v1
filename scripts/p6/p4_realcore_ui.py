@@ -182,12 +182,12 @@ def wait_for(url: str, *, timeout: float = 120) -> bool:
     return False
 
 
-def build_dashboard(work: Path) -> Path:
+def build_dashboard(work: Path, node_modules: Path) -> Path:
     """A dashboard built from `HEAD`'s own archive, never from a stale `dist`."""
     archive = subprocess.run(["git", "-C", str(REPO_ROOT), "archive", "HEAD"],
                              check=True, capture_output=True)
     subprocess.run(["tar", "-x", "-C", str(work)], input=archive.stdout, check=True)
-    os.symlink(REPO_ROOT / "web" / "node_modules", work / "web" / "node_modules")
+    os.symlink(args.node_modules, work / "web" / "node_modules")
     subprocess.run(["npx", "vite", "build"], cwd=work / "web", check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return work / "web" / "dist"
@@ -198,6 +198,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--ref", default=DEFAULT_REF)
     parser.add_argument("--keep", action="store_true", help="keep the temporary trees")
+    parser.add_argument("--node-modules", type=Path, default=REPO_ROOT / "web" / "node_modules",
+                        help="an existing node_modules to build the dashboard with (a fresh "
+                             "worktree has none)")
     parser.add_argument("--skip-build", action="store_true",
                         help="reuse the worktree's web/dist (debugging only)")
     args = parser.parse_args(argv)
@@ -232,7 +235,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.skip_build:
             dist = REPO_ROOT / "web" / "dist"
         else:
-            dist = build_dashboard(web_work)
+            dist = build_dashboard(web_work, args.node_modules)
         log(f"dashboard built from HEAD's archive ({dist})")
 
         ui_env = dict(os.environ,
