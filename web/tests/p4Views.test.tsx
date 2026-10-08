@@ -142,6 +142,10 @@ describe('a refused P4 read is shown as a missing dependency', () => {
     const panel = await screen.findByRole('region', { name: region })
     await waitFor(() => expect(within(panel).getByTestId('dependency-pending')).toBeTruthy())
     expect(within(panel).queryByRole('alert')).toBeNull()
+    // The proxy refuses with HTTP 404 *and* `proxy_path_not_allowed`. That must render as
+    // the missing dependency, never as Core's not-found state: the code decides, not the
+    // status, and a 404 that means "not forwarded" read as "does not exist" would be wrong.
+    expect(within(panel).queryByTestId('not-found')).toBeNull()
     // The panel must name the real contract source and the unpassed acceptance, not just
     // "not available".
     expect(panel.textContent).toContain('memory:read')
@@ -244,6 +248,8 @@ describe('empty, not-found, refused and pending stay four different states', () 
     const panel = await screen.findByRole('region', { name: /Memory Jobs/ })
     await waitFor(() => expect(within(panel).getByRole('alert').textContent).toContain('forbidden_scope'))
     expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
+    // A refusal is not an absence: 403 must never be dressed as not-found either.
+    expect(within(panel).queryByTestId('not-found')).toBeNull()
   })
 
   it('renders an unknown id as the same not-found state, because P4 does not distinguish', async () => {
