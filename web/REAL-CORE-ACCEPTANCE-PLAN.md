@@ -333,11 +333,15 @@ and a real Hindsight deployment alone would not reopen it: the G01 benefit-verif
 stopped for its own reasons.
 
 **The nine Python failures are listed, not summarised away**, with each test's name and message and
-the rehearsal's P4-tip comparison, in
-`validation-runs/p6/20261008T074301Z-p6-03-failure-attribution/` (see
-`validation-runs/p6/P6-03-INTEGRATION-REPORT.md`). They are environmental (native-hook install and
-pair-preparation tests that need the original repository layout) and they remain **not passed**;
-"0 integration-only failures" is a statement about attribution, not about a green suite.
+the P4-tip comparison, in `validation-runs/p6/20261008T074301Z-p6-03-failure-attribution/`. The
+comparison is not a clone's word for it: the same nine were then reproduced by running P4's **own**
+suite in P4's **own** worktree at `0c4f8f0e…` — `Ran 1155 tests`, 5 failures + 4 errors, set
+differences empty in both directions —
+`validation-runs/p6/20261008T074622Z-p6-03-failure-attribution-p4-tip/`. They are environmental
+(native-hook install and pair-preparation tests that fail with `canonical venv launcher parent
+required` without the original repository's launcher layout) and they remain **unfixed and not
+passing**; "0 integration-only failures" is a statement about attribution, not about a green suite.
+See `validation-runs/p6/P6-03-INTEGRATION-REPORT.md` for the full list.
 
 **Documentation sync.** The status text in this file and in `web/P6-03A-COMPLIANCE.md` was updated in
 a documentation-only commit on top of the acceptance commit; `git diff --name-only
