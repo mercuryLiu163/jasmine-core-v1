@@ -63,8 +63,28 @@ function parseArgs(argv) {
       case '--submit-writes': args.submitWrites = true; break
       case '--descriptor': args.descriptor = next; index += 1; break
       case '--p3-reads': args.p3Reads = true; break
+      // The Core behind the proxy is a REAL build of the dependency, not the simulated fixture.
+      // The only assertions that invert are the simulation-label records: with a real build the
+      // label must be ABSENT and the Core must report the dependency's own schema version.
+      case '--real-core': args.realCore = true; break
       case '--p3-limited-token': args.p3LimitedToken = next; index += 1; break
       case '--p3-route-scope-token': args.p3RouteScopeToken = next; index += 1; break
+      case '--p3-checkpoint': args.p3Checkpoint = next; index += 1; break
+      case '--p3-checkpoint-2': args.p3Checkpoint2 = next; index += 1; break
+      case '--p3-context': args.p3Context = next; index += 1; break
+      case '--p3-resume': args.p3Resume = next; index += 1; break
+      case '--p3-task': args.p3Task = next; index += 1; break
+      case '--p3-task-empty': args.p3TaskEmpty = next; index += 1; break
+      case '--p3-unknown': args.p3Unknown = next; index += 1; break
+      // No context pack exists in this Core. Two records depend on one; they are recorded as
+      // BLOCKED with the reason rather than deleted, so the bundle says what was not checked.
+      case '--p3-no-context': args.p3NoContext = true; break
+      case '--p3-checkpoint-revision': args.p3CheckpointRevision = next; index += 1; break
+      case '--p3-projection-digest': args.p3ProjectionDigest = next; index += 1; break
+      case '--p3-context-digest': args.p3ContextDigest = next; index += 1; break
+      case '--p3-workspace-digest': args.p3WorkspaceDigest = next; index += 1; break
+      case '--p3-checkpoint-2-revision': args.p3Checkpoint2Revision = next; index += 1; break
+      case '--p3-first-note-text': args.p3FirstNoteText = next; index += 1; break
       case '--p4-reads': args.p4Reads = true; break
       case '--p4-limited-token': args.p4LimitedToken = next; index += 1; break
       case '--p4-writes': args.p4Writes = true; break
@@ -189,9 +209,13 @@ export class Trace {
   }
 
   record(step, ok, detail) {
+    // `ok: null` is a BLOCKED row: a precondition was missing, so the check could not run. It is
+    // neither a pass nor a failure — P4's own Gate runner draws the same distinction — and it does
+    // not fail the run. Callers that care count the blocked rows themselves.
     this.steps.push({ t: new Date().toISOString(), step, ok, detail })
-    process.stderr.write(`${ok ? 'ok  ' : 'FAIL'} ${step}${detail ? ` — ${detail}` : ''}\n`)
-    if (!ok) this.failed = true
+    const mark = ok === null ? 'BLKD' : ok ? 'ok  ' : 'FAIL'
+    process.stderr.write(`${mark} ${step}${detail ? ` — ${detail}` : ''}\n`)
+    if (ok === false) this.failed = true
   }
 
   async screenshot(cdp, name) {
@@ -1466,13 +1490,25 @@ async function main() {
     if (args.p3Reads) {
       // The fixture publishes these ids; a stale constant shows up as a 404 read below
       // rather than as a silently weaker check.
-      const CKP = 'ckp_01M4B6VGC29ESRDRQR62DX8AK8'
-      const CKP2 = 'ckp_01M4B6VGC29ESRDRQR62DX8AKB'
-      const PACK = 'ctx_01M4B6VGC29ESRDRQR62DX8AK8'
-      const RMS = 'rms_01M4B6VGC29ESRDRQR62DX8AK8'
-      const TASK = 'tsk_01M4B6VGC29ESRDRQR62DX8AK8'
-      const TASK_EMPTY = 'tsk_01M4B6VGC29ESRDRQR62DX8AK9'
-      const UNKNOWN = 'ckp_01M4B6VGC29ESRDRQR62DX8AK7'
+      // Parameterised, with the fixture's ids as defaults: the simulation Gate takes the
+      // defaults (so its frozen bundles still describe what they described), and a **real** P3 Core
+      // passes the ids its own stores created.
+      const CKP = args.p3Checkpoint ?? 'ckp_01M4B6VGC29ESRDRQR62DX8AK8'
+      // The digest/revision assertions used the fixture's synthetic values (`'a'*64`, `r7`). A real
+      // P3 Core has real hashes and real revisions, so the harness takes them as parameters — the
+      // defaults keep the simulation Gate unchanged, and a real run asserts the Core's *own* values.
+      const DIGESTS = {
+        projection: args.p3ProjectionDigest ?? 'a'.repeat(64),
+        context: args.p3ContextDigest ?? 'b'.repeat(64),
+        workspace: args.p3WorkspaceDigest ?? 'd'.repeat(64),
+      }
+      const CKP_REVISION = args.p3CheckpointRevision ?? 'r7'
+      const CKP2 = args.p3Checkpoint2 ?? 'ckp_01M4B6VGC29ESRDRQR62DX8AKB'
+      const PACK = args.p3Context ?? 'ctx_01M4B6VGC29ESRDRQR62DX8AK8'
+      const RMS = args.p3Resume ?? 'rms_01M4B6VGC29ESRDRQR62DX8AK8'
+      const TASK = args.p3Task ?? 'tsk_01M4B6VGC29ESRDRQR62DX8AK8'
+      const TASK_EMPTY = args.p3TaskEmpty ?? 'tsk_01M4B6VGC29ESRDRQR62DX8AK9'
+      const UNKNOWN = args.p3Unknown ?? 'ckp_01M4B6VGC29ESRDRQR62DX8AK7'
 
       // Reads one KeyValue row by its label, so a status/revision assertion reads the
       // object's own row rather than a substring somewhere on the page.
@@ -1516,14 +1552,14 @@ async function main() {
       const cp = {
         snapshotNote: (await pageText()).includes('不可变快照'),
         revision: await evaluate(cdp, kv('task_revision')),
-        projectionDigest: (await pageText()).includes('a'.repeat(64)),
-        contextDigest: (await pageText()).includes('b'.repeat(64)),
-        workspaceDigest: (await pageText()).includes('d'.repeat(64)),
+        projectionDigest: (await pageText()).includes(DIGESTS.projection),
+        contextDigest: (await pageText()).includes(DIGESTS.context),
+        workspaceDigest: (await pageText()).includes(DIGESTS.workspace),
         pending: (await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`)),
         alerts: await evaluate(cdp, `[...document.querySelectorAll('[role=alert]')].map((n) => (n.textContent ?? '').slice(0, 80))`),
       }
       trace.record('a checkpoint renders as an immutable snapshot with its three digests',
-        cp.snapshotNote && cp.revision === 'r7' && cp.projectionDigest && cp.contextDigest &&
+        cp.snapshotNote && cp.revision === CKP_REVISION && cp.projectionDigest && cp.contextDigest &&
           cp.workspaceDigest && cp.pending === false && cp.alerts.length === 0,
         JSON.stringify(cp))
       await trace.screenshot(cdp, '21-checkpoint')
@@ -1563,6 +1599,14 @@ async function main() {
         malformed.pending === false && malformed.requested === 0, JSON.stringify(malformed))
 
       // --- a context pack: what was actually rendered, memory marked non-authoritative
+      if (args.p3NoContext) {
+        trace.record('a context pack shows what was rendered and marks memory non-authoritative',
+          null, 'BLOCKED: no context pack exists in this Core — P3\'s ContextBuilder needs its '
+            + 'pinned tokenizer (tiktoken + a fixed BPE asset SHA-256), which this environment does '
+            + 'not have; the route\'s shape is covered by the frozen contract and the simulated '
+            + 'fixture, and nothing was fabricated')
+        await trace.screenshot(cdp, '22-context-pack-blocked')
+      } else {
       await cdp.send('Page.navigate', { url: `${args.ui}/#/context/${PACK}` })
       await waitFor(cdp, `document.body.textContent.includes('实际渲染记录')`,
         { label: 'context pack' })
@@ -1574,6 +1618,7 @@ async function main() {
       trace.record('a context pack shows what was rendered and marks memory non-authoritative',
         pack.rendered && pack.memoryNote && pack.pending === false, JSON.stringify(pack))
       await trace.screenshot(cdp, '22-context-pack')
+      }
 
       // --- a resume: a comparison, with a note that denies its own authority ------
       await cdp.send('Page.navigate', { url: `${args.ui}/#/resume/${RMS}` })
@@ -1613,9 +1658,10 @@ async function main() {
       })()`
       const shownScopes = {}
       const shownStatus = {}
-      for (const [name, hash] of [['checkpoint', `#/checkpoints?checkpoint_id=${CKP}`],
-                                  ['context', `#/context/${PACK}`],
-                                  ['resume', `#/resume/${RMS}`]]) {
+      const views = [['checkpoint', `#/checkpoints?checkpoint_id=${CKP}`],
+                     ['resume', `#/resume/${RMS}`]]
+      if (!args.p3NoContext) views.splice(1, 0, ['context', `#/context/${PACK}`])
+      for (const [name, hash] of views) {
         await cdp.send('Page.navigate', { url: `${args.ui}/${hash}` })
         await waitFor(cdp, `document.querySelectorAll('dl.kv > div').length > 0`, { label: name })
         shownScopes[name] = await evaluate(cdp, scopeRow)
@@ -1628,29 +1674,43 @@ async function main() {
       }
       trace.record('a populated read still states PARTIAL / DEPENDENCY_PENDING',
         Object.values(shownStatus).every((text) => text.includes('PARTIAL / DEPENDENCY_PENDING')),
-        JSON.stringify(shownStatus))
+        JSON.stringify({ ...shownStatus, viewsChecked: Object.keys(shownStatus) }))
       const wantedScopes = {
         checkpoint: 'checkpoint:read + objects:read + state:read + authority:read + evidence:read + events:read',
         context: 'context:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read',
         resume: 'resume:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read',
       }
+      if (args.p3NoContext) {
+        // The context view's scope line cannot be read without a Context Pack, so it is recorded as
+        // blocked rather than dropped: the bundle must say what was not checked.
+        trace.record('the context view shows its full scope set',
+          null, 'BLOCKED: no context pack exists in this Core, so the view could not render; the '
+            + 'scope set itself is asserted by the frozen contract and the simulated fixture')
+      }
+      // Iterate the views that actually rendered: with no Context Pack the context view cannot be
+      // read, and it has its own BLOCKED record above rather than failing this one.
       trace.record('each view shows the full scope set the frozen contract requires',
-        Object.keys(wantedScopes).every((key) => shownScopes[key] === wantedScopes[key]),
-        JSON.stringify(shownScopes))
+        Object.keys(shownScopes).every((key) => shownScopes[key] === wantedScopes[key]),
+        JSON.stringify({ ...shownScopes, viewsChecked: Object.keys(shownScopes) }))
 
       // --- switching scope must not leave the previous record on screen -----------
+      const CKP2_REVISION = args.p3Checkpoint2Revision ?? 'r11'
+      // The **first** checkpoint's note text: what a correct switch removes from the page. Named
+      // for what it asserts, not for the record it came from — passing the second checkpoint's own
+      // text here (as the first real-P3 run did) inverts the check.
+      const FIRST_NOTE = args.p3FirstNoteText ?? 'stop here for today'
       await cdp.send('Page.navigate', { url: `${args.ui}/#/checkpoints?checkpoint_id=${CKP2}` })
       await waitFor(cdp, `(() => {
         const text = document.body.textContent ?? ''
-        return text.includes(${JSON.stringify(CKP2)}) && text.includes('r11')
+        return text.includes(${JSON.stringify(CKP2)}) && text.includes(${JSON.stringify(CKP2_REVISION)})
       })()`, { label: 'second checkpoint' })
       const swapped = {
-        secondNote: (await pageText()).includes('stop here for today'),
-        secondRevision: (await pageText()).includes('r11'),
-        firstId: (await pageText()).includes(CKP),
+        firstNoteGone: (await pageText()).includes(FIRST_NOTE) === false,
+        secondRevision: (await pageText()).includes(CKP2_REVISION),
+        firstIdGone: (await pageText()).includes(CKP) === false,
       }
       trace.record("switching checkpoint does not leave the previous one's content behind",
-        swapped.secondRevision && swapped.secondNote === false && swapped.firstId === false,
+        swapped.secondRevision && swapped.firstNoteGone && swapped.firstIdGone,
         JSON.stringify(swapped))
 
       // --- an unauthorised scope is Core's refusal, not the missing dependency ----
@@ -1713,15 +1773,25 @@ async function main() {
       const continuityReads = requests.filter((request) =>
         /^\/v1\/(context|checkpoints|resumes)\//.test(request.path),
       )
-      const unlabelled = continuityReads.filter(
-        (request) => (responses.get(request.requestId)?.fixtureLabel ?? null) !== 'simulated-p3-reads',
+      const labelled = continuityReads.filter(
+        (request) => (responses.get(request.requestId)?.fixtureLabel ?? null) === 'simulated-p3-reads',
       )
-      trace.record(
-        'every P3 continuity read in the traffic carries the simulated-fixture label',
-        continuityReads.length >= 4 && unlabelled.length === 0,
-        `${continuityReads.length} continuity reads, ${unlabelled.length} unlabelled` +
-          (unlabelled.length ? ` (${unlabelled.map((r) => r.path).join(', ')})` : ''),
-      )
+      if (args.realCore) {
+        // A real P3 build: no reply may carry the fixture label, and the Core must say it is P3.
+        const health = await httpJson(`${args.ui}/v1/health`, 'GET').catch(() => ({}))
+        trace.record(
+          'every P3 continuity read comes from a real P3 build: no simulation label, and health reports P3 schema',
+          continuityReads.length >= 4 && labelled.length === 0 && health?.schema_version === 10,
+          `${continuityReads.length} continuity reads, ${labelled.length} labelled, ` +
+            `health schema ${health?.schema_version}`,
+        )
+      } else {
+        trace.record(
+          'every P3 continuity read in the traffic carries the simulated-fixture label',
+          continuityReads.length >= 4 && labelled.length === continuityReads.length,
+          `${continuityReads.length} continuity reads, ${continuityReads.length - labelled.length} unlabelled`,
+        )
+      }
     }
 
 
