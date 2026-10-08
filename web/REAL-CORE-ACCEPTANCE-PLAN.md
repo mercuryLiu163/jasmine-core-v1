@@ -234,3 +234,38 @@ by P4's own recovery scan and worker (`2 DONE retain jobs`, `3 items`).
 Still to be settled by the harness: **D2** (the nested command `event` shape against the derivation),
 the human/agent withholding pair on the failed rows, the retry invariants on real jobs, and the
 dashboard-level pass (the six writes driven through the UI, not by hand).
+
+## 11. Integration rehearsal (synthetic merge; step 3's groundwork)
+
+Step 3 above needs a "final integration commit" that does not exist yet. `scripts/p6/
+integration_rehearsal.py` rehearses it in a throwaway clone — the source repository's refs are
+never touched, and its `HEAD` and branch list are recorded before and after with a difference
+aborting the run. The current rehearsal is
+`validation-runs/p6/20261008T062435Z-p6-03-integration-rehearsal/` (source `7016dab`, unchanged).
+
+What it found on the current tips (`p4-integration` `0c4f8f0`, `p6-01` `e570f6b`, onto `main`):
+
+* **P3 is an ancestor of P4**, so the integration set is `main + P4 + P6`.
+* **Both merges are conflict-free.** A clean synthetic merge promises nothing about the real one.
+* **All three frozen contracts are content-identical at the merged ref.** Only provenance stamps
+  differ: `source.ref` for the two P4 contracts, and `source.ref` + `source.commit` +
+  `source.schema_version_in_p3` for P3 (which recorded schema 10; the merged baseline is 11). Step 3
+  is therefore a **provenance decision**, not a contract re-derivation: record the integration ref,
+  or keep the pinned dependency ref beside it.
+* **The dashboard suites pass at the merged ref** — `tsc --noEmit` clean, vitest 328/328 — which is
+  the strongest signal available here that the P6 slice holds against a baseline that *contains* P3
+  and P4, not merely against their pinned commits.
+* **Python at the merged ref: 21 failing/erroring assertions across 12 unique tests.** Nine of those
+  unique tests fail identically at P4's own tip inside a clone (they need the real repository's
+  worktree and native-hook machinery — environmental). **Three appear only when merged**, and they
+  are step 3's work list: `test_baseline_core_serves_none_of_the_seven_endpoints` and
+  `test_baseline_core_serves_none_of_the_four_endpoints` (whose premise — "the baseline serves none
+  of these routes" — inverts once the slices are in), and
+  `test_conversation_event_filter_matches_the_core_enum` (the merged baseline's event enum has
+  values the P6 comparison did not know). None is a product defect, and none is fixed here.
+
+A wording correction, recorded rather than silently amended: the commit that added the rehearsal
+said "12 appear only when merged", conflating failing *assertions* with unique tests. The precise
+figures are the ones above and the ones in the bundle's `README.md` and `evidence.json`, which are
+generated from the run. The earlier commit is left as written because amending it would change a
+ref.
