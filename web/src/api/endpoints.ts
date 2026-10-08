@@ -339,6 +339,9 @@ export function makeEndpoints(client: CoreClient) {
     reflectMemory: (body: WriteBody, signal?: AbortSignal) =>
       client.post<MemoryReflectResult>('/memory/reflect', body, { signal }),
 
+    listHosts: (signal?: AbortSignal) => client.get<{ hosts: Host[] }>('/hosts', { signal }),
+    listActors: (signal?: AbortSignal) => client.get<{ actors: Actor[] }>('/actors', { signal }),
+
     // P6-03c: the P7-01 Validation reads. Five GETs, all `validation:read` (plus
     // `validation:unattributed` on Core's side for a run with no project attribution), all
     // DEPENDENCY PENDING — the baseline Core has no /v1/validation/* route, so the proxy
@@ -394,8 +397,6 @@ export function makeEndpoints(client: CoreClient) {
         { query: { form }, signal },
       ),
 
-    listHosts: (signal?: AbortSignal) => client.get<{ hosts: Host[] }>('/hosts', { signal }),
-    listActors: (signal?: AbortSignal) => client.get<{ actors: Actor[] }>('/actors', { signal }),
   }
 }
 
