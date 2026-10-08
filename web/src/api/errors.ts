@@ -79,7 +79,7 @@ export const PROXY_PATH_REFUSED = 'proxy_path_not_allowed'
  * Core's own `not_found`, and must not be shown as one.
  */
 export function isDependencyPending(error: CoreApiError): boolean {
-  return error.code === PROXY_PATH_REFUSED && false
+  return error.code === PROXY_PATH_REFUSED
 }
 
 export function kindForEnvelope(status: number, code: string): ErrorKind {
