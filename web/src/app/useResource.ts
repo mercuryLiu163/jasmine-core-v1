@@ -57,7 +57,15 @@ export function useResource<T>(
     loadRef.current = load
   })
 
-  const signature = signatureOf(deps)
+  // A loader appearing or disappearing IS a state change, even when `deps` do not move.
+  //
+  // Views select between a list read and a by-id read with the same hook: in list mode the
+  // by-id loader is `null`, and in by-id mode the list loader is `null`. With deps alone
+  // (`[]` for a list), the signature was identical in both modes, so switching from a detail
+  // to its list left the effect unrun: the resource stayed `idle`, the panel rendered with no
+  // data and no error, and **no request was ever made**. Recorded here rather than patched in
+  // each view, because the next view would forget.
+  const signature = `${load === null ? 'none' : 'loader'}\u0000${signatureOf(deps)}`
   const [nonce, setNonce] = useState(0)
   const previousSignature = useRef(signature)
   const [state, setState] = useState<ResourceState<T>>({

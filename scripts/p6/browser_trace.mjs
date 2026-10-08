@@ -67,7 +67,6 @@ function parseArgs(argv) {
       case '--p3-route-scope-token': args.p3RouteScopeToken = next; index += 1; break
       case '--p4-reads': args.p4Reads = true; break
       case '--p4-limited-token': args.p4LimitedToken = next; index += 1; break
-      case '--p4-scope-only': args.p4ScopeOnly = true; break
       case '--evidence': args.evidence = next; index += 1; break
       case '--interpretation': args.interpretation = next; index += 1; break
       case '--pending-interpretation': args.pendingInterpretation = next; index += 1; break
@@ -1736,7 +1735,6 @@ async function main() {
         await waitFor(cdp, waitForText, { label })
       }
 
-      if (!args.p4ScopeOnly) {
       // --- health, and Memory marked non-authoritative by Core's own field ------------
       // Wait for a *data-dependent* string, not the panel title: the title renders before
       // the payload arrives, and asserting too early read the marker as absent.
@@ -1894,14 +1892,24 @@ async function main() {
         `${memoryReads.length} P4 reads, ${unlabelledMemory.length} unlabelled, ` +
           `unexpected controls: ${JSON.stringify(unexpected)}`)
 
-      }
+      // --- signing out and in with a narrower token, then reading Memory --------------
+      // This transition used to be split into its own invocation because it failed: the app
+      // kept rendering the previous route while the URL already carried the target hash, and
+      // no request was made. The cause was real — `useResource` treated a list read and a
+      // by-id read as the same state when `deps` did not move, so switching from a detail to
+      // its list left the resource `idle` and never fetched. Fixed at the hook; the check is
+      // back inside one run so the Gate covers the transition that exposed it.
+      if (args.p4LimitedToken) {
+        await clickByText(cdp, 'button', '退出')
+        await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
+          { label: 'sign-in after 退出' })
+        await signInMemory(args.p4LimitedToken)
 
-      // --- a token without memory:read is refused by Core ----------------------------
-      // This runs as its OWN invocation (`--p4-scope-only`) with the limited token supplied
-      // as `--token-key`: signing out and back in mid-run left the app rendering the
-      // previous route while the URL already carried the target hash, and the check waited
-      // on a panel that could never appear. One sign-in per run removes that entirely.
-      if (args.p4ScopeOnly) {
+        // Signing in re-renders the route the hash already points at, so go to a *detail*
+        // first and then to the list: that is the exact detail->list transition that failed.
+        await gotoMemory(`memory/items/${MITEM}`, 'memory item with the narrow token',
+          `document.body.textContent.length > 0`)
+        const beforeScope = requests.length
         await gotoMemory('memory/items', 'memory items without the scope',
           `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('forbidden_scope'))`)
         const refusedMemory = {
@@ -1909,11 +1917,19 @@ async function main() {
           namesScope: (await pageText()).includes('memory:read'),
           pending: await evaluate(cdp,
             `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+          // The load-bearing part: a request must actually have been issued. With the defect
+          // the panel rendered and nothing was fetched, which is what made this check time out.
+          requested: requests.slice(beforeScope)
+            .filter((r) => r.path === '/v1/memory/items').length,
         }
-        trace.record('a token without memory:read is refused by Core, not reported as the missing dependency',
-          refusedMemory.forbidden && refusedMemory.namesScope && refusedMemory.pending === false,
+        trace.record('after 退出 and a narrower sign-in, the list fetches and Core refuses it',
+          refusedMemory.forbidden && refusedMemory.namesScope && refusedMemory.pending === false &&
+            refusedMemory.requested >= 1,
           JSON.stringify(refusedMemory))
         await trace.screenshot(cdp, '29-memory-scope-refusal')
+      } else {
+        trace.record('after 退出 and a narrower sign-in, the list fetches and Core refuses it',
+          false, 'no --p4-limited-token supplied, so the transition was not exercised')
       }
     }
 
