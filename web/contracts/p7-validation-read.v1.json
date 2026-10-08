@@ -1,0 +1,133 @@
+{
+  "contract": "p7-validation-read.v1",
+  "source": {
+    "ref": "2eb1e5a8cc31383b064d4055e884a8a10ffe0e18",
+    "kind": "pinned commit (not a branch)",
+    "derived_by": "scripts/p7/p7_contract.py",
+    "derived_at_ref": null,
+    "derived_at_identical": null,
+    "derived_at_differences": []
+  },
+  "read_routes": [
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/validation/runs$",
+      "handler": "list_runs",
+      "scope": "validation:read",
+      "response_key": "runs",
+      "response_fields": [
+        "complete",
+        "corrupt_count",
+        "count",
+        "discovery",
+        "duplicate_count",
+        "empty_reason",
+        "has_more",
+        "ignored_entries",
+        "ignored_samples",
+        "limit",
+        "offset",
+        "runs",
+        "total",
+        "visibility"
+      ]
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/validation/runs/([^/]+)$",
+      "handler": "get_run",
+      "scope": "validation:read",
+      "response_key": "run",
+      "response_fields": [
+        "cases",
+        "commit",
+        "core_version",
+        "created_at",
+        "environment",
+        "evidence_grade",
+        "executor",
+        "grade_downgraded_by",
+        "not_implemented",
+        "notes",
+        "redaction_warning",
+        "redactions",
+        "reviewer",
+        "run_id",
+        "schema_version",
+        "stage",
+        "synthetic",
+        "synthetic_note",
+        "unknown_record_keys",
+        "verdict",
+        "verdict_consistent",
+        "verifier",
+        "warnings"
+      ]
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/validation/runs/([^/]+)/manifest$",
+      "handler": "get_manifest",
+      "scope": "validation:read",
+      "response_key": "manifest",
+      "response_fields": [
+        "declared_mode",
+        "files",
+        "frozen_at",
+        "manifest_authentication",
+        "manifest_sha256",
+        "mode",
+        "mode_basis",
+        "projects",
+        "reason",
+        "rule",
+        "run_id",
+        "sources",
+        "status"
+      ]
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/validation/runs/([^/]+)/artifacts/([^/]+)$",
+      "handler": "get_artifact",
+      "scope": "validation:read",
+      "response_key": "artifact",
+      "response_fields": [
+        "artifact_id",
+        "bytes",
+        "content_scan",
+        "credential_shaped",
+        "declared_bytes",
+        "declared_sha256",
+        "digests",
+        "forms",
+        "integrity",
+        "media_type",
+        "path"
+      ]
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/validation/runs/([^/]+)/artifacts/([^/]+)/content$",
+      "handler": "get_artifact_content",
+      "scope": "validation:read",
+      "response_key": "content",
+      "response_fields": [
+        "artifact_id",
+        "bytes",
+        "content",
+        "content_is_original",
+        "form",
+        "mask_algorithm",
+        "mask_version",
+        "masked_sha256",
+        "media_type",
+        "original_sha256",
+        "served_sha256"
+      ]
+    }
+  ],
+  "read_scopes": [
+    "validation:read"
+  ]
+}

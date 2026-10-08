@@ -196,8 +196,11 @@ def derive(ref: str = WORKTREE) -> dict[str, Any]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="p7_contract", description=__doc__.splitlines()[0])
-    parser.add_argument("--ref", default=WORKTREE,
-                        help="git ref to derive from (default: the working tree)")
+    parser.add_argument("--ref", default=None,
+                        help="git ref to derive from. Defaults to the ref recorded in the "
+                             "frozen snapshot for --check (so the check re-derives at the same "
+                             "commit the snapshot was pinned to, and works in a fresh clone), "
+                             "and to the working tree otherwise")
     parser.add_argument("--write", action="store_true", help="regenerate the snapshot")
     parser.add_argument("--check", action="store_true", help="compare against the snapshot")
     parser.add_argument("--print", dest="show", action="store_true", help="print the snapshot")
@@ -206,10 +209,22 @@ def main(argv: list[str] | None = None) -> int:
                              "and record the provenance stamp in `source`")
     args = parser.parse_args(argv)
 
+    # `--check` must re-derive at the ref the snapshot is pinned to. Deriving at
+    # the working tree instead would report the provenance block itself as drift
+    # (and would compare a pinned snapshot against uncommitted edits), which is
+    # not what a drift guard means. `--ref` still overrides this explicitly.
+    ref = args.ref
+    if ref is None:
+        if args.check and SNAPSHOT.exists():
+            ref = json.loads(SNAPSHOT.read_text(encoding="utf-8")).get("source", {}).get("ref") \
+                  or WORKTREE
+        else:
+            ref = WORKTREE
+
     try:
-        derived = derive(args.ref)
+        derived = derive(ref)
     except AbsentRefError as error:
-        print(f"P7-01 contract source {args.ref!r} is absent, so the contract cannot be "
+        print(f"P7-01 contract source {ref!r} is absent, so the contract cannot be "
               f"re-derived: {error}. A drift guard that passes because it could not look is "
               f"worse than no guard.", file=sys.stderr)
         return 2
@@ -242,7 +257,7 @@ def main(argv: list[str] | None = None) -> int:
         SNAPSHOT.parent.mkdir(parents=True, exist_ok=True)
         SNAPSHOT.write_text(json.dumps(derived, indent=2, ensure_ascii=False) + "\n",
                             encoding="utf-8")
-        print(f"wrote {SNAPSHOT.relative_to(ROOT)} from {args.ref}")
+        print(f"wrote {SNAPSHOT.relative_to(ROOT)} from {ref}")
         return 0
 
     if args.check:
@@ -253,9 +268,9 @@ def main(argv: list[str] | None = None) -> int:
         # Only the integration stamp is ignored; `source.ref` and the derived
         # routes are still compared, so a wrong source still fails.
         if without_derived_at(frozen) == without_derived_at(derived):
-            print(f"P7-01 contract snapshot matches {args.ref}")
+            print(f"P7-01 contract snapshot matches {ref}")
             return 0
-        print(f"P7-01 contract snapshot DRIFTED from {args.ref}", file=sys.stderr)
+        print(f"P7-01 contract snapshot DRIFTED from {ref}", file=sys.stderr)
         frozen_content = without_derived_at(frozen)
         derived_content = without_derived_at(derived)
         for key in sorted(set(frozen_content) | set(derived_content)):
