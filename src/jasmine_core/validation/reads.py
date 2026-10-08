@@ -107,9 +107,6 @@ _MISSING = object()
 #: Root resolution is cached against the raw configured string, so a test or a
 #: restarted deployment can point at a different root without a stale cache while
 #: a request can never name or extend the path. A failed resolution is not cached.
-_ROOT_CACHE: dict[str, Any] = {"raw": None, "path": None}
-
-
 # -- services -----------------------------------------------------------------
 
 
@@ -155,14 +152,18 @@ def _validation_not_configured(reason: str, **details: Any) -> errors.Validation
 def _resolve_root() -> Path:
     """The configured root, or `503 validation_not_configured`.
 
-    The root is opened `O_DIRECTORY|O_NOFOLLOW`, so a symlinked root is refused
-    rather than followed: a request must not be able to redirect the walk.
+    The root is opened `O_DIRECTORY|O_NOFOLLOW` on every call, so a symlinked
+    root is refused rather than followed and a root swapped after an earlier
+    request is re-checked instead of being trusted from a cache. Every record,
+    manifest and artifact read additionally re-opens the root with `O_NOFOLLOW`,
+    so content is never served through a root that is currently a symlink.
     """
     raw = os.environ.get(ROOT_ENV_VAR)
     if raw is None or not raw.strip():
         raise _validation_not_configured("unset")
-    if _ROOT_CACHE["raw"] == raw and _ROOT_CACHE["path"] is not None:
-        return _ROOT_CACHE["path"]
+    # The check runs on EVERY use. Caching the resolved path meant the
+    # `O_NOFOLLOW` validation happened once and later requests followed a root
+    # that had since been replaced by a symlink.
     path = Path(raw).expanduser()
     if os.path.islink(path):
         raise _validation_not_configured("symlinked_root", root=raw)
@@ -179,8 +180,6 @@ def _resolve_root() -> Path:
         raise _validation_not_configured(reason, root=raw) from exc
     else:
         os.close(descriptor)
-    _ROOT_CACHE["raw"] = raw
-    _ROOT_CACHE["path"] = path
     return path
 
 
@@ -289,32 +288,37 @@ class _Record:
     data: dict[str, Any] | None = None
     corrupt_reason: str | None = None
     duplicate_reason: str | None = None
+    root: Path | None = None
+
+    @property
+    def dir_relative(self) -> str:
+        """The record's directory, relative to the configured root."""
+        return os.path.dirname(self.relative_path)
+
+    def under_root(self, relative: str) -> str:
+        """`relative` resolved against the configured root, for a rooted read.
+
+        Every read goes through the root so that `_open_regular_under` re-opens
+        the root with `O_NOFOLLOW` on each call: content is never served through
+        a root that has become a symlink.
+        """
+        return f"{self.dir_relative}/{relative}" if self.dir_relative else relative
 
 
-def _classify(path: Path, relative_path: str) -> _Record:
+def _classify(path: Path, relative_path: str, root: Path) -> _Record:
     """The §2 run-shaped grammar. Anything run-shaped is kept, never dropped."""
-    # F4: `_classify` runs for every run-shaped file on the list route, so the
-    # size is checked before the bytes are read. §8 says no route may read an
-    # unbounded amount of data; a record over the bound is reported corrupt
-    # rather than read.
-    try:
-        if path.stat().st_size > MAX_RECORD_BYTES:
-            return _Record(stem=path.stem, relative_path=relative_path, path=path,
-                           record_sha256="", status="corrupt",
-                           corrupt_reason=f"record exceeds {MAX_RECORD_BYTES} bytes")
-    except OSError as exc:
+    # `_classify` runs for every run-shaped file on the list route, so the read
+    # goes through the descriptor-relative, `O_NONBLOCK`, in-loop-capped helper:
+    # a pre-read `stat` followed by `read_bytes()` would let a swap to a FIFO
+    # block the request and let a file that grew past the cap be read whole.
+    raw, error = _read_bytes_under(root, relative_path, MAX_RECORD_BYTES)
+    if error is not None:
         return _Record(stem=path.stem, relative_path=relative_path, path=path,
-                       record_sha256="", status="corrupt",
-                       corrupt_reason=f"unreadable: {type(exc).__name__}")
-    try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        return _Record(stem=path.stem, relative_path=relative_path, path=path,
-                       record_sha256="", status="corrupt",
-                       corrupt_reason=f"unreadable: {type(exc).__name__}")
+                       record_sha256="", status="corrupt", root=root,
+                       corrupt_reason=_record_read_reason(error, MAX_RECORD_BYTES))
     digest = hashlib.sha256(raw).hexdigest()
     record = _Record(stem=path.stem, relative_path=relative_path, path=path,
-                     record_sha256=digest)
+                     record_sha256=digest, root=root)
     try:
         data = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -367,9 +371,21 @@ def _mark_duplicates(records: list[_Record]) -> None:
                 record.duplicate_reason = f"{len(group)} files share this stem"
 
 
+def _record_read_reason(error: str, cap: int) -> str:
+    if error == "too_large":
+        return f"record exceeds {cap} bytes"
+    if error == "not_regular_file":
+        return "not a regular file"
+    if error == "symlink_refused":
+        return "a path component is a symlink"
+    if error == "missing":
+        return "the record disappeared while it was being read"
+    return f"unreadable: {error}"
+
+
 def _records_for_stem(walk: _Walk, stem: str) -> list[_Record]:
     matches = [path for path in walk.paths if path.stem == stem]
-    return [_classify(path, walk.relative[path]) for path in matches]
+    return [_classify(path, walk.relative[path], walk.root) for path in matches]
 
 
 # -- presence, chain and grade (proposal §1.1, §4.1, §4.2) --------------------
@@ -596,35 +612,26 @@ class _Manifest:
     reason: str | None = None
 
 
-def _load_manifest(run_dir: Path, run_id: str) -> _Manifest:
+def _load_manifest(root: Path, run_dir_relative: str, run_id: str) -> _Manifest:
     """Classify `<run_dir>/manifest.json` without reading artifact contents.
 
     The list route needs only the status (and the projects/mode); reading every
     declared artifact is left to the manifest and artifact routes.
     """
-    path = run_dir / "manifest.json"
-    if path.is_symlink() or (path.exists() and not path.is_file()):
-        return _Manifest(status="corrupt", rule="manifest.json is not a regular file")
-    if not path.exists():
+    relative = f"{run_dir_relative}/manifest.json" if run_dir_relative else "manifest.json"
+    raw, error = _read_bytes_under(root, relative, MAX_MANIFEST_BYTES)
+    if error == "missing":
         return _Manifest(status="absent",
                          reason="the record predates the bundle convention and its history "
                                 "is not reconstructed")
-    # F4: refuse on the stat before reading, so a huge manifest is never made
-    # resident. No digest is reported for a file that was not read.
-    try:
-        if path.stat().st_size > MAX_MANIFEST_BYTES:
-            return _Manifest(status="corrupt",
-                             rule=f"manifest exceeds {MAX_MANIFEST_BYTES} bytes")
-    except OSError as exc:
-        return _Manifest(status="corrupt", rule=f"manifest.json is unreadable: {type(exc).__name__}")
-    try:
-        raw = path.read_bytes()
-    except OSError as exc:
-        return _Manifest(status="corrupt", rule=f"manifest.json is unreadable: {type(exc).__name__}")
-    sha = hashlib.sha256(raw).hexdigest()
-    if len(raw) > MAX_MANIFEST_BYTES:
-        return _Manifest(status="corrupt", sha256=sha,
+    if error == "too_large":
+        return _Manifest(status="corrupt",
                          rule=f"manifest exceeds {MAX_MANIFEST_BYTES} bytes")
+    if error is not None:
+        return _Manifest(status="corrupt",
+                         rule=f"manifest.json is not a regular readable file: {error}")
+    assert raw is not None
+    sha = hashlib.sha256(raw).hexdigest()
     try:
         data = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
@@ -733,7 +740,7 @@ class _ArtifactRead:
     error: str | None = None  # missing | symlink_refused | unreadable
 
 
-def _read_artifact(run_dir: Path, relative: str, declared_sha: str,
+def _read_artifact(root: Path, relative: str, declared_sha: str,
                    declared_bytes: int, cap: int) -> _ArtifactRead:
     """Open every component with `dir_fd`+`O_NOFOLLOW`, read once, hash that buffer.
 
@@ -742,78 +749,124 @@ def _read_artifact(run_dir: Path, relative: str, declared_sha: str,
     `O_NOFOLLOW` plus an `lstat`/inode comparison cannot see a symlinked
     ancestor, so the whole walk is descriptor-relative.
     """
-    parts = Path(relative).parts
-    if not parts or any(part in (".", "..", "") for part in parts) or Path(relative).is_absolute():
+    descriptor, error = _open_regular_under(root, relative, cap)
+    if error is not None:
+        if error in ("symlink_refused", "missing", "not_regular_file", "invalid_path"):
+            kind = "symlink_refused" if error == "symlink_refused" else (
+                "missing" if error in ("missing", "invalid_path") else "unreadable")
+            return _ArtifactRead(integrity="symlink_refused" if error == "symlink_refused"
+                                 else ("missing" if kind == "missing" else "unreadable"),
+                                 error=kind)
+        if error == "too_large":
+            return _ArtifactRead(integrity="unreadable", too_large=True, error="too_large")
         return _ArtifactRead(integrity="unreadable", error="unreadable")
-    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-    try:
-        directory = os.open(run_dir, flags | os.O_DIRECTORY)
-    except OSError:
+    buffer, read_error = _read_capped(descriptor, cap)
+    if read_error is not None:
+        if read_error == "too_large":
+            return _ArtifactRead(integrity="unreadable", too_large=True, error="too_large")
         return _ArtifactRead(integrity="unreadable", error="unreadable")
+    content = buffer or b""
+    # `realpath` containment is a second, non-primary check: it is a
+    # check-then-open and therefore races, so the descriptor-relative walk in
+    # `_open_regular_under` is what actually decides.
     try:
-        for part in parts[:-1]:
-            # `lstat` is a supplementary classifier, not the check: on macOS an
-            # intermediate symlinked directory fails `O_NOFOLLOW|O_DIRECTORY`
-            # with ENOTDIR, which would otherwise be reported as "missing". The
-            # descriptor-relative `O_NOFOLLOW` open below remains primary.
-            if _is_symlink_at(directory, part):
-                return _ArtifactRead(integrity="symlink_refused", error="symlink_refused")
-            try:
-                next_directory = os.open(part, flags | os.O_DIRECTORY, dir_fd=directory)
-            except OSError as exc:
-                return _ArtifactRead(integrity=_integrity_for_oserror(exc),
-                                     error=_error_for_oserror(exc))
-            os.close(directory)
-            directory = next_directory
-        if _is_symlink_at(directory, parts[-1]):
-            return _ArtifactRead(integrity="symlink_refused", error="symlink_refused")
-        try:
-            descriptor = os.open(parts[-1], flags, dir_fd=directory)
-        except OSError as exc:
-            return _ArtifactRead(integrity=_integrity_for_oserror(exc),
-                                 error=_error_for_oserror(exc))
-        try:
-            metadata = os.fstat(descriptor)
-            if not stat.S_ISREG(metadata.st_mode):
-                return _ArtifactRead(integrity="unreadable", error="unreadable")
-            if metadata.st_size > cap:
-                return _ArtifactRead(integrity="unreadable", too_large=True, error="too_large")
-            chunks: list[bytes] = []
-            total = 0
-            try:
-                while True:
-                    chunk = os.read(descriptor, min(1024 * 1024, cap + 1 - total))
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
-                    total += len(chunk)
-                    if total > cap:
-                        return _ArtifactRead(integrity="unreadable", too_large=True,
-                                             error="too_large")
-            except OSError:
-                # An I/O error after a successful open is row 15: the file exists
-                # but cannot be read, reported as `503 artifact_unreadable`, never
-                # as a 500 or as a fabricated digest.
-                return _ArtifactRead(integrity="unreadable", error="unreadable")
-        finally:
-            os.close(descriptor)
-    finally:
-        os.close(directory)
-    buffer = b"".join(chunks)
-    # The realpath containment is a second, non-primary check: it is a
-    # check-then-open and therefore races, so the descriptor walk above is what
-    # actually decides.
-    try:
-        resolved_root = os.path.realpath(run_dir)
-        resolved_file = os.path.realpath(run_dir / relative)
+        resolved_root = os.path.realpath(root)
+        resolved_file = os.path.realpath(root / relative)
         if os.path.commonpath([resolved_root, resolved_file]) != resolved_root:
             return _ArtifactRead(integrity="unreadable", error="unreadable")
     except (OSError, ValueError):
         return _ArtifactRead(integrity="unreadable", error="unreadable")
-    digest = hashlib.sha256(buffer).hexdigest()
-    match = digest == declared_sha and len(buffer) == declared_bytes
-    return _ArtifactRead(integrity="match" if match else "mismatch", buffer=buffer,
-                         actual_bytes=len(buffer))
+    matched = hashlib.sha256(content).hexdigest() == declared_sha and len(content) == declared_bytes
+    return _ArtifactRead(integrity="match" if matched else "mismatch", buffer=content,
+                         actual_bytes=len(content))
+def _open_regular_under(root: Path, relative: str, cap: int) -> tuple[int | None, str | None]:
+    """Open `relative` under `root` and prove it is a regular file of size <= `cap`.
+
+    Returns `(descriptor, None)` or `(None, reason)` with a reason in
+    `invalid_path`, `symlink_refused`, `missing`, `not_regular_file`,
+    `too_large`, `unreadable`.
+
+    The root is (re-)opened `O_DIRECTORY|O_NOFOLLOW` on **every** call rather than
+    trusting a cached path, so a root that has been replaced by a symlink is
+    refused here instead of being followed. Every component is opened
+    descriptor-relatively with `O_NOFOLLOW`, so a swapped ancestor cannot redirect
+    the read, and `O_NONBLOCK` means a FIFO is rejected by the `S_ISREG` check
+    rather than blocking the request. The size is checked on the open descriptor,
+    so a file that grew after any earlier look is still measured as it is now.
+    """
+    parts = Path(relative).parts
+    if (not parts or ".." in relative or Path(relative).is_absolute()
+            or any(part in (".", "..", "") for part in parts)):
+        return None, "invalid_path"
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
+    try:
+        directory = os.open(root, flags | os.O_DIRECTORY)
+    except OSError as exc:
+        return None, "symlink_refused" if exc.errno == errno.ELOOP else "root_unreadable"
+    try:
+        for part in parts[:-1]:
+            if _is_symlink_at(directory, part):
+                return None, "symlink_refused"
+            try:
+                next_directory = os.open(part, flags | os.O_DIRECTORY, dir_fd=directory)
+            except OSError as exc:
+                return None, _error_for_oserror(exc)
+            os.close(directory)
+            directory = next_directory
+        if _is_symlink_at(directory, parts[-1]):
+            return None, "symlink_refused"
+        try:
+            descriptor = os.open(parts[-1], flags, dir_fd=directory)
+        except OSError as exc:
+            return None, _error_for_oserror(exc)
+    finally:
+        os.close(directory)
+    try:
+        metadata = os.fstat(descriptor)
+    except OSError:
+        os.close(descriptor)
+        return None, "unreadable"
+    if not stat.S_ISREG(metadata.st_mode):
+        os.close(descriptor)
+        return None, "not_regular_file"
+    if metadata.st_size > cap:
+        os.close(descriptor)
+        return None, "too_large"
+    return descriptor, None
+
+
+def _read_capped(descriptor: int, cap: int) -> tuple[bytes | None, str | None]:
+    """Read at most `cap` bytes from an open descriptor, then close it.
+
+    The cap is enforced **inside** the loop, so a file that grows after the
+    `fstat` cannot push the read past it: one extra byte is requested and the
+    read is refused as `too_large`.
+    """
+    chunks: list[bytes] = []
+    total = 0
+    try:
+        while True:
+            chunk = os.read(descriptor, min(1024 * 1024, cap + 1 - total))
+            if not chunk:
+                break
+            chunks.append(chunk)
+            total += len(chunk)
+            if total > cap:
+                return None, "too_large"
+    except OSError:
+        return None, "unreadable"
+    finally:
+        os.close(descriptor)
+    return b"".join(chunks), None
+
+
+def _read_bytes_under(root: Path, relative: str, cap: int) -> tuple[bytes | None, str | None]:
+    """`_open_regular_under` then `_read_capped`: one bounded, race-free read."""
+    descriptor, error = _open_regular_under(root, relative, cap)
+    if error is not None:
+        return None, error
+    assert descriptor is not None
+    return _read_capped(descriptor, cap)
 
 
 def _is_symlink_at(directory: int, name: str) -> bool:
@@ -945,13 +998,13 @@ def list_runs(request: Request, core: "Core", principal: auth.Principal,
             limit=MAX_SCANNED_ENTRIES if walk.cap_name == "MAX_SCANNED_ENTRIES" else MAX_RUN_SHAPED)
     params = _list_params(request)
 
-    records = [_classify(path, walk.relative[path]) for path in walk.paths]
+    records = [_classify(path, walk.relative[path], walk.root) for path in walk.paths]
     _mark_duplicates(records)
 
     visible: list[tuple[_Record, _Manifest | None, str | None, str | None, list[str]]] = []
     for record in records:
         if record.status == "ok":
-            manifest = _load_manifest(record.path.parent, record.stem)
+            manifest = _load_manifest(record.root, record.dir_relative, record.stem)
             mode, basis = _effective_mode(manifest)
             projects = _manifest_projects(manifest)
         else:
@@ -1019,9 +1072,8 @@ def get_run(request: Request, core: "Core", principal: auth.Principal,
     run_id = match.group(1)
     _require_run_id(run_id)
     _no_query(request, "run detail")
-    record = _locate(svc, principal, run_id)
+    record, manifest = _locate(svc, principal, run_id)
 
-    manifest = _load_manifest(record.path.parent, record.stem)
     mode, _basis = _effective_mode(manifest)
     projects = _manifest_projects(manifest)
     if not _run_visible(svc, principal, projects=projects):
@@ -1083,8 +1135,7 @@ def get_manifest(request: Request, core: "Core", principal: auth.Principal,
     run_id = match.group(1)
     _require_run_id(run_id)
     _no_query(request, "run manifest")
-    record = _locate(svc, principal, run_id)
-    manifest = _load_manifest(record.path.parent, record.stem)
+    record, manifest = _locate(svc, principal, run_id)
     projects = _manifest_projects(manifest)
     if not _run_visible(svc, principal, projects=projects):
         raise errors.NotFound("validation_run", run_id)
@@ -1121,7 +1172,7 @@ def get_manifest(request: Request, core: "Core", principal: auth.Principal,
             "manifest_authentication": "unauthenticated",
         })
     data = manifest.data or {}
-    files = [_manifest_file(record.path.parent, entry) for entry in data.get("files", [])]
+    files = [_manifest_file(record, entry) for entry in data.get("files", [])]
     return Response(200, {
         "status": "frozen",
         "run_id": run_id,
@@ -1147,13 +1198,13 @@ def get_artifact(request: Request, core: "Core", principal: auth.Principal,
     _require_run_id(run_id)
     _require_artifact_id(artifact_id)
     _no_query(request, "artifact metadata")
-    record = _locate(svc, principal, run_id)
-    manifest, entry = _require_artifact(svc, principal, record, artifact_id, run_id)
+    record, manifest = _locate(svc, principal, run_id)
+    entry = _require_artifact(manifest, artifact_id)
 
     declared_sha = entry["sha256"]
     declared_bytes = entry["bytes"]
-    read = _read_artifact(record.path.parent, entry["path"], declared_sha, declared_bytes,
-                          MAX_ARTIFACT_BYTES)
+    read = _read_artifact(record.root, record.under_root(entry["path"]), declared_sha,
+                          declared_bytes, MAX_ARTIFACT_BYTES)
     _raise_artifact_error(read, artifact_id)
     if read.integrity == "mismatch":
         raise errors.ArtifactModified(
@@ -1205,8 +1256,8 @@ def get_artifact_content(request: Request, core: "Core", principal: auth.Princip
     download = request.param("download")
     if download is not None and download != "1":
         raise errors.InvalidRequest("download must be 1", field="download", value=download)
-    record = _locate(svc, principal, run_id)
-    manifest, entry = _require_artifact(svc, principal, record, artifact_id, run_id)
+    record, manifest = _locate(svc, principal, run_id)
+    entry = _require_artifact(manifest, artifact_id)
 
     declared_sha = entry["sha256"]
     declared_bytes = entry["bytes"]
@@ -1214,8 +1265,8 @@ def get_artifact_content(request: Request, core: "Core", principal: auth.Princip
         raise errors.UnsupportedMediaType(
             "only text artifacts have a content form",
             media_type=entry.get("media_type"), artifact_id=artifact_id)
-    read = _read_artifact(record.path.parent, entry["path"], declared_sha, declared_bytes,
-                          MAX_ARTIFACT_BYTES)
+    read = _read_artifact(record.root, record.under_root(entry["path"]), declared_sha,
+                          declared_bytes, MAX_ARTIFACT_BYTES)
     _raise_artifact_error(read, artifact_id)
     if read.integrity == "mismatch":
         raise errors.ArtifactModified(
@@ -1268,6 +1319,12 @@ def get_artifact_content(request: Request, core: "Core", principal: auth.Princip
             "the artifact bytes are not strict UTF-8", artifact_id=artifact_id, reason="not_utf8")
     masked_text = canonical.redact_text(text)
     served = masked_text.encode("utf-8")
+    # The masker can EXPAND content (`token=x` -> `token=[REDACTED]`), so the
+    # masked form is measured, not assumed to fit because the original did.
+    if len(served) > MAX_ARTIFACT_BYTES:
+        raise errors.PayloadTooLarge(
+            f"masked artifact exceeds {MAX_ARTIFACT_BYTES} bytes",
+            limit=MAX_ARTIFACT_BYTES, form="masked", original_bytes=len(buffer))
     served_sha = hashlib.sha256(served).hexdigest()
     headers["X-Validation-Sha256"] = served_sha
     return Response(200, {
@@ -1288,8 +1345,14 @@ def get_artifact_content(request: Request, core: "Core", principal: auth.Princip
 # -- shared handler helpers ---------------------------------------------------
 
 
-def _locate(svc: ValidationServices, principal: auth.Principal, run_id: str) -> _Record:
-    """Resolve the id to exactly one visible, parseable record.
+def _locate(svc: ValidationServices, principal: auth.Principal,
+            run_id: str) -> tuple[_Record, _Manifest]:
+    """Resolve the id to exactly one visible, parseable record and its manifest.
+
+    The manifest is read **once** and returned: the same object that decided the
+    grant check is the one the caller must use for the payload. Re-reading it in
+    the handler let a manifest swapped between the two reads decide the
+    permissions while a different manifest decided the bytes.
 
     The id grammar is validated by the caller before this is reached, so a
     malformed id never opens a record file. In `acl` mode a run the caller may
@@ -1327,10 +1390,10 @@ def _locate(svc: ValidationServices, principal: auth.Principal, run_id: str) -> 
         raise errors.ValidationRunCorrupt(
             matches[0].corrupt_reason or "the run record is unusable", run_id=run_id)
     record = parseable[0]
-    manifest = _load_manifest(record.path.parent, record.stem)
+    manifest = _load_manifest(record.root, record.dir_relative, record.stem)
     if not _run_visible(svc, principal, projects=_manifest_projects(manifest)):
         raise errors.NotFound("validation_run", run_id)
-    return record
+    return record, manifest
 
 
 def _not_found(kind: str, ident: str, reason: str) -> errors.NotFound:
@@ -1344,9 +1407,8 @@ def _not_found(kind: str, ident: str, reason: str) -> errors.NotFound:
     return error
 
 
-def _require_artifact(svc: ValidationServices, principal: auth.Principal, record: _Record,
-                      artifact_id: str, run_id: str) -> tuple[_Manifest, dict[str, Any]]:
-    manifest = _load_manifest(record.path.parent, record.stem)
+def _require_artifact(manifest: _Manifest, artifact_id: str) -> dict[str, Any]:
+    """The artifact entry from the manifest whose projects were already checked."""
     if manifest.status != "frozen":
         raise _not_found("artifact", artifact_id,
                          "manifest_absent" if manifest.status == "absent" else "manifest_corrupt")
@@ -1354,7 +1416,7 @@ def _require_artifact(svc: ValidationServices, principal: auth.Principal, record
                   if item.get("artifact_id") == artifact_id), None)
     if entry is None:
         raise _not_found("artifact", artifact_id, "unknown_artifact_id")
-    return manifest, entry
+    return entry
 
 
 def _raise_artifact_error(read: _ArtifactRead, artifact_id: str) -> None:
@@ -1367,9 +1429,10 @@ def _raise_artifact_error(read: _ArtifactRead, artifact_id: str) -> None:
         raise _validation_not_configured("artifact_unreadable")
 
 
-def _manifest_file(run_dir: Path, entry: dict[str, Any]) -> dict[str, Any]:
-    read = _read_artifact(run_dir, entry.get("path", ""), entry.get("sha256", ""),
-                          entry.get("bytes", -1), MAX_ARTIFACT_BYTES)
+def _manifest_file(record: _Record, entry: dict[str, Any]) -> dict[str, Any]:
+    read = _read_artifact(record.root, record.under_root(entry.get("path", "")),
+                          entry.get("sha256", ""), entry.get("bytes", -1),
+                          MAX_ARTIFACT_BYTES)
     return {**entry, "integrity": read.integrity,
             "bytes_agree": read.integrity == "match"}
 

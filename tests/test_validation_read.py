@@ -1202,5 +1202,120 @@ class ReviewRegression(ValidationApiTestCase):
             self.assertEqual(body["empty_reason"], "all_filtered_out")
 
 
+class IndependentReviewDefects(ValidationApiTestCase):
+    """Regressions for the four defects the operator's independent review found.
+
+    D1 the artifact routes re-read the manifest after the grant check; D2 the
+    record and manifest reads checked the size by `stat` and then read without a
+    cap (a FIFO blocked, a grown file was read whole); D3 the resolved root was
+    cached, so a root swapped for a symlink was followed; D4 the masked output
+    was never measured against the cap. Each test pins the property, not the
+    implementation shape.
+    """
+
+    def test_d1_exactly_one_manifest_read_decides_grants_and_payload(self) -> None:
+        self.build_bundle(rel_dir="p7-ok")
+        real = reads_module._load_manifest
+        for label, path in (
+                ("detail", f"/v1/validation/runs/{RUN_ONE}"),
+                ("manifest", f"/v1/validation/runs/{RUN_ONE}/manifest"),
+                ("artifact", f"/v1/validation/runs/{RUN_ONE}/artifacts/art_good"),
+                ("content", f"/v1/validation/runs/{RUN_ONE}/artifacts/art_good/content")):
+            with self.subTest(route=label):
+                calls: list[tuple] = []
+
+                def counting(root, run_dir_relative, run_id, _calls=calls):
+                    _calls.append((root, run_dir_relative, run_id))
+                    return real(root, run_dir_relative, run_id)
+
+                with self.env():
+                    token = self.key(["validation:read"])
+                    with patch.object(reads_module, "_load_manifest", side_effect=counting):
+                        status, body = self.call("GET", path, token=token)
+                self.assertEqual(status, 200, body)
+                self.assertEqual(
+                    len(calls), 1,
+                    f"{label} read the manifest {len(calls)} times; the grant check must decide "
+                    f"on the same read that produces the payload")
+
+    def test_d2_a_read_cap_is_enforced_inside_the_read(self) -> None:
+        path = self.root / "grown.json"
+        path.write_bytes(b"x" * 64)
+        descriptor = os.open(path, os.O_RDONLY)
+        try:
+            buffer, error = reads_module._read_capped(descriptor, 16)
+        finally:
+            pass                       # _read_capped closes the descriptor
+        self.assertIsNone(buffer)
+        self.assertEqual(error, "too_large")
+
+    def test_d2_b_a_fifo_is_refused_before_any_read(self) -> None:
+        run_dir = self.root / "p7-fifo" / RUN_ONE
+        run_dir.mkdir(parents=True)
+        fifo = run_dir / f"{RUN_ONE}.json"
+        os.mkfifo(fifo)
+        self.addCleanup(os.remove, fifo)
+        descriptor, error = reads_module._open_regular_under(
+            self.root, f"p7-fifo/{RUN_ONE}/{RUN_ONE}.json", reads_module.MAX_RECORD_BYTES)
+        self.assertIsNone(descriptor)
+        self.assertEqual(error, "not_regular_file")
+        record = reads_module._classify(
+            fifo, f"p7-fifo/{RUN_ONE}/{RUN_ONE}.json", self.root)
+        self.assertEqual(record.status, "corrupt")
+        self.assertIn("not a regular file", record.corrupt_reason)
+
+    def test_d3_a_swapped_symlinked_root_is_refused(self) -> None:
+        import shutil
+
+        self.build_bundle(rel_dir="p7-ok")
+        outside = Path(tempfile.mkdtemp(prefix="jasmine-p7-outside-"))
+        self.addCleanup(shutil.rmtree, outside, ignore_errors=True)
+        (outside / RUN_ONE).mkdir(parents=True)
+        shutil.copyfile(self.root / "p7-ok" / RUN_ONE / f"{RUN_ONE}.json",
+                        outside / RUN_ONE / f"{RUN_ONE}.json")
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", "/v1/validation/runs", token=token)
+            self.assertEqual(status, 200, body)
+            # The root is replaced by a symlink to a directory that holds a
+            # perfectly valid record: the reader must refuse, not follow.
+            displaced = self.root.parent / f"{self.root.name}-displaced"
+            os.rename(self.root, displaced)
+            os.symlink(outside, self.root)
+            self.addCleanup(lambda: (os.unlink(self.root), os.rename(displaced, self.root)))
+            status, body = self.call("GET", "/v1/validation/runs", token=token)
+            self.assertEqual(status, 503, body)
+            self.assertEqual(body["error"]["code"], "validation_not_configured")
+            self.assertEqual(body["error"]["details"]["reason"], "symlinked_root")
+            status, body = self.call(
+                "GET", f"/v1/validation/runs/{RUN_ONE}", token=token)
+            self.assertEqual(status, 503, body)
+            self.assertEqual(body["error"]["details"]["reason"], "symlinked_root")
+
+    def test_d4_masked_output_over_the_cap_is_refused(self) -> None:
+        run_dir = self.root / "p7-mask" / RUN_ONE
+        run_dir.mkdir(parents=True)
+        self.write_run(run_dir, RUN_ONE)
+        # `redact_text` EXPANDS `token=x` into `token=[REDACTED]`, so the raw
+        # bytes can sit under the cap while the masked form exceeds it.
+        filler = b"token=x " * 18
+        entry = self.artifact_entry(run_dir, "art_expand", "artifacts/expand.txt",
+                                    content=filler)
+        self.write_manifest(run_dir, RUN_ONE, [entry])
+        masked = reads_module.canonical.redact_text(filler.decode()).encode("utf-8")
+        self.assertGreater(len(masked), len(filler))
+        cap = len(filler) + 2
+        self.assertGreater(len(masked), cap)
+        with self.env():
+            token = self.key(["validation:read"])
+            with patch.object(reads_module, "MAX_ARTIFACT_BYTES", cap):
+                status, body = self.call(
+                    "GET", f"/v1/validation/runs/{RUN_ONE}/artifacts/art_expand/content",
+                    token=token)
+            self.assertEqual(status, 413, body)
+            self.assertEqual(body["error"]["code"], "payload_too_large")
+            self.assertEqual(body["error"]["details"]["limit"], cap)
+
+
 if __name__ == "__main__":
     unittest.main()

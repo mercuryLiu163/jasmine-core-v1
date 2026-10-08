@@ -200,6 +200,44 @@ field names them, and a record between the two bounds is still read normally.
   resolved; a `mode`/`attribution`/`project` filter therefore never matches a
   duplicate row. That follows from the fail-closed rule, not from a missing field.
 
+### 5.4 Four invariants against a swapped or hostile filesystem
+
+An independent review of the delivered candidate showed that reading a file
+"carefully" is not enough if the check and the read are separate operations, so
+four invariants are now explicit and tested. They matter because the run root is
+a real directory an operator (or anything else on the host) can change while the
+Core is serving.
+
+1. **One manifest read per request.** `_locate` returns both the record and the
+   manifest it read, and the manifest routes and both artifact routes use that
+   object. Re-reading the manifest in the handler let a manifest swapped between
+   the two reads decide the **permissions** while a different manifest decided the
+   **bytes**. The grant check and the payload now provably come from one read.
+2. **One rooted, bounded read path.** Records, manifests and artifacts are read
+   through `_open_regular_under` + `_read_capped`:
+   * the root is re-opened `O_DIRECTORY|O_NOFOLLOW` on **every** call, so content
+     is never served through a root that is currently a symlink;
+   * every path component is opened descriptor-relatively with `O_NOFOLLOW`, so a
+     swapped ancestor cannot redirect the read;
+   * `O_NONBLOCK` plus an `fstat` `S_ISREG` test means a FIFO, socket or device is
+     refused rather than opened and blocked on;
+   * the size is checked on the open descriptor **and again inside the read loop**
+     (one extra byte is requested and the read is refused as too large), so a file
+     that grows after the check cannot be read past the cap, and a record over
+     `MAX_RECORD_BYTES` is never made resident.
+   A `stat` followed by `read_bytes()` satisfied none of these, and a FIFO named
+   `run-*.json` made every request block until the client timed out.
+3. **The root is re-validated on every use.** The resolved path used to be cached
+   per configured string, so the `O_NOFOLLOW` check ran once and later requests
+   followed a root that had since been replaced by a symlink. Nothing about the
+   root is cached now; the check runs per request, and invariant 2 re-checks it
+   again at every read.
+4. **The masked form is measured.** `canonical.redact_text` can *expand* content
+   (`token=x` becomes `token=[REDACTED]`), so a raw artifact under the cap can
+   produce a masked body over it. The masked bytes are measured and a body over
+   `MAX_ARTIFACT_BYTES` is refused `413 payload_too_large` (with `details.limit`
+   and `details.original_bytes`) instead of being returned successfully.
+
 ## 6. Artifact reads and the masker revision
 
 A declared path is opened with the repo's per-component descriptor-relative
