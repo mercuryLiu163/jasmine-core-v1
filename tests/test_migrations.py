@@ -20,6 +20,8 @@ from jasmine_core.migrations import (  # noqa: E402
 )
 
 EXPECTED_TABLES = {
+    "context_packs", "context_request_keys",
+    "checkpoints", "checkpoint_request_keys", "resume_results", "resume_request_keys",
     "core_meta",
     "schema_migrations",
     "hosts",
@@ -45,6 +47,16 @@ EXPECTED_TABLES = {
     "reviews", "review_changes", "review_request_keys",
     "maintenance_heads", "interpretation_changes", "interpretation_operation_completions",
     "maintenance_request_keys",
+    # P4 (ADR 0014 §3). P4 owns these and creates nothing else; the P0-P3 truth
+    # tables above are untouched by m0009_memory.
+    "memory_items",
+    "memory_item_sources",
+    "memory_jobs",
+    "memory_job_attempts",
+    "memory_query_traces",
+    "memory_query_trace_items",
+    "memory_engine_status",
+    "memory_project_actors",
 }
 
 
@@ -72,7 +84,11 @@ class MigrationFromEmptyDatabase(DbTestCase):
 
     def test_migrate_creates_the_full_baseline_schema(self) -> None:
         applied = migrate(self.conn)
-        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority", "m0004_task_step_state", "m0005_evidence_fingerprint", "m0006_codex_exec_observations", "m0007_interpretations", "m0008_resolutions"])
+        self.assertEqual(applied, ["m0001_baseline", "m0002_api_auth_audit", "m0003_authority",
+         "m0004_task_step_state", "m0005_evidence_fingerprint",
+         "m0006_codex_exec_observations", "m0007_interpretations",
+         "m0008_resolutions", "m0009_continuity", "m0010_context",
+         "m0011_memory"])
         self.assertEqual(_tables(self.conn), EXPECTED_TABLES)
         self.assertEqual(current_version(self.conn), expected_version())
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
@@ -97,7 +113,11 @@ class MigrationFromEmptyDatabase(DbTestCase):
     def test_migration_record_carries_a_checksum_and_timestamp(self) -> None:
         migrate(self.conn)
         recorded = applied_migrations(self.conn)
-        self.assertEqual([row["version"] for row in recorded], [1, 2, 3, 4, 5, 6, 7, 8])
+        # P3's form, which is the stronger one: it keeps asserting the count
+        # against the shipped constant, so a migration added without bumping
+        # SCHEMA_VERSION (or the reverse) fails here rather than at some later
+        # `migrate()` call.
+        self.assertEqual([row["version"] for row in recorded], list(range(1, SCHEMA_VERSION+1)))
         for row in recorded:
             self.assertEqual(len(row["checksum"]), 64)
             self.assertTrue(row["applied_at"].endswith("Z"), row["applied_at"])

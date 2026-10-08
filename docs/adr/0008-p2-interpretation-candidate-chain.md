@@ -1,6 +1,6 @@
-# ADR 0008 — P2-01 Interpretation 候选链
+# ADR 0009 — P2-01 Interpretation 候选链
 
-- 状态：候选数据合同 Accepted；provider no-execution.v2 默认模式拒绝元工具验证待冻结；候选实现验收另行记录，不宣称 P2 验收。
+- 状态：Accepted；provider no-execution.v2 已冻结并按真实/组件边界验证。完整 P2 的 scoped admission-only 独立验收见 [P2结果摘要](../p2-results.md)，不宣称实际工具执行或 P3。
 - 日期：2026-09-29
 - 基线：`9de00fe`，Schema 6；本 PR 独占新增 `m0007_interpretations` / Schema 7。
 
@@ -47,6 +47,8 @@ P0/P1 tokens是整个Core实例的scope，尚无project ACL；过滤是查询上
 空库/含P1数据v6升级及重复迁移、旧程序拒绝v7；strict schema负例/source引用/身份伪造；并发重复请求只一个provider调用；坏输出及timeout留失败Raw；provider期间独立Core writer成功；中断reservation恢复、迟到结果不覆盖；scope/audit脱敏；真实provider输出至少一个Playwright候选且Truth前后无变化。仅这些通过才能称P2-01完成，不称完整P2 PASS。
 
 ## 7 Provider合同评审附录
+
+2026-10-01 CLI0.159.3兼容复验：独立实际binary/owned local mock Responses probe验证Interpreter实际_argv 8/8、P2 admission 8/8、P3 app-server 11/11；包含精确工具边界、Default模式Plan-only request_user_input不可用及未知工具拒绝。证据为artifacts/codex-01593-component-probe/summary.json。据此允许SHA256 4d210f7c5a18fd0386434df23b5bdbb8c0e7257d3e8a2b30b0769c8bbe99a878，保留旧0.159.0 fingerprint；配置版本按精确binary SHA选择，执行前仍复核。此为无付费model的component边界证据，七个真实Gate均NOT_RUN，不证明新版真实模型提取或Gate通过。未修改全局config/hooks/trust。
 
 初始独立component preflight捕获CLI0.159.0实际请求，顶层tools字段缺省、model精确gpt-6.1-sol、strict json_schema；同配置真实saved-auth调用13.8167秒产出结构候选。但后续完整检查发现input.additional_tools仍含code-mode functions.exec，因此初始记录不证明工具面为空。固定actual catalog条目清除apply_patch_tool_type/experimental_supported_tools/supports_search_tool及tool_mode（null），模型slug保持原值。禁用features与进程env whitelist以src/jasmine_core/interpreter_provider.py为准；CLI二进制SHA固定，其他版本拒绝直到重新评审。operator用JASMINE_CORE_INTERPRETER_CODEX和JASMINE_CORE_INTERPRETER_CATALOG显式启用；HTTP不可设置。catalog内容/hash与绝对executable路径/hash记录config digest；每调用重新核二进制hash，实际临时catalog由冻结字节生成。继承环境仅HOME/PATH/TMPDIR/LANG/LC_ALL/SYSTEMROOT和固定saved-auth CODEX_HOME，清除API key/BASE_URL/nonce/proxy/provider覆盖。没有修改全局config/hooks/trust。
 

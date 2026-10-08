@@ -1,5 +1,8 @@
 # Jasmine Core V1 P3 阶段任务书：Checkpoint、Context Pack 与真实续接
 
+> **2026-09-30 用户执行覆盖：** 后续按完整阶段在本地完成实现、独立 Review、独立 validation 和真实 Gate 后统一 push；不逐条创建/推送 PR，不运行 CI，也不把 CI 作为验收门禁。文内 PR 切分保留为本地实施与审查里程碑；旧 CI/逐 PR 发布要求由此覆盖。已合并 P2-01/P2-02 的历史记录保留，不追溯删除。后续阶段采用同一覆盖规则，除非用户明确另行调整。
+
+
 日期：2026-09-29。状态：实施任务书，未实现、未验收。准备基线为 P1 完成的 `main@9059625`、schema 6；启动时重新核对事实。仓库为 `/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1`。本线程按 P2 → P3 顺序实施，P2 真实 Gate 通过并合并后才能开始 P3 实施；可提前冻结 P3 设计和跨阶段契约，不提前声明续接能力。
 
 明确委派实施后允许必要的项目/临时目录隔离开发测试环境及依赖准备；禁止擅改/停止用户现有服务、生产自启动、外部付费账户、全局 user config/hooks/secret/trust、重新连接 V0 或启动其他 taskbook。V0 `_archive/` 仅历史。所有设计包保留，设计 input 不是已实现证明或即时环境操作指令。

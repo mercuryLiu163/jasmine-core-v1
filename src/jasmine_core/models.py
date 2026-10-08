@@ -31,6 +31,11 @@ EVENT_HASH_FIELDS = (
 )
 
 EVENT_TYPES = frozenset({
+    "adapter.lifecycle_reported", "adapter.lifecycle_attested", "adapter.operation_reserved",
+    "adapter.operation_completed", "adapter.operation_denied", "adapter.operation_key_bound", "adapter.requirement_bound",
+    "context.built",
+    "checkpoint.created",
+    "resume.built",
     "user.prompt",
     "assistant.message",
     "session.started",
@@ -56,6 +61,18 @@ EVENT_TYPES = frozenset({
     "step.staled",
     "resolution.command", "interpretation.bound", "review.approved", "review.rejected",
     "interpretation.corrected", "interpretation.rejected", "interpretation.rerun",
+    # P4 (ADR 0014 §7). Only human/system command actions on the Memory
+    # lifecycle are Events. Worker claim/retain/completion is *not*: those rows
+    # live in the append-only `memory_job_attempts` table, because a background
+    # worker holds a lease owner rather than a registered device actor, and a job
+    # row is not Truth that any other projection must agree with. Eligibilable
+    # source Events are the events P1 already commits; P4 never writes an Event
+    # to make content eligible.
+    "memory.obsoleted",
+    "memory.deleted",
+    "memory.pinned",
+    "memory.unpinned",
+    "memory.job.retried",
 })
 
 MAX_TEXT_BYTES = 256 * 1024
@@ -146,6 +163,8 @@ class NewEvent:
                 f"event_type must be one of {', '.join(sorted(EVENT_TYPES))}", field="event_type"
             )
         source_system = require(body, "source_system")
+        if event_type.startswith("adapter.") or source_system=="core-native-adapter":
+            raise errors.InvalidRequest("adapter command namespace is reserved for internal capability endpoints")
         if not source_system.strip():
             raise errors.InvalidRequest("source_system must not be empty", field="source_system")
 
