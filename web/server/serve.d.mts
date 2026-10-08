@@ -33,6 +33,9 @@ export interface Allowlist {
   /** Real P4 memory paths, forwarded only when the operator states the Core has P4. */
   p4_pending_paths: RegExp[]
   p4_reads_enabled: boolean
+  /** Real P7-01 Validation read paths, forwarded only when the operator states the Core has them. */
+  p7_pending_paths: RegExp[]
+  p7_reads_enabled: boolean
   write_methods?: string[]
   /** The milestone B write list before the P4 write opt-in is applied. */
   baseline_write_paths: string[]
@@ -46,13 +49,20 @@ export interface Allowlist {
 export const P3_READS_ENV: string
 export const P4_READS_ENV: string
 export const P4_WRITES_ENV: string
+export const P7_READS_ENV: string
 export function p3ReadsEnabled(env?: Record<string, string | undefined>): boolean
 export function p4ReadsEnabled(env?: Record<string, string | undefined>): boolean
 export function p4WritesEnabled(env?: Record<string, string | undefined>): boolean
+export function p7ReadsEnabled(env?: Record<string, string | undefined>): boolean
 export function parseArgs(argv: string[]): ParsedArgs
 export function loadAllowlist(
   directory?: string,
-  options?: { enableP3Reads?: boolean; enableP4Reads?: boolean; enableP4Writes?: boolean },
+  options?: {
+    enableP3Reads?: boolean
+    enableP4Reads?: boolean
+    enableP4Writes?: boolean
+    enableP7Reads?: boolean
+  },
 ): Allowlist
 export function resolveCoreOrigin(raw?: string): URL
 export function isAllowed(allowlist: Allowlist, method: string | undefined, pathname: string): boolean

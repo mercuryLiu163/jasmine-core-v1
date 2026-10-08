@@ -25,7 +25,7 @@ const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '::1', 'localhost'])
 const ALLOWED_METHODS = new Set(allowlist.methods.map((method) => method.toUpperCase()))
 
 /**
- * Must match `serve.mjs`: the P3 and P4 reads are opt-in for a Core that has them, never
+ * Must match `serve.mjs`: the P3, P4 and P7 reads are opt-in for a Core that has them, never
  * implicit, and both hosts spell "the operator says yes" the same way. The environment is
  * read once at module load, which is why the tests reset the module registry rather than
  * passing an option. The P4 *writes* have their own switch, so an operator who has the reads
@@ -38,14 +38,17 @@ function flagEnabled(name: string): boolean {
 const p3ReadsEnabled = flagEnabled('P6_ENABLE_P3_READS')
 const p4ReadsEnabled = flagEnabled('P6_ENABLE_P4_READS')
 const p4WritesEnabled = flagEnabled('P6_ENABLE_P4_WRITES')
+const p7ReadsEnabled = flagEnabled('P6_ENABLE_P7_READS')
 const pendingPaths = allowlist as {
   p3_pending_paths?: string[]
   p4_pending_paths?: string[]
+  p7_pending_paths?: string[]
 }
 const ALLOWED_PATHS = [
   ...allowlist.paths,
   ...(p3ReadsEnabled ? pendingPaths.p3_pending_paths ?? [] : []),
   ...(p4ReadsEnabled ? pendingPaths.p4_pending_paths ?? [] : []),
+  ...(p7ReadsEnabled ? pendingPaths.p7_pending_paths ?? [] : []),
 ].map((pattern) => new RegExp(pattern))
 const WRITE_METHODS = new Set(
   (allowlist.write_methods ?? []).map((method) => method.toUpperCase()),
