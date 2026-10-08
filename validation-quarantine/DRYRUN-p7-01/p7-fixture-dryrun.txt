@@ -1,0 +1,34 @@
+discovered 5  ignored 12  reasons ['excluded_dir', 'not_run_shaped', 'symlinked_directory', 'symlinked_file']
+  ok        p7-escape/run-20261008T000004Z/run-20261008T000004Z.json  
+  ok        p7-fail/run-20261008T000002Z/run-20261008T000002Z.json  
+  corrupt   p7-corrupt/run-20261008T000003Z.json  unparseable: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+  duplicate p7-dup/run-20261008T000001Z/run-20261008T000001Z.json  2 files share this stem
+  duplicate p7-ok/run-20261008T000001Z/run-20261008T000001Z.json  2 files share this stem
+
+detail on a duplicate stem -> 409 validation_run_ambiguous (2 files share this stem)
+corrupt rows stay listed: 1; total includes them when unfiltered
+
+A manifest_status=frozen
+   art_good       integrity=match     media_ok=True
+   art_tampered   integrity=mismatch  media_ok=True
+   art_missing    integrity=missing   media_ok=True
+   art_secret     integrity=match     media_ok=True
+      original scan (independent of credential_shaped=False): looks_like_credential=True -> 403 original_withheld
+      masked differs: True  masked line: ['Authorization: Bearer [REDACTED]']
+
+E manifest_status=corrupt  rule=art_dotdot: dot segment path '../p7-outside/loot.txt'
+   (a single broken path makes the whole manifest corrupt, so no artifact is partially trusted)
+
+individual path verdicts:
+   art_dotdot   ../p7-outside/loot.txt                         REFUSED: dot segment
+   art_abs      /tmp/p7-outside/loot.txt                       REFUSED: absolute/UNC prefix
+   art_drive    C:foo.txt                                      REFUSED: drive-relative
+   art_unc      \\host\share\f.txt                             REFUSED: absolute/UNC prefix
+   art_url      https://evil.example/x.txt                     REFUSED: URL scheme
+   art_symfile  artifacts/link.txt                             OK
+   art_symdir   artifacts/sub/loot.txt                         OK
+   art_baduuid  artifacts/good.txt                             OK
+
+declared mode=real with projects and recorder provenance -> effective real
+   effective mode = real
+   without projects           -> effective mode = unknown (mode_basis names the missing provenance)
