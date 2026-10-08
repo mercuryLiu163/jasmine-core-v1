@@ -1827,9 +1827,13 @@ async function main() {
         JSON.stringify(malformedItem))
 
       // --- no write affordance, and every reply labelled as simulated -----------------
+      // Scoped to the Memory panel on purpose: the page also carries the app's global
+      // 退出 button, which is not a Memory write affordance.
       const controls = await evaluate(cdp, `(() => {
+        const panel = document.querySelector('section[aria-label^="Memory"]')
+        if (!panel) return ['<no memory panel>']
         const out = []
-        for (const node of document.querySelectorAll('button, input[type=submit]')) {
+        for (const node of panel.querySelectorAll('button, input[type=submit]')) {
           out.push((node.textContent ?? '').trim())
         }
         return out
@@ -1850,7 +1854,7 @@ async function main() {
         await clickByText(cdp, 'button', '退出')
         await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
           { label: 'sign-in before the memory scope check' })
-        await signIn(args.p4LimitedToken)
+        await signInMemory(args.p4LimitedToken)
         await gotoMemory('memory/items', 'memory items without the scope',
           `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('forbidden_scope'))`)
         const refusedMemory = {
