@@ -1748,9 +1748,17 @@ async function main() {
         coreImpact: (await pageText()).includes('core_impact'),
         pending: await evaluate(cdp,
           `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+        // The status is a property of the milestone, not of the response: a *populated* read
+        // must still carry it, or a screenshot of real data invites the "P6 passed" reading.
+        status: await evaluate(cdp, `(() => {
+          const node = document.querySelector('[data-testid="slice-status"]')
+          return node ? (node.textContent ?? '') : ''
+        })()`),
       }
-      trace.record('memory health renders, and Memory is marked NON_AUTHORITATIVE from Core',
-        health.nonAuthoritative && health.coreImpact && health.pending === false,
+      trace.record('memory health renders, marked NON_AUTHORITATIVE from Core, and states PARTIAL / DEPENDENCY_PENDING',
+        health.nonAuthoritative && health.coreImpact && health.pending === false &&
+          health.status.includes('PARTIAL / DEPENDENCY_PENDING') &&
+          health.status.includes('验收未通过'),
         JSON.stringify(health))
       await trace.screenshot(cdp, '25-memory-health')
 

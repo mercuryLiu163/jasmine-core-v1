@@ -93,7 +93,7 @@ export function App(): JSX.Element {
             发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理
             rerun),详见 P6-02-COMPLIANCE.md。<a href={hrefFor({ name: 'pending', key: 'validation' })}>Validation</a>、
             <a href={hrefFor({ name: 'pending', key: 'context' })}>Context</a>、
-            <a href={hrefFor({ name: 'pending', key: 'memory' })}>Memory</a> 等按依赖分别标未接入。
+            <a href={hrefFor({ name: 'pending', key: 'memory' })}>Memory</a> 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并,因此仍列在此处而不在导航里。
           </p>
           <main id="main">{renderRoute(route)}</main>
         </>

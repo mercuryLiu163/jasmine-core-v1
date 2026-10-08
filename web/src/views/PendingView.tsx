@@ -47,7 +47,12 @@ const SPECS: Record<string, PendingSpec> = {
     title: 'Memory Jobs / Recall',
     feature: 'Memory jobs、retry、bank mapping、recall trace、obsolete/pin/delete',
     owner: 'P4 独立线(Memory Adapter/Jobs/Recall)',
-    pending: 'jobs/detail/retry、bank 映射、管理权限与审计契约',
+    // The read slice exists (P6-03b1: health/jobs/items/traces) but its dependency is
+    // unmerged, so it stays under this heading rather than in the nav. The writes and the
+    // management contract are genuinely still missing.
+    pending:
+      '读切片(health/jobs/items/traces)已实现但 P4 未合并,因此列为依赖未满足,不在导航里;' +
+      'retry、bank 映射、obsolete/pin/delete、管理权限与审计契约仍待 P4 与 P6-03b2',
     note: 'Memory 是 NON_AUTHORITATIVE;它不会修改 Rule/State,浏览器也不会接触 Hindsight 凭据。',
   },
   validation: {

@@ -7,8 +7,10 @@ Core**, never a source of truth: it reads only the frozen `GET` endpoints of
 This is the **P6-02** delivery plus the **P6-03a** read-only continuity views: the P6-01
 shell, the P2 Interpretation/Resolver reads, the P6-02 milestone-B audited writes, and
 read-only Checkpoint / Context Pack / Resume screens built against the P3 contract.
-Memory (P4) and Validation (P7-01) are **not** wired — those screens say `未接入` and name
-the owning phase instead of showing sample data.
+Memory (P4) and Validation (P7-01) are **not** wired: Validation's screen says `未接入`, and
+Memory's read views (P6-03b1: health / jobs / items / traces) exist but are
+**PARTIAL / DEPENDENCY_PENDING** against an unmerged P4 — they are not in the nav, the paths are
+refused by default, and each one states its status on arrival. Neither shows sample data.
 
 **P3 is not merged.** The P6-03a views are therefore built against a contract derived from
 the unmerged branch `p3-checkpoint-context-resume` (`7016dab`), and the dashboard marks the

@@ -5,7 +5,7 @@
 This began as the task breakdown and dependency check the operator asked for before
 implementation. The operator then authorised b1, and E1–E5 below are built, tested and
 evidenced: contract pinned by full SHA, pending paths behind a default-off switch, a labelled
-simulated fixture, the seven read views, and 110 guards across three layers. The Gate evidence
+simulated fixture, the seven read views, and 118 guards across three layers. The Gate evidence
 is registered under the P6-03b1 section of `validation-runs/p6/P6-02B-INDEX.md`, which is where
 the current bundle and the superseded ones are listed — the directory is gitignored, so a
 specific timestamp here would rot the moment the Gate is re-run.
@@ -134,6 +134,17 @@ routes, scopes and shapes:
   both normal states, not failures.
 * **Hindsight credentials never enter the browser.** The engine lives behind Core.
 
+### Enabling the switch against a Core that has no P4 is not a harmless experiment
+
+`P6_ENABLE_P4_READS=1` tells the *proxy* to forward the seven paths. If the Core behind it has no
+P4, the request arrives and Core answers `not_found` — the same answer it gives for a route it
+does not serve — so the view renders "does not exist, or you may not see it" rather than the
+dependency-pending panel. The proxy did not refuse it, so nothing marks the dependency.
+
+That is why the flag is a Gate-time affordance and not a readiness switch: pointed at a baseline
+Core it produces a misleading answer instead of an honest refusal. Set it only when the Core is
+genuinely a P4 build.
+
 ## 3. What was built before P4 merges, and what stays blocked
 
 **Built — P6-03b1**, every piece of it dependency-marked. None of it makes the feature
@@ -146,7 +157,7 @@ labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
 | E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts accept the same value set and are tested on it — including `' yes '` and mixed case, because the helper is *duplicated* rather than shared and dropping `.trim()` from one host left both suites green until those cases existed. Tests also assert P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
 | E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | **built.** `X-P6-Fixture: simulated-p4-reads`; the fixture also serves the shell routes in their documented shapes after an earlier version crashed the overview |
 | E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
-| E5 | Component tests plus a Gate section | **built, 110 guards** (24 contract, 21 fixture, 35 view, 16 static-host, 14 Vite-host). Gate: 10/10 full twice, 4/4 scope |
+| E5 | Component tests plus a Gate section | **built, 118 guards** (25 contract, 21 fixture, 42 view, 16 static-host, 14 Vite-host). Gate: 10/10 full twice, 4/4 scope |
 
 **Still blocked until P4 is merged and independently validated:**
 
@@ -221,9 +232,9 @@ Falsifiable, each a test or a Gate record rather than a sentence.
    bundle carries no origin other than XML namespace URIs and React's error-decoder link; no
    engine credential identifier (`api_key`, `access_token`, `refresh_token`, `password=`,
    `client_secret`); every memory call is a same-origin `/memory/...` path; and no memory
-   module names an engine client. **The three bundle-level assertions skip when `web/dist` is
-   absent** (a fresh checkout has none), so they pass vacuously there; the endpoint-layer and
-   module assertions always run. Build before relying on the bundle checks.
+   module names an engine client. **The two bundle-level tests skip when `web/dist` is absent**
+   (a fresh checkout has none), so those two pass vacuously there; the same-origin-path and
+   no-engine-client tests read source and always run. Build before relying on the bundle pair.
 9. **Status.** The pages and the report say **PARTIAL / DEPENDENCY_PENDING** and state that
    the contract source is pinned while **P4 phase acceptance has not passed**; nothing claims
    P6 passed, and Memory is never presented as Truth.

@@ -159,6 +159,34 @@ describe('a refused P4 read is shown as a missing dependency', () => {
     const panel = await screen.findByRole('region', { name: /Memory Jobs/ })
     expect(within(panel).getByTestId('slice-status').textContent).toContain('PARTIAL / DEPENDENCY_PENDING')
   })
+
+  it.each(VIEWS)('%s states the status even when the read succeeds', async (
+    _name, hash, region, route,
+  ) => {
+    // The status is a property of the milestone, not of the response. Rendering it only when
+    // the dependency is pending passes every other test in this file — which is exactly the
+    // gap P6-03a also had, so it is pinned here too: a populated read must still say it.
+    const bodies: Record<string, unknown> = {
+      '/v1/memory/health': health(),
+      '/v1/memory/jobs': { jobs: [job()], count: 1, counts: withKeys(contract.nested_fields.job_counts, {}) },
+      [`/v1/memory/jobs/${JOB}`]: { job: job(), attempts: [] },
+      '/v1/memory/items': { items: [{ ...item(), lifecycle: lifecycle() }], count: 1, non_authoritative: true },
+      [`/v1/memory/items/${ITEM}`]: {
+        memory: item(), sources: [], jobs: [], recallable: true, lifecycle: lifecycle(),
+        engine_claim: 'x', non_authoritative: true,
+      },
+      '/v1/memory/traces': { traces: [trace()], count: 1 },
+      [`/v1/memory/traces/${TRACE}`]: { trace: { ...trace(), filtered: [], authority_refs: [], state_revision: 7, items: [] } },
+    }
+    const user = userEvent.setup()
+    await enter(user, hash, { ...SIGNED_IN, ['GET ' + route]: { body: bodies[route] } })
+    const panel = await screen.findByRole('region', { name: region })
+    const status = await within(panel).findByTestId('slice-status')
+    expect(status.textContent).toContain('PARTIAL / DEPENDENCY_PENDING')
+    // And it must name the pin and the unpassed acceptance, not just the status word.
+    expect(status.textContent).toContain('验收未通过')
+    expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
+  })
 })
 
 describe('Memory is marked non-authoritative from Core own field', () => {

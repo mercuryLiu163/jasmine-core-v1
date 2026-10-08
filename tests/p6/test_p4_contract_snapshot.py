@@ -355,47 +355,81 @@ class NoEngineAccessFromTheBrowser(unittest.TestCase):
 
 
 class TheAcceptanceMappingNamesRealTests(unittest.TestCase):
-    """The criterion-to-test mapping must not cite a test that does not exist.
+    """The criterion-to-test mapping must cite tests that exist, and cite them in backticks.
 
     The mapping exists because three of the nine criteria were false as written. But it is
-    itself a hand-written list, and a rename silently turns a row into a claim about nothing —
-    which is exactly what happened when `test_an_agent_key_has_the_engine_text_withheld` became
-    `test_every_read_withholds_the_engine_text_from_an_agent`. This keeps the two in step.
+    itself a hand-written list, and review showed two ways it could rot silently:
+
+    * a citation outside backticks was invisible to the parser, so removing the backticks made
+      the row uncheckable while looking unchanged;
+    * the web half matched by substring, so truncating `…not an error` to `…not an erro` passed.
+
+    It also only proves a cited test *exists*, not that it checks the criterion — which is how a
+    criterion whose test asserted the opposite survived it. That gap is covered by reading the
+    table, and by the tests themselves.
     """
 
     PLAN = ROOT / "web" / "P6-03B-PLAN.md"
 
-    def test_every_cited_python_test_exists(self) -> None:
+    def section(self) -> str:
         plan = self.PLAN.read_text(encoding="utf-8")
-        start = plan.index("### Every criterion names the test")
-        end = plan.index("## 5. Non-goals")
-        # `[A-Za-z0-9_]+`, not `[a-z0-9_]+`: the narrower class silently *truncates* a
-        # citation at the first uppercase letter, so `test_x_RENAMED` parsed as the real
-        # `test_x` and a typo would pass. A truncated match must fail, not be forgiven.
-        cited = set(re.findall(r"`(test_[A-Za-z0-9_]+)`", plan[start:end]))
-        self.assertTrue(cited, "the mapping cites no Python tests at all")
+        return plan[plan.index("### Every criterion names the test"):plan.index("## 5. Non-goals")]
 
+    def test_every_python_test_name_is_backticked(self) -> None:
+        section = self.section()
+        inside = set(re.findall(r"`(test_[A-Za-z0-9_]+)`", section))
+        # Any `test_…` token in the table that is *not* inside backticks would be skipped by
+        # the checks below, so it is a failure rather than something to ignore.
+        bare = set(re.findall(r"(?<![`\w])(test_[A-Za-z0-9_]+)(?![\w`])", section)) - inside
+        self.assertEqual(sorted(bare), [],
+                         f"these citations are not backticked, so nothing checks them: "
+                         f"{sorted(bare)}")
+
+    def test_every_cited_python_test_exists(self) -> None:
+        cited = set(re.findall(r"`(test_[A-Za-z0-9_]+)`", self.section()))
+        self.assertTrue(cited, "the mapping cites no Python tests at all")
         source = ""
         for name in ("test_p4_contract_snapshot.py", "test_p4_read_fixture.py"):
             source += (ROOT / "tests" / "p6" / name).read_text(encoding="utf-8")
-        declared = set(re.findall(r"def (test_[a-z0-9_]+)\(", source))
-        missing = sorted(cited - declared)
-        self.assertEqual(missing, [],
-                         f"the mapping cites tests that do not exist: {missing}")
+        declared = set(re.findall(r"def (test_[A-Za-z0-9_]+)\(", source))
+        self.assertEqual(sorted(cited - declared), [],
+                         "the mapping cites tests that do not exist")
 
-    def test_every_cited_web_case_exists(self) -> None:
-        plan = self.PLAN.read_text(encoding="utf-8")
-        start = plan.index("### Every criterion names the test")
-        end = plan.index("## 5. Non-goals")
-        source = ""
+    @staticmethod
+    def _web_case_names() -> set[str]:
+        """Every case name declared by the three P4 web test files, exactly as written."""
+        names: set[str] = set()
         for name in ("p4Views.test.tsx", "p4Reads.test.ts", "p4ReadsCoreProxy.test.ts"):
-            source += (ROOT / "web" / "tests" / name).read_text(encoding="utf-8")
-        # Web cases are cited as prose in backticks; check each that looks like a case name.
-        cited = [c for c in re.findall(r"`([^`]+)`", plan[start:end])
-                 if c[:1].islower() and not c.startswith(("test_", "src/", "web/", "./", "p4_",
-                                                          "scripts/"))]
+            text = (ROOT / "web" / "tests" / name).read_text(encoding="utf-8")
+            # `it('…')`, and the name argument of `it.each([...])('…')`. The `it.each` match
+            # must allow the table to span lines and contain parens — `[^)]*` stopped at the
+            # first `)` inside an array element and silently collected nothing for those.
+            names |= set(re.findall(r"\bit\(\s*'([^']+)'", text))
+            names |= set(re.findall(r"\bit\.each\((?:.|\n)*?\)\(\s*'([^']+)'", text))
+        return names
+
+    def test_every_cited_web_case_exists_exactly(self) -> None:
+        section = self.section()
+        source_names = self._web_case_names()
+        self.assertTrue(source_names, "no web case names were parsed; the extractor is stale")
+        # A case cite is a sentence; a bare identifier like `non_authoritative` is a field
+        # name, and demanding it be a test name would be a false failure.
+        cited = [c for c in re.findall(r"`([^`]+)`", section)
+                 if c[:1].islower() and " " in c
+                 and not c.startswith(("test_", "src/", "web/", "./", "p4_", "scripts/"))]
         self.assertTrue(cited)
-        missing = [c for c in cited
-                   if c.split("…")[0].split("...")[0] not in source]
-        self.assertEqual(missing, [],
-                         f"the mapping cites web cases that do not exist: {missing}")
+        missing: list[str] = []
+        for citation in cited:
+            if "…" in citation:
+                # The ellipsis can sit anywhere (`for a bad … id`), and it stands for "some
+                # text". It must resolve to exactly one real case, or the citation is not
+                # identifying a test — and a prefix-only comparison would also let a typo
+                # hide in the first part.
+                pattern = re.compile(".*?".join(re.escape(part) for part in citation.split("…")))
+                # `match`, not `fullmatch`: an abbreviated citation omits the tail.
+                matches = [n for n in source_names if pattern.match(n)]
+                if len(matches) != 1:
+                    missing.append(f"{citation} (matches {len(matches)})")
+            elif citation not in source_names:
+                missing.append(citation)
+        self.assertEqual(missing, [], f"the mapping cites web cases that do not exist: {missing}")
