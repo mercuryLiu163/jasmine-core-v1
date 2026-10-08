@@ -18,13 +18,19 @@ export function Pager({
   paged: Paged<unknown>
   noun: string
   limit: number
-  /** `offset`/`after_seq` prove completion by a short page; `after_id` by Core's null cursor. */
-  cursorKind?: 'offset' | 'after_seq' | 'after_id'
+  /**
+   * `offset`/`after_seq` prove completion by a short page; `after_id` by Core's null
+   * cursor; `has_more` by Core's own `has_more` flag (the Validation list computes
+   * `offset + count < total`, so a full last page is still the last page).
+   */
+  cursorKind?: 'offset' | 'after_seq' | 'after_id' | 'has_more'
 }): JSX.Element {
   const completeReason =
     cursorKind === 'after_id'
       ? 'Core 对 after_id 返回了 null 游标(next_after_id 为空)。'
-      : '最后一页短于 limit。'
+      : cursorKind === 'has_more'
+        ? 'Core 在最后一页返回 has_more = false。'
+        : '最后一页短于 limit。'
   return (
     <div className="pager">
       <p className="pager__meta">

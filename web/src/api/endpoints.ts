@@ -57,6 +57,11 @@ import type {
   StepList,
   Task,
   TaskPage,
+  ValidationArtifact,
+  ValidationArtifactContent,
+  ValidationManifest,
+  ValidationRunDetail,
+  ValidationRunPage,
 } from './types'
 
 /**
@@ -333,6 +338,61 @@ export function makeEndpoints(client: CoreClient) {
       client.post<MemoryWriteResult>(`/memory/items/${id(memoryId)}/${command}`, body, { signal }),
     reflectMemory: (body: WriteBody, signal?: AbortSignal) =>
       client.post<MemoryReflectResult>('/memory/reflect', body, { signal }),
+
+    // P6-03c: the P7-01 Validation reads. Five GETs, all `validation:read` (plus
+    // `validation:unattributed` on Core's side for a run with no project attribution), all
+    // DEPENDENCY PENDING — the baseline Core has no /v1/validation/* route, so the proxy
+    // refuses them by name until an operator points it at a Core carrying the read slice
+    // with P6_ENABLE_P7_READS=1. The slice is read-only: no write is added here.
+    //
+    // The list filters are Core's own (`verdict`/`stage`/`mode`/`attribution`/`project`); a
+    // null filter is omitted from the query string rather than sent as an empty value, and
+    // Core refuses an unknown value with `400 invalid_request`.
+    listValidationRuns: (
+      query: {
+        limit?: number
+        offset?: number
+        verdict?: string | null
+        stage?: string | null
+        mode?: string | null
+        attribution?: string | null
+        project?: string | null
+      } = {},
+      signal?: AbortSignal,
+    ) =>
+      client.get<ValidationRunPage>('/validation/runs', {
+        query: {
+          limit: query.limit,
+          offset: query.offset,
+          verdict: query.verdict,
+          stage: query.stage,
+          mode: query.mode,
+          attribution: query.attribution,
+          project: query.project,
+        },
+        signal,
+      }),
+    getValidationRun: (runId: string, signal?: AbortSignal) =>
+      client.get<ValidationRunDetail>(`/validation/runs/${id(runId)}`, { signal }),
+    getValidationManifest: (runId: string, signal?: AbortSignal) =>
+      client.get<ValidationManifest>(`/validation/runs/${id(runId)}/manifest`, { signal }),
+    getValidationArtifact: (runId: string, artifactId: string, signal?: AbortSignal) =>
+      client.get<ValidationArtifact>(
+        `/validation/runs/${id(runId)}/artifacts/${id(artifactId)}`,
+        { signal },
+      ),
+    // `form` defaults to `masked` on Core; the caller still sends it explicitly, because a
+    // default that lives only in Core is one a UI can forget it did not choose.
+    getValidationArtifactContent: (
+      runId: string,
+      artifactId: string,
+      form: 'masked' | 'original',
+      signal?: AbortSignal,
+    ) =>
+      client.get<ValidationArtifactContent>(
+        `/validation/runs/${id(runId)}/artifacts/${id(artifactId)}/content`,
+        { query: { form }, signal },
+      ),
 
     listHosts: (signal?: AbortSignal) => client.get<{ hosts: Host[] }>('/hosts', { signal }),
     listActors: (signal?: AbortSignal) => client.get<{ actors: Actor[] }>('/actors', { signal }),

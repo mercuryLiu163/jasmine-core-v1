@@ -59,8 +59,14 @@ const SPECS: Record<string, PendingSpec> = {
     title: 'Validation Inspector',
     feature: 'Validation run 列表、run 详情、bundle manifest、安全 artifact 读取、FAIL 分类',
     owner: 'P7 owner(P7-01 最小读取切片)',
-    pending: '/v1/validation/runs 与 run 详情/verdict、受权 artifact 读取',
-    note: '当前 recorder 不等于完整 API;本页不会生成占位 PASS 或伪 Agent 响应。',
+    // The read slice is implemented as a deep link (#/validation/runs) but its dependency is
+    // unmerged, so it stays under this heading rather than in the nav — exactly like Memory.
+    pending:
+      '只读切片(runs 列表/详情、manifest、artifact metadata+content)已实现但 P7-01 未合并,因此列为依赖未满足,' +
+      '不在导航里;它的验收标准 1(读取一条真实 FAIL run)仍为 BLOCKED —— 磁盘上没有 FAIL case。',
+    note:
+      '当前 recorder 不等于完整 API;本页不生成占位 PASS 或伪 Agent 响应。Inspector 按记录原样展示 verdict,' +
+      '缺失的 chain 段只标注 missing_reason,不会补写;artifact 内容只作为文本渲染,永不作为 HTML。',
   },
   registry: {
     title: 'Registry 在线状态',
