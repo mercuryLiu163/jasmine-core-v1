@@ -109,7 +109,7 @@ from the click-trace's prose — which is exactly what the P6-03b1 bundle could 
   switch on (twice, with identical step names and outcomes, restarting the fixture between runs) and
   **4/4** with it off; **45** files frozen and verified by `freeze_bundle.py --verify`; the bundle
   README is generated from the run's own click-trace files before the freeze. It binds `8be4352`;
-  no product source has changed since, and any later commit here is documentation only.
+  nothing under `web/src/`, `web/server/` or `src/` has changed since, and the commits after it are documentation plus one comment in the Gate launcher.
 * What a reviewer can check from the frozen files alone: `browser-write-responses.jsonl` (25 write
   requests with request **and** response bodies), the 5-key replay with the same `event_id`, the
   7-key fresh transitions, the human/agent `reflect` pair, `writes-off/fixture-state.json` (the
