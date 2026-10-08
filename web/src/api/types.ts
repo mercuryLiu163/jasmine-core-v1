@@ -595,3 +595,186 @@ export interface ContextPack {
   omissions: unknown
   selected_optional_ids: unknown
 }
+
+/* -------------------------------------------------------------------------- *
+ * P6-03b1: P4 memory reads — health / jobs / items / traces
+ *
+ * **DEPENDENCY PENDING.** These routes exist at the pinned P4 commit
+ * `0c4f8f0e2118711ac9aa2a7006fddc6982962248` and **not** in this baseline
+ * (`850fbec`, schema 8, no `src/jasmine_core/memory/`). The field sets below were
+ * derived from that commit by `scripts/p6/p4_contract.py` and frozen in
+ * `web/contracts/p4-memory-read.v1.json`, with the source commit recorded. The
+ * drift check re-derives and diffs them, and exits non-zero when the pinned
+ * commit is absent rather than skipping.
+ *
+ * P4 phase acceptance has NOT passed: nothing here was validated against a real
+ * P4 Core, and the seven routes are served only by the simulated fixture.
+ *
+ * The same two habits as the P3 section above, for the same reasons: scalar
+ * identity/revision/digest fields are typed as P4 returns them (nullability read
+ * from the `m0011_memory` table definitions, not guessed), and nested documents
+ * stay `JsonObject`/`unknown` because their inner shape is P4's to define.
+ *
+ * `non_authoritative` is Core's own field, not an editorial note: P4 emits it on
+ * the item list, the item detail and health. The views read it rather than
+ * printing a hardcoded claim.
+ * -------------------------------------------------------------------------- */
+
+/** `memory_jobs` row, with `receipt_json` decoded to `receipt` (memory/jobs.py). */
+export interface MemoryJob {
+  job_id: string
+  kind: string
+  memory_id: string
+  source_event_id: string
+  project_id: string | null
+  task_id: string | null
+  memory_type: string
+  bank_id: string
+  document_id: string
+  content_sha256: string
+  status: string
+  retry_count: number
+  max_attempts: number
+  next_attempt_at: string
+  lease_owner: string | null
+  lease_expires_at: string | null
+  claim_generation: number
+  last_error_code: string | null
+  safe_error_summary: string | null
+  receipt: JsonObject | null
+  created_at: string
+  updated_at: string
+  completed_at: string | null
+}
+
+/** `memory_job_attempts` row, with `receipt_json` decoded to `receipt`. */
+export interface MemoryJobAttempt {
+  attempt_id: string
+  job_id: string
+  attempt_number: number
+  phase: string
+  outcome: string
+  error_code: string | null
+  safe_error_summary: string | null
+  receipt: JsonObject | null
+  lease_owner: string
+  started_at: string
+  finished_at: string | null
+}
+
+/** `JobStore.counts()` — one key per `JOB_STATUSES` entry, lowercased. */
+export interface MemoryJobCounts {
+  pending: number
+  running: number
+  done: number
+  failed: number
+}
+
+/** `MemoryStore.health_counts()` — three status counts plus three engine-state counts. */
+export interface MemoryHealthCounts {
+  items_active: number
+  items_obsolete: number
+  items_deleted: number
+  retain_failed: number
+  delete_pending: number
+  delete_failed: number
+}
+
+/** `lifecycle.lifecycle_summary` — what the Inspector shows for one item. */
+export interface MemoryLifecycle {
+  status: string
+  recallable: boolean
+  pinned: boolean
+  pin_affects: string
+  engine_state: string
+  remote_document_deleted: boolean
+  last_recalled_at: string | null
+  recall_count: number
+  lifecycle_reason: string | null
+}
+
+/** `memory_items` row, with `evidence_ids_json`/`receipt_json` decoded. */
+export interface MemoryItem {
+  memory_id: string
+  bank_id: string
+  scope_kind: string
+  project_id: string | null
+  task_id: string | null
+  memory_type: string
+  document_id: string
+  source_event_id: string
+  evidence_ids: unknown[]
+  origin_rule_id: string | null
+  origin_rule_version: number | null
+  origin_event_id: string | null
+  content_sha256: string
+  sanitized_text: string
+  status: string
+  pinned: boolean
+  revision: number
+  engine_state: string
+  receipt: JsonObject | null
+  last_error_code: string | null
+  safe_error_summary: string | null
+  remote_deleted_at: string | null
+  lifecycle_reason: string | null
+  last_recalled_at: string | null
+  recall_count: number
+  created_at: string
+  updated_at: string
+}
+
+/** The list endpoint adds `lifecycle` to each row; the detail endpoint does not. */
+export interface MemoryItemListRow extends MemoryItem {
+  lifecycle: MemoryLifecycle
+}
+
+/** `memory_query_traces` row, with the four `_json` columns decoded. */
+export interface MemoryTrace {
+  trace_id: string
+  mode: string
+  status: string
+  project_id: string | null
+  task_id: string | null
+  session_id: string | null
+  actor_id: string
+  query_sha256: string
+  query_length: number
+  requested_types: unknown[]
+  banks: unknown[]
+  filtered: unknown[]
+  budget_tokens: number | null
+  used_tokens: number
+  authority_refs: unknown[]
+  state_revision: number | null
+  error_code: string | null
+  safe_error_summary: string | null
+  created_at: string
+}
+
+/** The trace detail read adds `items`; the list row does not. */
+export interface MemoryTraceDetail extends MemoryTrace {
+  items: unknown[]
+}
+
+/** `health.report()` plus the handler's `non_authoritative`. */
+export interface MemoryHealth {
+  status: string
+  engine_id: string | null
+  configured: boolean
+  reachable: boolean | null
+  api_version: string | null
+  origin_host: string | null
+  features: JsonObject
+  last_check_at: string | null
+  last_success_at: string | null
+  last_error_code: string | null
+  safe_error_summary: string | null
+  jobs: MemoryJobCounts
+  items: MemoryHealthCounts
+  degraded: boolean
+  core_impact: string
+  deployment: JsonObject
+  checked_at: string
+  non_authoritative: boolean
+}

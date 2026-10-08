@@ -28,6 +28,15 @@ import type {
   EvidencePage,
   Health,
   Host,
+  MemoryHealth,
+  MemoryItem,
+  MemoryItemListRow,
+  MemoryJob,
+  MemoryJobAttempt,
+  MemoryJobCounts,
+  MemoryLifecycle,
+  MemoryTrace,
+  MemoryTraceDetail,
   MetaSchema,
   Project,
   ProjectPage,
@@ -255,6 +264,54 @@ export function makeEndpoints(client: CoreClient) {
       client.get<{ context: ContextPack }>(`/context/${id(contextPackId)}`, { signal }),
     getResume: (resumeId: string, signal?: AbortSignal) =>
       client.get<{ resume: Resume }>(`/resumes/${id(resumeId)}`, { signal }),
+
+    // P6-03b1: P4 memory reads. Seven GETs, all `memory:read`, all DEPENDENCY PENDING —
+    // the baseline Core has no /v1/memory/* route, so the proxy refuses them by name until
+    // an operator points it at a P4 Core with P6_ENABLE_P4_READS=1. There is deliberately
+    // no retry, no lifecycle command and no reflect here: those are writes (P6-03b2).
+    memoryHealth: (signal?: AbortSignal) =>
+      client.get<MemoryHealth>('/memory/health', { signal }),
+    listMemoryJobs: (
+      filters: { project_id?: string | null; status?: string | null } = {},
+      signal?: AbortSignal,
+    ) =>
+      client.get<{ jobs: MemoryJob[]; count: number; counts: MemoryJobCounts }>(
+        '/memory/jobs',
+        { query: { project_id: filters.project_id, status: filters.status }, signal },
+      ),
+    getMemoryJob: (jobId: string, signal?: AbortSignal) =>
+      client.get<{ job: MemoryJob; attempts: MemoryJobAttempt[] }>(
+        `/memory/jobs/${id(jobId)}`,
+        { signal },
+      ),
+    listMemoryItems: (
+      filters: { project_id?: string | null; status?: string | null } = {},
+      signal?: AbortSignal,
+    ) =>
+      client.get<{ items: MemoryItemListRow[]; count: number; non_authoritative: boolean }>(
+        '/memory/items',
+        { query: { project_id: filters.project_id, status: filters.status }, signal },
+      ),
+    getMemoryItem: (memoryId: string, signal?: AbortSignal) =>
+      client.get<{
+        memory: MemoryItem
+        sources: unknown[]
+        jobs: MemoryJob[]
+        recallable: boolean
+        lifecycle: MemoryLifecycle
+        engine_claim: string
+        non_authoritative: boolean
+      }>(`/memory/items/${id(memoryId)}`, { signal }),
+    listMemoryTraces: (
+      filters: { project_id?: string | null; task_id?: string | null } = {},
+      signal?: AbortSignal,
+    ) =>
+      client.get<{ traces: MemoryTrace[]; count: number }>('/memory/traces', {
+        query: { project_id: filters.project_id, task_id: filters.task_id },
+        signal,
+      }),
+    getMemoryTrace: (traceId: string, signal?: AbortSignal) =>
+      client.get<{ trace: MemoryTraceDetail }>(`/memory/traces/${id(traceId)}`, { signal }),
 
     listHosts: (signal?: AbortSignal) => client.get<{ hosts: Host[] }>('/hosts', { signal }),
     listActors: (signal?: AbortSignal) => client.get<{ actors: Actor[] }>('/actors', { signal }),

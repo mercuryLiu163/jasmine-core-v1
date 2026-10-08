@@ -42,6 +42,15 @@ export type Route =
   | { name: 'checkpoints'; taskId: string | null; checkpointId: string | null; sessionId: string | null }
   | { name: 'context'; contextPackId: string }
   | { name: 'resume'; resumeId: string }
+  // P6-03b1: P4 memory reads. Same arrangement as P6-03a's routes: the deep link is stable
+  // and the view says DEPENDENCY PENDING until a P4-enabled proxy is running.
+  | { name: 'memoryHealth' }
+  | { name: 'memoryJobs'; jobId: string | null }
+  | { name: 'memoryJob'; jobId: string }
+  | { name: 'memoryItems'; memoryId: string | null }
+  | { name: 'memoryItem'; memoryId: string }
+  | { name: 'memoryTraces'; traceId: string | null }
+  | { name: 'memoryTrace'; traceId: string }
   | { name: 'event'; eventId: string }
   | { name: 'pending'; key: string }
   | { name: 'unknown'; raw: string }
@@ -129,6 +138,22 @@ export function parseHash(hash: string): Route {
     const contextPackId = segment(parts[1])
     return contextPackId ? { name: 'context', contextPackId } : { name: 'unknown', raw }
   }
+  if (head === 'memory') {
+    const section = parts[1]
+    const ident = segment(parts[2])
+    if (section === 'health') return { name: 'memoryHealth' }
+    if (section === 'jobs') {
+      // `#/memory/jobs` is the list; `#/memory/jobs/{mjb}` is one job.
+      return ident === null ? { name: 'memoryJobs', jobId: null } : { name: 'memoryJob', jobId: ident }
+    }
+    if (section === 'items') {
+      return ident === null ? { name: 'memoryItems', memoryId: null } : { name: 'memoryItem', memoryId: ident }
+    }
+    if (section === 'traces') {
+      return ident === null ? { name: 'memoryTraces', traceId: null } : { name: 'memoryTrace', traceId: ident }
+    }
+    return { name: 'unknown', raw }
+  }
   if (head === 'resume') {
     const resumeId = segment(parts[1])
     return resumeId ? { name: 'resume', resumeId } : { name: 'unknown', raw }
@@ -186,6 +211,20 @@ export function hrefFor(route: Route): string {
       return `#/context/${encodeURIComponent(route.contextPackId)}`
     case 'resume':
       return `#/resume/${encodeURIComponent(route.resumeId)}`
+    case 'memoryHealth':
+      return '#/memory/health'
+    case 'memoryJobs':
+      return '#/memory/jobs'
+    case 'memoryJob':
+      return `#/memory/jobs/${encodeURIComponent(route.jobId)}`
+    case 'memoryItems':
+      return '#/memory/items'
+    case 'memoryItem':
+      return `#/memory/items/${encodeURIComponent(route.memoryId)}`
+    case 'memoryTraces':
+      return '#/memory/traces'
+    case 'memoryTrace':
+      return `#/memory/traces/${encodeURIComponent(route.traceId)}`
     case 'evidence':
       return `#/evidence${queryString({ evidence_id: route.evidenceId, task_id: route.taskId })}`
     case 'interpretations':
@@ -244,6 +283,13 @@ export const sourceHref = {
   contextPack: (contextPackId: string): string =>
     hrefFor({ name: 'context', contextPackId }),
   resume: (resumeId: string): string => hrefFor({ name: 'resume', resumeId }),
+  memoryHealth: (): string => hrefFor({ name: 'memoryHealth' }),
+  memoryJobs: (): string => hrefFor({ name: 'memoryJobs', jobId: null }),
+  memoryJob: (jobId: string): string => hrefFor({ name: 'memoryJob', jobId }),
+  memoryItems: (): string => hrefFor({ name: 'memoryItems', memoryId: null }),
+  memoryItem: (memoryId: string): string => hrefFor({ name: 'memoryItem', memoryId }),
+  memoryTraces: (): string => hrefFor({ name: 'memoryTraces', traceId: null }),
+  memoryTrace: (traceId: string): string => hrefFor({ name: 'memoryTrace', traceId }),
   review: (reviewId: string): string => hrefFor({ name: 'review', reviewId }),
   reviews: (projectId: string | null, taskId: string | null = null): string =>
     hrefFor({ name: 'reviews', projectId, taskId }),

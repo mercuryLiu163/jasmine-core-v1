@@ -14,6 +14,12 @@ import { useSession } from './app/session'
 import { SignIn } from './components/SignIn'
 import { Panel } from './components/States'
 import { CheckpointsView, ContextPackView, ResumeView } from './views/ContinuityViews'
+import {
+  MemoryHealthView,
+  MemoryItemsView,
+  MemoryJobsView,
+  MemoryTracesView,
+} from './views/MemoryViews'
 import { ConversationView } from './views/ConversationView'
 import { EventView } from './views/EventView'
 import { EvidenceView } from './views/EvidenceView'
@@ -168,6 +174,22 @@ function renderRoute(route: Route): JSX.Element {
       return <ContextPackView contextPackId={route.contextPackId} />
     case 'resume':
       return <ResumeView resumeId={route.resumeId} />
+    // P6-03b1: P4 memory reads. Read-only by construction — the retry, lifecycle and
+    // reflect actions are P6-03b2 writes and have no route here at all.
+    case 'memoryHealth':
+      return <MemoryHealthView />
+    case 'memoryJobs':
+      return <MemoryJobsView jobId={route.jobId} />
+    case 'memoryJob':
+      return <MemoryJobsView jobId={route.jobId} />
+    case 'memoryItems':
+      return <MemoryItemsView memoryId={route.memoryId} />
+    case 'memoryItem':
+      return <MemoryItemsView memoryId={route.memoryId} />
+    case 'memoryTraces':
+      return <MemoryTracesView traceId={route.traceId} />
+    case 'memoryTrace':
+      return <MemoryTracesView traceId={route.traceId} />
     case 'pending':
       return <PendingView pendingKey={route.key} />
     case 'unknown':
