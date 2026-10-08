@@ -184,7 +184,7 @@ the `reason`/`idempotency_key` fields the interpretation/review writes require.
 | Manual reapply (`/v1/resolutions/{id}/manual-reapply`) | P6-02 later | Needs its own frozen payload/permission table and an explicit operator decision; a web button cannot produce the ADR 0007 human-prompt provenance this one records |
 | Checkpoint compare | P3 | **Read-only delivered in P6-03a** against the P3 contract; the compare write and any restoration remain P3's |
 | Context inspector (actual injection) | P3 | **Read-only pack delivered in P6-03a**; the persisted injection receipt remains P3's |
-| Memory jobs / recall / management | P4 | Memory adapter read + management API |
+| Memory jobs / recall / management | P4 | **Not started.** P4's API exists only on the unmerged `p4-integration` branch (schema 11); the baseline serves none of its 13 routes. Scope, dependency check and acceptance criteria: [`P6-03B-PLAN.md`](P6-03B-PLAN.md) |
 | Validation inspector (run list, artifacts) | P7-01 | minimal validation read API + safe artifact contract |
 | online / backup / storage | P5 / P7 | health read contracts |
 | Task / Step / Evidence-confirmation writes | P6-02 later | Still gated on an independent permission Gate; `evidence/confirm` additionally needs a human prompt the browser cannot mint |

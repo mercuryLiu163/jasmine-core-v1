@@ -30,6 +30,29 @@ frozen contract records the result in `scope` + `extra_scopes`. The route table 
 one scope per route and would have under-stated every one of them, which is precisely the
 defect an independent review found in the first cut of this contract.
 
+### The taskbook's scope list is a subset of this, deliberately
+
+The P6-03a taskbook words the endpoint scopes as `context:read`, `checkpoint:read`, and
+`resume:read + checkpoint:read`. The frozen contract records **more than that**, because the
+taskbook list names only the *slice-specific* scope of each route while P3's handlers also
+require the five shared scopes:
+
+| Route | Taskbook wording | Contract (derived from P3) |
+| --- | --- | --- |
+| `GET /v1/context/{ctx}` | `context:read` | `context:read`, `checkpoint:read`, + five shared |
+| `GET /v1/tasks/{tsk}/checkpoints/latest` | `checkpoint:read` | `checkpoint:read` + five shared |
+| `GET /v1/checkpoints/{ckp}` | `checkpoint:read` | `checkpoint:read` + five shared |
+| `GET /v1/resumes/{rms}` | `resume:read + checkpoint:read` | `resume:read`, `checkpoint:read`, + five shared |
+
+This divergence is **intentional and settled**: the operator decided to keep the full derived
+set, on the grounds that the UI must reflect what Core actually requires, not what a summary
+of it omits. The taskbook's wording is recorded here so the omission is visible rather than
+silently corrected — a future reader comparing the two should find this table, not a puzzle.
+
+The practical consequence is that a token carrying exactly the taskbook's scopes is refused
+by real P3 (and by the labelled fixture, which enforces the contract). Granting only
+`context:read` for a Context Pack read does not work.
+
 So the four views are delivered, wired, and exercised — against a **simulated fixture**,
 with the missing dependency marked prominently in the product itself. That is the honest
 maximum for this milestone without P3.
@@ -145,6 +168,44 @@ pending paths are appended only when `P6_ENABLE_P3_READS=1` is set:
 
 `tests/p6/test_p3_contract_snapshot.py` asserts the pending patterns are **absent** from the
 live allowlist, so enabling them cannot happen by drift or by a careless edit to `paths`.
+
+### The live entry stays closed until P3 lands — deliberately
+
+The operator's decision is to keep this entrance shut, and it is **not** unlocked by the
+existence of this switch. `P6_ENABLE_P3_READS` is a Gate-time affordance for driving the
+views against the labelled fixture; it is not a production readiness flag.
+
+The order for opening it is fixed, and each step is a precondition for the next:
+
+1. P3 is merged into the target baseline this dashboard is served against;
+2. the contract is **re-derived** from that merged code (`scripts/p6/p3_contract.py --write`)
+   and the drift guard run against the merged baseline rather than the branch;
+3. the four reads are independently validated against a **real Core** with a real token —
+   not the fixture — including the scope refusals and the empty-checkpoint case;
+4. only then is `P6_ENABLE_P3_READS` treated as a normal configuration option.
+
+Until step 3 has actually happened, any claim that these views work against real P3 is
+unverified. Today they are exercised against a fixture whose payloads are *shaped* like P3's
+and whose values are not P3's, which is a different and much weaker statement.
+
+## Historical failure: `faf6800` must not be used as an acceptance candidate
+
+Commit `faf6800` is **broken** and is retained only as failure history. It was created by
+accident when a `git add -A` swept in an independent reviewer's in-flight falsification edit —
+`isDependencyPending` left as `error.code === PROXY_PATH_REFUSED && false` — so that commit's
+tree fails four tests. It is reverted in `61a96af`.
+
+Consequences, stated plainly so nobody has to rediscover them:
+
+* do not validate, cite, or offer `faf6800` as an acceptance candidate;
+* the verdicts recorded for P6-03a bind the current tip and the frozen bundle's commit, not
+  that one;
+* the process correction is to stage **explicit paths** rather than `git add -A` while an
+  independent reviewer may be editing the same worktree. The commit that follows `faf6800`
+  was made that way, and every commit since has been.
+
+This is recorded in a *tracked* file on purpose: the evidence index and bundle READMEs that
+also mention it live under `validation-runs/`, which is gitignored.
 
 ## Evidence
 
