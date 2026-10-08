@@ -217,6 +217,37 @@ describe('a real P3 read renders the record it was given', () => {
     expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
   })
 
+  it('shows the identity, reason, revision and versions a reader needs', async () => {
+    // Requirement: the view shows scope / source Event / actor / host / reason / revision /
+    // the three digests / projection and workspace version. The digests have their own
+    // test; these are the rows that make the record attributable to a real event.
+    const user = userEvent.setup()
+    await enter(user, `#/checkpoints?checkpoint_id=${CHECKPOINT}`, {
+      ...SIGNED_IN,
+      ['GET /v1/checkpoints/' + CHECKPOINT]: { body: { checkpoint: checkpoint() } },
+    })
+    const panel = await screen.findByRole('region', { name: /读取 Checkpoint/ })
+    await waitFor(() => expect(panel.textContent).toContain(CHECKPOINT))
+
+    const rows = new Map<string, string>()
+    for (const row of panel.querySelectorAll('dl.kv > div')) {
+      rows.set(row.querySelector('dt')?.textContent ?? '', row.querySelector('dd')?.textContent ?? '')
+    }
+    // The source event the checkpoint was taken at, and who/where recorded it.
+    expect(rows.get('source Event')).toContain('evt_01M4B6VGC29ESRDRQR62DX8AK9')
+    expect(rows.get('command Event')).toContain('evt_01M4B6VGC29ESRDRQR62DX8AK8')
+    // actor and host share one row; both ids must be on it.
+    expect(rows.get('actor / host')).toContain('act_01M4B6VGC29ESRDRQR62DX8AK8')
+    expect(rows.get('actor / host')).toContain('hst_01M4B6VGC29ESRDRQR62DX8AK8')
+    expect(rows.get('reason')).toContain('SESSION_STOP')
+    expect(rows.get('task_revision')).toContain('r7')
+    // Projection and workspace versions: the projection version is stated, and both the
+    // projection and the workspace are shown, not merely digested.
+    expect(panel.textContent).toContain('jasmine.task-snapshot.v1')
+    expect(panel.textContent).toContain('projection(')
+    expect(panel.textContent).toContain('workspace')
+  })
+
   it('renders "no checkpoint yet" as an empty result, not an error', async () => {
     const user = userEvent.setup()
     await enter(user, `#/checkpoints?task_id=${TASK}`, {
