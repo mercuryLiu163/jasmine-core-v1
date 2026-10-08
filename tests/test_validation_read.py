@@ -47,8 +47,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_SCRIPT = REPO_ROOT / "scripts" / "p7" / "p7_contract.py"
 
 #: The operator's source repository. Read-only; the tree is gitignored, so a
-#: checkout without it skips the real-record test rather than failing.
-REAL_ROOT = Path("/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs")
+#: checkout without it skips the real-record test rather than failing. On this
+#: machine it is the shared checkout; anywhere else, point `P7_REAL_RUNS_ROOT` at
+#: a tree that holds real P0 records and the criterion-2/6 assertions run there
+#: instead of skipping silently.
+REAL_ROOT = Path(os.environ.get("P7_REAL_RUNS_ROOT")
+                 or "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs")
 
 RUN_ONE = "run-20261008T000001Z"
 RUN_TWO = "run-20261008T000002Z"
