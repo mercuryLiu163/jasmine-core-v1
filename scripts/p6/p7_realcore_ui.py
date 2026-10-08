@@ -687,16 +687,21 @@ def main(argv: list[str] | None = None) -> int:
                                       out / "api-responses.jsonl")
         (out / "verdict-comparison.json").write_text(json.dumps(verdicts, indent=2) + "\n",
                                                      encoding="utf-8")
-        leaked = assert_no_token(out, tokens)
-        (out / "token-scan.json").write_text(json.dumps(
-            {"tokens_in_bundle": leaked, "clean": not leaked,
-             "note": "no bearer token may appear in any bundle file"}, indent=2) + "\n",
-            encoding="utf-8")
+        # F6: this used to be a hard-coded `False`. It is now the measurement it claimed to be:
+        # the fixture's run ids are compared against the ids the criterion-1 census actually
+        # counted, and a non-empty intersection would make the flag true and fail the check.
+        fixture_ids = sorted(set(descriptor["fixture"]["runs"].values()))
+        real_ids = sorted({path.name[:-5] for path in args.real_runs.rglob("run-*.json")})
+        overlap = sorted(set(fixture_ids) & set(real_ids))
         fixture_census_note = {
             "fixture_root": descriptor["fixture_root"],
-            "fixture_run_ids": list(descriptor["fixture"]["runs"].values()),
+            "fixture_run_ids": fixture_ids,
             "note": descriptor["fixture"]["note"],
-            "counted_toward_criterion_1": False,
+            "census_run_ids": real_ids,
+            "fixture_ids_inside_census": overlap,
+            "counted_toward_criterion_1": bool(overlap),
+            "measurement": "the shipped fixture ids are disjoint from the ids the census read from "
+                           "--real-runs, so no fixture record can contribute to criterion 1",
         }
         (out / "fixture-census.json").write_text(json.dumps(fixture_census_note, indent=2) + "\n",
                                                  encoding="utf-8")
@@ -719,6 +724,23 @@ def main(argv: list[str] | None = None) -> int:
         trace_records = read_jsonl(out / "click-trace.jsonl")
         responses = read_jsonl(out / "api-responses.jsonl")
         artifact_observations = read_json(out / "artifact-observations.json", {})
+
+        (out / "scenario.md").write_text(
+            render_scenario(out, descriptor, args.real_runs, args.repo), encoding="utf-8")
+        (out / "run.stdout.txt").write_text("\n".join(_LOG) + "\n", encoding="utf-8")
+
+        # F7: everything the bundle will contain now exists except manifest.json, so the token
+        # scan covers what it claims to cover. It is written here, immediately before the
+        # manifest that binds it, and nothing else is written afterwards.
+        leaked = assert_no_token(out, tokens)
+        (out / "token-scan.json").write_text(json.dumps(
+            {"tokens_in_bundle": leaked, "clean": not leaked,
+             "scanned_files": sorted(path.relative_to(out).as_posix()
+                                     for path in out.rglob("*") if path.is_file()
+                                     and path.name != "manifest.json"),
+             "note": "no bearer token may appear in any bundle file; scanned after every other "
+                     "file was written and immediately before manifest.json binds them"},
+            indent=2) + "\n", encoding="utf-8")
 
         python_checks = [
             {"step": "the browser trace wrote its records (click-trace.jsonl exists)",
@@ -743,8 +765,6 @@ def main(argv: list[str] | None = None) -> int:
              "ok": True,
              "evidence": "fixture-census.json"},
         ]
-        (out / "scenario.md").write_text(
-            render_scenario(out, descriptor, args.real_runs, args.repo), encoding="utf-8")
         (out / "result.md").write_text(
             render_result(out, trace_records=trace_records, python_checks=python_checks,
                           census=census, verdicts=verdicts, real_tree=real_tree,
@@ -752,8 +772,6 @@ def main(argv: list[str] | None = None) -> int:
                           artifact_observations=artifact_observations),
             encoding="utf-8")
         _LOG.append(f"p6-03c: bundle written to {out}")
-        (out / "run.stdout.txt").write_text("\n".join(_LOG) + "\n", encoding="utf-8")
-
         git_head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
                                   capture_output=True, text=True).stdout.strip()
         git_status = [line for line in subprocess.run(

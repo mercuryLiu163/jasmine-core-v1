@@ -478,6 +478,103 @@ describe('the run list renders what the API said, including what is unusable', (
     expect(within(panel).getByTestId('validation-summary').textContent).toContain('duplicate_count')
   })
 
+  it('does not claim the root is empty when acl filters every record out (AD1)', async () => {
+    // Core computes `empty_reason` over the VISIBLE set so that a hidden record cannot be
+    // probed for. Under `grant_filtered`, `no_run_shaped_files` therefore means "none you may
+    // read", and the page must not turn it into a statement about the operator's own disk.
+    const user = userEvent.setup()
+    await enter(user, '#/validation/runs?project=prj_01M4B6VGC29ESRDRQR62DX8AK8', {
+      'GET /v1/validation/runs': {
+        body: page({
+          runs: [],
+          count: 0,
+          total: 0,
+          visibility: 'grant_filtered',
+          empty_reason: 'no_run_shaped_files',
+        }),
+      },
+    })
+    const panel = await screen.findByRole('region', { name: /Validation Runs/ })
+    const reason = await within(panel).findByTestId('empty-reason')
+    expect(reason.textContent).toContain('no_run_shaped_files')
+    expect(reason.textContent).toContain('按「可见集合」算')
+    expect(reason.textContent).not.toContain('运行根里没有 run-shaped 文件')
+  })
+
+  it('says a duplicate row is parseable instead of claiming its verdict is unavailable', async () => {
+    const user = userEvent.setup()
+    await enter(user, '#/validation/runs', {
+      'GET /v1/validation/runs': {
+        body: page({
+          runs: [
+            runRow({
+              record_status: 'duplicate',
+              verdict: 'PASS',
+              duplicate_reason: '2 files share this stem',
+            }),
+          ],
+          count: 1,
+          total: 1,
+          duplicate_count: 1,
+        }),
+      },
+    })
+    const panel = await screen.findByRole('region', { name: /Validation Runs/ })
+    const table = await within(panel).findByTestId('validation-runs')
+    const note = within(table).getByTestId('run-row-unusable-reason').textContent ?? ''
+    expect(note).toContain('可解析')
+    expect(note).toContain('不是权威结论')
+    expect(note).toContain('409 validation_run_ambiguous')
+    expect(note).not.toContain('都不可用')
+  })
+
+  it('shows the recorded verdict even when it disagrees with the cases (no re-derivation)', async () => {
+    // The run's recorded verdict is PASS while its only case is BLOCKED, so the API reports
+    // `verdict_consistent: false` and still serves PASS. A view that re-derived the run verdict
+    // from the cases would show BLOCKED for the run: this asserts the recorded value is what
+    // the run row displays.
+    const user = userEvent.setup()
+    await enter(user, `#/validation/runs/${RUN_A}`, {
+      ['GET ' + detailPath]: {
+        body: detail({
+          verdict: 'PASS',
+          verdict_consistent: false,
+          cases: [caseFixture({ verdict: 'BLOCKED' })],
+        }),
+      },
+    })
+    const panel = await screen.findByRole('region', { name: /Validation Run/ })
+    // The run's own row is the first occurrence; the case card carries the same label for the
+    // case's verdict, which is a different value.
+    const [runVerdictRow] = within(panel).getAllByText('verdict(按记录)')
+    expect(runVerdictRow?.closest('div')?.textContent).toContain('PASS')
+    expect(within(panel).getByTestId('verdict-consistent').textContent).toContain('false')
+    expect(panel.textContent).toContain('本页仍按记录展示,不替你改判')
+    // The case's own BLOCKED verdict is still shown: it is the case's value, not a verdict the
+    // view computed for the run.
+    expect(within(panel).getAllByText(/BLOCKED/).length).toBeGreaterThan(0)
+  })
+
+  it('echoes an unrecognised missing_reason verbatim instead of a hard-coded string', async () => {
+    const user = userEvent.setup()
+    const arbitrary = 'the recorder said something this build has never seen'
+    await enter(user, `#/validation/runs/${RUN_A}`, {
+      ['GET ' + detailPath]: {
+        body: detail({
+          cases: [
+            caseFixture({
+              chain: chainFixture({
+                agent: { present: false, source: 'case.agent_response', missing_reason: arbitrary },
+              }),
+            }),
+          ],
+        }),
+      },
+    })
+    const panel = await screen.findByRole('region', { name: /Validation Run/ })
+    expect(within(panel).getByTestId('chain-agent').textContent).toContain(arbitrary)
+  })
+
   it('tells a filtered-empty result apart from an empty root, and shows grant filtering', async () => {
     const user = userEvent.setup()
     await enter(user, '#/validation/runs', {

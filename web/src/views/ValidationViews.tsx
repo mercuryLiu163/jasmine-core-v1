@@ -118,9 +118,16 @@ function isPendingError(error: CoreApiError | null): boolean {
  * them out instead of printing the token alone. The token is echoed first so an operator
  * can still grep for exactly what Core said.
  */
-function emptyReasonText(reason: string | undefined): string {
+function emptyReasonText(reason: string | undefined, visibility?: string): string {
   if (reason === 'no_run_shaped_files') {
-    return '运行根里没有 run-shaped 文件:这是一个空集,不是遍历失败(遍历不完整会返回 503,而不是空)。'
+    // ADR 0015 §5.1 (AD1): Core computes `empty_reason` over the *visible* set, not the raw
+    // walk, so a hidden record cannot be probed for. In `acl` mode "no run-shaped files"
+    // therefore means "none you may read", and saying the root is empty would be a false
+    // statement about the operator's own disk.
+    return visibility === 'grant_filtered'
+      ? '没有你可见的 run-shaped 记录:empty_reason 是按「可见集合」算的,所以这只说明当前 actor 一条都读不到,' +
+          '运行根里是否还有记录,这个字段不会告诉你(这正是 acl 模式不给存在性预言机的方式)。'
+      : '运行根里没有 run-shaped 文件:这是一个空集,不是遍历失败(遍历不完整会返回 503,而不是空)。'
   }
   if (reason === 'all_filtered_out') {
     return '有可见的 run-shaped 记录,但当前过滤条件把它们全部排除:这不是「没有记录」。'
@@ -264,8 +271,20 @@ function RunRow({ row }: { row: ValidationRunRow }): JSX.Element {
             {reason ? <> · {reason}</> : null} · record_sha256{' '}
             <code className="wrap">{row.record_sha256}</code>
             <div className="muted">
-              这一行仍被列出(不是空集,也没有被藏起来),但它的 verdict / mode / attribution /
-              evidence_grade / manifest_status / verdict_consistent 都不可用,所以显示为 —。
+              {row.record_status === 'duplicate' ? (
+                <>
+                  这一行仍被列出(不是空集,也没有被藏起来),而且它**是可解析的**:上面显示的
+                  verdict 是其中一份文件的原值,不是权威结论 —— 同一个 stem 有多份可解析记录时,
+                  Core 拒绝在它们之间做选择,详情路由会返回 409 validation_run_ambiguous。
+                  mode / attribution / evidence_grade / manifest_status 才是不可用的(显示为 —)。
+                </>
+              ) : (
+                <>
+                  这一行仍被列出(不是空集,也没有被藏起来),但它**无法解析**,所以它的
+                  verdict / mode / attribution / evidence_grade / manifest_status /
+                  verdict_consistent 都不可用,显示为 —。
+                </>
+              )}
             </div>
           </td>
         </tr>
@@ -339,7 +358,7 @@ function ListSummary({ page }: { page: ValidationRunPage }): JSX.Element {
       />
       <p className="state state--meta" data-testid="empty-reason">
         <strong>empty_reason:</strong> <code>{page.empty_reason ?? '(未给出)'}</code> ——{' '}
-        {emptyReasonText(page.empty_reason)}
+        {emptyReasonText(page.empty_reason, page.visibility)}
       </p>
       <JsonBlock value={page.discovery} label="discovery(运行根诊断,非按项目)" />
       {page.ignored_samples.length > 0 ? (
@@ -501,7 +520,7 @@ export function ValidationRunsView({
           {!pending && runs.error === null && page !== null ? <ListSummary page={page} /> : null}
 
           {!pending && runs.error === null && !runs.loading && runs.items.length === 0 ? (
-            <Empty what="Validation run" hint={emptyReasonText(page?.empty_reason)} />
+            <Empty what="Validation run" hint={emptyReasonText(page?.empty_reason, page?.visibility)} />
           ) : null}
 
           {!pending && runs.error === null && runs.items.length > 0 ? <RunTable rows={runs.items} /> : null}
@@ -598,7 +617,11 @@ function SectionsTable({ sections }: { sections: ValidationSections }): JSX.Elem
                   {isContext ? (
                     <div className="muted" data-testid="context-pack-present">
                       context_pack_present ={' '}
-                      <strong>{String(section.context_pack_present === true)}</strong>
+                      <strong>
+                        {section.context_pack_present === undefined
+                          ? '未给出'
+                          : String(section.context_pack_present === true)}
+                      </strong>
                       {section.present && section.context_pack_present !== true
                         ? ' —— 这一段被记录了,但里面没有 context pack,不能当作 pack'
                         : ''}
