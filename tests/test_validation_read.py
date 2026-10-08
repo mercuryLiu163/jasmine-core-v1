@@ -37,7 +37,12 @@ from test_api import ACTOR, HOST, ApiTestCase  # noqa: E402
 from jasmine_core import auth, canonical, db, errors, fingerprint, ids, registry  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "p7"
-ARTIFACTS = FIXTURES / "artifacts"
+#: Fixture *source* files. NOT named `artifacts/`: `.gitignore` excludes any
+#: directory with that name, so the files would be missing from a clone and the
+#: committed tests could not run. The manifest paths inside a run stay
+#: `artifacts/...`; this is only where the bytes are kept before being copied
+#: into a temporary run directory.
+FILES = FIXTURES / "files"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_SCRIPT = REPO_ROOT / "scripts" / "p7" / "p7_contract.py"
 
@@ -131,7 +136,7 @@ class ValidationApiTestCase(ApiTestCase):
             destination = run_dir / rel_path
             destination.parent.mkdir(parents=True, exist_ok=True)
             if fixture is not None:
-                shutil.copyfile(ARTIFACTS / fixture, destination)
+                shutil.copyfile(FILES / fixture, destination)
             if content is not None:
                 destination.write_bytes(content)
         actual = (run_dir / rel_path).read_bytes() if os.path.exists(run_dir / rel_path) else b""
@@ -175,7 +180,7 @@ class ValidationApiTestCase(ApiTestCase):
         files = [
             self.artifact_entry(run_dir, "art_good", "artifacts/good.txt", fixture="good.txt"),
             self.artifact_entry(run_dir, "art_assign", "artifacts/assign.log",
-                                fixture="assign.log"),
+                                fixture="assign.txt"),
             self.artifact_entry(run_dir, "art_plain", "artifacts/plain.txt", fixture="plain.txt"),
             self.artifact_entry(run_dir, "art_binary", "artifacts/binary.bin",
                                 fixture="binary.bin", media_type="application/octet-stream"),
@@ -297,7 +302,7 @@ class TheFiveRoutes(ValidationApiTestCase):
         self.build_bundle()
         # `looks_like_credential` does NOT match an assignment-shaped secret: the
         # original gate is `redact_text(text) == text`, which is stronger.
-        text = (ARTIFACTS / "assign.log").read_text()
+        text = (FILES / "assign.txt").read_text()
         self.assertFalse(canonical.looks_like_credential(text))
         self.assertNotEqual(canonical.redact_text(text), text)
         with self.env():
@@ -333,7 +338,7 @@ class TheFiveRoutes(ValidationApiTestCase):
         self.assertEqual(status, 200, content)
         self.assertEqual(content["form"], "original")
         self.assertTrue(content["content_is_original"])
-        self.assertEqual(content["content"], (ARTIFACTS / "plain.txt").read_text())
+        self.assertEqual(content["content"], (FILES / "plain.txt").read_text())
         self.assertEqual(content["original_sha256"], content["masked_sha256"])
 
     def test_content_response_headers_are_not_renderable(self) -> None:
@@ -465,7 +470,7 @@ class ArtifactNegatives(ValidationApiTestCase):
                                 declared_sha="2" * 64, declared_bytes=3),
             self.artifact_entry(run_dir, "art_tampered", "artifacts/tampered.txt",
                                 fixture="tampered.txt",
-                                declared_sha=sha256_file(ARTIFACTS / "tampered-original.txt"),
+                                declared_sha=sha256_file(FILES / "tampered-original.txt"),
                                 declared_bytes=len(b"original bytes\n")),
         ]
         self.write_manifest(run_dir, RUN_ONE, files)
