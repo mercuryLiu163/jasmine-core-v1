@@ -156,7 +156,7 @@ live allowlist, so enabling them cannot happen by drift or by a careless edit to
   `validation-runs/p6/P6-02B-INDEX.md`.
 * The product asset was rebuilt from committed source and compared file for file against the
   tree the runs served, so the evidence comes from the commit and not from a stale build.
-* Component tests: `web/tests/p3Views.test.tsx` (26), `web/tests/p3Reads.test.ts` (15),
+* Component tests: `web/tests/p3Views.test.tsx` (27), `web/tests/p3Reads.test.ts` (15),
   `web/tests/p3ReadsCoreProxy.test.ts` (9) — the last covers the Vite-plugin host, which had
   no test until review pointed out that only `serve.mjs` was gated by one.
 * Contract tests: `tests/p6/test_p3_contract_snapshot.py` (16),
@@ -191,7 +191,7 @@ four things worth recording rather than quietly fixing:
   returns objects, so the "lists next_actions" evidence exercised a branch real P3 never
   reaches. `section_metrics` and `omissions` were invented too. The fixture and the view now
   use P3's real key sets for everything the UI renders, and a test pins each mirrored key set
-  to P3's source (`continuity.next_actions`, `continuity._comparison`,
+  to P3's source (`continuity.next_actions`, `continuity._compare_checkpoint`,
   `context.renderer.render`). That test reads P3's source through git rather than comparing
   to a hardcoded copy, and skips loudly where the P3 ref is absent — a claim the review
   correctly rejected when the test was only checking literals. A nested shape this build does
@@ -202,7 +202,8 @@ A third pass found the pages said PARTIAL / DEPENDENCY_PENDING only through the 
 when the proxy *refuses* the path — so against a P3-enabled proxy they rendered a populated
 record with no standing marker, and a screenshot of that state invited the "P6 passed" reading
 this milestone forbids. Each view now carries a `slice-status` line stating the status and the
-unmerged source commit whether or not the read succeeded.
+unmerged source commit whenever a record renders — so the status is never absent on a
+populated read, and on a refused one the dependency panel states it instead.
 
 That pass also found the view over-refusing: a malformed `task_id` beside a valid
 `checkpoint_id` blocked the record, even though the by-id read never uses `task_id`. A
