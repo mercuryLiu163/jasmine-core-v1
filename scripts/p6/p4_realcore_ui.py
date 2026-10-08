@@ -187,7 +187,14 @@ def build_dashboard(work: Path, node_modules: Path) -> Path:
     archive = subprocess.run(["git", "-C", str(REPO_ROOT), "archive", "HEAD"],
                              check=True, capture_output=True)
     subprocess.run(["tar", "-x", "-C", str(work)], input=archive.stdout, check=True)
-    os.symlink(args.node_modules, work / "web" / "node_modules")
+    # `node_modules` is this function's parameter. The plumbing that made a fresh worktree
+    # buildable changed the call site to pass `args.node_modules` but left the body reading the
+    # enclosing `args`, which does not exist here: the whole UI pass died with a `NameError`
+    # before it built anything. Assert the directory too — a symlink to nothing fails later, in
+    # vite, where the cause is much harder to read.
+    if not node_modules.is_dir():
+        raise SystemExit(f"--node-modules {node_modules} is not a directory")
+    os.symlink(node_modules, work / "web" / "node_modules")
     subprocess.run(["npx", "vite", "build"], cwd=work / "web", check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return work / "web" / "dist"
