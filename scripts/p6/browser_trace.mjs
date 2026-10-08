@@ -2099,6 +2099,28 @@ async function main() {
        * *before* the next submit's response arrives. Counting the requests is what keeps this
        * section from asserting a stale render and calling it a second write.
        */
+      /** Poll a Node-side counter (the CDP event log, not the page) until it reaches `expected`. */
+      const waitForCount = async (counter, expected, label) => {
+        for (let attempt = 0; attempt < 150; attempt += 1) {
+          if (counter() >= expected) return
+          await sleep(100)
+        }
+        throw new Error(`timed out waiting for ${label}`)
+      }
+      /**
+       * Force the readback: click the write panel's own re-read button and wait for the GET.
+       *
+       * The panels do not reload automatically — an automatic reload would hide whether the
+       * operator's read happened at all, and the criterion is "the object is re-read *after a
+       * forced reload*". Asking the page who it is reading from is the whole point.
+       */
+      const readBack = async (panelTitle, method, path, expected) => {
+        await clickByText(cdp, `[data-write-panel=${JSON.stringify(panelTitle)}] button`,
+          '从 Core 重新读取')
+        await waitForCount(
+          () => requests.filter((r) => r.method === method && r.path === path).length,
+          expected, `readback ${method} ${path}`)
+      }
       const waitForPost = async (suffix, expected) => {
         for (let attempt = 0; attempt < 120; attempt += 1) {
           if (writeRequests(suffix).length >= expected) return
@@ -2139,6 +2161,8 @@ async function main() {
         await setControl('[data-testid="write-reason"]', 'gate: pin through the panel', 'HTMLInputElement')
         await clickSubmit('Memory 生命周期写入 (memory:manage)')
         await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '已提交')
+        await readBack('Memory 生命周期写入 (memory:manage)', 'GET', `/v1/memory/items/${MITEM}`,
+          readsBefore + 1)
         const pinRoute = routeFor('/pin')
         const pinEvidence = await evidenceFor('/pin')
         const pinPayload = assertPayload('/pin', pinEvidence?.requestBody ?? null, pinRoute)
@@ -2179,6 +2203,8 @@ async function main() {
           await clickSubmit('Memory 生命周期写入 (memory:manage)')
           await waitForPost(`/${command}`, postsBefore + 1)
           await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '已提交')
+          await readBack('Memory 生命周期写入 (memory:manage)', 'GET',
+            `/v1/memory/items/${MITEM}`, reads + 1)
           const evidence = await evidenceFor(`/${command}`)
           const payload = assertPayload(`/${command}`, evidence?.requestBody ?? null, route)
           trace.record(
@@ -2200,6 +2226,8 @@ async function main() {
         await clickSubmit('Memory retry (memory:manage)')
         await waitForPost('/retry', 1)
         await waitForWriteResult('Memory retry (memory:manage)', '已提交')
+        await readBack('Memory retry (memory:manage)', 'GET', `/v1/memory/jobs/${MJOB}`,
+          jobReads + 1)
         const retryRoute = routeFor('/retry')
         const retryEvidence = await evidenceFor('/retry')
         const retryPayload = assertPayload('/retry', retryEvidence?.requestBody ?? null, retryRoute)
@@ -2454,8 +2482,12 @@ async function main() {
           const postsBefore = writeRequests(`/${command}`).length
           await setControl('[data-testid="lifecycle-command"]', command, 'HTMLSelectElement')
           await clickSubmit('Memory 生命周期写入 (memory:manage)')
+          const itemReads = requests.filter((request) => request.method === 'GET' &&
+            request.path === `/v1/memory/items/${MITEM}`).length
           await waitForPost(`/${command}`, postsBefore + 1)
           await waitForWriteResult('Memory 生命周期写入 (memory:manage)', '已提交')
+          await readBack('Memory 生命周期写入 (memory:manage)', 'GET',
+            `/v1/memory/items/${MITEM}`, itemReads + 1)
           const evidence = await evidenceFor(`/${command}`)
           destructive.push({
             command,
