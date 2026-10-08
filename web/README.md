@@ -208,7 +208,7 @@ against the operator's own Core. `P6` as a stage is not complete. Details, evide
 and the side-effect finding: `P6-02-COMPLIANCE.md`.
 
 `P6-03a (Checkpoint / Context Pack / Resume reads): PARTIAL / DEPENDENCY_PENDING`.
-The four read-only views are implemented and exercised in a real browser — a 14/14
+The four read-only views are implemented and exercised in a real browser — a 15/15
 click-through Gate, three times with identical step sequences — but **P3 is not merged**,
 so the Core behind that Gate was a labelled simulated fixture, not P3 code. Nothing here
 verifies P3, and `P6-03a` is not complete. The contract is derived from the P3 branch and

@@ -148,7 +148,7 @@ live allowlist, so enabling them cannot happen by drift or by a careless edit to
 
 ## Evidence
 
-* Browser click-through Gate, **14/14**, three times with identical step sequences, run
+* Browser click-through Gate, **15/15**, three times with identical step sequences, run
   from an isolated `git archive` of the commit with its own fixture, proxy and ports:
   `validation-runs/p6/<stamp>-p6-03a-clickthrough/` (+ `-stability1`, `-stability2`), with
   `README.md`, `BUNDLE-FROZEN.json`, `click-trace.jsonl`, `browser-requests.jsonl` and
@@ -156,7 +156,7 @@ live allowlist, so enabling them cannot happen by drift or by a careless edit to
   `validation-runs/p6/P6-02B-INDEX.md`.
 * The product asset was rebuilt from committed source and compared file for file against the
   tree the runs served, so the evidence comes from the commit and not from a stale build.
-* Component tests: `web/tests/p3Views.test.tsx` (23), `web/tests/p3Reads.test.ts` (15),
+* Component tests: `web/tests/p3Views.test.tsx` (26), `web/tests/p3Reads.test.ts` (15),
   `web/tests/p3ReadsCoreProxy.test.ts` (9) — the last covers the Vite-plugin host, which had
   no test until review pointed out that only `serve.mjs` was gated by one.
 * Contract tests: `tests/p6/test_p3_contract_snapshot.py` (16),
@@ -198,7 +198,13 @@ four things worth recording rather than quietly fixing:
   not recognise renders as JSON rather than being dropped. Values remain the fixture's — it
   has no Truth store, and this document says so rather than letting the distinction blur.
 
-A later review pass also found the view over-refusing: a malformed `task_id` beside a valid
+A third pass found the pages said PARTIAL / DEPENDENCY_PENDING only through the panel shown
+when the proxy *refuses* the path — so against a P3-enabled proxy they rendered a populated
+record with no standing marker, and a screenshot of that state invited the "P6 passed" reading
+this milestone forbids. Each view now carries a `slice-status` line stating the status and the
+unmerged source commit whether or not the read succeeded.
+
+That pass also found the view over-refusing: a malformed `task_id` beside a valid
 `checkpoint_id` blocked the record, even though the by-id read never uses `task_id`. A
 malformed id now blocks only when the read that will run actually needs it; the others are
 reported as ignored rather than dropped in silence.
