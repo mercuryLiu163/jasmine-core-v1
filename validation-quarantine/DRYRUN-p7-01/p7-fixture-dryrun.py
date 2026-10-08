@@ -54,6 +54,11 @@ def build():
         "2026-10-08 INFO starting\nAuthorization: Bearer ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789\n")
     sec = (a/"artifacts"/"secret.log").read_bytes()
     manifest["files"][3]["bytes"] = len(sec); manifest["files"][3]["sha256"] = hashlib.sha256(sec).hexdigest()
+    assign = b"2026-10-08 INFO db_password=hunter2hunter2 in the log line\n"
+    (a/"artifacts"/"assign.log").write_bytes(assign)
+    manifest["files"].append({"artifact_id":"art_assign","path":"artifacts/assign.log",
+        "bytes":len(assign),"sha256":hashlib.sha256(assign).hexdigest(),
+        "media_type":"text/plain","credential_shaped":False})
     (a/"manifest.json").write_text(json.dumps(manifest, indent=1))
 
     # B: synthetic FAIL run (permanently labelled)
@@ -96,7 +101,14 @@ def build():
     os.symlink("/tmp/p7-outside", e/"artifacts"/"sub")
     (e/"manifest.json").write_text(json.dumps(m))
 
-    # F: noise the walk must ignore
+    # F: an unreadable subtree. Trap: os.walk with the default onerror=None
+    # SILENTLY IGNORES a directory it cannot list, so a reader that does not pass
+    # onerror can never report index_incomplete.
+    u = BASE/"p7-unreadable"/"run-20261008T000007Z"; u.mkdir(parents=True)
+    (u/"run-20261008T000007Z.json").write_text(json.dumps(run("run-20261008T000007Z")))
+    os.chmod(BASE/"p7-unreadable", 0o000)
+
+    # G: noise the walk must ignore
     (BASE/".hidden").mkdir(); (BASE/".hidden"/"run-20261008T000005Z.json").write_text("{}")
     (BASE/"__pycache__").mkdir(); (BASE/"__pycache__"/"x.pyc").write_text("x")
     os.symlink("/tmp/p7-outside", BASE/"p7-linkdir")
@@ -150,8 +162,12 @@ def art_media_ok(mt):
 
 def main():
     build()
-    runs, ignored = [], []
-    for dirpath, dirnames, filenames in os.walk(BASE):
+    runs, ignored, unreadable = [], [], []
+
+    def on_error(exc):
+        unreadable.append((str(getattr(exc, "filename", "?")), type(exc).__name__))
+
+    for dirpath, dirnames, filenames in os.walk(BASE, onerror=on_error):
         rel = Path(dirpath).relative_to(BASE)
         if len(rel.parts) >= 4:
             ignored.append((str(rel),"depth_cap")); dirnames[:]=[]; continue
@@ -184,7 +200,14 @@ def main():
     for r in recs:
         if r["status"]=="ok" and len(stems[Path(r["rel"]).stem])>1:
             r["status"]="duplicate"; r["reason"]=f"{len(stems[Path(r['rel']).stem])} files share this stem"
-    print(f"discovered {len(recs)}  ignored {len(ignored)}  reasons {sorted({x for _,x in ignored})}")
+    print(f"discovered {len(recs)}  ignored {len(ignored)}  unreadable {len(unreadable)}")
+    print(f"ignored reasons {sorted({x for _,x in ignored})}")
+    if unreadable:
+        print("unreadable_entries > 0 => the list MUST be 503 validation_not_configured "
+              "(details.reason=index_incomplete), never a page that omits rows:")
+        print(f"   {unreadable}")
+    else:
+        print("unreadable_entries == 0 => the index is complete and may be paged")
     for r in sorted(recs,key=lambda r:(0 if r["status"]=="ok" else 1, r["rel"])):
         print(f"  {r['status']:9s} {r['rel']}  {r.get('reason','')}")
     print()
@@ -223,6 +246,26 @@ def main():
     for f in json.loads((e/"manifest.json").read_text())["files"]:
         ok, rule = classify_path(f["path"])
         print(f"   {f['artifact_id']:12s} {str(f['path'])[:44]:46s} {'OK' if ok else 'REFUSED: '+rule}")
+    a_status, a_m = load_manifest(a, "run-20261008T000001Z")
+    if a_status == "frozen":
+        from jasmine_core.canonical import looks_like_credential, redact_text
+        for f in a_m["files"]:
+            if f["artifact_id"] != "art_assign":
+                continue
+            txt = (a/f["path"]).read_text(); masked = redact_text(txt)
+            print(f"   {f['artifact_id']:12s} original gate: looks_like_credential="
+                  f"{looks_like_credential(txt)} (alone it would SERVE the file); "
+                  f"redact_text==input: {masked==txt} -> "
+                  f"{'serve original' if masked==txt else '403 original_withheld (mask is not a no-op)'}")
+            print(f"      masked -> {masked.strip()}")
+    print()
+    print("grade ladder on the synthetic FAIL record (rev 5 §4.2):")
+    fd = json.loads((BASE/"p7-fail"/"run-20261008T000002Z"/"run-20261008T000002Z.json").read_text())
+    for c in fd["cases"]:
+        g = "simulated" if fd.get("synthetic") is True else "unknown"
+        basis = "the run record marks itself synthetic" if fd.get("synthetic") is True else "?"
+        print(f"   {c['case_id']}: evidence_grade={g}  grade_basis={basis}")
+    print("   run grade = least trustworthy of (bundle mode unknown, case grades) = unknown")
     print()
     from jasmine_core.canonical import looks_like_credential
     print("declared mode=real with projects and recorder provenance -> effective real")
@@ -233,4 +276,9 @@ def main():
     eff3 = "real" if (m3.get("projects") and m3.get("sources",{}).get("recorder")) else "unknown"
     print(f"   without projects           -> effective mode = {eff3} (mode_basis names the missing provenance)")
 
-main()
+try:
+    main()
+finally:
+    u = BASE/"p7-unreadable"
+    if u.exists():
+        os.chmod(u, 0o700)

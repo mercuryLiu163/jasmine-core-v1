@@ -1,4 +1,7 @@
-discovered 5  ignored 12  reasons ['excluded_dir', 'not_run_shaped', 'symlinked_directory', 'symlinked_file']
+discovered 5  ignored 13  unreadable 1
+ignored reasons ['excluded_dir', 'not_run_shaped', 'symlinked_directory', 'symlinked_file']
+unreadable_entries > 0 => the list MUST be 503 validation_not_configured (details.reason=index_incomplete), never a page that omits rows:
+   [('/tmp/p7-fixroot/p7-unreadable', 'PermissionError')]
   ok        p7-escape/run-20261008T000004Z/run-20261008T000004Z.json  
   ok        p7-fail/run-20261008T000002Z/run-20261008T000002Z.json  
   corrupt   p7-corrupt/run-20261008T000003Z.json  unparseable: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
@@ -15,6 +18,7 @@ A manifest_status=frozen
    art_secret     integrity=match     media_ok=True
       original scan (independent of credential_shaped=False): looks_like_credential=True -> 403 original_withheld
       masked differs: True  masked line: ['Authorization: Bearer [REDACTED]']
+   art_assign     integrity=match     media_ok=True
 
 E manifest_status=corrupt  rule=art_dotdot: dot segment path '../p7-outside/loot.txt'
    (a single broken path makes the whole manifest corrupt, so no artifact is partially trusted)
@@ -28,6 +32,12 @@ individual path verdicts:
    art_symfile  artifacts/link.txt                             OK
    art_symdir   artifacts/sub/loot.txt                         OK
    art_baduuid  artifacts/good.txt                             OK
+   art_assign   original gate: looks_like_credential=False (alone it would SERVE the file); redact_text==input: False -> 403 original_withheld (mask is not a no-op)
+      masked -> 2026-10-08 INFO db_password=[REDACTED] in the log line
+
+grade ladder on the synthetic FAIL record (rev 5 §4.2):
+   F-1: evidence_grade=simulated  grade_basis=the run record marks itself synthetic
+   run grade = least trustworthy of (bundle mode unknown, case grades) = unknown
 
 declared mode=real with projects and recorder provenance -> effective real
    effective mode = real

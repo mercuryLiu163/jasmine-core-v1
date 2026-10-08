@@ -1,6 +1,6 @@
 # P7-01 frozen-contract **proposal** — the minimal Validation read slice
 
-Status: **proposal, revision 3, awaiting delta re-review.** Nothing here is implemented yet. This is the
+Status: **proposal, revision 5, awaiting the fifth-pass re-review.** Nothing here is implemented yet. This is the
 phase-1 deliverable the dependency taskbook asks for: the contract is proposed, independently reviewed,
 revised, re-reviewed, and only then frozen as a machine-checked contract
 (`web/contracts/p7-validation-read.v1.json`, derived by `scripts/p7/p7_contract.py`) and implemented.
@@ -13,7 +13,8 @@ kept verbatim under `validation-quarantine/REVIEW-p7-01-proposal/`):
 | 1 | `3ebe46c` | **APPROVE WITH NAMED MANDATORY CHANGES** (12); facts (a)–(e) CONFIRMED — `findings.md`, 493 lines |
 | 2 | `f397213` | **APPROVE WITH NAMED MANDATORY CHANGES**; rev-1 items 1, 3, 4, 8, 10, 11 only partially closed, 10 new defects N1–N10 — `RE-REVIEW-findings.md`, 658 lines |
 | 3 | `c8fd597` | **APPROVE WITH NAMED MANDATORY CHANGES**; all 11 rev-2 mandatory items CLOSED, six new defects D1–D6 — `RE-REVIEW-2-findings.md`, 731 lines |
-| 4 | this document | folds D1–D6 and D7, and retains the dry-run evidence |
+| 4 | `1b9791a` | **APPROVE WITH NAMED MANDATORY CHANGES**; D1/D2/D5/D6/D7 CLOSED (D1 independently recomputed from the records), D3/D4 partial; 4 mandatory items + advisory A1–A10 — `RE-REVIEW-3-findings.md`, 705 lines |
+| 5 | this document | closes the 4 mandatory items (list visibility in `acl`, `manifest_status`, `complete`, section-grade `min`) and every advisory item |
 
 Baseline: `integration/p6-03-realcore` @ `039f5a3e7800704e5f0478d01992f00eeb2ca3f1`, in its own worktree
 `_worktrees/p7-01` on branch `p7-01-validation-read`.
@@ -104,7 +105,9 @@ the recorder's worst-case rule (it does, for all nine); nothing here re-signs or
 The nine real records sit in **nine distinct leaf directories at depth 2–3 below `validation-runs/`** — no
 single directory holds all nine — so discovery is defined completely and is the routing table for
 acceptance criteria 5 and 6. This walk was dry-run against the real tree and against a synthetic
-adversarial tree (§9); the real tree yields exactly 9 run-shaped records out of 288 scanned entries.
+adversarial tree, with the scripts and their raw output retained under
+`validation-quarantine/DRYRUN-p7-01/`: the real tree yields exactly **9 run-shaped records**, and the
+retained output lists every walk entry that was not treated as a record.
 
 **Root.** `JASMINE_CORE_VALIDATION_RUNS` (absolute or relative; fits the existing `JASMINE_CORE_*`
 convention). Unset ⇒ `503 validation_not_configured`. The configured value is read lazily on first use and
@@ -155,30 +158,57 @@ tie-break, so two files sharing a `created_at`/`run_id` can never make a page ov
 
 **Pagination and `total`.** `limit` default 20 / max 100; `offset` ≥ 0. `total` is the number of
 discovered run-shaped records that **pass the filters**: with no filter that includes corrupt and
-duplicate rows; with a filter it counts only matching rows. A **corrupt** row has none of the filtered
-fields and therefore never matches a positive filter (it appears only in an unfiltered listing), while a
-**duplicate** row is parseable and matches filters normally. `count == len(runs)` for the current page, and
+duplicate rows; with a filter it counts only matching rows. A **corrupt** row never matches a positive
+filter: it has no usable `verdict`/`stage`/`mode`/`attribution`, so it cannot be shown to match one, and it
+appears only in an unfiltered listing. A **duplicate** row is parseable and matches filters normally. `count == len(runs)` for the current page, and
 `has_more = offset + count < total`; page *n* is `offset = n·limit` over the same total order.
 Filters (`verdict`, `stage`, `mode`, `attribution`, `project`) use an unknown value ⇒ `400
 invalid_request`, and **unknown query keys are refused** with `400 invalid_request` (precedent:
 `get_resolution` refuses any unexpected query).
 
 **Response.** `{runs[], count, total, limit, offset, has_more, corrupt_count, duplicate_count,
-ignored_entries, discovery, empty_reason?, warnings[]}` where
+ignored_entries, ignored_samples[], discovery, empty_reason?, complete, visibility}` where
 `discovery: {root_present, max_depth, scanned_dirs, scanned_files, run_shaped_files,
-unreadable_entries, capped}`. A row carries `run_id, stage, created_at, commit, schema_version,
-core_version, verdict (as recorded), case_counts{pass,fail,blocked,total}, mode, mode_basis,
-attribution{status, projects[]}, evidence_grade, synthetic, synthetic_note?, manifest_status,
-record_status, corrupt_reason?, duplicate_reason?, record_sha256, verdict_consistent`.
+unreadable_entries, capped}`, `ignored_samples[]` is at most 20 `{relative_path, reason}` entries naming
+*why* something was not treated as a record, and `complete` is `true` on every successful list response —
+an incomplete index returns `503` (below), so `false` is unreachable. A row carries `run_id, stage,
+created_at, commit, schema_version, core_version, verdict (as recorded),
+case_counts{pass,fail,blocked,total}, mode, mode_basis, attribution{status, projects[]}, evidence_grade,
+grade_downgraded_by[], synthetic, synthetic_note?, manifest_status, record_status, corrupt_reason?,
+duplicate_reason?, record_sha256, verdict_consistent`.
+
+**Fields on a row, and the fields that are deliberately inert on a 200.** `record_status ∈ {ok, corrupt,
+duplicate}` (§2 statuses). `manifest_status` is the run's §3 manifest status — `frozen`, `absent` or
+`corrupt` — derived by looking for `<run_dir>/manifest.json` and applying §3's rules **without** reading
+artifact contents; for a row whose `record_status` is not `ok` it is `null`, because the record could not
+be parsed to confirm that the manifest's `run_id` matches (the row's `corrupt_reason`/`duplicate_reason`
+says why). `grade_downgraded_by[]` lists the case ids that lowered the run grade below the bundle mode
+(§4.2), and is empty when nothing was downgraded. On a successful list `discovery.unreadable_entries` is
+always `0` and `capped` always `false`, because either condition returns `503`; they are reported so a
+successful body and the `503` body share one shape rather than two.
+
+**`acl` mode: the list is grant-filtered, and `total` counts only what the caller may read.** The list
+route applies the **same** visibility predicate as detail (§6) — a run is visible iff the caller could read
+it — so `runs[]`, `count`, `total`, `corrupt_count` and `duplicate_count` are all computed over the visible
+set, and `discovery.run_shaped_files` counts visible runs rather than every run-shaped file in the tree.
+The other `discovery` fields (`scanned_dirs`, `scanned_files`, `ignored_entries`, `unreadable_entries`,
+`capped`) are diagnostics about the operator's configured root, which is not per-project information, and
+`visibility: "grant_filtered"` says which reading applies; in `single_user` mode every run is visible and
+`visibility: "all"`. A corrupt or duplicate record has no readable manifest and is therefore treated as
+unattributed, so in `acl` mode it is visible only to a key carrying `validation:unattributed` — exactly as
+in detail. This costs one manifest read per discovered run, bounded by `MAX_RUN_SHAPED` (§8). The paired
+acceptance test therefore compares a granted and a non-granted key on the **list** as well as on detail,
+so an unfiltered-list regression cannot ship unnoticed.
 
 **`record_sha256` is the SHA-256 of the run record file's raw bytes** — exactly what `sha256sum` over the
 file returns — so the validator can recompute it without knowing the reader's parser.
 
 **An incomplete index is never paginated.** An `OSError` while walking a subtree (a permission failure on
 a directory, a failed `stat`, and so on) skips that subtree and increments
-`discovery.unreadable_entries`, which is named in `warnings[]` (≤20 samples). A traversal that is knowingly
-incomplete must not be paged: **if `unreadable_entries > 0`, the list route returns
-`503 validation_not_configured` with `details.reason: "index_incomplete"` and the counts** — whether or not
+`discovery.unreadable_entries`, whose first 20 entries are named in the `503` body's
+`details.samples` (`{path, error}`). A traversal that is knowingly incomplete must not be paged: **if
+`unreadable_entries > 0`, the list route returns `503 validation_not_configured` with
+`details.reason: "index_incomplete"`, the counts, and those samples** — whether or not
 records were found — so no page walk can silently omit rows. `complete: bool` is returned on every
 successful list (always `true`, since a `false` index never returns 200), and detail/manifest/artifact
 reads are unaffected because they address a known run id and need no index. When the walk was complete,
@@ -282,11 +312,18 @@ therefore:
 | Raw | `case.user_raw` | `present_kind ∈ {sentinel, absent, reason_only}` |
 | Extraction | **none** — `recorder.SECTIONS` has no extraction field | always; `missing_reason: "the recorder records no Extraction section"` |
 | Resolution | **none** — `recorder.SECTIONS` has no resolution field | always; `missing_reason: "the recorder records no Resolution section"` |
-| Context | `case.context` — recorded **and** `context_pack_present` (§1.1) | not a context pack (three named reasons) |
+| Context | `case.context` — recorded **and** `context_pack_present` (§1.1) | not a context pack (one of three reasons, below) |
 | Agent | `case.agent_response` | `present_kind != value` |
 | Tool | `case.tools` | `tools == []` (`missing_reason: "the case records no tool call"`) |
 | Evidence | `case.evidence` (a case field, **not** one of the seven `SECTIONS`) | empty list |
 | State | `case.state_before` + `case.state_after` | both `present_kind != value` |
+
+The three `missing_reason` strings for a missing Context link are frozen so a validator can assert them: the
+sentinel form reports `"recorded as N/A (P0 not implemented)"` (§1.1), the reason-only form reports
+`"the case records a reason, not a context pack"`, and a recorded-but-packless form reports
+`"the section records run details, not a context pack"`. A validator may assert either the exact string or
+simply that the link is missing, and the §9 criterion-2 test asserts the exact strings for the three real
+forms.
 
 `case.interpretation` is a recorded `SECTIONS` member and is returned **verbatim as case data**. It is
 **not** equated with Resolution: ADR 0008 and the P2 taskbook keep Interpretation (a candidate) and
@@ -331,15 +368,18 @@ search over free text**.
    `grade_basis: "the qualifying bundle manifest"`;
 5. otherwise **`unknown`** — never `real` by the absence of markers.
 
-**Section grade** = the section's own marker's grade if that section's value is a mapping carrying a
-marker, otherwise the case grade. Because a marker maps into the same four-value enum, a section grade can
-never exceed its case grade.
+**Section grade** = `min` over the trust order of (the case grade, the section's own marker's grade), the
+second term being absent when the section value is not a mapping carrying a marker. The `min` is
+load-bearing: a section mapping `{"component": …}` inside a case graded `simulated` (bundle mode
+`simulated`) must grade `simulated`, not `component`, so a section can **never** be more trustworthy than
+its case.
 
 **Run grade = the least trustworthy of the effective bundle mode and every case grade** (min over the
 trust order above), so a `component` bundle mode with one `simulated` case yields `simulated`, not
-`component`, and a bundle whose mode is `unknown` is never improved by a case grade. Whenever the run grade
-is less trustworthy than the effective bundle mode, `warnings[]` names the case that caused the downgrade:
-`"manifest declares <mode> but case <case_id> is graded <grade>"`.
+`component`, and a bundle whose mode is `unknown` is never improved by a case grade. Whenever the run
+grade is less trustworthy than the effective bundle mode, the downgrade is reported twice: the list row
+carries `grade_downgraded_by: [case_id, …]`, and the detail response carries the message
+`"manifest declares <mode> but case <case_id> is graded <grade>"` in its `warnings[]`.
 
 **Stated limit.** Detection is marker-based. A `mode: real` manifest paired with an *unmarked* mocked
 `agent_response` cannot be detected by a read-only contract, and the API does not claim otherwise: the
@@ -363,7 +403,8 @@ kept out of the operator's run root (§9), but the contract does not rely on tha
 | `GET /v1/validation/runs/{run_id}/artifacts/{artifact_id}/content?form=masked\|original&download=1` | text content, authorised, masked, digest-pinned |
 
 **Detail** returns the recorded run fields verbatim plus `synthetic`, `synthetic_note?`,
-`unknown_record_keys[]`, `evidence_grade`, and, per case:
+`unknown_record_keys[]`, `evidence_grade`, `warnings[]` (run-level notices, including the §4.2 grade
+downgrade), and, per case:
 `case_id, name, verdict (as recorded), failure_class, failure_output, reproduction[], not_applied_reason,
 evidence: [{recorded, status: "unaddressable", reason}], sections{…§1.1}, chain{…§4.1},
 evidence_grade, grade_basis`.
@@ -487,21 +528,26 @@ and a malformed id never causes a filesystem read.
 | 7 | `*` | malformed `run_id` / `artifact_id` / `limit` / `offset` / unknown filter, `form` or query key | `400 invalid_request` |
 | 8 | `D M A C` | `acl` mode and the run may not be read **for any reason** (project not granted, unattributed without `validation:unattributed`, or a corrupt/duplicate record failing closed) | `404 validation_run_not_found` |
 | 9 | `D M A C` | unknown run id | `404 validation_run_not_found` |
-| 10 | `D M A C` | `single_user` mode only: run record unparseable / wrong `run_id` / missing required field / duplicate stem | `409 validation_run_corrupt` / `409 validation_run_ambiguous` |
+| 10 | `D M A C` | `single_user` mode only: run record unparseable / wrong `run_id` / missing required field | `409 validation_run_corrupt` |
+| 10b | `D M A C` | `single_user` mode only: two run-shaped files share this stem | `409 validation_run_ambiguous` |
 | 11 | `M` | `single_user` mode only: manifest present but breaks a rule | `409 validation_manifest_corrupt` |
 | 12 | `A C` | artifact not addressable (manifest absent/corrupt, unknown `artifact_id`, declared file missing or symlinked) | `404 artifact_not_found`, `reason` distinguishing the cases |
 | 13 | `A C` | file bytes disagree with the declared `sha256`/`bytes` | `409 artifact_modified` |
 | 14 | `A C` | artifact content exceeds `MAX_ARTIFACT_BYTES` | `413 payload_too_large` (`details.limit`) |
-| 15 | `C` | original form requested and the masker is not a no-op, or `credential_shaped: true`, or not UTF-8 | `403 original_withheld` (`details.reason`, `details.masked_sha256`) |
-| 16 | `C` | non-text artifact content | `415 unsupported_media_type` |
+| 15 | `A C` | a declared file exists but cannot be read (permission or I/O error; not a symlink) | `503 validation_not_configured` (`details.reason: "artifact_unreadable"`) |
+| 16 | `C` | original form requested and the masker is not a no-op, or `credential_shaped: true`, or not UTF-8 | `403 original_withheld` (`details.reason`, `details.masked_sha256`) |
+| 17 | `C` | non-text artifact content | `415 unsupported_media_type` |
 
-Two consequences of the scoping, both deliberate: rows 8 and 9 are the **same** status and code, so in
-`acl` mode the response cannot distinguish "does not exist" from "you may not read it"; and rows 10–11 are
-`single_user`-only because in `acl` mode a record that cannot be read has already been answered by row 8 —
-the `409` family is never reachable in `acl` mode, which is what makes the fail-closed rule hold without a
-second oracle. Rows 12–16 are the only rows that can fire on `A`/`C`, so a corrupt manifest yields
-`409 validation_manifest_corrupt` from `M` (row 11) and `404 artifact_not_found` from `A`/`C` (row 12, with
-`reason: "manifest_corrupt"`) — the two routes answer differently on purpose, and each is single-valued.
+Three consequences of the scoping, all deliberate: (i) rows 8 and 9 are the **same** status and code, so
+in `acl` mode the response cannot distinguish "does not exist" from "you may not read it"; (ii) rows 10–11
+are `single_user`-only, because in `acl` mode an unreadable record has already been answered by row 8, so
+the `409` family is unreachable there and the fail-closed rule needs no second oracle; (iii) a corrupt
+manifest yields `409 validation_manifest_corrupt` from `M` (row 11) and `404 artifact_not_found` from `A`/`C`
+(row 12, `reason: "manifest_corrupt"`), which is intended: `M` reports the manifest's own status, while
+`A`/`C` can only report that the artifact is not addressable. Within a single route the table has exactly
+one answer per situation. Rows 3, 5 and 7 also fire on `A`/`C`, and stage B precedes stage C, so a malformed
+id is answered before any *record* is read — the operator-configured root is opened first, to answer
+deployment errors, and it is not attacker-controlled.
 
 **Id grammars are validated before any path construction** (frozen here):
 `^run-[0-9]{8}T[0-9]{6}Z$` and `^art_[a-z0-9][a-z0-9_.-]{0,63}$` — anchored matches against the raw route
@@ -524,21 +570,24 @@ is capped at the same size. List: `limit` ≤ 100. A declared `bytes`/`sha256` d
 `409 artifact_modified`; content larger than the cap is `413 payload_too_large`; a manifest breaking the
 size rules is `409 validation_manifest_corrupt` with the rule named; exceeding a walk cap is
 `503 validation_index_too_large`. The only truncation anywhere is the explicitly-stated 20-sample cap on
-the `ignored_entries`/`warnings` **samples**, whose counts remain complete. No route can be made to read an
+the `ignored_samples[]` list and on a `503` body's `details.samples`; the corresponding counts
+(`ignored_entries`, `unreadable_entries`) remain complete. No route can be made to read an
 unbounded amount of data, and no route silently returns a partial index.
 
 ## 9. Acceptance mapping, and the unblock action for criterion #1
 
 Both the real-record rules and the adversarial rules below were **dry-run** read-only before
-implementation: the real tree yields 9 records / 288 scanned entries with `verdict_consistent` for all
-nine, and a synthetic tree exercises every negative.
+implementation: the real tree yields exactly 9 records with `verdict_consistent` for all nine, and the
+synthetic tree exercises every negative named in criterion 4 plus the unreadable-subtree and
+assignment-shaped-secret negatives; both scripts and their raw output are retained under
+`validation-quarantine/DRYRUN-p7-01/` and are re-runnable.
 
 | Criterion | How it is met |
 | --- | --- |
 | 1. an existing real FAIL Run, classified, raw output traceable | **BLOCKED** — no P7-format FAIL run exists (0 FAIL cases, 0 `failure_class`, 0 `failure_output` on disk). The FAIL *code path* is exercised on a synthetic fixture; the validator records BLOCKED with the reason. **Unblock action: the P7 owner records one genuinely failing scenario with `recorder.py` into the configured run root** (`validation-runs/p7-<scenario>/`), after which criterion 1 is re-validated against that real record. Until then `P6-T06`/P6-03c cannot close. |
-| 2. missing Context / Agent shown as missing, no fabrication, no verdict upgrade | **Demonstrable on real records**: the Context chain link is missing in 9/9 because none of the 63 cases holds a context pack (6 sentinel, 27 reason-only, 30 recorded run details — each with its own `missing_reason`), and `agent_response` is missing in the six BLOCKED runs; `chain` names Extraction and Resolution as having no recorded source at all; the recorded verdict is served unchanged and `verdict_consistent` reports only. The residual (an *unmarked* mock under `mode: real`) is stated in §4.2, not hidden. |
-| 3. authorised success and refusal paired on the same resource | §6/§7: each route with a granted key (200) and with a scope-less / non-granted-project / unattributed-less key (403 or 404) on the same run and artifact, in both `single_user` and `acl`; the `acl` refusals use one code, `404 validation_run_not_found`. |
-| 4. artifact normal, missing, modified, escape | fixture manifest with a good file (200 + digest), a missing file (404), a byte-flipped file (409), a manifest whose declared paths use `..`, an absolute path, a `C:` form, a UNC form and a URL (all refuse the manifest with the offending entry named), a symlinked file and a **symlinked intermediate directory** (`integrity: symlink_refused`, 404 at content), and a log whose only secret is assignment-shaped (`db_password=…` / `{"api_key": …}`) served masked and **withheld** as original while `looks_like_credential` alone would have allowed it |
+| 2. missing Context / Agent shown as missing, no fabrication, no verdict upgrade | **Demonstrable on real records**: the Context chain link is missing in 9/9 because none of the 63 cases holds a context pack (6 sentinel, 27 reason-only, 30 recorded run details — each with its own `missing_reason`), and `agent_response` is missing in the six BLOCKED runs; `chain` names Extraction and Resolution as having no recorded source at all and the three frozen `missing_reason` strings (§4.1) are asserted for the three forms; the recorded verdict is served unchanged and `verdict_consistent` reports only. The residual (an *unmarked* mock under `mode: real`) is stated in §4.2, not hidden. |
+| 3. authorised success and refusal paired on the same resource | §6/§7: each route with a granted key (200) and with a scope-less / non-granted-project / unattributed-less key (403 or 404) on the same run and artifact, in both `single_user` and `acl`; the `acl` refusals use one code, `404 validation_run_not_found`; and for the list route a run the caller may not read appears in neither `runs[]` nor `total` for the ungranted key while it does for the granted one (§2) |
+| 4. artifact normal, missing, modified, escape | fixture manifest with a good file (200 + digest), a missing file (404), a byte-flipped file (409), a manifest whose declared paths use `..`, an absolute path, a `C:` form, a UNC form and a URL (all refuse the manifest with the offending entry named), a symlinked file and a **symlinked intermediate directory** (`integrity: symlink_refused`, 404 at content), and a log whose only secret is assignment-shaped (`db_password=…` / `{"api_key": …}`) served masked and **withheld** as original while `looks_like_credential` alone would have allowed it. Every one of these negatives is exercised by the retained dry run (§9) and is asserted by the test suite |
 | 5. pagination, no duplicates or omissions, corrupt ≠ empty | §2's single ordering tuple with a unique `relative_path` tie-break; `total` includes corrupt/duplicate rows only when unfiltered and never mismatches the page arithmetic; a page-walk over the nine real records plus a corrupt row and a duplicate stem; `corrupt_count`, `duplicate_count`, `record_status`, `discovery` and `empty_reason` visible; an unreadable or partially unreadable tree returns 503 `index_incomplete`/`root_unreadable` instead of a page that quietly omits rows, while by-id reads still work |
 | 6. API values match the records and file digests | tests read the same files directly and compare every served field, `record_sha256` (raw file bytes), `manifest_sha256` (raw file bytes), `declared_sha256`, `masked_sha256` and the original scan result, including masked ≠ original being reported as distinct fields (and equal when the masker is a no-op) |
 

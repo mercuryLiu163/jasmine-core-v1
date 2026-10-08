@@ -53,6 +53,9 @@ def presence(value, *, context=False):
     if isinstance(value, str) and value.strip() == "":
         return {"present": False, "present_kind": "absent",
                 "missing_reason": "recorded as an empty string"}
+    if isinstance(value, list) and not value:
+        return {"present": False, "present_kind": "absent",
+                "missing_reason": "recorded as an empty list"}
     if context:
         pack = (isinstance(value, dict) and bool(set(value) & CONTEXT_PACK_KEYS)) or \
                (isinstance(value, list) and bool(value))
@@ -64,13 +67,49 @@ def chain(case):
     return {
         "raw": sec["user_raw"]["present"],
         "extraction": False,
-        "resolution": sec["interpretation"]["present"],
+        # rev 4/5 §4.1: the recorder has no Resolution source at all.
+        # case.interpretation is a different P2 concept and is NOT Resolution.
+        "resolution": False,
         "context": sec["context"]["present"] and sec["context"].get("context_pack_present", False),
         "agent": sec["agent_response"]["present"],
         "tool": bool(case.get("tools")),
         "evidence": bool(case.get("evidence")),
         "state": sec["state_before"]["present"] or sec["state_after"]["present"],
     }
+
+MARKER_GRADE = {"synthetic": "simulated", "simulated": "simulated",
+                "fixture": "simulated", "mock": "simulated", "component": "component"}
+TRUST = {"real": 0, "component": 1, "simulated": 2, "unknown": 3}
+EXECUTOR_RE = re.compile(r"(?i)(fixture|mock|simulat|synthetic)")
+
+
+def marker_grade(value):
+    if isinstance(value, dict):
+        for key, grade in MARKER_GRADE.items():
+            if value.get(key):
+                return grade
+    return None
+
+
+def case_grade(run, case):
+    """rev 5 §4.2: first matching rule wins; never upgraded."""
+    if run.get("synthetic") is True:
+        return "simulated", "the run record marks itself synthetic"
+    own = marker_grade(case.get("agent_response"))
+    if own:
+        return own, "recorded in the case"
+    if isinstance(run.get("executor"), str) and EXECUTOR_RE.search(run["executor"]):
+        return "simulated", "run.executor"
+    return "unknown", "no qualifying bundle manifest"
+
+
+def run_grade(run, cases):
+    """least trustworthy of the bundle mode and every case grade."""
+    mode = "unknown"  # no manifest in the real tree
+    grades = [case_grade(run, c)[0] for c in cases]
+    worst = max([TRUST[mode]] + [TRUST[g] for g in grades])
+    return {v: k for k, v in TRUST.items()}[worst]
+
 
 def worst(cases):
     if any(c.get("verdict")=="FAIL" for c in cases): return "FAIL"
@@ -116,7 +155,7 @@ for r in order:
     ever = {k: any(l[k] for l in links) for k in links[0]}
     missing_links = [k for k,v in ever.items() if not v]
     print(f"  {d['run_id']}  {d['created_at']}  verdict={d['verdict']:7s} consistent={d['verdict']==worst(cs)!s:5s}"
-          f" cases={len(cs)} {cc} run_grade=unknown(mode=unknown, no manifest)"
+          f" cases={len(cs)} {cc} run_grade={run_grade(d, cs)}(mode=unknown, no manifest)"
           f" missing_links={','.join(missing_links) if missing_links else '(none)'}")
     forms = {}
     for c in cs:
