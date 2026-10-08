@@ -18,11 +18,11 @@ returns no result while the session's default model answers, and the `opencode-g
 API key set. Every role therefore ran on the session default, **`deepseek-flash`**, with the
 operator's agreement:
 
-| Role | Who |
-| --- | --- |
-| Implementation | the session agent (`deepseek-flash`), plus one `deepseek-flash` subagent for the simulated fixture and its 63 tests |
-| Independent review | a separate `deepseek-flash` subagent, adversarial, read-only, on the final commit |
-| Independent validation | a separate `deepseek-flash` subagent, re-running the suites and the Gate from a clean archive on the final commit |
+| Role | Who | Outcome |
+| --- | --- | --- |
+| Implementation | the session agent (`deepseek-flash`), plus one `deepseek-flash` subagent for the simulated fixture and its tests | — |
+| Independent review | a separate `deepseek-flash` subagent, adversarial and read-only | 12 findings, 10 real and all fixed at `76ffa29`; 2 were process observations, recorded |
+| Independent validation | a separate `deepseek-flash` subagent, re-running the suites, the contract checks and the Gate from clean archives | **REPRODUCED** for every claim it tested; its 2 findings were the credential leak and post-bundle `web/src` drift, both resolved by the current binding |
 
 Independence here is between **separate agent contexts**, not between model families. Stated
 because "independently reviewed" would otherwise be read as "by a different model".
@@ -89,20 +89,37 @@ from the click-trace's prose — which is exactly what the P6-03b1 bundle could 
   panel text before the state it was looking for; the audit readback sent no `Authorization` header;
   and the launcher used fixed ports, so one run talked to a stale dashboard from an earlier session
   and would have reported the product as broken.
+* **The bundle recorded its own throwaway tokens.** The fixture printed the tokens it accepts and
+  the launcher redirected that banner into the bundle, so three cleartext tokens sat in a frozen file
+  while the bundle README said none did. Found by adversarial review (and independently by the
+  validation pass). The banner is masked, the launcher **refuses to freeze** a bundle containing any
+  token it generated, and the two leaking bundles are withdrawn with the reason in the index.
+* **Three checks that could not fail**, all found by review: the shared sign-out record asserted
+  `every(...)` over an *empty* request list; the tombstone record sent the *current* revision, so a
+  revision-first Core would have passed it; and the "every write route has a panel" test rewrote the
+  contract and compared it with the contract, so deleting every panel left it green. All three now
+  drive the product and fail when it does not behave.
+* **The fixture was stricter than the Core it stands in for.** P4's `retry_job` validates neither
+  `host_id` nor `event_id`; the fixture answered 400 for a malformed value, which would have turned a
+  real Core's acceptance into a fixture refusal. Relaxed, pinned by a test, and disclosed.
 
 ## Evidence
 
-* Gate bundle `validation-runs/p6/20261008T053138Z-p6-03b2-clickthrough/`: **16/16** with the write
-  switch on (twice, with identical step sequences, restarting the fixture between runs) and
-  **4/4** with it off; 44 files frozen by `freeze_bundle.py --verify`; the bundle README is
-  generated from the run's own click-trace files before the freeze. (The bundle binds
-  `422923b`; the commits after it touch documentation, the launcher's README step and two record
-  names — no product source — which the evidence index records.)
-* `web/tests`: **322** tests, `tsc --noEmit` clean. New for b2: `memoryWrites.test.ts` (13),
-  `memoryWriteViews.test.tsx` (15), `p4Writes.test.ts` (19), `p4WritesCoreProxy.test.ts` (16),
+* Gate bundle `validation-runs/p6/20261008T053936Z-p6-03b2-clickthrough/`: **16/16** with the write
+  switch on (twice, with identical step names and outcomes, restarting the fixture between runs) and
+  **4/4** with it off; **45** files frozen and verified by `freeze_bundle.py --verify`; the bundle
+  README is generated from the run's own click-trace files before the freeze. It binds `8be4352`;
+  no product source has changed since, and any later commit here is documentation only.
+* What a reviewer can check from the frozen files alone: `browser-write-responses.jsonl` (25 write
+  requests with request **and** response bodies), the 5-key replay with the same `event_id`, the
+  7-key fresh transitions, the human/agent `reflect` pair, `writes-off/fixture-state.json` (the
+  simulated Core's command log, empty before and after the refused submit), and a bundle that
+  contains no generated token (the launcher refuses to freeze one that does).
+* `web/tests`: **328** tests, `tsc --noEmit` clean. New for b2: `memoryWrites.test.ts` (13),
+  `memoryWriteViews.test.tsx` (21), `p4Writes.test.ts` (19), `p4WritesCoreProxy.test.ts` (16),
   plus the classifier guards in `writeAction.test.tsx` and the rewritten read-only/affordance
   cases in `p4Views.test.tsx` and `endpointContract.test.ts`.
-* `tests/` (Python): **520** tests. New for b2: `test_p4_write_fixture.py` (63),
+* `tests/` (Python): **521** tests. New for b2: `test_p4_write_fixture.py` (64),
   `test_freeze_bundle.py` (9), and `test_p4_write_spec.py` rewritten for the delivered state (15).
 * `scripts/p6/p4_write_spec.py --check` exits 0 against the pinned SHA and **2** when it is absent.
 
@@ -125,4 +142,9 @@ from the click-trace's prose — which is exactly what the P6-03b1 bundle could 
    built from `0c4f8f0e2118711ac9aa2a7006fddc6982962248` with `P6_ENABLE_P4_WRITES=1`, and re-run
    this Gate's assertions against it. Until then, 9b is unmet and the status is PARTIAL /
    DEPENDENCY_PENDING.
-2. Independent review and validation reports on the final commit (recorded in the evidence index).
+2. **Both independent passes are done** and recorded in the evidence index. The validation pass ran
+   against `b6fcee8`; its two findings are fixed and the final bundle binds `8be4352`, which contains
+   those fixes. It did not itself re-run against `8be4352` — the difference between the two commits
+   is the review fixes plus this documentation, and the suites and the Gate were re-run here after
+   them (328 web, 521 Python, 16/16 twice, 4/4 off). Stated rather than glossed: the *independent*
+   pass predates the last two commits.
