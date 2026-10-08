@@ -85,7 +85,7 @@ they are re-asserted in every bundle by the credential check.
 | P6-T02 permissions & secrets | **D** (PASS) | same |
 | P6-T03 audited manual maintenance | **B** (real chain) | nine writes + audit readback gated against fixtures and real P4; real P2 conversation chain not run |
 | P6-T04 actual Context (incl. injection receipt) | **B** (receipt) | real P3 pack/rendered content verified; no receipt exists to match |
-| P6-T05 Memory degradation | **P** | real P4 jobs/retry/withholding verified; `Hindsight unavailable ⇒ degraded` not covered; engine is a labelled wire double |
+| P6-T05 Memory degradation | **P** | both halves now have evidence: real P4 jobs/retry/withholding in the real-Core matrix, and `Hindsight unavailable ⇒ degraded, P1 unaffected` in `20261008T123611Z-p6-t05-degraded/` (**12/12**, frozen at `0b6f737…`). Still **P**, not PASS: the engine is a labelled wire double, so no real Hindsight outage is claimed |
 | P6-T06 Validation drill-down | **B** | blocked on P7-01 |
 | P6-T07 maintainability | **D** (PASS) | P6-01 r3 |
 
@@ -99,7 +99,7 @@ Negative cases (§7), which ones are actually covered:
 | project A slow response arriving after switching to B; same id, different revision | **covered** — T07 (the rapid-switch phase was falsified and fixed) + `revision_conflict` |
 | API 404/401/403/422/503, disconnection, unknown enum, truncated paging | **covered** across the P1/P6-01/P6-02/P6-03 Gates |
 | secret-looking raw text, HTML/script, artifact path traversal, external links | **covered for text/protocol** (T02, proxy allowlist); artifact traversal is N/A until P6-03c |
-| **Memory unavailable / stale Memory vs Authority conflict / old Checkpoint / Context over budget** | **not covered** for the continuity views — the real runs exercise equal/healthy states only |
+| **Memory unavailable / stale Memory vs Authority conflict / old Checkpoint / Context over budget** | **partly covered now**: "Memory unavailable ⇒ degraded, P1 unaffected" is covered by `20261008T123611Z-p6-t05-degraded/` (the engine is stopped and P4's own probe records `unreachable`; Core stays `ok`, the P1 reads and views are unaffected, and a 200-with-`degraded`-payload `reflect` is recorded as a degradation, not a success). **Still not covered**: stale Memory vs current Authority, an old/atypical Checkpoint, and an over-budget Context |
 | Validation missing Context or Agent transcript / mocked response | N/A until P6-03c |
 
 ## 5. §8 bundle format and merge gate
@@ -167,6 +167,14 @@ documentation and harness tooling:
 
 * tracked docs: this file, `web/TASK-p4-interpreter-symlink.md`, and the status text in
   `web/P6-03A-COMPLIANCE.md` / `web/REAL-CORE-ACCEPTANCE-PLAN.md`;
+* the **T05 degraded slice** (the runner-up in §6, now delivered): `scripts/p6/p4_realcore_env.py`
+  gained `--engine-state unavailable` (default unchanged), and
+  `scripts/p6/run_t05_degraded.py` + `scripts/p6/t05_degraded_trace.mjs` run and freeze it. The
+  bundle `20261008T123611Z-p6-t05-degraded/` is **12/12** (6 Core checks + 6 browser records), frozen
+  at `0b6f737681eb9a6e7ad0c76b8b4be54409e12ac4`, and keeps the labels straight: `mode: boundary-fake`
+  means real Core with a simulated engine boundary, the "unavailable" engine is a **stopped loopback
+  wire double** (not a real Hindsight outage), and `POST /v1/memory/reflect`'s **HTTP 200 with a
+  `degraded` payload** is recorded as a degradation, never as a success. No product path changed;
 * harness tooling: `scripts/p6/bundle_conformance.py` (the taskbook-§8 renderer described in the
   next-minimal-delivery section) and `tests/p6/test_bundle_conformance.py` — **20** hermetic tests
   after the operator reproduced three defects in the first version and they were fixed: a symlink at
@@ -184,8 +192,9 @@ documentation and harness tooling:
   verdict and no Gate result changes.
 
 The exact diff list against the acceptance commit is
-`git diff --name-only f323c779… HEAD`: those six paths and nothing else, with **no `src/`, schema or
-`web/` product path touched** — so the acceptance bundles still bind the same product code. The
+`git diff --name-only f323c779… HEAD`: documentation and harness paths only, with **no `src/`, schema
+or `web/` product path** — so the acceptance bundles still bind the same product code and the
+dashboard results (tsc, 328/328) still apply unchanged. The
 battery was deliberately **not** re-run for this: a tool that only reads frozen bundles and a test
 that only builds temp trees cannot change a Gate result, and re-running one to make a new tip look
 "verified" would be the wrong reason to run a Gate. The Python suite's count does move (the 13 new

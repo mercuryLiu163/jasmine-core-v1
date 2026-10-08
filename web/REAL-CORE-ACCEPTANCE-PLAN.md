@@ -382,10 +382,37 @@ task), are documentation-only. The tree also gained `scripts/p6/bundle_conforman
 `tests/p6/test_bundle_conformance.py` — tooling that renders the taskbook-§8 file names out of
 already-frozen bundles into a separate derived directory; it re-runs nothing, writes into no bundle
 and changes no verdict, and a complete file set is not acceptance. The exact diff against the
-acceptance commit is `git diff --name-only f323c779bc91893b5908218d8c5c148619159180… HEAD`: those six
-paths and nothing else, with **no `src/`, schema or `web/` product path** among them, so the batteries
-above still bind the same product code. This text names the acceptance commit rather than the tip, and
+acceptance commit is `git diff --name-only f323c779bc91893b5908218d8c5c148619159180… HEAD`:
+documentation and harness paths only, with **no `src/`, schema or `web/` product path** among them, so
+the batteries above still bind the same product code and the dashboard results (tsc, 328/328) still
+apply unchanged. This text names the acceptance commit rather than the tip, and
 states the command rather than the list, on purpose: a commit that named its own tip or its own file
 list would go stale the moment it was committed. The earlier `e7f322ae…` battery is a separate
 binding with its own bundles, and the harness commit `caeb947` sits between it and the current code —
 its battery was re-run, not assumed.
+
+## 13. T05 degraded slice — Memory unavailable, Core and the P1 views still up
+
+The remaining-task list's next behavioural slice, delivered after §12. T05's PASS condition has a half
+no earlier run covered — *"Memory 故障不挡 P1 视图,degraded 明确"* — and
+`scripts/p6/run_t05_degraded.py` covers it against the same isolated real P4 Core the other
+acceptances use, put into P4's own `unreachable` state.
+
+* `p4_realcore_env.py --engine-state unavailable` (the default `wire-double` is unchanged, so every
+  earlier run is unaffected): the deliberate retain failure is skipped, the wire double is **stopped**
+  after seeding, and **P4's own probe** (`record_engine_probe`) records the refusal. The engine row
+  then reports `unreachable` / `degraded: true` / `core_impact: memory_paused` /
+  `last_error_code: engine_unreachable` — the state a real outage produces, not an edited status.
+* Result, frozen at `0b6f737681eb9a6e7ad0c76b8b4be54409e12ac4` in
+  `validation-runs/p6/20261008T123611Z-p6-t05-degraded/`: **12/12** (6 Core checks + 6 browser
+  records), 0 blocked. Core health stays `ok`; every P1 read still answers with rows; the Memory job
+  and trace lists are not blanked; and the P1 views (Overview, Task, Conversation, Rules, Evidence)
+  render with no dependency-pending panel and no dependency-failure alert.
+* The honesty case this slice exists to record: `POST /v1/memory/reflect` answers **HTTP 200 with a
+  `degraded` payload** (`engine_unreachable`, `non_authoritative: true`, empty basis, every bank
+  `failed`). The check calls that a degradation, not a success, and a revision comparison shows no
+  Task or Rule change.
+* What it does **not** establish: the engine is a stopped loopback wire double, not a real Hindsight
+  outage, so `mode: boundary-fake` still means real Core with a simulated engine boundary — no claim
+  about Hindsight, extraction or reflection content, and **not** a P4 Gate verdict. P4 phase
+  acceptance is not claimed. The retry half of T05 remains covered by the real-Core matrix.
