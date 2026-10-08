@@ -415,9 +415,12 @@ async function main() {
       }
     })
 
-    // The standard walkthrough needs a full Core. A slice run points the proxy at a
-    // slice fixture instead, so it is skipped there — the shared negatives below still run.
-    if (!args.p3Reads && !args.p4Reads) {
+    // The standard walkthrough needs a full Core. A slice run points the proxy at a slice
+    // fixture instead, so it is skipped there — the shared negatives below still run. Every
+    // slice mode has to be listed here: P6-03b2 was first run without `--p4-writes`, so it fell
+    // into this block, drove the P2 walkthrough against a fixture with no P2 data, and failed
+    // before reaching a single write record.
+    if (!args.p3Reads && !args.p4Reads && !args.p4Writes && !args.p4WritesOff) {
     // 1. sign-in. First prove the negative: a bogus token must be refused, which
     // is only possible because sign-in validates with an *authenticated* read.
     // `GET /v1/health` is public and answers 200 for any token, so a sign-in that
@@ -2610,9 +2613,14 @@ async function main() {
     // mode — never as a blanket allowance, or a real 404 would slip through unnoticed.
     // 404 is expected only in a slice run, where an unknown id is requested on purpose:
     // never as a blanket allowance, or a real 404 would slip through unnoticed.
-    const expectedStatuses = args.p3Reads || args.p4Reads
-      ? /(401|403|404|409)/
-      : /(401|403|409)/
+    // A b2 run provokes more on purpose: 404 for the default-off proxy refusal, and 502/504 for
+    // the deliberately dropped write reply that the replay case needs. They are *expected* only
+    // in that mode — never a blanket allowance, or a real failure would slip through.
+    const expectedStatuses = args.p4Writes || args.p4WritesOff
+      ? /(401|403|404|409|502|504)/
+      : args.p3Reads || args.p4Reads
+        ? /(401|403|404|409)/
+        : /(401|403|409)/
     const expectedRefusals = consoleErrors.filter((line) => {
       if (!/Failed to load resource/.test(line)) return false
       return expectedStatuses.test(line)
