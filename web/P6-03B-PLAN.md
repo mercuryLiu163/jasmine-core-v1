@@ -5,7 +5,7 @@
 This began as the task breakdown and dependency check the operator asked for before
 implementation. The operator then authorised b1, and E1–E5 below are built, tested and
 evidenced: contract pinned by full SHA, pending paths behind a default-off switch, a labelled
-simulated fixture, the seven read views, and 118 guards across three layers. The Gate evidence
+simulated fixture, the seven read views, and 121 guards across three layers. The Gate evidence
 is registered under the P6-03b1 section of `validation-runs/p6/P6-02B-INDEX.md`, which is where
 the current bundle and the superseded ones are listed — the directory is gitignored, so a
 specific timestamp here would rot the moment the Gate is re-run.
@@ -157,7 +157,7 @@ labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
 | E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts accept the same value set and are tested on it — including `' yes '` and mixed case, because the helper is *duplicated* rather than shared and dropping `.trim()` from one host left both suites green until those cases existed. Tests also assert P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
 | E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | **built.** `X-P6-Fixture: simulated-p4-reads`; the fixture also serves the shell routes in their documented shapes after an earlier version crashed the overview |
 | E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
-| E5 | Component tests plus a Gate section | **built, 118 guards** (25 contract, 21 fixture, 42 view, 16 static-host, 14 Vite-host). Gate: 10/10 full twice, 4/4 scope |
+| E5 | Component tests plus a Gate section | **built, 121 guards** (25 contract, 21 fixture, 42 view, 16 static-host, 14 Vite-host, 3 shared-hook). Gate: 10/10 full twice, 4/4 scope |
 
 **Still blocked until P4 is merged and independently validated:**
 
@@ -301,17 +301,22 @@ Still open, for the operator:
 * **Independent review of the b1 implementation** has not run at the time of writing; the
   bundle is frozen and the slices are green, but no third party has yet reviewed the b1 code
   or reproduced the Gate.
-* **One unexplained behaviour.** Signing out and back in mid-Gate left the app rendering the
-  previous route while the URL already carried the target hash; assigning the hash and
-  dispatching `hashchange` did not fix it, so the scope check moved to its own run. The root
-  cause was not established. Independent review could not reproduce it in jsdom either (two
-  probes — sign-out→sign-in→navigate, and setting the target hash while signed out then
-  signing in — both rendered the target route), which is why it is not filed as a product
-  defect. **The wording here previously overstated that support**: it claimed the component
-  tests drive the same transition and pass, but no test signs out and back in mid-session —
-  `app.test.tsx` signs out and asserts the sign-in form, which is a different transition. The
-  honest position is: unexplained, not reproduced in jsdom by review, and **not covered by a
-  test either way**.
+* **RESOLVED — the "route anomaly" was a real defect, and my first framing of it was wrong.**
+  The Gate used to time out after 退出 and re-signing in with a narrower token, when navigating
+  from a Memory *detail* to its *list*. I first recorded it as unexplained, not reproduced in
+  jsdom, and probably not a product defect. The operator refused that reasoning, correctly, and a
+  real-browser probe found the cause: `useResource` depends on `[nonce, signature]`, and the list
+  resources passed `[]` as `deps`, so the signature was `''` in both modes. Switching from a
+  detail to a list changed the loader from `null` to a function **without changing the signature**,
+  so the effect never re-ran, the resource stayed `idle`, and the panel rendered with no data, no
+  loading, no error and **no request**. It is fixed at the hook — a loader appearing or
+  disappearing is now part of the signature — and the same shape existed latently in
+  `CheckpointsView`, whose `latest` resource depends on `[taskId, sessionId]`.
+  The probe also answered the question that mattered more than the routing: **no data fetched with
+  the previous token was ever displayed** after 退出 or after signing in with a narrower token, so
+  this was staleness, not a leak. Evidence, including before/after request logs, is in
+  `<bundle>-route-investigation/`. The Gate workaround (splitting the scope check into its own
+  invocation) is removed and the check now covers the transition in one run.
 
 ## 7. Standing status
 
