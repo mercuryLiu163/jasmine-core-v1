@@ -44,7 +44,7 @@ export function p4ReadsEnabled(env?: Record<string, string | undefined>): boolea
 export function parseArgs(argv: string[]): ParsedArgs
 export function loadAllowlist(
   directory?: string,
-  options?: { enableP3Reads?: boolean },
+  options?: { enableP3Reads?: boolean; enableP4Reads?: boolean },
 ): Allowlist
 export function resolveCoreOrigin(raw?: string): URL
 export function isAllowed(allowlist: Allowlist, method: string | undefined, pathname: string): boolean
