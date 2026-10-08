@@ -622,9 +622,13 @@ function SectionsTable({ sections }: { sections: ValidationSections }): JSX.Elem
                           ? '未给出'
                           : String(section.context_pack_present === true)}
                       </strong>
-                      {section.present && section.context_pack_present !== true
-                        ? ' —— 这一段被记录了,但里面没有 context pack,不能当作 pack'
-                        : ''}
+                      {section.context_pack_present === undefined
+                        ? section.present
+                          ? ' —— 这一段被记录了;Core 没有报告 context_pack_present,所以这里不断言它是不是 pack'
+                          : ''
+                        : section.present && section.context_pack_present !== true
+                          ? ' —— 这一段被记录了,但里面没有 context pack,不能当作 pack'
+                          : ''}
                     </div>
                   ) : null}
                 </td>

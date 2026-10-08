@@ -727,6 +727,7 @@ def main(argv: list[str] | None = None) -> int:
 
         (out / "scenario.md").write_text(
             render_scenario(out, descriptor, args.real_runs, args.repo), encoding="utf-8")
+        log(f"bundle written to {out}")
         (out / "run.stdout.txt").write_text("\n".join(_LOG) + "\n", encoding="utf-8")
 
         # F7: everything the bundle will contain now exists except manifest.json, so the token
@@ -738,8 +739,12 @@ def main(argv: list[str] | None = None) -> int:
              "scanned_files": sorted(path.relative_to(out).as_posix()
                                      for path in out.rglob("*") if path.is_file()
                                      and path.name != "manifest.json"),
-             "note": "no bearer token may appear in any bundle file; scanned after every other "
-                     "file was written and immediately before manifest.json binds them"},
+             "not_scanned": ["manifest.json", "result.md", "token-scan.json"],
+             "note": "no bearer token may appear in any bundle file. Everything written before "
+                     "this point was scanned; `result.md` cannot be scanned by the scan it "
+                     "reports (it is written immediately afterwards and is generated only from "
+                     "the already-scanned observations), and `manifest.json` is the binder "
+                     "written last."},
             indent=2) + "\n", encoding="utf-8")
 
         python_checks = [
@@ -762,7 +767,12 @@ def main(argv: list[str] | None = None) -> int:
              "ok": not leaked,
              "evidence": "token-scan.json"},
             {"step": "the fixture is not counted toward criterion 1",
-             "ok": True,
+             # F6: this reads the measurement rather than asserting it. `counted_toward_criterion_1`
+             # is true exactly when a fixture run id appears among the ids the census counted, so
+             # this check fails if that ever happens.
+             "ok": not fixture_census_note["counted_toward_criterion_1"],
+             "detail": f"fixture ids inside the census: "
+                       f"{fixture_census_note['fixture_ids_inside_census']}",
              "evidence": "fixture-census.json"},
         ]
         (out / "result.md").write_text(
