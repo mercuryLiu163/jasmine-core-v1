@@ -316,6 +316,11 @@ Still open, for the operator:
   detail-only fields — all fixed after that. Validation reproduced every suite, the contract
   check, the build digests and 11/11 on the Gate from a clean archive, and confirmed the
   `useResource` fix is load-bearing by reverting it and watching the Gate fail at record 8.
+  **Model caveat, stated rather than glossed:** the operator asked for these passes on
+  `gpt-6.1-sol`. That override was unreachable in this environment — it returned no result while
+  the default model did, and the `opencode-go` provider has no API key set — so every pass ran on
+  the session's default model (`deepseek-flash`) after the operator chose that fallback. The
+  independence is between separate agent contexts, not between model families.
 * **RESOLVED — the "route anomaly" was a real defect, and my first framing of it was wrong.**
   The Gate used to time out after 退出 and re-signing in with a narrower token, when navigating
   from a Memory *detail* to its *list*. I first recorded it as unexplained, not reproduced in
