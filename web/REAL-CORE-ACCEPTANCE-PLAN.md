@@ -195,3 +195,35 @@ dashboard from a pinned commit, and the two meet on loopback inside a temp direc
 depend on the merge is the `live` default: `web/server/core-paths.json` stays as it is, the live
 entry stays closed, and no operator service is started or reconfigured until the real target
 baseline has passed this plan and the operator says so.
+
+## 10. First probe — exploratory, not yet a frozen bundle
+
+The environment was built and driven by hand to find out whether the plan's design works before a
+harness is written around it. **These observations are real but exploratory**: they come from one
+ad-hoc session, they are not yet a bundle with `BUNDLE-FROZEN.json`, and the harness is expected to
+re-derive every one of them. They are recorded because three of the fixture's admitted divergences
+are already settled by them, and a settled divergence changes what the harness must assert.
+
+Environment: real P4 Core at the pinned commit (`schema_version: 11`), its own tree under
+`/tmp`, wire-double engine, real Truth created through P4's own stores, and the Memory rows produced
+by P4's own recovery scan and worker (`2 DONE retain jobs`, `3 items`).
+
+| Observation | Result |
+| --- | --- |
+| The seven reads | 200 with the frozen contract's key sets: health 18, jobs `{count,counts,jobs}`, job `{job,attempts}`, items `{count,items,non_authoritative}`, item `{memory,sources,jobs,recallable,lifecycle,engine_claim,non_authoritative}`, traces `{count,traces}`; the nested `lifecycle` has 9 keys |
+| `memory:read` on a read-only key | reads 200; a `pin` with the same key → **403 `forbidden_scope`** `{required: memory:manage, granted: [...]}` |
+| **Issuance, which the fixture could not model** | `auth.issue_key` for an **agent** actor with `memory:manage` → **403 `forbidden_actor_kind`**; with `memory:reflect` → the same. The fixture's "artificial agent token carrying manage" therefore **cannot exist on real P4**, exactly as the b2 compliance record says |
+| A fresh lifecycle transition | `pin` → 200, **7 keys** with `before`/`after`, `replayed: false`, `revision` 1 → 2, and `job: null` (correct: a pin queues no remote work) |
+| A replay | the same `event_id` and body again → 200, **5 keys**, `replayed: true` |
+| **D1 — the replay identity** | the same `event_id` with a **changed** `reason` → **409 `event_id_conflict`** carrying `existing_body_sha256`. P4 hashes the command payload; the fixture keyed on `(object_id, command)` and replayed here, so the fixture **was** looser and the divergence is now settled with evidence |
+| A stale revision | → 409 `revision_conflict` with `current_revision` and `expected_revision` |
+| `reflect` | → 200, **8 keys**, a real `trace_id`, `non_authoritative: true` |
+| A retry on a `DONE` job | → 409 `invalid_state_transition` |
+| The audit readback | the command Event read back through `/v1/events/{event_id}` → 200, same id and type |
+| **D3 — a lifecycle reply's job** | `obsolete` returns a **real queued job** (`kind: invalidate`), readable by id; the fixture always returned `job: null` |
+| **D4 — the list after a write** | the items **list** reflects the mutation (`status: OBSOLETE`, `revision: 2`); the fixture's list routes did not |
+| **The withholding rule needs a row that carries engine text** | a healthy item's `safe_error_summary` is `None` **for the human too**, so the fixture's "text for the human" was an artifact of the fixture. The environment now produces a genuinely failed retain (a transport pointed at a port nothing listens on): the job ends `FAILED`/`engine_unreachable` and the item ends `RETAIN_FAILED`, both carrying `'could not reach the engine: [Errno 61] Connection refused'`. The human/agent pair must be checked on **those** rows |
+
+Still to be settled by the harness: **D2** (the nested command `event` shape against the derivation),
+the human/agent withholding pair on the failed rows, the retry invariants on real jobs, and the
+dashboard-level pass (the six writes driven through the UI, not by hand).
