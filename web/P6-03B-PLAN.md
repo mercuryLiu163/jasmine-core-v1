@@ -5,8 +5,10 @@
 This began as the task breakdown and dependency check the operator asked for before
 implementation. The operator then authorised b1, and E1–E5 below are built, tested and
 evidenced: contract pinned by full SHA, pending paths behind a default-off switch, a labelled
-simulated fixture, the seven read views, and 89 guards across three layers. The Gate bundle is
-`validation-runs/p6/20261008T020743Z-p6-03b1-clickthrough/`.
+simulated fixture, the seven read views, and 98 guards across three layers. The Gate evidence
+is registered under the P6-03b1 section of `validation-runs/p6/P6-02B-INDEX.md`, which is where
+the current bundle and the superseded ones are listed — the directory is gitignored, so a
+specific timestamp here would rot the moment the Gate is re-run.
 
 **P4 phase acceptance still has NOT passed**, and the live proxy entry is still closed: nothing
 here was validated against a real P4 Core. Section §6 records what remains open.
@@ -144,7 +146,7 @@ labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
 | E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts share one `flagEnabled` spelling; tests assert they agree, that P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
 | E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | **built.** `X-P6-Fixture: simulated-p4-reads`; the fixture also serves the shell routes in their documented shapes after an earlier version crashed the overview |
 | E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
-| E5 | Component tests plus a Gate section | **built, 89 guards.** Gate: 10/10 full twice, 4/4 scope |
+| E5 | Component tests plus a Gate section | **built, 98 guards** (21 contract, 21 fixture, 31 view, 16 static-host, 9 Vite-host). Gate: 10/10 full twice, 4/4 scope |
 
 **Still blocked until P4 is merged and independently validated:**
 
