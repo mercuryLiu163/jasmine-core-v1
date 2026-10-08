@@ -16,8 +16,10 @@ handler the click-through Gate talks to.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
+import subprocess
 import sys
 import threading
 import unittest
@@ -27,6 +29,77 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+_P3_SOURCE_CACHE: dict[tuple[str, str], str] = {}
+
+
+def _p3_source(ref: str, path: str) -> str:
+    """P3's file at `ref`, or skip the test. Cached: several tests read the same file.
+
+    These guards are only as good as the checkout: with the P3 branch absent there is
+    nothing to compare against, and a skip says so rather than passing on a hardcoded copy.
+    """
+    if (ref, path) in _P3_SOURCE_CACHE:
+        return _P3_SOURCE_CACHE[(ref, path)]
+    try:
+        source = subprocess.run(["git", "show", f"{ref}:{path}"], cwd=ROOT, check=True,
+                                capture_output=True, text=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError) as error:
+        raise unittest.SkipTest(
+            f"P3 ref {ref!r} is not in this checkout, so {path} cannot be compared "
+            f"({error.__class__.__name__})") from error
+    _P3_SOURCE_CACHE[(ref, path)] = source
+    return source
+
+
+def _effective_dict_keys(source: str, func_name: str, var_name: str) -> frozenset[str]:
+    """Every key `var_name` ends up with in `func_name`, including post-hoc assignment.
+
+    P3 builds the comparison `diff` as a literal and *then* adds `workspace_paths` by
+    subscript assignment (`diff['workspace_paths'] = {...}`). A literal-only reading would
+    report a key set that the returned document does not have — the first version of this
+    guard did exactly that and failed against a correct fixture.
+    """
+    keys: set[str] = set()
+    for node in ast.walk(ast.parse(source)):
+        if not (isinstance(node, ast.FunctionDef) and node.name == func_name):
+            continue
+        for inner in ast.walk(node):
+            if (isinstance(inner, ast.Assign)
+                    and isinstance(inner.targets[0], ast.Name)
+                    and inner.targets[0].id == var_name
+                    and isinstance(inner.value, ast.Dict)):
+                keys |= {k.value for k in inner.value.keys
+                         if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+            if (isinstance(inner, ast.Assign)
+                    and isinstance(inner.targets[0], ast.Subscript)
+                    and isinstance(inner.targets[0].value, ast.Name)
+                    and inner.targets[0].value.id == var_name):
+                slice_node = inner.targets[0].slice
+                if isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
+                    keys.add(slice_node.value)
+        return frozenset(keys)
+    raise AssertionError(f"{func_name} not found in the P3 source")
+
+
+def _dict_key_sets(source: str, func_name: str) -> set[frozenset[str]]:
+    """Every string-keyed dict literal inside `func_name`, as key sets.
+
+    A rename or removal in P3 changes one of these frozensets, so a fixture that still
+    serves the old key stops matching.
+    """
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.FunctionDef) and node.name == func_name:
+            out: set[frozenset[str]] = set()
+            for literal in ast.walk(node):
+                if not isinstance(literal, ast.Dict):
+                    continue
+                keys = [k.value for k in literal.keys
+                        if isinstance(k, ast.Constant) and isinstance(k.value, str)]
+                if keys:
+                    out.add(frozenset(keys))
+            return out
+    raise AssertionError(f"{func_name} not found in the P3 source")
 
 _spec = importlib.util.spec_from_file_location(
     "p3_read_fixture", ROOT / "scripts" / "p6" / "p3_read_fixture.py")
@@ -71,39 +144,69 @@ class PayloadShapes(unittest.TestCase):
     def test_the_nested_shapes_mirrored_from_p3_carry_its_keys(self) -> None:
         """The fixture has no Truth store, so it cannot serve P3's *values*.
 
-        It can still serve P3's *shapes*, and for the nested documents the UI actually
-        renders it must: the first cut sent `next_actions` as a list of strings where P3
-        returns a list of objects, which exercised a branch real P3 never reaches. These
-        key sets are read from P3's source (`continuity.next_actions`,
-        `continuity._comparison`, `context.renderer.render`); if P3 changes one, this test
-        is the place that notices.
+        It can still serve P3's *shapes*, and for the nested documents the UI renders it
+        must: the first cut sent `next_actions` as a list of strings where P3 returns a list
+        of objects, which exercised a branch real P3 never reaches.
+
+        This reads the key sets out of **P3's own source**, so a rename there fails here
+        rather than going unnoticed. The ref is the one the contract pins; where it is
+        absent the test skips loudly instead of passing on a hardcoded copy.
         """
+        ref = CONTRACT["source"]["ref"]
+        source = _p3_source(ref, "src/jasmine_core/continuity.py")
+        renderer = _p3_source(ref, "src/jasmine_core/context/renderer.py")
+
         resume = fixture.resume_payload(CONTRACT)
-        # continuity.next_actions: `{'kind': ...}` when reconciliation is required, and
+        # continuity.next_actions emits `{'kind': ...}` on the reconciliation branch and
         # `{'kind', 'step_id', 'status'}` otherwise. Never a string.
         self.assertEqual(resume["next_actions"], [{"kind": "RECONCILE_CURRENT_TRUTH"}])
-        # continuity._comparison
-        self.assertEqual(
-            set(resume["comparison"]),
-            {"checkpoint_freshness", "workspace", "warnings", "reconciliation_required", "diff"})
-        self.assertEqual(
-            set(resume["comparison"]["diff"]),
-            {"added", "removed", "changed", "evidence_changed", "workspace_paths"})
-        self.assertEqual(set(resume["comparison"]["diff"]["workspace_paths"]),
-                         {"added", "removed", "changed"})
+        self.assertIn(frozenset({"kind"}), _dict_key_sets(source, "next_actions"))
+        self.assertIn(frozenset({"kind", "step_id", "status"}), _dict_key_sets(source, "next_actions"))
 
+        # continuity._compare_checkpoint returns the comparison document, and builds `diff` and its
+        # `workspace_paths` as dict literals in the same function.
+        comparison_sets = _dict_key_sets(source, "_compare_checkpoint")
+        self.assertIn(frozenset(resume["comparison"]), comparison_sets)
+        # `diff` gains `workspace_paths` by assignment after its literal, so the effective
+        # key set is the literal's keys plus the assigned one.
+        self.assertEqual(frozenset(resume["comparison"]["diff"]),
+                         _effective_dict_keys(source, "_compare_checkpoint", "diff"))
+        self.assertIn(frozenset(resume["comparison"]["diff"]["workspace_paths"]), comparison_sets)
+
+        # context.renderer.render builds each section metric and each omission as a literal.
         pack = fixture.context_payload(CONTRACT)
-        # context.renderer.render -> section_metrics
+        renderer_sets = _dict_key_sets(renderer, "render")
         for metric in pack["section_metrics"]:
-            self.assertEqual(
-                set(metric),
-                {"section", "utf8_start", "utf8_end", "sha256", "standalone_tokens",
-                 "cumulative_prefix_tokens", "prefix_delta_tokens"})
-        # context.renderer.render -> omissions
+            self.assertIn(frozenset(metric), renderer_sets)
         for omission in pack["omissions"]:
-            self.assertEqual(
-                set(omission),
-                {"section", "item_id", "reason", "standalone_tokens", "source_ids"})
+            self.assertIn(frozenset(omission), renderer_sets)
+
+    def test_a_rename_in_p3_would_break_the_guard(self) -> None:
+        """Falsify the guard by mutating P3's source, not by mutating the expectation.
+
+        If the derivation ignored the source — or read the wrong function — a renamed key
+        would leave it matching, and this test would pass for the wrong reason. So the
+        source text itself is changed and the derived sets must change with it.
+        """
+        ref = CONTRACT["source"]["ref"]
+        continuity = _p3_source(ref, "src/jasmine_core/continuity.py")
+        renderer = _p3_source(ref, "src/jasmine_core/context/renderer.py")
+
+        renamed_comparison = continuity.replace("'checkpoint_freshness'", "'checkpoint_freshness_v2'")
+        self.assertNotEqual(renamed_comparison, continuity, "P3 no longer uses that key")
+        self.assertNotIn(
+            frozenset({"checkpoint_freshness", "workspace", "warnings",
+                       "reconciliation_required", "diff"}),
+            _dict_key_sets(renamed_comparison, "_compare_checkpoint"),
+            "renaming the key in P3 must stop the fixture's set from matching")
+
+        renamed_metric = renderer.replace("'prefix_delta_tokens'", "'prefix_delta_tokens_v2'")
+        self.assertNotEqual(renamed_metric, renderer, "P3 no longer uses that key")
+        self.assertNotIn(
+            frozenset({"section", "utf8_start", "utf8_end", "sha256", "standalone_tokens",
+                       "cumulative_prefix_tokens", "prefix_delta_tokens"}),
+            _dict_key_sets(renamed_metric, "render"),
+            "renaming a metric key in P3 must stop the fixture's set from matching")
 
     def test_the_resume_note_denies_its_own_authority(self) -> None:
         note = fixture.resume_payload(CONTRACT)["note"]

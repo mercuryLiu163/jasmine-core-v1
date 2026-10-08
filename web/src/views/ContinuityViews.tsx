@@ -57,6 +57,25 @@ function InvalidId({ prefix, value, field }: { prefix: string; value: string; fi
   )
 }
 
+/**
+ * A malformed id in the URL that this view's read does not use.
+ *
+ * Reported rather than dropped — silently ignoring what someone typed is how a typo
+ * becomes a mystery — but it does not block the record that *is* readable, because
+ * refusing a usable URL over an unused field would be its own kind of wrong.
+ */
+function UnusedInvalidId({ prefix, value, field }: { prefix: string; value: string; field: string }): JSX.Element {
+  return (
+    <div className="state state--meta" role="status" data-testid="invalid-id-unused">
+      <p>
+        忽略无法使用的 <code>{field}</code>:<code>{value}</code> 不是 Core 的 id 形状
+        (<code>{prefix}_</code> + 26 位 Crockford base32)。当前 URL 选择的是按 ID 读取,
+        不使用这个字段,所以记录仍然显示。
+      </p>
+    </div>
+  )
+}
+
 /** A resource error is nullable; only a real proxy refusal counts as pending. */
 function pending(error: CoreApiError | null): boolean {
   return error !== null && isDependencyPending(error)
@@ -295,17 +314,33 @@ export function CheckpointsView({
   const checkpointIdValid = checkpointId === null || isCoreId(checkpointId, 'ckp')
   const taskIdValid = taskId === null || isCoreId(taskId, 'tsk')
   const sessionIdValid = sessionId === null || isCoreId(sessionId, 'ses')
-  // Any malformed id in the URL refuses the whole view, not just the request that would
-  // have used it: a bad `task_id` beside a valid `checkpoint_id` used to be dropped in
-  // silence, which reads as "the dashboard ignored what I typed".
+  // A malformed id blocks the view only when the read that will actually run needs it.
+  // `checkpoint_id` selects the by-id read; `task_id` and `session_id` select the latest
+  // read, which runs only when there is no `checkpoint_id`. Refusing a *usable* URL over a
+  // field the read never touches is its own kind of wrong — so those are reported below
+  // without blocking, and nothing is dropped in silence either way.
   const badId =
-    checkpointId !== null && !checkpointIdValid
-      ? { prefix: 'ckp', field: 'checkpoint_id', value: checkpointId }
+    checkpointId !== null
+      ? checkpointIdValid
+        ? null
+        : { prefix: 'ckp', field: 'checkpoint_id', value: checkpointId }
       : taskId !== null && !taskIdValid
         ? { prefix: 'tsk', field: 'task_id', value: taskId }
         : sessionId !== null && !sessionIdValid
           ? { prefix: 'ses', field: 'session_id', value: sessionId }
           : null
+  // Malformed, but not used by the read this URL selects. Reported, not blocking.
+  const unusedBadIds =
+    checkpointId !== null
+      ? [
+          ...(taskId !== null && !taskIdValid
+            ? [{ prefix: 'tsk', field: 'task_id', value: taskId }]
+            : []),
+          ...(sessionId !== null && !sessionIdValid
+            ? [{ prefix: 'ses', field: 'session_id', value: sessionId }]
+            : []),
+        ]
+      : []
   const byId =
     badId !== null || checkpointId === null
       ? null
@@ -392,6 +427,11 @@ export function CheckpointsView({
         </p>
 
         {badId ? <InvalidId {...badId} /> : null}
+        {badId === null
+          ? unusedBadIds.map((unused) => (
+              <UnusedInvalidId key={unused.field} {...unused} />
+            ))
+          : null}
 
         {!badId && isPending ? (
           <DependencyPending

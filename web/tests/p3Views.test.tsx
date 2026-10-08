@@ -314,15 +314,43 @@ describe('a malformed id is refused with the right reason', () => {
     expect(fake!.requests.filter((r) => r.path.startsWith('/v1/context/'))).toHaveLength(0)
   })
 
-  it('refuses a malformed task_id even when the checkpoint_id is valid', async () => {
-    // A malformed field that nothing happens to request must still be reported: silently
-    // ignoring it reads as "the dashboard ignored what I typed".
+  it('reports a malformed task_id beside a valid checkpoint_id without blocking the read', async () => {
+    // The by-id read never uses `task_id`. Refusing a usable URL over an unused field is
+    // over-refusal, but silently ignoring it is how a typo becomes a mystery — so it is
+    // reported and the record still renders.
     const user = userEvent.setup()
-    await enter(user, `#/checkpoints?checkpoint_id=${CHECKPOINT}&task_id=tsk_short`, SIGNED_IN)
+    await enter(user, `#/checkpoints?checkpoint_id=${CHECKPOINT}&task_id=tsk_short`, {
+      ...SIGNED_IN,
+      ['GET /v1/checkpoints/' + CHECKPOINT]: { body: { checkpoint: checkpoint() } },
+    })
     const panel = await screen.findByRole('region', { name: /读取 Checkpoint/ })
-    await waitFor(() => expect(within(panel).getByTestId('invalid-id').textContent).toContain('task_id'))
-    expect(fake!.requests.filter((r) => r.path.startsWith('/v1/checkpoints/'))).toHaveLength(0)
+    await waitFor(() => expect(within(panel).getByTestId('invalid-id-unused')).toBeTruthy())
+    expect(within(panel).getByTestId('invalid-id-unused').textContent).toContain('task_id')
+    // Not the blocking panel, and the record really did load.
+    expect(within(panel).queryByTestId('invalid-id')).toBeNull()
+    await waitFor(() => expect(panel.textContent).toContain('不可变快照'))
     expect(fake!.requests.filter((r) => r.path.includes('/checkpoints/latest'))).toHaveLength(0)
+  })
+
+  it('refuses a malformed session_id only when the latest read would use it', async () => {
+    // With no checkpoint_id, `session_id` selects the latest read — so it blocks.
+    const user = userEvent.setup()
+    await enter(user, `#/checkpoints?task_id=${TASK}&session_id=ses_short`, SIGNED_IN)
+    const panel = await screen.findByRole('region', { name: /读取 Checkpoint/ })
+    await waitFor(() => expect(within(panel).getByTestId('invalid-id').textContent).toContain('session_id'))
+    expect(fake!.requests.filter((r) => r.path.includes('/checkpoints/latest'))).toHaveLength(0)
+  })
+
+  it('still reads the latest checkpoint from a valid task_id alone', async () => {
+    const user = userEvent.setup()
+    await enter(user, `#/checkpoints?task_id=${TASK}`, {
+      ...SIGNED_IN,
+      ['GET /v1/tasks/' + TASK + '/checkpoints/latest']: { body: { checkpoint: checkpoint() } },
+    })
+    const panel = await screen.findByRole('region', { name: /读取 Checkpoint/ })
+    await waitFor(() => expect(panel.textContent).toContain('不可变快照'))
+    expect(within(panel).queryByTestId('invalid-id')).toBeNull()
+    expect(within(panel).queryByTestId('invalid-id-unused')).toBeNull()
   })
 
   it('refuses a malformed resume id without requesting it', async () => {

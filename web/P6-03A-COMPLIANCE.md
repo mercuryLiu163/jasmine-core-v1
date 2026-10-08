@@ -148,7 +148,7 @@ live allowlist, so enabling them cannot happen by drift or by a careless edit to
 
 ## Evidence
 
-* Browser click-through Gate, **13/13**, three times with identical step sequences, run
+* Browser click-through Gate, **14/14**, three times with identical step sequences, run
   from an isolated `git archive` of the commit with its own fixture, proxy and ports:
   `validation-runs/p6/<stamp>-p6-03a-clickthrough/` (+ `-stability1`, `-stability2`), with
   `README.md`, `BUNDLE-FROZEN.json`, `click-trace.jsonl`, `browser-requests.jsonl` and
@@ -156,12 +156,13 @@ live allowlist, so enabling them cannot happen by drift or by a careless edit to
   `validation-runs/p6/P6-02B-INDEX.md`.
 * The product asset was rebuilt from committed source and compared file for file against the
   tree the runs served, so the evidence comes from the commit and not from a stale build.
-* Component tests: `web/tests/p3Views.test.tsx` (18), `web/tests/p3Reads.test.ts` (15),
+* Component tests: `web/tests/p3Views.test.tsx` (23), `web/tests/p3Reads.test.ts` (15),
   `web/tests/p3ReadsCoreProxy.test.ts` (9) — the last covers the Vite-plugin host, which had
   no test until review pointed out that only `serve.mjs` was gated by one.
 * Contract tests: `tests/p6/test_p3_contract_snapshot.py` (16),
-  `tests/p6/test_p3_read_fixture.py` (15) — 31 in total, including two that pin the scope
-  *order* Core would report, not only the set.
+  `tests/p6/test_p3_read_fixture.py` (16) — 32 in total, including two that pin the scope
+  *order* Core would report (not only the set) and one that reads P3's own source to pin the
+  nested key sets.
 
 ## What independent review changed
 
@@ -191,9 +192,16 @@ four things worth recording rather than quietly fixing:
   reaches. `section_metrics` and `omissions` were invented too. The fixture and the view now
   use P3's real key sets for everything the UI renders, and a test pins each mirrored key set
   to P3's source (`continuity.next_actions`, `continuity._comparison`,
-  `context.renderer.render`). A nested shape this build does not recognise renders as JSON
-  rather than being dropped. Values remain the fixture's — it has no Truth store, and this
-  document says so rather than letting the distinction blur.
+  `context.renderer.render`). That test reads P3's source through git rather than comparing
+  to a hardcoded copy, and skips loudly where the P3 ref is absent — a claim the review
+  correctly rejected when the test was only checking literals. A nested shape this build does
+  not recognise renders as JSON rather than being dropped. Values remain the fixture's — it
+  has no Truth store, and this document says so rather than letting the distinction blur.
+
+A later review pass also found the view over-refusing: a malformed `task_id` beside a valid
+`checkpoint_id` blocked the record, even though the by-id read never uses `task_id`. A
+malformed id now blocks only when the read that will run actually needs it; the others are
+reported as ignored rather than dropped in silence.
 
 ## Deliverables
 
