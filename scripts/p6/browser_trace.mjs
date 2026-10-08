@@ -2342,6 +2342,10 @@ async function main() {
       if (args.p4WritesOff) {
         await goto(`memory/items/${MITEM}`, 'memory item detail with writes off',
           `document.querySelector('[data-testid="lifecycle-command"]') !== null`)
+        // The simulation's own command log, before and after, written into the bundle. The record's
+        // claim is "no command reached Core", and a live read whose result only exists in a log
+        // line is weaker evidence than a frozen file a reviewer can diff.
+        const offStateBefore = await simState()
         const beforeOff = requests.length
         await clickSubmit('Memory 生命周期写入 (memory:manage)')
         await waitFor(cdp,
@@ -2356,11 +2360,17 @@ async function main() {
             .filter((request) => request.method === 'POST').length,
         }
         const offState = await simState()
+        await writeFile(join(out, 'fixture-state.json'),
+          JSON.stringify({ note: 'the simulated Core\'s own log, read directly on the fixture port',
+                           before: offStateBefore, after: offState }, null, 2) + '\n')
         trace.record(
           'with P6_ENABLE_P4_WRITES unset the proxy refuses the write, names the switch, and no command reaches Core',
           off.pending && off.namesSwitch && off.genericScopeBanner === false &&
-            off.refused === 1 && (offState.commands ?? []).length === 0,
-          JSON.stringify({ ...off, commands: (offState.commands ?? []).length }))
+            off.refused === 1 && (offState.commands ?? []).length === 0 &&
+            (offStateBefore.commands ?? []).length === 0,
+          JSON.stringify({ ...off, commandsBefore: (offStateBefore.commands ?? []).length,
+            commandsAfter: (offState.commands ?? []).length,
+            stateFile: 'fixture-state.json' }))
         await trace.screenshot(cdp, '32-memory-write-switch-off')
       }
 
