@@ -5,7 +5,7 @@
 This began as the task breakdown and dependency check the operator asked for before
 implementation. The operator then authorised b1, and E1–E5 below are built, tested and
 evidenced: contract pinned by full SHA, pending paths behind a default-off switch, a labelled
-simulated fixture, the seven read views, and 121 guards across three layers. The Gate evidence
+simulated fixture, the seven read views, and 124 guards across three layers. The Gate evidence
 is registered under the P6-03b1 section of `validation-runs/p6/P6-02B-INDEX.md`, which is where
 the current bundle and the superseded ones are listed — the directory is gitignored, so a
 specific timestamp here would rot the moment the Gate is re-run.
@@ -157,7 +157,7 @@ labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
 | E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts accept the same value set and are tested on it — including `' yes '` and mixed case, because the helper is *duplicated* rather than shared and dropping `.trim()` from one host left both suites green until those cases existed. Tests also assert P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
 | E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | **built.** `X-P6-Fixture: simulated-p4-reads`; the fixture also serves the shell routes in their documented shapes after an earlier version crashed the overview |
 | E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
-| E5 | Component tests plus a Gate section | **built, 121 guards** (25 contract, 21 fixture, 42 view, 16 static-host, 14 Vite-host, 3 shared-hook). Gate: 11/11, twice with identical step sequences, in a single run |
+| E5 | Component tests plus a Gate section | **built, 124 guards** (25 contract, 21 fixture, 44 view, 16 static-host, 14 Vite-host, 4 shared-hook). Gate: 11/11, twice with identical step sequences, in a single run |
 
 **Still blocked until P4 is merged and independently validated:**
 
