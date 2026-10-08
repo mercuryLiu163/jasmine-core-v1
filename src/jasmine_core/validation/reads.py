@@ -59,6 +59,11 @@ MAX_DEPTH = 4
 MAX_SCANNED_ENTRIES = 20_000
 MAX_RUN_SHAPED = 500
 MAX_MANIFEST_BYTES = 1024 * 1024
+#: Robustness bound for one run record. §8 names no record size, but it does
+#: require that no route can be made to read an unbounded amount of data, and
+#: the list route classifies every discovered record. A real record is a few
+#: kilobytes; a file over this bound is reported corrupt rather than read.
+MAX_RECORD_BYTES = 16 * 1024 * 1024
 MAX_MANIFEST_FILES = 128
 MAX_ARTIFACT_BYTES = 8 * 1024 * 1024
 LIMIT_DEFAULT = 20
@@ -220,10 +225,10 @@ def _walk(root: Path, *, stop_on_caps: bool) -> _Walk:
         depth = len(rel_dir.parts)
         result.scanned_dirs += 1
         result.scanned_entries += 1
-        if depth >= MAX_DEPTH:
-            result.ignored.append((str(rel_dir), "depth_cap"))
-            dirnames[:] = []
-            continue
+        # F2: the CURRENT directory's files are at `depth`, and the cap is
+        # "at most 4 directory levels below the root", so a file in a directory
+        # four levels down is inside the cap. The filenames are therefore
+        # processed first (below) and only the descent past the cap is pruned.
         keep: list[str] = []
         for name in dirnames:
             if name.startswith(".") or name == "__pycache__":
@@ -237,7 +242,15 @@ def _walk(root: Path, *, stop_on_caps: bool) -> _Walk:
                 result.scanned_entries += 1
                 continue
             keep.append(name)
-        dirnames[:] = keep
+        if depth >= MAX_DEPTH:
+            # Subdirectories here would be at depth+1, past the cap: name each
+            # one and do not descend. The contents are not enumerated, so a
+            # pruned directory counts as one ignored entry.
+            for name in keep:
+                result.ignored.append((str(rel_dir / name), "depth_cap"))
+            dirnames[:] = []
+        else:
+            dirnames[:] = keep
         for name in filenames:
             result.scanned_files += 1
             result.scanned_entries += 1
@@ -273,6 +286,19 @@ class _Record:
 
 def _classify(path: Path, relative_path: str) -> _Record:
     """The §2 run-shaped grammar. Anything run-shaped is kept, never dropped."""
+    # F4: `_classify` runs for every run-shaped file on the list route, so the
+    # size is checked before the bytes are read. §8 says no route may read an
+    # unbounded amount of data; a record over the bound is reported corrupt
+    # rather than read.
+    try:
+        if path.stat().st_size > MAX_RECORD_BYTES:
+            return _Record(stem=path.stem, relative_path=relative_path, path=path,
+                           record_sha256="", status="corrupt",
+                           corrupt_reason=f"record exceeds {MAX_RECORD_BYTES} bytes")
+    except OSError as exc:
+        return _Record(stem=path.stem, relative_path=relative_path, path=path,
+                       record_sha256="", status="corrupt",
+                       corrupt_reason=f"unreadable: {type(exc).__name__}")
     try:
         raw = path.read_bytes()
     except OSError as exc:
@@ -542,9 +568,15 @@ def _classify_path(path: Any) -> tuple[bool, str]:
         return False, "backslash"
     if URL_SCHEME_RE.match(path):
         return False, "URL scheme"
-    parts = Path(path).parts
-    if any(part in ("..", "", ".") for part in parts):
+    # F3: `Path(path).parts` normalises `a//b`, `a/./b` and a trailing `/` away
+    # before a component check can see them, so the raw string is validated.
+    if ".." in path:
         return False, "dot segment"
+    if "//" in path:
+        return False, "empty path component"
+    components = path.split("/")
+    if any(component in ("", ".") for component in components):
+        return False, "empty or dot path component"
     return True, "ok"
 
 
@@ -570,6 +602,14 @@ def _load_manifest(run_dir: Path, run_id: str) -> _Manifest:
         return _Manifest(status="absent",
                          reason="the record predates the bundle convention and its history "
                                 "is not reconstructed")
+    # F4: refuse on the stat before reading, so a huge manifest is never made
+    # resident. No digest is reported for a file that was not read.
+    try:
+        if path.stat().st_size > MAX_MANIFEST_BYTES:
+            return _Manifest(status="corrupt",
+                             rule=f"manifest exceeds {MAX_MANIFEST_BYTES} bytes")
+    except OSError as exc:
+        return _Manifest(status="corrupt", rule=f"manifest.json is unreadable: {type(exc).__name__}")
     try:
         raw = path.read_bytes()
     except OSError as exc:
@@ -917,8 +957,11 @@ def list_runs(request: Request, core: "Core", principal: auth.Principal,
 
     filtered = [entry for entry in visible if _matches(entry, params)]
 
-    corrupt_count = sum(1 for entry in visible if entry[0].status == "corrupt")
-    duplicate_count = sum(1 for entry in visible if entry[0].status == "duplicate")
+    # F7: the counts describe the served set, exactly like `total` and
+    # `runs[]`, so `verdict=PASS` cannot report a corrupt row that is not in the
+    # body. Computed over `filtered`, not over `visible`.
+    corrupt_count = sum(1 for entry in filtered if entry[0].status == "corrupt")
+    duplicate_count = sum(1 for entry in filtered if entry[0].status == "duplicate")
 
     # AD1: `empty_reason` is computed over the visible set, never the raw walk,
     # so an `acl` caller cannot infer hidden-record existence from it.
@@ -1260,17 +1303,23 @@ def _locate(svc: ValidationServices, principal: auth.Principal, run_id: str) -> 
             raise errors.ValidationIndexTooLarge(
                 "the run index exceeds a walk cap", cap=walk.cap_name)
         raise errors.NotFound("validation_run", run_id)
-    if len(matches) > 1:
+    # F1: exactly the same predicate `_mark_duplicates` uses. A stem is
+    # ambiguous only when MORE THAN ONE parseable record claims it; a corrupt
+    # sibling does not make the parseable record unreadable, and a stem with no
+    # parseable member is corrupt rather than ambiguous. Without this the list
+    # could certify a row as `ok` and the detail route then refuse it.
+    parseable = [record for record in matches if record.status != "corrupt"]
+    if len(parseable) > 1:
         if acl and not explicit_unattributed:
             raise errors.NotFound("validation_run", run_id)
         raise errors.ValidationRunAmbiguous(
-            f"{len(matches)} run-shaped files share this stem", run_id=run_id)
-    record = matches[0]
-    if record.status == "corrupt":
+            f"{len(parseable)} run-shaped files share this stem", run_id=run_id)
+    if not parseable:
         if acl and not explicit_unattributed:
             raise errors.NotFound("validation_run", run_id)
         raise errors.ValidationRunCorrupt(
-            record.corrupt_reason or "the run record is unusable", run_id=run_id)
+            matches[0].corrupt_reason or "the run record is unusable", run_id=run_id)
+    record = parseable[0]
     manifest = _load_manifest(record.path.parent, record.stem)
     if not _run_visible(svc, principal, projects=_manifest_projects(manifest)):
         raise errors.NotFound("validation_run", run_id)

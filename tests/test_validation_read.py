@@ -35,6 +35,7 @@ from unittest.mock import patch
 from test_api import ACTOR, HOST, ApiTestCase  # noqa: E402
 
 from jasmine_core import auth, canonical, db, errors, fingerprint, ids, registry  # noqa: E402
+from jasmine_core.validation import reads as reads_module  # noqa: E402
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "p7"
 #: Fixture *source* files. NOT named `artifacts/`: `.gitignore` excludes any
@@ -1039,6 +1040,138 @@ class ContractSurface(ValidationApiTestCase):
             capture_output=True, text=True, cwd=REPO_ROOT)
         self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
         self.assertIn("absent", result.stderr)
+
+
+class ReviewRegression(ValidationApiTestCase):
+    """Regressions for the defects the independent implementation review named.
+
+    F1 (mixed parseable/corrupt stem), F2 (depth cap), F3 (raw declared-path
+    components), F4 (bounded reads) and F7 (counters describe the served set).
+    Each asserts the behaviour the frozen specification requires, not merely
+    that something did not crash.
+    """
+
+    def test_f1_a_corrupt_sibling_does_not_hide_a_parseable_record(self) -> None:
+        # `_mark_duplicates` groups parseable records only, so this stem is not a
+        # duplicate; `_locate` must therefore serve the parseable record instead
+        # of refusing the stem as ambiguous.
+        self.write_corrupt(self.root / "p7-corrupt" / RUN_ONE, RUN_ONE)
+        self.build_bundle(rel_dir="p7-ok")
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", "/v1/validation/runs", token=token)
+            self.assertEqual(status, 200, body)
+            self.assertEqual({(row["run_id"], row["record_status"]) for row in body["runs"]},
+                             {(RUN_ONE, "ok"), (RUN_ONE, "corrupt")})
+            self.assertEqual(body["corrupt_count"], 1)
+            self.assertEqual(body["duplicate_count"], 0)
+            status, body = self.call("GET", f"/v1/validation/runs/{RUN_ONE}", token=token)
+            self.assertEqual(status, 200, body)
+            self.assertEqual(body["run_id"], RUN_ONE)
+            self.assertTrue(body["verdict_consistent"])
+
+    def test_f1_two_parseable_records_still_refuse_the_stem(self) -> None:
+        self.build_bundle(rel_dir="p7-ok")
+        self.write_run(self.root / "p7-dup" / RUN_ONE, RUN_ONE)
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", f"/v1/validation/runs/{RUN_ONE}", token=token)
+            self.assertEqual(status, 409, body)
+            self.assertEqual(body["error"]["code"], "validation_run_ambiguous")
+
+    def test_f1_a_stem_with_only_corrupt_files_is_corrupt_not_ambiguous(self) -> None:
+        self.write_corrupt(self.root / "p7-c1" / RUN_ONE, RUN_ONE)
+        self.write_corrupt(self.root / "p7-c2" / RUN_ONE, RUN_ONE)
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", f"/v1/validation/runs/{RUN_ONE}", token=token)
+            self.assertEqual(status, 409, body)
+            self.assertEqual(body["error"]["code"], "validation_run_corrupt")
+
+    def test_f2_a_record_four_levels_below_the_root_is_found(self) -> None:
+        self.write_run(self.root / "d0" / "d1" / "d2" / "d3", RUN_ONE)
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", "/v1/validation/runs", token=token)
+            self.assertEqual(status, 200, body)
+            self.assertEqual([row["run_id"] for row in body["runs"]], [RUN_ONE])
+            self.assertEqual(body["ignored_entries"], 0)
+
+    def test_f2_a_record_five_levels_below_the_root_is_pruned(self) -> None:
+        self.write_run(self.root / "d0" / "d1" / "d2" / "d3" / "d4", RUN_ONE)
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", "/v1/validation/runs", token=token)
+            self.assertEqual(status, 200, body)
+            self.assertEqual(body["total"], 0)
+            self.assertEqual(body["empty_reason"], "no_run_shaped_files")
+            self.assertEqual(body["ignored_entries"], 1)
+            self.assertEqual(body["ignored_samples"][0]["reason"], "depth_cap")
+
+    def test_f3_raw_declared_path_components_refuse_the_manifest(self) -> None:
+        # `pathlib` normalises these away before a component check can see them,
+        # so the rule has to read the raw string.
+        for declared in ("a//b", "a/./b", "a/b/", "./a", "..%2Fb", "."):
+            with self.subTest(declared=declared):
+                run_dir = self.root / "p7-raw" / f"run-20261008T{abs(hash(declared)) % 1000000:06d}Z"
+                run_id = run_dir.name
+                self.write_run(run_dir, run_id)
+                entry = self.artifact_entry(run_dir, "art_raw", "artifacts/plain.txt",
+                                            fixture="plain.txt", declared_path=declared)
+                self.write_manifest(run_dir, run_id, [entry])
+                with self.env():
+                    token = self.key(["validation:read"])
+                    status, body = self.call(
+                        "GET", f"/v1/validation/runs/{run_id}/manifest", token=token)
+                    self.assertEqual(status, 409, body)
+                    self.assertEqual(body["error"]["code"], "validation_manifest_corrupt")
+                    self.assertIn("path", body["error"]["details"]["rule"])
+
+    def test_f4_an_oversize_manifest_is_refused_without_being_read(self) -> None:
+        run_dir = self.root / "p7-big" / RUN_ONE
+        self.write_run(run_dir, RUN_ONE)
+        self.write_manifest(run_dir, RUN_ONE, [],
+                            raw=" " * (reads_module.MAX_MANIFEST_BYTES + 1))
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", f"/v1/validation/runs/{RUN_ONE}/manifest", token=token)
+            self.assertEqual(status, 409, body)
+            self.assertEqual(body["error"]["code"], "validation_manifest_corrupt")
+            self.assertIn("exceeds", body["error"]["details"]["rule"])
+            # The digest of a file that was never read is not reported.
+            self.assertNotIn("manifest_sha256", body["error"]["details"])
+
+    def test_f4_an_oversize_record_is_corrupt_rather_than_read(self) -> None:
+        run_dir = self.root / "p7-big-run" / RUN_ONE
+        run_dir.mkdir(parents=True)
+        (run_dir / f"{RUN_ONE}.json").write_bytes(b"{" + b" " * (reads_module.MAX_RECORD_BYTES + 1))
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", "/v1/validation/runs", token=token)
+            self.assertEqual(status, 200, body)
+            self.assertEqual([row["record_status"] for row in body["runs"]], ["corrupt"])
+            self.assertEqual(body["corrupt_count"], 1)
+            self.assertEqual(body["runs"][0]["record_sha256"], "")
+
+    def test_f7_counters_describe_the_served_filtered_set(self) -> None:
+        self.build_bundle(rel_dir="p7-ok")
+        self.write_corrupt(self.root / "p7-corrupt" / RUN_FOUR, RUN_FOUR)
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", "/v1/validation/runs", token=token)
+            self.assertEqual(status, 200, body)
+            self.assertEqual((body["total"], body["corrupt_count"]), (2, 1))
+            status, body = self.call("GET", "/v1/validation/runs?verdict=PASS", token=token)
+            self.assertEqual(status, 200, body)
+            self.assertEqual([row["run_id"] for row in body["runs"]], [RUN_ONE])
+            self.assertEqual(body["total"], 1)
+            self.assertEqual(body["corrupt_count"], 0)
+            self.assertEqual(body["duplicate_count"], 0)
+            status, body = self.call("GET", "/v1/validation/runs?stage=NOPE", token=token)
+            self.assertEqual(status, 200, body)
+            self.assertEqual(body["total"], 0)
+            self.assertEqual(body["corrupt_count"], 0)
+            self.assertEqual(body["empty_reason"], "all_filtered_out")
 
 
 if __name__ == "__main__":

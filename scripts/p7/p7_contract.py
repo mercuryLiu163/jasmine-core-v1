@@ -220,6 +220,16 @@ def main(argv: list[str] | None = None) -> int:
                   or WORKTREE
         else:
             ref = WORKTREE
+    if ref != WORKTREE:
+        # F9: normalise a resolvable ref to the full commit SHA, so an equivalent
+        # short ref compares equal to the pinned `source.ref` instead of looking
+        # like provenance drift. An UNRESOLVABLE ref is deliberately left as it
+        # is, so it falls through to the "is absent" refusal below rather than
+        # being reported as something else.
+        try:
+            ref = resolve_commit(ref)
+        except (subprocess.CalledProcessError, ValueError):
+            pass
 
     try:
         derived = derive(ref)

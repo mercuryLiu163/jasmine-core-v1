@@ -122,6 +122,32 @@ actor; `validation:unattributed` is refused at key issuance for `agent` keys, th
 same `ForbiddenActorKind` guard already used for `memory:manage` and
 `memory:reflect`.
 
+### 5.0 Two documented divergences from the frozen proposal's wording
+
+The independent implementation review (F5, F6) found two places where the code
+answers more honestly than the proposal's prose. In both the code is kept and the
+divergence is recorded here, because changing the code would state something
+false.
+
+* **F5 — rows 4 and 6 also fire on the by-id routes.** The proposal scopes
+  `index_incomplete` and `validation_index_too_large` to the list route (`L`),
+  and says by-id reads "need no index". That is true for a record that can be
+  found: a known id is still served while a sibling subtree is unreadable. It is
+  not true for an id that resolves to **nothing** when the walk was knowingly
+  incomplete: answering `404 validation_run_not_found` would assert that the
+  record does not exist when the reader in fact could not look. The by-id routes
+  therefore return the same row 4 / row 6 refusal as the list when they cannot
+  rule the id out. This is not an existence oracle: the same refusal is returned
+  whether the id is hidden or absent.
+* **F6 — `acl` plus `validation:unattributed` reaches the `409` family.** The
+  proposal's §7 says the `409`s are `single_user`-only because in `acl` mode an
+  unreadable record "has already been answered by row 8". That is true only while
+  the caller lacks the explicit `validation:unattributed` grant: with it, a
+  corrupt or duplicate record is no longer hidden by row 8, and the honest answer
+  is `409 validation_run_corrupt` / `409 validation_run_ambiguous`. Without the
+  grant the caller still receives the single indistinguishable
+  `404 validation_run_not_found`, so the isolation property is unchanged.
+
 ### 5.1 Two isolation invariants (closing the approving review's AD1 and AD2)
 
 * **AD1 — `empty_reason` is computed over the visible set, never the raw walk.**
@@ -143,6 +169,19 @@ same `ForbiddenActorKind` guard already used for `memory:manage` and
 `discovery` counters (`scanned_dirs`, `scanned_files`, `unreadable_entries`,
 `capped`) and `ignored_entries` are raw root diagnostics and are not per-project
 information.
+
+### 5.2 Bounded reads
+
+`MAX_MANIFEST_BYTES` (1 MiB) is the proposal's §8 limit and is checked with a
+`stat` **before** the bytes are read, so an oversized manifest is reported
+`corrupt` without ever being made resident (and is then reported with no
+`manifest_sha256`, because a file that was not read has no digest). §8 names no
+record size but does require that no route read an unbounded amount of data, and
+the list route classifies every discovered record on every request; a run record
+over `MAX_RECORD_BYTES` (16 MiB, far above any real record — the nine are a few
+kilobytes) is therefore reported `corrupt` with `record_sha256: ""` rather than
+read. Both bounds are implementation limits, not contract vocabulary: no response
+field names them, and a record between the two bounds is still read normally.
 
 ## 6. Artifact reads and the masker revision
 
