@@ -22,8 +22,11 @@ Read `scripts/p6/p7_realcore_env.py`, `scripts/p6/p7_realcore_ui_trace.mjs` and
    proxy.
 
 Then `p7_realcore_ui_trace.mjs` drives Chrome, this runner verifies the Python-side facts (the
-nine real records' digests, the criterion-1 census, and the disk-vs-API-vs-DOM verdict
-comparison), and the bundle is written. Everything is torn down in a `finally`.
+real records' digests, the criterion-1 census, and the disk-vs-API-vs-DOM verdict comparison),
+and the bundle is written. Before the trace starts, this runner writes the real-record
+population it read from disk (`p7-trace-expectations.json`) and names it on the trace's command
+line, so the browser assertions are held against the tree that is actually there rather than a
+frozen count. Everything is torn down in a `finally`.
 
     python3.13 scripts/p6/p7_realcore_ui.py --out validation-runs/p6/<stamp>-p6-03c-validation-drilldown \
         [--ref SHA] [--keep]
@@ -58,6 +61,7 @@ from p7_realcore_env import (  # noqa: E402 - path setup must precede the import
     DEFAULT_REF,
     DEFAULT_REAL_RUNS,
     compare_real_tree,
+    criterion1_finding,
     snapshot_real_tree,
 )
 
@@ -218,36 +222,43 @@ class SwitchProxy:
 def criterion1_census(real_runs: Path) -> dict[str, Any]:
     """Criterion 1 ("a real FAIL Run, classified, raw output traceable") — the census.
 
-    Read straight from the operator's nine files, independent of the API and the UI.
+    Read straight from the real files on disk, independent of the API and the UI. The counting
+    itself is `p7_realcore_env.criterion1_finding()`, shared with the environment banner and
+    `descriptor.json`'s `mode.note`, so no two surfaces can disagree about whether a real FAIL
+    record exists.
     """
-    census: dict[str, Any] = {
-        "real_runs_root": str(real_runs),
-        "records": 0, "run_verdicts": {"PASS": 0, "BLOCKED": 0, "FAIL": 0},
-        "cases": 0, "case_verdicts": {"PASS": 0, "BLOCKED": 0, "FAIL": 0},
-        "fail_cases": 0, "failure_class_non_null": 0, "failure_output_non_null": 0,
-        "files": [],
-    }
-    for path in sorted(real_runs.rglob("run-*.json")):
-        data = json.loads(path.read_text(encoding="utf-8"))
-        census["records"] += 1
-        census["run_verdicts"][data.get("verdict", "FAIL")] = \
-            census["run_verdicts"].get(data.get("verdict"), 0) + 1
-        census["files"].append({"path": path.relative_to(real_runs).as_posix(),
-                                "run_id": data.get("run_id"), "verdict": data.get("verdict")})
-        for case in data.get("cases") or []:
-            census["cases"] += 1
-            verdict = case.get("verdict")
-            census["case_verdicts"][verdict] = census["case_verdicts"].get(verdict, 0) + 1
-            if verdict == "FAIL":
-                census["fail_cases"] += 1
-            if case.get("failure_class") not in (None, ""):
-                census["failure_class_non_null"] += 1
-            if case.get("failure_output") not in (None, ""):
-                census["failure_output_non_null"] += 1
-    census["criterion_1"] = (
-        "BLOCKED" if census["fail_cases"] == 0 and census["failure_class_non_null"] == 0
-        and census["failure_output_non_null"] == 0 else "demonstrated")
+    census = criterion1_finding(real_runs)
+    census["real_runs_root"] = str(real_runs)
     return census
+
+
+def trace_expectations(real_runs: Path) -> dict[str, Any]:
+    """The real-record population the browser trace must be held to, read from disk.
+
+    `p7_realcore_ui_trace.mjs` gets this as `--expectations` and derives every count in its list,
+    paging, ACL and agent assertions from it (`ids.length`, the PASS/BLOCKED id sets), so a tree
+    of any size asserts the same *shape* against the data. `ids` are the run ids the Core will
+    surface; the PASS/BLOCKED/FAIL lists are grouped by the run-level verdict on disk.
+    """
+    ids: list[str] = []
+    by_verdict: dict[str, list[str]] = {"PASS": [], "BLOCKED": [], "FAIL": []}
+    for path in sorted(real_runs.rglob("run-*.json"), key=lambda item: item.as_posix()):
+        if not path.is_file():
+            continue
+        data = json.loads(path.read_text(encoding="utf-8"))
+        run_id = data["run_id"]
+        ids.append(run_id)
+        by_verdict.setdefault(data.get("verdict", "FAIL"), []).append(run_id)
+    return {
+        "real_runs_root": str(real_runs),
+        "ids": sorted(ids),
+        "total": len(ids),
+        "run_verdicts": {verdict: len(run_ids) for verdict, run_ids in sorted(by_verdict.items())
+                         if run_ids},
+        "pass_run_ids": sorted(by_verdict.get("PASS", [])),
+        "blocked_run_ids": sorted(by_verdict.get("BLOCKED", [])),
+        "fail_run_ids": sorted(by_verdict.get("FAIL", [])),
+    }
 
 
 def verdict_comparison(real_runs: Path, observed_path: Path, responses_path: Path) -> dict[str, Any]:
@@ -301,8 +312,9 @@ def verdict_comparison(real_runs: Path, observed_path: Path, responses_path: Pat
             and len(set(row[key] for key in (
                 "disk", "api_list", "api_detail", "dom_list", "dom_detail", "paginated"))) == 1)
         rows.append(row)
-    nine = set(disk)
-    union_ok = (set(dom_list) == nine and set(paginated) == nine and set(api_list) == nine)
+    disk_ids = set(disk)
+    union_ok = (set(dom_list) == disk_ids and set(paginated) == disk_ids
+                and set(api_list) == disk_ids)
     no_upgrade = all(not (row["disk"] == "BLOCKED"
                           and "PASS" in {row["api_list"], row["api_detail"], row["dom_list"],
                                          row["dom_detail"], row["paginated"]})
@@ -313,7 +325,13 @@ def verdict_comparison(real_runs: Path, observed_path: Path, responses_path: Pat
         "dom_list_run_ids": sorted(dom_list),
         "api_list_run_ids": sorted(api_list),
         "paginated_run_ids": sorted(paginated),
-        "pagination_union_is_nine": union_ok,
+        "record_count": len(disk),
+        "pagination_union_matches_disk": union_ok,
+        # Legacy alias kept for the read-only historical auditors that read this key by name. It
+        # is honest rather than derived-from-a-name: it is true only when the union matches the
+        # disk id set *and* that set is the nine records the key's name claims. This harness's own
+        # gate reads `pagination_union_matches_disk`, which is size-agnostic.
+        "pagination_union_is_nine": union_ok and len(disk) == 9,
         "no_verdict_upgraded": no_upgrade,
         "manifest_absent_authentication": {
             run_id: {"status": body.get("status"),
@@ -445,13 +463,13 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
         # that asserts BLOCKED three lines above a "## Criterion 1 — demonstrated" heading.
         (f"**This drill-down does not by itself make P6 or P7 PASS.** P7-01's acceptance criterion 1 "
          f"(read an existing real FAIL Run, classified, raw output traceable) is "
-         f"**{census['criterion_1']}** on the operator's own records: the census below reports "
+         f"**{census['criterion_1']}** on the real records tree: the census below reports "
          f"{census['fail_cases']} FAIL cases, {census['failure_class_non_null']} `failure_class` "
          f"and {census['failure_output_non_null']} `failure_output`."
          + (" The FAIL code path is exercised only by the clearly-labelled synthetic fixture, "
             "which is not evidence and counts toward no criterion."
             if census["criterion_1"] == "BLOCKED" else
-            " The FAIL code path is exercised by a real record on the operator's tree, so it can "
+            " The FAIL code path is exercised by a real record in that tree, so it can "
             "be assessed against real data rather than a fixture.")),
         "",
         "## Per-check outcomes",
@@ -471,7 +489,7 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
         "",
         f"## Criterion 1 — {census['criterion_1']}",
         "",
-        f"{census['records']} real records under the operator's tree "
+        f"{census['records']} real records under the real records root "
         f"({census['real_runs_root']}); run verdicts {census['run_verdicts']}; "
         f"{census['cases']} cases with verdicts {census['case_verdicts']}; "
         # Derived, never hard-coded: a real FAIL run must not produce a result.md whose prose
@@ -484,7 +502,7 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
            "evidence. This drill-down is `P6-T06` evidence for the read slice and does **not** "
            "close criterion 1 and does **not** make the P6 or P7 phase PASS."
            if census["criterion_1"] == "BLOCKED" else
-           " The census finds a FAIL case on the operator's tree, so the real-FAIL-run path is "
+           " The census finds a FAIL case on the real records tree, so the real-FAIL-run path is "
            "**met by the data**: this run reads it, and criterion 1 can be assessed against it "
            "rather than against a fixture."),
         "",
@@ -500,8 +518,9 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
             f"{'yes' if row['all_match'] else '**NO**'} |")
     lines += [
         "",
-        f"* pagination union (limit=3, offsets 0/3/6/9) is exactly the nine: "
-        f"**{verdicts['pagination_union_is_nine']}**",
+        f"* pagination union (limit=3, every page until the {verdicts['record_count']} real records "
+        f"are covered) equals the disk id set: "
+        f"**{verdicts['pagination_union_matches_disk']}**",
         f"* no verdict upgraded (no PASS anywhere the file says BLOCKED): "
         f"**{verdicts['no_verdict_upgraded']}**",
         f"* real records' mtimes/digests unchanged before and after: "
@@ -536,16 +555,17 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
         "## Unverified scope, stated rather than implied",
         "",
         (f"* **P7 criterion 1 is {census['criterion_1']}** (above). "
-         + ("No real FAIL run, `failure_class` or `failure_output` exists on the operator's tree; "
+         + ("No real FAIL run, `failure_class` or `failure_output` exists on the real records tree; "
             "the fixture FAIL run is labelled and counted nowhere."
             if census["criterion_1"] == "BLOCKED" else
-            "A real record on the operator's tree carries a FAIL case, `failure_class` or "
+            "A real record in that tree carries a FAIL case, `failure_class` or "
             "`failure_output`, so the criterion can be assessed against real data.")),
-        "* **No project-attributed real run exists.** All nine real records are `unattributed`, so "
-        "the `acl` grant-filtered list can only show *all nine* (with `validation:unattributed`) or "
-        "*zero* (without it); a partial, project-scoped subset is not demonstrable on real data. "
-        "The single grant row the `acl` process needs is seeded by the harness on a project the "
-        "real records do not reference.",
+        f"* **No project-attributed real run exists.** All {census['records']} real records are "
+        "`unattributed`, so the `acl` grant-filtered list can only show "
+        f"*all {census['records']}* (with `validation:unattributed`) or *zero* (without it); a "
+        "partial, project-scoped subset is not demonstrable on real data. The single grant row the "
+        "`acl` process needs is seeded by the harness on a project the real records do not "
+        "reference.",
         "* **The withheld-original reason is only available by probing.** Core's artifact *metadata* "
         "route reports `forms` and the digests but carries no `original_withheld_reason`; only the "
         "content route with `form=original` answers `403 original_withheld` with `details.reason` "
@@ -581,6 +601,9 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
         "(`request_id`, method, path, status, error code; the `Authorization` value is never "
         "recorded, only `present(redacted)`/`absent`).",
         "* `screenshots/*.png` — the pages the checks looked at.",
+        "* `p7-trace-expectations.json` — the real-record population (ids and PASS/BLOCKED/FAIL "
+        "id sets) this runner read from the tree and named on the trace's command line; every "
+        "count in the browser assertions is derived from it.",
         "* `criterion1-census.json`, `verdict-comparison.json`, `real-tree-before.json`, "
         "`real-tree-after.json`, `pagination-observed.json`, `verdicts-observed.json`, "
         "`artifact-observations.json`, `acl-observations.json`, `fixture-observations.json`.",
@@ -605,16 +628,17 @@ def render_scenario(out: Path, descriptor: dict[str, Any], real_runs: Path,
         "(`web/server/core-paths.json`, `p7_pending_paths`) to a harness switch proxy and then to "
         "a real Core built from the P7-01 branch tip "
         f"`{descriptor['ref']}` (worktree `{p7_repo}`), extracted with `git archive`.",
-        "* Four real Core processes answered, one per configuration: `real` (the operator's tree, "
-        "`single_user`), `fixture` (the labelled synthetic root, `single_user`), `unset` (no run "
-        "root, `single_user`) and `acl` (the operator's tree, `acl`).",
+        "* Four real Core processes answered, one per configuration: `real` (the real records "
+        "root, `single_user`), `fixture` (the labelled synthetic root, `single_user`), `unset` (no "
+        "run root, `single_user`) and `acl` (the real records root, `acl`).",
         "",
         "## The three passes",
         "",
-        "**Pass A — the operator's real records (read-only).** The list is walked with `limit=3` "
+        "**Pass A — the real records (read-only).** The list is walked with `limit=3` "
         "by the page's own fetch (the Inspector's page size is fixed at 20), the union is checked "
-        "against the nine file names, each row's verdict is compared with the file on disk, all "
-        "nine detail views are opened for the eight T06 links and the three Context forms, the "
+        f"against the {census['records']} file names, each row's verdict is compared with the file "
+        f"on disk, all {census['records']} detail views are opened for the eight T06 links and the "
+        "three Context forms, the "
         "manifest view is opened for the `absent`/`unauthenticated` state, the `acl` grant filter "
         "is exercised with and without `validation:unattributed`, and a key without "
         "`validation:read` is refused `403 forbidden_scope`.",
@@ -632,9 +656,9 @@ def render_scenario(out: Path, descriptor: dict[str, Any], real_runs: Path,
         "",
         "## The honesty boundary",
         "",
-        "* The real records are **read-only**: the nine files' mtimes and SHA-256 digests are "
-        "snapshotted before the build, after the build and after the browser pass; any change "
-        "fails the bundle.",
+        f"* The real records are **read-only**: the {census['records']} files' mtimes and SHA-256 "
+        "digests are snapshotted before the build, after the build and after the browser pass; any "
+        "change fails the bundle.",
         "* The switch proxy is a **router, not a second allowlist**: the dashboard's proxy still "
         "decides what the browser may reach, and the switch proxy only chooses which real Core "
         "answers.",
@@ -662,6 +686,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--keep", action="store_true", help="keep the temporary trees")
     parser.add_argument("--skip-build", action="store_true",
                         help="reuse web/dist instead of running `npm run build` (debugging only)")
+    parser.add_argument(
+        "--expectations", type=Path, default=None,
+        help="falsification only: use this JSON as the trace's expected real-record population "
+             "instead of deriving it from --real-runs, so a deliberately perturbed expectation "
+             "can be shown to fail the browser assertions")
     args = parser.parse_args(argv)
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -738,12 +767,24 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         log(f"dashboard on http://127.0.0.1:{port_ui} (bundle {dist})")
 
+        # The real-record population the browser trace is held to. Derived from the tree unless a
+        # falsification override is given; either way the bundle records exactly what was used.
+        expected = (json.loads(args.expectations.read_text(encoding="utf-8"))
+                    if args.expectations is not None else trace_expectations(args.real_runs))
+        expected["source"] = (f"override: {args.expectations}" if args.expectations is not None
+                              else "derived from the records under --real-runs")
+        expectations_path = out / "p7-trace-expectations.json"
+        expectations_path.write_text(json.dumps(expected, indent=2) + "\n", encoding="utf-8")
+        log(f"trace expectations: {len(expected.get('ids', []))} real id(s) "
+            f"{expected.get('run_verdicts')} ({expected['source']})")
+
         trace_log = (out / "trace.stdout.txt").open("w")
         trace = subprocess.run(
             ["node", str(TRACE_SCRIPT),
              "--ui", f"http://127.0.0.1:{port_ui}", "--proxy", proxy.origin,
              "--tokens", str(env_dir / "tokens.json"),
-             "--descriptor", str(env_dir / "descriptor.json"), "--out", str(out)],
+             "--descriptor", str(env_dir / "descriptor.json"),
+             "--expectations", str(expectations_path), "--out", str(out)],
             stdout=trace_log, stderr=subprocess.STDOUT, text=True)
         trace_log.close()
         trace_exit = trace.returncode
@@ -836,8 +877,8 @@ def main(argv: list[str] | None = None) -> int:
             {"step": "the browser trace wrote its records (click-trace.jsonl exists)",
              "ok": (out / "click-trace.jsonl").is_file() and len(trace_records) > 0,
              "evidence": "click-trace.jsonl"},
-            {"step": "the operator's nine records are byte-identical (mtime + sha256) before and "
-                     "after the whole run",
+            {"step": f"the operator's real records ({census['records']}) are byte-identical (mtime "
+                     "+ sha256) before and after the whole run",
              "ok": real_tree["unchanged"],
              "evidence": "real-tree-before.json, real-tree-after.json, real-tree-comparison.json"},
             {"step": f"criterion 1 census: {census['fail_cases']} FAIL cases, "
@@ -856,7 +897,7 @@ def main(argv: list[str] | None = None) -> int:
                           if census["criterion_1"] == "BLOCKED" else
                           "criterion1-census.json (the criterion's FAIL run is present)")},
             {"step": "every verdict matches disk, and no PASS appears where the file says BLOCKED",
-             "ok": verdicts["pagination_union_is_nine"] and verdicts["no_verdict_upgraded"]
+             "ok": verdicts["pagination_union_matches_disk"] and verdicts["no_verdict_upgraded"]
                    and all(row["all_match"] for row in verdicts["rows"]),
              "evidence": "verdict-comparison.json"},
             {"step": "no bearer token appears in any bundle file",
@@ -908,9 +949,9 @@ def main(argv: list[str] | None = None) -> int:
                                    "labelled synthetic fixture root for the Pass B negatives",
                 "phase_acceptance": (
                     "NOT claimed: P7-01 criterion 1 is BLOCKED (no real FAIL run exists on the "
-                    "operator's tree), so this drill-down does not make the P6 or P7 phase PASS"
+                    "real records tree), so this drill-down does not make the P6 or P7 phase PASS"
                     if census["criterion_1"] == "BLOCKED" else
-                    "NOT claimed: P7-01 criterion 1 is demonstrated on the operator's tree, but "
+                    "NOT claimed: P7-01 criterion 1 is demonstrated on the real records tree, but "
                     "the P6 and P7 phases each need their own remaining Gates, so this drill-down "
                     "does not make either phase PASS"),
             },

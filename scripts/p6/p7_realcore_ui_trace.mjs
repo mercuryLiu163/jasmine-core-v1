@@ -53,12 +53,13 @@ function parseArgs(argv) {
       case '--proxy': args.proxy = next; index += 1; break
       case '--tokens': args.tokens = next; index += 1; break
       case '--descriptor': args.descriptor = next; index += 1; break
+      case '--expectations': args.expectations = next; index += 1; break
       case '--out': args.out = next; index += 1; break
       case '--headful': args.headful = true; break
       default: throw new Error(`unknown argument ${flag}`)
     }
   }
-  for (const required of ['ui', 'proxy', 'tokens', 'descriptor', 'out']) {
+  for (const required of ['ui', 'proxy', 'tokens', 'descriptor', 'expectations', 'out']) {
     if (!args[required]) throw new Error(`--${required} is required`)
   }
   return args
@@ -83,6 +84,21 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const tokens = JSON.parse(await readFile(args.tokens, 'utf8'))
   const descriptor = JSON.parse(await readFile(args.descriptor, 'utf8'))
+  // The expected real-record population, written by `p7_realcore_ui.py` from the tree on disk and
+  // named on this trace's command line. Every count and id below is read from it — this file
+  // asserts the *shape* ("exactly these ids, each once", "the walk covers the union") against the
+  // data rather than against a hard-coded size.
+  const expected = JSON.parse(await readFile(args.expectations, 'utf8'))
+  const expectedIds = Array.isArray(expected.ids) ? expected.ids : []
+  if (expectedIds.length === 0) {
+    throw new Error(`expectations ${args.expectations} carries no ids; cannot assert a population`)
+  }
+  const expectedIdsSorted = expectedIds.slice().sort()
+  const expectedBlockedIds = (expected.blocked_run_ids ?? []).slice().sort()
+  const expectedPassIds = (expected.pass_run_ids ?? []).slice().sort()
+  // The real run used for the single-run manifest and ACL probes: the last id in sorted order, so
+  // the probe names a record this tree actually holds rather than a fixed id.
+  const probeRunId = expectedIdsSorted[expectedIdsSorted.length - 1]
   const fixture = descriptor.fixture
   const expectations = fixture.expectations
   const bundleRun = fixture.runs.bundle
@@ -332,17 +348,23 @@ async function main() {
     const list = await listState()
     observed.list = list
     const uniqueIds = [...new Set(list.rows.map((row) => row.runId))]
-    trace.record('A/list renders exactly the nine real run ids with no repeats',
-      list.present === true && list.rows.length === 9 && uniqueIds.length === 9
+    const uniqueIdsSorted = uniqueIds.slice().sort()
+    trace.record(`A/list renders exactly the ${expectedIds.length} real run ids with no repeats`,
+      list.present === true && list.rows.length === expectedIds.length
+        && uniqueIds.length === expectedIds.length
+        && uniqueIdsSorted.join(',') === expectedIdsSorted.join(',')
         && list.unusable === 0,
       `${list.rows.length} usable rows, ${list.unusable} unusable, summary=${list.summary}`)
 
     // "walking every page with a small limit". The Inspector's page size is fixed at RUN_LIMIT=20,
     // so the small-limit walk is the page's own fetch through the same proxy with the same
-    // credential — recorded here rather than claimed.
+    // credential — recorded here rather than claimed. The walk steps by the page size until it has
+    // covered the expected population, so it is not a fixed list of offsets.
+    const pageSize = 3
+    const expectedPages = Math.ceil(expectedIds.length / pageSize)
     const pageUnion = []
-    for (const offset of [0, 3, 6, 9]) {
-      const page = await browserFetch(`/v1/validation/runs?limit=3&offset=${offset}`, tokens.read)
+    for (let offset = 0; offset < expectedIds.length; offset += pageSize) {
+      const page = await browserFetch(`/v1/validation/runs?limit=${pageSize}&offset=${offset}`, tokens.read)
       observed.listPages.push({
         offset, status: page.status,
         count: page.body?.count ?? null, total: page.body?.total ?? null,
@@ -353,15 +375,16 @@ async function main() {
       for (const row of page.body?.runs ?? []) pageUnion.push(row.run_id)
     }
     const union = [...new Set(pageUnion)]
-    trace.record('A/paging: limit=3 walked every page in the browser and the union is exactly nine with no repeats',
+    trace.record(`A/paging: limit=3 walked every page in the browser and the union is exactly the ${expectedIds.length} with no repeats`,
       observed.listPages.every((page) => page.status === 200)
-        && pageUnion.length === 9 && union.length === 9
-        && union.slice().sort().join(',') === uniqueIds.slice().sort().join(','),
+        && observed.listPages.length === expectedPages
+        && pageUnion.length === expectedIds.length && union.length === expectedIds.length
+        && union.slice().sort().join(',') === expectedIdsSorted.join(','),
       JSON.stringify(observed.listPages.map((page) => ({
         offset: page.offset, count: page.count, total: page.total, has_more: page.hasMore,
       }))))
 
-    // The nine detail views: chain links, context forms and per-run agent presence.
+    // Every expected detail view: chain links, context forms and per-run agent presence.
     const contextKinds = new Set()
     const contextReasons = new Set()
     const agentByRun = {}
@@ -376,8 +399,8 @@ async function main() {
       const state = await detailState()
       observed.details[runId] = state
       agentByRun[runId] = { verdict: state.verdict, cases: [] }
-      if (runId === 'run-20260929T173423Z') {
-        await trace.screenshot(cdp, 'passA-02-detail-173423Z')
+      if (runId === probeRunId) {
+        await trace.screenshot(cdp, `passA-02-detail-${probeRunId}`)
       }
       for (const item of state.cases) {
         const names = Object.keys(item.chain)
@@ -407,11 +430,11 @@ async function main() {
     trace.record('A/chain: every case shows all eight T06 links with extraction/resolution present=false and verbatim reasons',
       chainRowProblems.length === 0 && extractionBad === 0 && resolutionBad === 0,
       `problems=${JSON.stringify(chainRowProblems)} extractionBad=${extractionBad} resolutionBad=${resolutionBad}`)
-    trace.record('A/chain: the Context link is absent in all nine runs',
+    trace.record(`A/chain: the Context link is absent in all ${expectedIds.length} runs`,
       Object.values(observed.details).every((state) =>
         state.cases.every((item) => item.chain.context?.present === false)),
       `context_pack_present=true seen ${contextPackTrue} times`)
-    trace.record('A/context: the three recorded forms (sentinel, reason-only, recorded-but-no-pack) all appear across the nine',
+    trace.record(`A/context: the three recorded forms (sentinel, reason-only, recorded-but-no-pack) all appear across the ${expectedIds.length}`,
       contextKinds.has('sentinel') && contextKinds.has('reason_only') && contextKinds.has('value')
         && contextPackTrue === 0,
       `present_kind=${JSON.stringify([...contextKinds])} pack_true=${contextPackTrue}`)
@@ -424,14 +447,20 @@ async function main() {
       JSON.stringify([...contextReasons]))
     const blockedRuns = Object.entries(agentByRun).filter(([, value]) => value.verdict === 'BLOCKED')
     const passRuns = Object.entries(agentByRun).filter(([, value]) => value.verdict === 'PASS')
-    trace.record('A/agent: present=false in every case of the six BLOCKED runs',
-      blockedRuns.length === 6 && blockedRuns.every(([, value]) => value.cases.every((p) => p === false)),
+    const blockedIdsSeen = blockedRuns.map(([id]) => id).sort()
+    const passIdsSeen = passRuns.map(([id]) => id).sort()
+    trace.record(`A/agent: present=false in every case of the ${expectedBlockedIds.length} BLOCKED runs`,
+      blockedRuns.length === expectedBlockedIds.length
+        && blockedIdsSeen.join(',') === expectedBlockedIds.join(',')
+        && blockedRuns.every(([, value]) => value.cases.every((p) => p === false)),
       `blocked=${blockedRuns.length} ${JSON.stringify(blockedRuns.map(([id, v]) => [id, v.cases]))}`)
     trace.record('A/agent: present=true in at least one case of a PASS run',
-      passRuns.length === 3 && passRuns.some(([, value]) => value.cases.some((p) => p === true)),
+      passRuns.length === expectedPassIds.length
+        && passIdsSeen.join(',') === expectedPassIds.join(',')
+        && passRuns.some(([, value]) => value.cases.some((p) => p === true)),
       `pass=${passRuns.length} ${JSON.stringify(passRuns.map(([id, v]) => [id, v.cases]))}`)
 
-    await goto('validation/runs/run-20260929T173423Z/manifest', 'real manifest',
+    await goto(`validation/runs/${probeRunId}/manifest`, 'real manifest',
       `document.querySelector('[data-testid=manifest-not-frozen]') !== null`)
     await trace.screenshot(cdp, 'passA-03-manifest-absent')
     const manifestAbsent = await stateOf('[data-testid=manifest-not-frozen]')
@@ -453,8 +482,8 @@ async function main() {
     await trace.screenshot(cdp, 'passA-04-acl-list-granted')
     const aclGranted = await listState()
     observed.acl.granted = aclGranted
-    trace.record('A/acl: with validation:unattributed the grant-filtered list shows all nine and says visibility=grant_filtered',
-      aclGranted.present === true && aclGranted.rows.length === 9
+    trace.record(`A/acl: with validation:unattributed the grant-filtered list shows all ${expectedIds.length} and says visibility=grant_filtered`,
+      aclGranted.present === true && aclGranted.rows.length === expectedIds.length
         && (aclGranted.summary ?? '').includes('grant_filtered'),
       `rows=${aclGranted.rows.length} summary=${aclGranted.summary}`)
 
@@ -464,13 +493,13 @@ async function main() {
     await trace.screenshot(cdp, 'passA-05-acl-list-refused')
     const aclRefused = await listState()
     observed.acl.refused = aclRefused
-    trace.record('A/acl: without validation:unattributed the same list is grant-filtered to zero (not an error, not the nine)',
+    trace.record(`A/acl: without validation:unattributed the same list is grant-filtered to zero (not an error, not the ${expectedIds.length})`,
       aclRefused.present === false && aclRefused.rows.length === 0
         && (aclRefused.summary ?? '').includes('grant_filtered')
         && (await appears(`document.querySelector('[data-testid=not-configured]') === null`, 500)),
       `rows=${aclRefused.rows.length} summary=${aclRefused.summary} emptyReason=${aclRefused.emptyReason}`)
 
-    const ungranted = await browserFetch('/v1/validation/runs/run-20260929T173423Z', tokens.read)
+    const ungranted = await browserFetch(`/v1/validation/runs/${probeRunId}`, tokens.read)
     const absent = await browserFetch('/v1/validation/runs/run-20200101T000000Z', tokens.read)
     observed.acl.ungranted = { status: ungranted.status, code: ungranted.body?.error?.code }
     observed.acl.nonexistent = { status: absent.status, code: absent.body?.error?.code }

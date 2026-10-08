@@ -14,8 +14,11 @@ What is real here, and what is not:
   `src/jasmine_core/validation/reads.py` must be present or the build refuses.
 * **Real records, read-only.** The Validation root for the main pass is the operator's own tree
   `/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs`. It is opened
-  read-only by every Core here and the nine run records' mtimes and digests are snapshotted
-  before and after the run; a change fails the bundle. Nothing in this file writes to it.
+  read-only by every Core here and every real run record's mtime and digest is snapshotted
+  before and after the run; a change fails the bundle. Nothing in this file writes to it. The
+  tree's size is **derived**, never assumed: any non-empty tree of parseable `run-*.json` records
+  builds, and the criterion-1 sentence in the banner and the descriptor is read from that tree's
+  census rather than asserted.
 * **Fixture negatives, clearly labelled.** The real records contain no manifest, no artifact,
   no FAIL case and no corrupt/duplicate record, so a second root inside the temp tree provides
   those. Every fixture record carries `synthetic: true` and a `synthetic_note` saying it is not
@@ -39,7 +42,7 @@ Commands::
     python3.13 scripts/p6/p7_realcore_env.py serve --out /tmp/p6-p7-env --port 8804 \
         --root real --mode acl
 
-    # prove the operator's nine records are untouched
+    # prove the operator's real records are untouched
     python3.13 scripts/p6/p7_realcore_env.py verify-real --before before.json
 
 The descriptor (`--out/descriptor.json`) carries the ids, the fixture expectations and the
@@ -67,7 +70,7 @@ DEFAULT_P7_REPO = REPO_ROOT.parent / "p7-01"
 DEFAULT_REAL_RUNS = REPO_ROOT.parent.parent / "jasmine-core-v1" / "validation-runs"
 
 #: Scopes each key carries. `validation:read` is the slice's one scope; `validation:unattributed`
-#: is required in `acl` mode for a run with no project attribution (all nine real records), and the
+#: is required in `acl` mode for a run with no project attribution (every real record), and the
 #: Core refuses to issue it to an agent key.
 KEY_SCOPES: dict[str, list[str]] = {
     "read": ["objects:read", "events:read", "state:read", "validation:read"],
@@ -78,7 +81,7 @@ KEY_SCOPES: dict[str, list[str]] = {
 
 #: The fixture records. Ids are the recorder's `run-YYYYmmddTHHMMSSZ` grammar; artifact ids are the
 #: bundle's `art_…` grammar. They are deliberately in the far past so no fixture id can be mistaken
-#: for one of the operator's nine, and every record says `synthetic: true`.
+#: for one of the operator's real records, and every record says `synthetic: true`.
 FIXTURE_RUN_BUNDLE = "run-20260101T000001Z"
 FIXTURE_RUN_FAIL = "run-20260101T000002Z"
 FIXTURE_RUN_CORRUPT = "run-20260101T000003Z"
@@ -104,12 +107,13 @@ def log(message: str) -> None:
     print(f"p7-realcore: {message}", file=sys.stderr, flush=True)
 
 
-def banner(ref: str, out: Path, real_runs: Path) -> None:
+def banner(ref: str, out: Path, real_runs: Path, finding: dict[str, Any]) -> None:
     print("=" * 78, file=sys.stderr)
     print("ISOLATED REAL CORE + P7-01 VALIDATION READ SLICE. NOT a P7 Gate verdict, and P7-01",
           file=sys.stderr)
-    print("acceptance criterion 1 (a real FAIL run) stays BLOCKED — no real FAIL record exists.",
-          file=sys.stderr)
+    # Derived from the same census the driver records, so a tree that carries a real FAIL case is
+    # never described as having none.
+    print(f"{criterion1_sentence(finding)}.", file=sys.stderr)
     print(f"  Core from commit {ref} (git archive), extracted into {out / 'p7'}", file=sys.stderr)
     print(f"  Real Validation root (READ-ONLY): {real_runs}", file=sys.stderr)
     print("  Fixture root (synthetic, NOT evidence) inside the same temp tree.", file=sys.stderr)
@@ -131,7 +135,7 @@ def sha256_file(path: Path) -> str:
 
 
 def snapshot_real_tree(root: Path) -> dict[str, dict[str, Any]]:
-    """The nine run records' mtime and digest, so a write anywhere shows up.
+    """Every real run record's mtime and digest, so a write anywhere shows up.
 
     Only run-shaped files are snapshotted: they are the operator's evidence, and the reader is
     asserted never to write them. Directory mtimes are deliberately not included — a read does not
@@ -156,6 +160,75 @@ def compare_real_tree(before: dict[str, dict[str, Any]],
     changed = sorted(path for path in set(before) | set(after)
                      if before.get(path) != after.get(path))
     return {"unchanged": not changed, "changed": changed, "records": len(before)}
+
+
+def read_real_records(real_runs: Path) -> list[tuple[Path, dict[str, Any]]]:
+    """Every `run-*.json` under `real_runs`, parsed — or a refusal.
+
+    The gate is about the tree being **usable**, not a fixed size: any non-empty tree of parseable
+    run records builds, and the `resolve` walk downstream reads run_id-keyed data. A record that
+    is not JSON, is not an object, or carries no `run_id` is refused here with the path, so a
+    broken tree fails before a Core starts rather than halfway through the browser pass.
+    """
+    paths = sorted(path for path in real_runs.rglob("run-*.json") if path.is_file())
+    if not paths:
+        raise SystemExit(f"{real_runs} holds no run-*.json records; the harness needs at least "
+                         f"one usable real record")
+    records: list[tuple[Path, dict[str, Any]]] = []
+    for path in paths:
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise SystemExit(f"unusable real run record {path}: {error}") from error
+        if not isinstance(data, dict) or not isinstance(data.get("run_id"), str) or not data["run_id"]:
+            raise SystemExit(f"unusable real run record {path}: it carries no run_id")
+        records.append((path, data))
+    return records
+
+
+def criterion1_finding(real_runs: Path) -> dict[str, Any]:
+    """Criterion 1's census, derived from the tree — the one predicate for the whole harness.
+
+    `p7_realcore_ui.py`'s `criterion1_census()` is this function plus the root label, so the
+    banner, `descriptor.json`'s `mode.note` and the bundle's census cannot disagree about whether
+    a real FAIL record exists. Every count comes from the files; nothing here assumes a size.
+    """
+    census: dict[str, Any] = {
+        "records": 0, "run_verdicts": {"PASS": 0, "BLOCKED": 0, "FAIL": 0},
+        "cases": 0, "case_verdicts": {"PASS": 0, "BLOCKED": 0, "FAIL": 0},
+        "fail_cases": 0, "failure_class_non_null": 0, "failure_output_non_null": 0,
+        "files": [],
+    }
+    for path, data in read_real_records(real_runs):
+        census["records"] += 1
+        run_verdict = data.get("verdict", "FAIL")
+        census["run_verdicts"][run_verdict] = census["run_verdicts"].get(run_verdict, 0) + 1
+        census["files"].append({"path": path.relative_to(real_runs).as_posix(),
+                                "run_id": data.get("run_id"), "verdict": data.get("verdict")})
+        for case in data.get("cases") or []:
+            census["cases"] += 1
+            verdict = case.get("verdict")
+            census["case_verdicts"][verdict] = census["case_verdicts"].get(verdict, 0) + 1
+            if verdict == "FAIL":
+                census["fail_cases"] += 1
+            if case.get("failure_class") not in (None, ""):
+                census["failure_class_non_null"] += 1
+            if case.get("failure_output") not in (None, ""):
+                census["failure_output_non_null"] += 1
+    census["criterion_1"] = (
+        "BLOCKED" if census["fail_cases"] == 0 and census["failure_class_non_null"] == 0
+        and census["failure_output_non_null"] == 0 else "demonstrated")
+    return census
+
+
+def criterion1_sentence(finding: dict[str, Any]) -> str:
+    """The one derived sentence the banner and the descriptor note both print."""
+    if finding["criterion_1"] == "BLOCKED":
+        return "criterion 1 (a real FAIL run) is BLOCKED: no real FAIL record exists on this tree"
+    return ("criterion 1 (a real FAIL run) is demonstrated: the census reads "
+            f"{finding['fail_cases']} FAIL case(s), "
+            f"{finding['failure_class_non_null']} non-null failure_class and "
+            f"{finding['failure_output_non_null']} non-null failure_output on this tree")
 
 
 def extract_core(ref: str, destination: Path, repo: Path) -> None:
@@ -328,7 +401,7 @@ def _new_id(prefix: str) -> str:
     return new_id(prefix)
 
 
-def build(args: argparse.Namespace) -> dict[str, Any]:
+def build(args: argparse.Namespace, census_finding: dict[str, Any] | None = None) -> dict[str, Any]:
     out: Path = args.out
     if out.exists() and any(out.iterdir()) and not args.reuse:
         raise SystemExit(f"{out} is not empty; pass --reuse to build in place")
@@ -340,9 +413,10 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     if not real_runs.is_dir():
         raise SystemExit(f"--real-runs {real_runs} is not a directory")
     snapshot_before = snapshot_real_tree(real_runs)
-    if len(snapshot_before) != 9:
-        raise SystemExit(f"expected exactly 9 real run records under {real_runs}, "
-                         f"found {len(snapshot_before)}")
+    # Usability gate, not a size gate: any non-empty tree of parseable run records builds. The
+    # finding is the same census the driver records, so the descriptor note below cannot claim a
+    # real FAIL record does not exist when one is present.
+    finding = census_finding if census_finding is not None else criterion1_finding(real_runs)
 
     sys.path.insert(0, str(p7 / "src"))
     from jasmine_core import SCHEMA_VERSION, canonical, db, registry
@@ -421,8 +495,8 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             "core": "real-p7-01",
             "validation_root": "operator tree (read-only) for the main pass; a labelled synthetic "
                                "fixture root for the negatives the real records cannot provide",
-            "note": "the slice is read-only; no Validation route writes anything, and criterion 1 "
-                    "(a real FAIL run) is BLOCKED because no real FAIL record exists",
+            "note": "the slice is read-only; no Validation route writes anything. "
+                    + criterion1_sentence(finding) + ".",
         },
         "ref": args.ref,
         "repo": str(args.repo),
@@ -434,6 +508,11 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         "real_runs_root": str(real_runs),
         "fixture_root": str(fixture_root),
         "fixture": fixture,
+        "criterion_1": {"state": finding["criterion_1"], "records": finding["records"],
+                        "run_verdicts": finding["run_verdicts"],
+                        "fail_cases": finding["fail_cases"],
+                        "failure_class_non_null": finding["failure_class_non_null"],
+                        "failure_output_non_null": finding["failure_output_non_null"]},
         "host_id": host_id,
         "actors": {"human": human_id, "agent": agent_id},
         "project_id": project_id,
@@ -515,8 +594,11 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     if args.command == "build":
-        banner(args.ref, args.out, args.real_runs)
-        descriptor = build(args)
+        # Read the census once, for the banner and the descriptor that must agree with it; the
+        # same finding is handed to `build` so the tree is not parsed twice.
+        finding = criterion1_finding(args.real_runs)
+        banner(args.ref, args.out, args.real_runs, finding)
+        descriptor = build(args, finding)
         log(f"schema {descriptor['schema_version']}; real root {descriptor['real_runs_root']}; "
             f"fixture root {descriptor['fixture_root']}")
         log(f"keys: {', '.join(descriptor['keys'])}")
