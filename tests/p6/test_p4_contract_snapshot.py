@@ -352,3 +352,50 @@ class NoEngineAccessFromTheBrowser(unittest.TestCase):
                     self.assertNotIn(forbidden, text.lower(),
                                      f"{path} names {forbidden!r}; the browser must not have an "
                                      f"engine client")
+
+
+class TheAcceptanceMappingNamesRealTests(unittest.TestCase):
+    """The criterion-to-test mapping must not cite a test that does not exist.
+
+    The mapping exists because three of the nine criteria were false as written. But it is
+    itself a hand-written list, and a rename silently turns a row into a claim about nothing —
+    which is exactly what happened when `test_an_agent_key_has_the_engine_text_withheld` became
+    `test_every_read_withholds_the_engine_text_from_an_agent`. This keeps the two in step.
+    """
+
+    PLAN = ROOT / "web" / "P6-03B-PLAN.md"
+
+    def test_every_cited_python_test_exists(self) -> None:
+        plan = self.PLAN.read_text(encoding="utf-8")
+        start = plan.index("### Every criterion names the test")
+        end = plan.index("## 5. Non-goals")
+        # `[A-Za-z0-9_]+`, not `[a-z0-9_]+`: the narrower class silently *truncates* a
+        # citation at the first uppercase letter, so `test_x_RENAMED` parsed as the real
+        # `test_x` and a typo would pass. A truncated match must fail, not be forgiven.
+        cited = set(re.findall(r"`(test_[A-Za-z0-9_]+)`", plan[start:end]))
+        self.assertTrue(cited, "the mapping cites no Python tests at all")
+
+        source = ""
+        for name in ("test_p4_contract_snapshot.py", "test_p4_read_fixture.py"):
+            source += (ROOT / "tests" / "p6" / name).read_text(encoding="utf-8")
+        declared = set(re.findall(r"def (test_[a-z0-9_]+)\(", source))
+        missing = sorted(cited - declared)
+        self.assertEqual(missing, [],
+                         f"the mapping cites tests that do not exist: {missing}")
+
+    def test_every_cited_web_case_exists(self) -> None:
+        plan = self.PLAN.read_text(encoding="utf-8")
+        start = plan.index("### Every criterion names the test")
+        end = plan.index("## 5. Non-goals")
+        source = ""
+        for name in ("p4Views.test.tsx", "p4Reads.test.ts", "p4ReadsCoreProxy.test.ts"):
+            source += (ROOT / "web" / "tests" / name).read_text(encoding="utf-8")
+        # Web cases are cited as prose in backticks; check each that looks like a case name.
+        cited = [c for c in re.findall(r"`([^`]+)`", plan[start:end])
+                 if c[:1].islower() and not c.startswith(("test_", "src/", "web/", "./", "p4_",
+                                                          "scripts/"))]
+        self.assertTrue(cited)
+        missing = [c for c in cited
+                   if c.split("…")[0].split("...")[0] not in source]
+        self.assertEqual(missing, [],
+                         f"the mapping cites web cases that do not exist: {missing}")

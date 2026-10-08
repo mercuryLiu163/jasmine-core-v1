@@ -5,7 +5,7 @@
 This began as the task breakdown and dependency check the operator asked for before
 implementation. The operator then authorised b1, and E1–E5 below are built, tested and
 evidenced: contract pinned by full SHA, pending paths behind a default-off switch, a labelled
-simulated fixture, the seven read views, and 108 guards across three layers. The Gate evidence
+simulated fixture, the seven read views, and 110 guards across three layers. The Gate evidence
 is registered under the P6-03b1 section of `validation-runs/p6/P6-02B-INDEX.md`, which is where
 the current bundle and the superseded ones are listed — the directory is gitignored, so a
 specific timestamp here would rot the moment the Gate is re-run.
@@ -146,7 +146,7 @@ labelled fixture, and every page says PARTIAL / DEPENDENCY_PENDING.
 | E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | **built.** Both hosts accept the same value set and are tested on it — including `' yes '` and mixed case, because the helper is *duplicated* rather than shared and dropping `.trim()` from one host left both suites green until those cases existed. Tests also assert P3 and P4 gate independently, and that enabling the reads does not open the six b2 writes |
 | E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | **built.** `X-P6-Fixture: simulated-p4-reads`; the fixture also serves the shell routes in their documented shapes after an earlier version crashed the overview |
 | E4 | Types, endpoints and views behind the dependency-pending panel | **built.** Seven views; no write control exists, asserted structurally rather than by text |
-| E5 | Component tests plus a Gate section | **built, 108 guards** (22 contract, 21 fixture, 35 view, 16 static-host, 14 Vite-host). Gate: 10/10 full twice, 4/4 scope |
+| E5 | Component tests plus a Gate section | **built, 110 guards** (24 contract, 21 fixture, 35 view, 16 static-host, 14 Vite-host). Gate: 10/10 full twice, 4/4 scope |
 
 **Still blocked until P4 is merged and independently validated:**
 
@@ -229,7 +229,7 @@ the criterion claims. `R#` is a Gate record in `scripts/p6/browser_trace.mjs`.
 | 4 `non_authoritative` from Core | `shows the marker when Core sends non_authoritative: true`, `does NOT claim it when Core does not send the field`, `shows the marker on an item detail`, `test_non_authoritative_is_present_where_p4_sends_it`; Gate R1 |
 | 5 five states distinct | `renders a grantless actor as an empty result, not an error`, `shows an unauthorised project as not_found, not as an error and not as pending`, `renders an unknown id as the same not-found state…`, `still shows a genuine failure as an error banner with a retry`, `shows a missing scope as Core refusal…`; the `%s marks the pending dependency instead of blaming Core` cases also assert that a proxy refusal — which is also HTTP 404 — renders the **pending** panel and not the not-found state, so the code decides and not the status; `test_a_grantless_token_gets_an_empty_list_not_an_error`, `test_an_unauthorised_project_is_not_found_rather_than_an_error`, `test_a_missing_scope_is_403_and_names_itself`, `test_an_unknown_id_is_not_found`; Gate R5 |
 | 6 malformed id refused locally | the three `does not blame the missing P4 for a bad … id` cases; `test_a_malformed_id_is_400_not_a_silent_404`; Gate R6 |
-| 7 redaction respected | `test_a_human_key_sees_the_engine_text`, `test_an_agent_key_has_the_engine_text_withheld`, `test_withholding_does_not_drop_the_field`, `renders nothing where Core withheld the text`, `renders the sentinel Core actually sent` — the last pair runs on the **detail** view, because the list table never renders the field and the first version of it was vacuous |
+| 7 redaction respected | `test_a_human_key_sees_the_engine_text`, `test_every_read_withholds_the_engine_text_from_an_agent` (all seven routes, each with a per-route control so an unobservable route fails rather than passing), `test_withholding_does_not_drop_the_field`, `renders nothing where Core withheld the text`, `renders the sentinel Core actually sent` — the last pair runs on the **detail** view, because the list table never renders the field and the first version of it was vacuous |
 | 8 no engine client | `test_the_bundle_can_only_talk_to_its_own_origin`, `test_the_bundle_carries_no_engine_credential_identifier`, `test_the_memory_endpoints_stay_under_the_same_origin_client`, `test_no_engine_client_exists_in_the_slice`, `test_the_memory_endpoint_layer_issues_get_only`, `test_absent_retain_and_bank_selector_routes`; `test_every_write_is_refused_because_writes_are_p6_03b2` |
 | 9 status | `test_snapshot_says_the_dependency_is_missing_and_acceptance_unpassed`; `states PARTIAL / DEPENDENCY_PENDING on the view itself`; the `%s offers only read controls` cases; Gate R7 |
 
