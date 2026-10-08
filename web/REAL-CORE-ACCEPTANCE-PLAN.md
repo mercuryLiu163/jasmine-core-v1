@@ -403,11 +403,29 @@ acceptances use, put into P4's own `unreachable` state.
   after seeding, and **P4's own probe** (`record_engine_probe`) records the refusal. The engine row
   then reports `unreachable` / `degraded: true` / `core_impact: memory_paused` /
   `last_error_code: engine_unreachable` — the state a real outage produces, not an edited status.
-* Result, frozen at `0b6f737681eb9a6e7ad0c76b8b4be54409e12ac4` in
-  `validation-runs/p6/20261008T123611Z-p6-t05-degraded/`: **12/12** (6 Core checks + 6 browser
+* Result, frozen at `31d738f08e9613bb8d8071197a67c77633d675b1` in
+  `validation-runs/p6/20261008T130315Z-p6-t05-degraded/`: **19/19** (9 Core checks + 10 browser
   records), 0 blocked. Core health stays `ok`; every P1 read still answers with rows; the Memory job
   and trace lists are not blanked; and the P1 views (Overview, Task, Conversation, Rules, Evidence)
   render with no dependency-pending panel and no dependency-failure alert.
+* **Recovery, in the same environment.** The engine port is pinned by a harness shim so the wire
+  double returns on the **same address** — P4 builds its transport once per process, so a new port
+  would have meant restarting the Core — and a loopback-only control channel starts it again; P4's own
+  probe then records `reachable: true`. The Core is not restarted: same process, database and ids. The
+  browser pass runs **twice** (`--phase outage` while the engine is down, `--phase recovered` after
+  the restore, the runner merging both traces), because a single pass after the restore could only
+  ever show the recovered state. After recovery: health `degraded: false` / `core_impact: none` / no
+  error (`status: idle`, P4's own conservative word), a real `reflect` reaches the engine
+  (`error_code: null`, every bank `ok`), and the stop/restore log appears in the bundle's
+  `engine_events`.
+* **Three gaps an independent review reproduced, and their closure.** (1) The revision check read
+  `task_revision`/`revision` from the wrong response layer, so both sides were `null` and a changed
+  revision still passed; it now reads `task.revision`/`rule.revision` and raises on a missing field,
+  with `tests/p6/test_t05_revision_snapshot.py` pinning it. (2) The browser checks could be satisfied
+  by a 200 from earlier in the pass and a panel title; each view now requires a **freshly observed**
+  200 after its own navigation plus **the object the page is about** (project/task/event/rule/evidence
+  id). (3) The recovery evidence did not exist; it does now, as above. The earlier
+  `20261008T123611Z-…` bundle stays as written and is superseded.
 * The honesty case this slice exists to record: `POST /v1/memory/reflect` answers **HTTP 200 with a
   `degraded` payload** (`engine_unreachable`, `non_authoritative: true`, empty basis, every bank
   `failed`). The check calls that a degradation, not a success, and a revision comparison shows no
