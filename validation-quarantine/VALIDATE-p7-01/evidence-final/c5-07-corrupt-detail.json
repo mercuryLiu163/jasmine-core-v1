@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "validation_run_corrupt",
+    "details": {
+      "run_id": "run-20261008T000004Z"
+    },
+    "message": "unparseable: JSONDecodeError",
+    "request_id": "aud_01M4E08W7NT03EM3JWQ0S9HQC3"
+  }
+}

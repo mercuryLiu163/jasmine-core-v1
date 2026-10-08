@@ -1,0 +1,10 @@
+[ok] unset root is 503 validation_not_configured
+[ok] unset root reason is 'unset'
+[ok] symlinked root is 503
+[ok] symlinked root reason is 'symlinked_root'
+[ok] malformed run id is 400 invalid_request
+[ok] malformed run id code is invalid_request
+[ok] unknown query key is 400 invalid_request
+[ok] POST to the list route is 405 method_not_allowed
+[ok] the allowed method list is [GET]
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-revalidation/extra-01-probes.json

@@ -1,0 +1,14 @@
+{
+  "error": {
+    "code": "artifact_modified",
+    "details": {
+      "actual_bytes": 15,
+      "actual_sha256": "a92e5b97a935ce9e1cb82cbc6bb8a92226eaf29076dc7d03facb1f8f53a31c91",
+      "artifact_id": "art_tampered",
+      "declared_bytes": 15,
+      "declared_sha256": "45c0b761a6c6640319e6cddeb492718532f70161ed9174c75ca7f1158c508b2f"
+    },
+    "message": "artifact bytes disagree with the manifest",
+    "request_id": "aud_01M4DZZP9VFAZ6G35EJT3XYH54"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "REDACT_TEXT_VERSION": "1",
+  "looks_like_credential_assign": false,
+  "masked_sha256_assign": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+  "redact_text_apikey": "{\"api_key\": \"[REDACTED]\"}\n",
+  "redact_text_assign": "2026-10-08 INFO db_password=[REDACTED] in the log line\n"
+}

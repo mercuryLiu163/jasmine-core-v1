@@ -1,0 +1,359 @@
+{
+  "all": [
+    {
+      "actual": 200,
+      "name": "single_user granted key 200 on /v1/validation/runs",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "single_user scope-less key 403 on /v1/validation/runs",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "scope-less code is forbidden_scope on /v1/validation/runs",
+      "ok": true
+    },
+    {
+      "actual": {
+        "granted": [
+          "objects:read"
+        ],
+        "required": "validation:read"
+      },
+      "name": "scope-less details.required names validation:read on /v1/validation/runs",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z",
+      "ok": true
+    },
+    {
+      "actual": {
+        "granted": [
+          "objects:read"
+        ],
+        "required": "validation:read"
+      },
+      "name": "scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z/manifest",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/manifest",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z/manifest",
+      "ok": true
+    },
+    {
+      "actual": {
+        "granted": [
+          "objects:read"
+        ],
+        "required": "validation:read"
+      },
+      "name": "scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z/manifest",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good",
+      "ok": true
+    },
+    {
+      "actual": {
+        "granted": [
+          "objects:read"
+        ],
+        "required": "validation:read"
+      },
+      "name": "scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content",
+      "ok": true
+    },
+    {
+      "actual": {
+        "granted": [
+          "objects:read"
+        ],
+        "required": "validation:read"
+      },
+      "name": "scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content",
+      "ok": true
+    },
+    {
+      "actual": 401,
+      "name": "no token is 401 unauthenticated",
+      "ok": true
+    },
+    {
+      "actual": "unauthenticated",
+      "name": "no-token code is unauthenticated",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "acl granted key 200 on /v1/validation/runs",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "acl scope-less key 403 on /v1/validation/runs",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "acl scope-less code forbidden_scope on /v1/validation/runs",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "acl granted key 200 on /v1/validation/runs/run-20261008T000001Z",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "acl granted key 200 on /v1/validation/runs/run-20261008T000001Z/manifest",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/manifest",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z/manifest",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "acl granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "acl granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content",
+      "ok": true
+    },
+    {
+      "actual": "forbidden_scope",
+      "name": "acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "acl non-granted project detail is 404",
+      "ok": true
+    },
+    {
+      "actual": "validation_run_not_found",
+      "name": "acl non-granted project refuses validation_run_not_found",
+      "ok": true
+    },
+    {
+      "name": "acl non-granted project never emits project_not_found",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "acl unattributed run without validation:unattributed is 404",
+      "ok": true
+    },
+    {
+      "actual": "validation_run_not_found",
+      "name": "acl unattributed refusal is validation_run_not_found",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "acl unattributed run with validation:unattributed is 200",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "acl ungranted actor is 404 on a granted project's run",
+      "ok": true
+    },
+    {
+      "actual": "validation_run_not_found",
+      "name": "acl ungranted actor refusal is validation_run_not_found",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "acl corrupt record fails closed (404) for a granted key",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "acl granted list is 200",
+      "ok": true
+    },
+    {
+      "actual": "grant_filtered",
+      "name": "acl list reports visibility=grant_filtered",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000001Z"
+      ],
+      "name": "acl granted list contains only the granted run",
+      "ok": true
+    },
+    {
+      "actual": 1,
+      "name": "acl granted list total counts only what the key may read",
+      "ok": true
+    },
+    {
+      "name": "the ungranted project's run is absent from runs[]",
+      "ok": true
+    },
+    {
+      "name": "the unattributed run is absent from runs[]",
+      "ok": true
+    },
+    {
+      "name": "the corrupt run is absent from the granted key's runs[]",
+      "ok": true
+    },
+    {
+      "actual": 1,
+      "name": "discovery.run_shaped_files counts visible runs",
+      "ok": true
+    },
+    {
+      "actual": [],
+      "name": "acl list ignored_samples[] is empty",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "acl granted corrupt_count excludes the invisible corrupt record",
+      "ok": true
+    },
+    {
+      "actual": [
+        0,
+        []
+      ],
+      "name": "a project filter naming the ungranted project cannot reach it",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000001Z",
+        "run-20261008T000003Z",
+        "run-20261008T000004Z"
+      ],
+      "name": "acl unattributed key sees the attributed, unattributed and fail-closed corrupt runs",
+      "ok": true
+    },
+    {
+      "actual": 3,
+      "name": "acl unattributed list total is 3",
+      "ok": true
+    },
+    {
+      "actual": "corrupt",
+      "name": "the fail-closed corrupt row is listed, not turned into an empty list",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        "unparseable: JSONDecodeError"
+      ],
+      "name": "the corrupt row serves a null verdict and a named corrupt_reason",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "acl list with a scope-less key is 403",
+      "ok": true
+    },
+    {
+      "actual": [
+        "forbidden_scope",
+        "validation_run_not_found"
+      ],
+      "name": "no acl response carries project_not_found",
+      "ok": true
+    }
+  ],
+  "checks": 63,
+  "failed": 0,
+  "failures": [],
+  "label": "criterion 3"
+}

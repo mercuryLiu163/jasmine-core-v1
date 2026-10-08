@@ -1,0 +1,18 @@
+# FINAL full-suite provenance (fresh clone of the shared repo)
+candidate_sha: 0ae80411824739b11485c61ed388d86093f2be7c
+clone: /tmp/p7-01-final-clone (git clone --no-hardlinks from jasmine-core-v1)
+clone_HEAD: 0ae80411824739b11485c61ed388d86093f2be7c
+clone_status_porcelain: []
+baseline_worktree: /tmp/p7-01-final-baseline at 0f7b2ec (parent of the phase-2 implementation)
+baseline_HEAD: 0f7b2ec60847308ba3a9119fdbfe7d741041b81c
+python: Python 3.13.15
+
+module_test (tests/test_validation_read.py): Ran 48 tests in 1.964s -> OK
+candidate_full_suite: Ran 1414 tests in 45.427s -> FAILED (failures=5, errors=4, skipped=13) | real 45.83
+baseline_full_suite:  Ran 1366 tests in 41.880s -> FAILED (failures=5, errors=4, skipped=13) | real 42.44
+
+failure_set_identical_candidate_vs_baseline: yes
+p4_env_reason_in_candidate: 8 occurrences
+p4_env_reason_in_baseline: 8 occurrences
+
+reproduce: bash final_fullsuite_freshclone.sh

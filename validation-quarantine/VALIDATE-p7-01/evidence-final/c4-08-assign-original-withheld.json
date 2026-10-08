@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "original_withheld",
+    "details": {
+      "masked_sha256": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+      "reason": "mask_not_noop"
+    },
+    "message": "the original form is withheld because the masker is not a no-op",
+    "request_id": "aud_01M4E090GXT6VPXDR6RRY90EJP"
+  }
+}

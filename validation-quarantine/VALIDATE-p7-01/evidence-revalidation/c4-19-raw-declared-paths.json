@@ -1,0 +1,302 @@
+{
+  "dot_alone artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPBXAYEVGVNWYWS3GJAS"
+      }
+    },
+    "status": 404
+  },
+  "dot_alone manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: empty or dot path component path '.'",
+          "run_id": "run-20261008T000304Z"
+        },
+        "message": "art_raw: empty or dot path component path '.'",
+        "request_id": "aud_01M4DZZPBWQBVEH3ZGQ8DFM6JK"
+      }
+    },
+    "declared": ".",
+    "status": 409
+  },
+  "dot_component artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPBMG7TH7B9VFH8A7K6G"
+      }
+    },
+    "status": 404
+  },
+  "dot_component manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: empty or dot path component path 'a/./b'",
+          "run_id": "run-20261008T000301Z"
+        },
+        "message": "art_raw: empty or dot path component path 'a/./b'",
+        "request_id": "aud_01M4DZZPBJWVCEMXBDJMA6FQ83"
+      }
+    },
+    "declared": "a/./b",
+    "status": 409
+  },
+  "dotdot_encoded artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPCGXS0DTNPFNZW8FW9V"
+      }
+    },
+    "status": 404
+  },
+  "dotdot_encoded manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: dot segment path '..%2Fb'",
+          "run_id": "run-20261008T000309Z"
+        },
+        "message": "art_raw: dot segment path '..%2Fb'",
+        "request_id": "aud_01M4DZZPCEWHE827Z0WKVGZT4R"
+      }
+    },
+    "declared": "..%2Fb",
+    "status": 409
+  },
+  "dotdot_segment artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPCAFKQNVW8Q7MES4Z3E"
+      }
+    },
+    "status": 404
+  },
+  "dotdot_segment manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: dot segment path 'artifacts/../loot.txt'",
+          "run_id": "run-20261008T000308Z"
+        },
+        "message": "art_raw: dot segment path 'artifacts/../loot.txt'",
+        "request_id": "aud_01M4DZZPC9EF5C882R9A1Y4QGP"
+      }
+    },
+    "declared": "artifacts/../loot.txt",
+    "status": 409
+  },
+  "dotdot_segment_name artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPC75H81V59RYA9BV3A1"
+      }
+    },
+    "status": 404
+  },
+  "dotdot_segment_name manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: dot segment path 'artifacts/..hidden'",
+          "run_id": "run-20261008T000307Z"
+        },
+        "message": "art_raw: dot segment path 'artifacts/..hidden'",
+        "request_id": "aud_01M4DZZPC6A7Z9X5TYN78H9S1V"
+      }
+    },
+    "declared": "artifacts/..hidden",
+    "status": 409
+  },
+  "dotdot_substring_mid artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPC4EJCW0DWTV2YNY2A4"
+      }
+    },
+    "status": 404
+  },
+  "dotdot_substring_mid manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: dot segment path 'a..b'",
+          "run_id": "run-20261008T000306Z"
+        },
+        "message": "art_raw: dot segment path 'a..b'",
+        "request_id": "aud_01M4DZZPC3ZMW6GW5MGWTVCF58"
+      }
+    },
+    "declared": "a..b",
+    "status": 409
+  },
+  "dotdot_substring_name artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPC0R37FXSW9Z56XN6M1"
+      }
+    },
+    "status": 404
+  },
+  "dotdot_substring_name manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: dot segment path 'artifacts/note..txt'",
+          "run_id": "run-20261008T000305Z"
+        },
+        "message": "art_raw: dot segment path 'artifacts/note..txt'",
+        "request_id": "aud_01M4DZZPBZ450AM1PWKG1YQ6XM"
+      }
+    },
+    "declared": "artifacts/note..txt",
+    "status": 409
+  },
+  "empty_component artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPBGE4S04EG19SHWH1DG"
+      }
+    },
+    "status": 404
+  },
+  "empty_component manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: empty path component path 'a//b'",
+          "run_id": "run-20261008T000300Z"
+        },
+        "message": "art_raw: empty path component path 'a//b'",
+        "request_id": "aud_01M4DZZPBE2JQZ6HVYX4HXVX4X"
+      }
+    },
+    "declared": "a//b",
+    "status": 409
+  },
+  "leading_dot_slash artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPBT57GXX0NABZHZFBVY"
+      }
+    },
+    "status": 404
+  },
+  "leading_dot_slash manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: empty or dot path component path './a'",
+          "run_id": "run-20261008T000303Z"
+        },
+        "message": "art_raw: empty or dot path component path './a'",
+        "request_id": "aud_01M4DZZPBS79GV9DQYTKF7T4GK"
+      }
+    },
+    "declared": "./a",
+    "status": 409
+  },
+  "trailing_slash artifact": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_raw",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_raw not found",
+        "request_id": "aud_01M4DZZPBQ7TWXED5JN419B7DV"
+      }
+    },
+    "status": 404
+  },
+  "trailing_slash manifest": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_raw: empty or dot path component path 'a/b/'",
+          "run_id": "run-20261008T000302Z"
+        },
+        "message": "art_raw: empty or dot path component path 'a/b/'",
+        "request_id": "aud_01M4DZZPBN2S5CT396Y7MQVHGQ"
+      }
+    },
+    "declared": "a/b/",
+    "status": 409
+  }
+}

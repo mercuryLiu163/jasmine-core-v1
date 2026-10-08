@@ -1,0 +1,1374 @@
+{
+  "all": [
+    {
+      "actual": [
+        9,
+        9
+      ],
+      "name": "real root page walk with limit=2 covers all nine",
+      "ok": true
+    },
+    {
+      "actual": [
+        9,
+        9
+      ],
+      "name": "real root page walk has no repeats",
+      "ok": true
+    },
+    {
+      "actual": [
+        9
+      ],
+      "name": "real root total is stable at 9 across pages",
+      "ok": true
+    },
+    {
+      "name": "real root corrupt_count is 0 on every page",
+      "ok": true
+    },
+    {
+      "name": "real root duplicate_count is 0 on every page",
+      "ok": true
+    },
+    {
+      "actual": [
+        2,
+        2
+      ],
+      "name": "page 0 count == len(runs)",
+      "ok": true
+    },
+    {
+      "actual": [
+        true,
+        0,
+        2,
+        9
+      ],
+      "name": "page 0 has_more arithmetic",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "page 0 offset is n*limit",
+      "ok": true
+    },
+    {
+      "actual": [
+        2,
+        2
+      ],
+      "name": "page 1 count == len(runs)",
+      "ok": true
+    },
+    {
+      "actual": [
+        true,
+        2,
+        2,
+        9
+      ],
+      "name": "page 1 has_more arithmetic",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "name": "page 1 offset is n*limit",
+      "ok": true
+    },
+    {
+      "actual": [
+        2,
+        2
+      ],
+      "name": "page 2 count == len(runs)",
+      "ok": true
+    },
+    {
+      "actual": [
+        true,
+        4,
+        2,
+        9
+      ],
+      "name": "page 2 has_more arithmetic",
+      "ok": true
+    },
+    {
+      "actual": 4,
+      "name": "page 2 offset is n*limit",
+      "ok": true
+    },
+    {
+      "actual": [
+        2,
+        2
+      ],
+      "name": "page 3 count == len(runs)",
+      "ok": true
+    },
+    {
+      "actual": [
+        true,
+        6,
+        2,
+        9
+      ],
+      "name": "page 3 has_more arithmetic",
+      "ok": true
+    },
+    {
+      "actual": 6,
+      "name": "page 3 offset is n*limit",
+      "ok": true
+    },
+    {
+      "actual": [
+        1,
+        1
+      ],
+      "name": "page 4 count == len(runs)",
+      "ok": true
+    },
+    {
+      "actual": [
+        false,
+        8,
+        1,
+        9
+      ],
+      "name": "page 4 has_more arithmetic",
+      "ok": true
+    },
+    {
+      "actual": 8,
+      "name": "page 4 offset is n*limit",
+      "ok": true
+    },
+    {
+      "name": "the union equals the 9 files by run_id, exactly once each",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "fixture full list is 200",
+      "ok": true
+    },
+    {
+      "actual": 12,
+      "name": "fixture total is 12 (9 real + 1 corrupt + 2 duplicate rows)",
+      "ok": true
+    },
+    {
+      "actual": 12,
+      "name": "fixture count is 12",
+      "ok": true
+    },
+    {
+      "actual": 1,
+      "name": "corrupt_count is 1",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "name": "duplicate_count is 2",
+      "ok": true
+    },
+    {
+      "actual": 1,
+      "name": "one corrupt row is listed",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "name": "two duplicate rows are listed",
+      "ok": true
+    },
+    {
+      "name": "corrupt row serves verdict null",
+      "ok": true
+    },
+    {
+      "actual": "unparseable: JSONDecodeError",
+      "name": "corrupt row names a corrupt_reason",
+      "ok": true
+    },
+    {
+      "name": "corrupt row is never disguised as an empty list",
+      "ok": true
+    },
+    {
+      "name": "duplicate rows name a duplicate_reason",
+      "ok": true
+    },
+    {
+      "actual": [
+        "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+        "729ab7d7b3eddb74f7551a6d10d072333eb280123c61ccdbd0caafee93a198bf"
+      ],
+      "name": "the two duplicate rows are distinguishable by record_sha256",
+      "ok": true
+    },
+    {
+      "actual": [
+        12,
+        12
+      ],
+      "name": "fixture page walk covers all 12 rows exactly once",
+      "ok": true
+    },
+    {
+      "name": "fixture page walk union equals the single 100-limit page",
+      "ok": true
+    },
+    {
+      "actual": [
+        true,
+        0,
+        4,
+        12
+      ],
+      "name": "fixture page 0 has_more arithmetic",
+      "ok": true
+    },
+    {
+      "name": "fixture page 0 count == len(runs)",
+      "ok": true
+    },
+    {
+      "actual": [
+        true,
+        4,
+        4,
+        12
+      ],
+      "name": "fixture page 1 has_more arithmetic",
+      "ok": true
+    },
+    {
+      "name": "fixture page 1 count == len(runs)",
+      "ok": true
+    },
+    {
+      "actual": [
+        false,
+        8,
+        4,
+        12
+      ],
+      "name": "fixture page 2 has_more arithmetic",
+      "ok": true
+    },
+    {
+      "name": "fixture page 2 count == len(runs)",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "depth root list is 200",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000201Z",
+        "run-20261008T000202Z"
+      ],
+      "name": "a record 3 directory levels below the root is found",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000201Z",
+        "run-20261008T000202Z"
+      ],
+      "name": "a record whose directory is 4 levels below the root is found",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000201Z",
+        "run-20261008T000202Z"
+      ],
+      "name": "a record 5 directory levels below the root is pruned",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000201Z",
+        "run-20261008T000202Z"
+      ],
+      "name": "exactly the two inside-cap records are served",
+      "ok": true
+    },
+    {
+      "actual": 1,
+      "name": "the pruned directory is counted once as depth_cap",
+      "ok": true
+    },
+    {
+      "actual": [
+        {
+          "reason": "depth_cap",
+          "relative_path": "d0/d1/d2/d3/d4"
+        }
+      ],
+      "name": "an ignored sample names the depth_cap reason",
+      "ok": true
+    },
+    {
+      "actual": [
+        {
+          "reason": "depth_cap",
+          "relative_path": "d0/d1/d2/d3/d4"
+        }
+      ],
+      "name": "the depth_cap sample names the pruned directory (d4)",
+      "ok": true
+    },
+    {
+      "actual": 4,
+      "name": "discovery.max_depth is 4",
+      "ok": true
+    },
+    {
+      "actual": "0o10644",
+      "name": "validator's non-regular entry is a real FIFO on disk",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        0.0018
+      ],
+      "name": "a FIFO named run-*.json does NOT hang the list reader",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000401Z"
+      ],
+      "name": "the FIFO is not served as a run row",
+      "ok": true
+    },
+    {
+      "actual": [
+        1,
+        [
+          "run-20261008T000401Z"
+        ]
+      ],
+      "name": "the one regular sibling record is still served",
+      "ok": true
+    },
+    {
+      "actual": 1,
+      "name": "the FIFO is counted in ignored_entries",
+      "ok": true
+    },
+    {
+      "actual": [
+        {
+          "reason": "not_regular_file",
+          "relative_path": "run-20261008T000402Z.json"
+        }
+      ],
+      "name": "exactly one ignored sample carries reason not_regular_file",
+      "ok": true
+    },
+    {
+      "actual": [
+        {
+          "reason": "not_regular_file",
+          "relative_path": "run-20261008T000402Z.json"
+        }
+      ],
+      "name": "the not_regular_file sample names the FIFO",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        404,
+        0.0016,
+        {
+          "code": "validation_run_not_found",
+          "details": {
+            "id": "run-20261008T000402Z",
+            "kind": "validation_run"
+          },
+          "message": "validation_run run-20261008T000402Z not found",
+          "request_id": "aud_01M4E08W4G1NH08EQ3GY9GQ6SQ"
+        }
+      ],
+      "name": "a by-id read of the FIFO stem does NOT hang and is 404 validation_run_not_found",
+      "ok": true
+    },
+    {
+      "actual": "0o140755",
+      "name": "validator's second non-regular entry is a real socket on disk",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        0.0015
+      ],
+      "name": "a Unix socket named run-*.json does NOT hang the list reader",
+      "ok": true
+    },
+    {
+      "actual": [
+        "not_regular_file"
+      ],
+      "name": "the socket is counted with reason not_regular_file",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "single_user: combo list is 200",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "single_user: total == count == 7",
+      "ok": true
+    },
+    {
+      "actual": 3,
+      "name": "single_user: the list's corrupt_count is 3",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "name": "single_user: the list's duplicate_count is 2",
+      "ok": true
+    },
+    {
+      "actual": [
+        "corrupt",
+        "ok"
+      ],
+      "name": "single_user run-20261008T000101Z: list row statuses are ['corrupt', 'ok']",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "single_user run-20261008T000101Z: detail status is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20261008T000101Z",
+      "name": "single_user run-20261008T000101Z: detail serves run_id run-20261008T000101Z",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        [
+          "corrupt",
+          "ok"
+        ]
+      ],
+      "name": "single_user run-20261008T000101Z: an ok list row implies detail 200",
+      "ok": true
+    },
+    {
+      "actual": [
+        {
+          "attribution": {
+            "projects": [],
+            "reason": "manifest_absent",
+            "status": "unattributed"
+          },
+          "case_counts": {
+            "blocked": 0,
+            "fail": 0,
+            "pass": 1,
+            "total": 1
+          },
+          "commit": "0000000000000000000000000000000000000000",
+          "core_version": "0.1.0",
+          "created_at": "2026-10-08T00:00:01.000000Z",
+          "evidence_grade": "unknown",
+          "grade_downgraded_by": [],
+          "manifest_status": "absent",
+          "mode": "unknown",
+          "mode_basis": "no bundle manifest on disk",
+          "record_sha256": "207bac3c449bdfd57035e584e379e38484e182fa2dc4dd10a009bdc6549fc8e2",
+          "record_status": "ok",
+          "run_id": "run-20261008T000101Z",
+          "schema_version": 11,
+          "stage": "P7",
+          "synthetic": false,
+          "verdict": "PASS",
+          "verdict_consistent": true
+        },
+        {
+          "attribution": null,
+          "case_counts": {
+            "blocked": 0,
+            "fail": 0,
+            "pass": 0,
+            "total": 0
+          },
+          "commit": null,
+          "core_version": null,
+          "corrupt_reason": "unparseable: JSONDecodeError",
+          "created_at": null,
+          "evidence_grade": null,
+          "grade_downgraded_by": [],
+          "manifest_status": null,
+          "mode": null,
+          "mode_basis": null,
+          "record_sha256": "5904a5cacb8ec3ce7ae0f5a0382bf9c628f4b1e98eac8f93c4e7071d62eb729b",
+          "record_status": "corrupt",
+          "run_id": "run-20261008T000101Z",
+          "schema_version": null,
+          "stage": null,
+          "synthetic": false,
+          "verdict": null,
+          "verdict_consistent": null
+        }
+      ],
+      "name": "single_user run-20261008T000101Z: an ok row carries the parseable digest",
+      "ok": true
+    },
+    {
+      "actual": [
+        {
+          "attribution": {
+            "projects": [],
+            "reason": "manifest_absent",
+            "status": "unattributed"
+          },
+          "case_counts": {
+            "blocked": 0,
+            "fail": 0,
+            "pass": 1,
+            "total": 1
+          },
+          "commit": "0000000000000000000000000000000000000000",
+          "core_version": "0.1.0",
+          "created_at": "2026-10-08T00:00:01.000000Z",
+          "evidence_grade": "unknown",
+          "grade_downgraded_by": [],
+          "manifest_status": "absent",
+          "mode": "unknown",
+          "mode_basis": "no bundle manifest on disk",
+          "record_sha256": "207bac3c449bdfd57035e584e379e38484e182fa2dc4dd10a009bdc6549fc8e2",
+          "record_status": "ok",
+          "run_id": "run-20261008T000101Z",
+          "schema_version": 11,
+          "stage": "P7",
+          "synthetic": false,
+          "verdict": "PASS",
+          "verdict_consistent": true
+        },
+        {
+          "attribution": null,
+          "case_counts": {
+            "blocked": 0,
+            "fail": 0,
+            "pass": 0,
+            "total": 0
+          },
+          "commit": null,
+          "core_version": null,
+          "corrupt_reason": "unparseable: JSONDecodeError",
+          "created_at": null,
+          "evidence_grade": null,
+          "grade_downgraded_by": [],
+          "manifest_status": null,
+          "mode": null,
+          "mode_basis": null,
+          "record_sha256": "5904a5cacb8ec3ce7ae0f5a0382bf9c628f4b1e98eac8f93c4e7071d62eb729b",
+          "record_status": "corrupt",
+          "run_id": "run-20261008T000101Z",
+          "schema_version": null,
+          "stage": null,
+          "synthetic": false,
+          "verdict": null,
+          "verdict_consistent": null
+        }
+      ],
+      "name": "single_user run-20261008T000101Z: a corrupt row carries the corrupt digest",
+      "ok": true
+    },
+    {
+      "actual": [
+        "duplicate",
+        "duplicate"
+      ],
+      "name": "single_user run-20261008T000102Z: list row statuses are ['duplicate', 'duplicate']",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "single_user run-20261008T000102Z: detail status is 409",
+      "ok": true
+    },
+    {
+      "actual": "validation_run_ambiguous",
+      "name": "single_user run-20261008T000102Z: detail code is validation_run_ambiguous",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        [
+          "duplicate",
+          "duplicate"
+        ]
+      ],
+      "name": "single_user run-20261008T000102Z: duplicate rows imply 409 ambiguous",
+      "ok": true
+    },
+    {
+      "actual": [
+        "corrupt",
+        "corrupt"
+      ],
+      "name": "single_user run-20261008T000103Z: list row statuses are ['corrupt', 'corrupt']",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "single_user run-20261008T000103Z: detail status is 409",
+      "ok": true
+    },
+    {
+      "actual": "validation_run_corrupt",
+      "name": "single_user run-20261008T000103Z: detail code is validation_run_corrupt",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        [
+          "corrupt",
+          "corrupt"
+        ]
+      ],
+      "name": "single_user run-20261008T000103Z: corrupt-only rows imply 409 corrupt",
+      "ok": true
+    },
+    {
+      "actual": [
+        "ok"
+      ],
+      "name": "single_user run-20261008T000104Z: list row statuses are ['ok']",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "single_user run-20261008T000104Z: detail status is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20261008T000104Z",
+      "name": "single_user run-20261008T000104Z: detail serves run_id run-20261008T000104Z",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        [
+          "ok"
+        ]
+      ],
+      "name": "single_user run-20261008T000104Z: an ok list row implies detail 200",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "verdict=PASS list is 200",
+      "ok": true
+    },
+    {
+      "actual": [
+        "ok",
+        "ok",
+        "duplicate",
+        "duplicate"
+      ],
+      "name": "verdict=PASS serves only parseable rows",
+      "ok": true
+    },
+    {
+      "actual": [
+        4,
+        4
+      ],
+      "name": "verdict=PASS total/count/rows agree at 4",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "verdict=PASS corrupt_count is 0 on the served set",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "name": "verdict=PASS duplicate_count counts only served duplicates",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "verdict=PASS corrupt_count matches the rows actually present",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        0
+      ],
+      "name": "a filter matching nothing is 200 with total 0",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "a filter matching nothing reports corrupt_count 0",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "a filter matching nothing reports duplicate_count 0",
+      "ok": true
+    },
+    {
+      "actual": "all_filtered_out",
+      "name": "a filter matching nothing reports all_filtered_out",
+      "ok": true
+    },
+    {
+      "actual": [
+        4,
+        0,
+        2
+      ],
+      "name": "stage=P7 serves four parseable rows and counts 0 corrupt",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        0
+      ],
+      "name": "acl read-only key sees no unattributed combo row",
+      "ok": true
+    },
+    {
+      "actual": [
+        404,
+        {
+          "error": {
+            "code": "validation_run_not_found",
+            "details": {
+              "id": "run-20261008T000101Z",
+              "kind": "validation_run"
+            },
+            "message": "validation_run run-20261008T000101Z not found",
+            "request_id": "aud_01M4E08W5B5CEHNVGDA3K71P67"
+          }
+        }
+      ],
+      "name": "acl read-only key gets 404 for the S1 parseable record",
+      "ok": true
+    },
+    {
+      "actual": [
+        404,
+        "validation_run_not_found"
+      ],
+      "name": "acl read-only key gets 404 for the corrupt S3 record",
+      "ok": true
+    },
+    {
+      "actual": 7,
+      "name": "acl unattributed key sees all 7 combo rows",
+      "ok": true
+    },
+    {
+      "actual": 3,
+      "name": "acl unattributed list counts the visible corrupt rows",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "name": "acl unattributed list counts the visible duplicate rows",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        {
+          "cases": [
+            {
+              "agent_response": "world",
+              "case_id": "T-1",
+              "chain": {
+                "agent": {
+                  "present": true,
+                  "source": "case.agent_response"
+                },
+                "context": {
+                  "present": true,
+                  "source": "case.context"
+                },
+                "evidence": {
+                  "present": true,
+                  "source": "case.evidence"
+                },
+                "extraction": {
+                  "missing_reason": "the recorder records no Extraction section",
+                  "present": false,
+                  "source": null
+                },
+                "raw": {
+                  "present": true,
+                  "source": "case.user_raw"
+                },
+                "resolution": {
+                  "missing_reason": "the recorder records no Resolution section",
+                  "present": false,
+                  "source": null
+                },
+                "state": {
+                  "present": true,
+                  "source": "case.state_before + case.state_after"
+                },
+                "tool": {
+                  "present": true,
+                  "source": "case.tools"
+                }
+              },
+              "context": {
+                "context_id": "ctx_1",
+                "pack": {
+                  "sections": []
+                }
+              },
+              "evidence": [
+                {
+                  "reason": "recorded evidence is free-form data and is never resolved; artifacts are addressable only through a bundle manifest",
+                  "recorded": "/absolute/host/path/stdout.txt",
+                  "status": "unaddressable"
+                },
+                {
+                  "reason": "recorded evidence is free-form data and is never resolved; artifacts are addressable only through a bundle manifest",
+                  "recorded": "prose evidence",
+                  "status": "unaddressable"
+                }
+              ],
+              "evidence_grade": "simulated",
+              "failure_class": null,
+              "failure_output": null,
+              "grade_basis": "run.executor",
+              "interpretation": "N/A (P0 not implemented)",
+              "name": "a passing case with a context pack",
+              "not_applied_reason": null,
+              "reproduction": [],
+              "sections": {
+                "agent_response": {
+                  "evidence_grade": "simulated",
+                  "present": true,
+                  "present_kind": "value",
+                  "value": "world"
+                },
+                "context": {
+                  "context_pack_present": true,
+                  "evidence_grade": "simulated",
+                  "present": true,
+                  "present_kind": "value",
+                  "value": {
+                    "context_id": "ctx_1",
+                    "pack": {
+                      "sections": []
+                    }
+                  }
+                },
+                "interpretation": {
+                  "evidence_grade": "simulated",
+                  "missing_reason": "recorded as N/A (P0 not implemented)",
+                  "present": false,
+                  "present_kind": "sentinel"
+                },
+                "state_after": {
+                  "evidence_grade": "simulated",
+                  "present": true,
+                  "present_kind": "value",
+                  "value": {
+                    "revision": 2
+                  }
+                },
+                "state_before": {
+                  "evidence_grade": "simulated",
+                  "present": true,
+                  "present_kind": "value",
+                  "value": {
+                    "revision": 1
+                  }
+                },
+                "tools": {
+                  "evidence_grade": "simulated",
+                  "present": true,
+                  "present_kind": "value",
+                  "value": [
+                    {
+                      "name": "read",
+                      "response": {
+                        "project_id": "prj_00000000000000000000000000"
+                      }
+                    }
+                  ]
+                },
+                "user_raw": {
+                  "evidence_grade": "simulated",
+                  "present": true,
+                  "present_kind": "value",
+                  "value": "hello"
+                }
+              },
+              "state_after": {
+                "revision": 2
+              },
+              "state_before": {
+                "revision": 1
+              },
+              "tools": [
+                {
+                  "name": "read",
+                  "response": {
+                    "project_id": "prj_00000000000000000000000000"
+                  }
+                }
+              ],
+              "user_raw": "hello",
+              "verdict": "PASS"
+            }
+          ],
+          "commit": "0000000000000000000000000000000000000000",
+          "core_version": "0.1.0",
+          "created_at": "2026-10-08T00:00:01.000000Z",
+          "environment": {
+            "platform": "fixture",
+            "python": "3.11"
+          },
+          "evidence_grade": "unknown",
+          "executor": "fixture",
+          "grade_downgraded_by": [],
+          "not_implemented": [],
+          "notes": [
+            "a syntactically complete fixture record"
+          ],
+          "reviewer": "fixture",
+          "run_id": "run-20261008T000101Z",
+          "schema_version": 11,
+          "stage": "P7",
+          "synthetic": false,
+          "unknown_record_keys": [
+            "extra_record_key"
+          ],
+          "verdict": "PASS",
+          "verdict_consistent": true,
+          "verifier": "fixture",
+          "warnings": []
+        }
+      ],
+      "name": "acl+unattributed S1 detail is 200 (parseable sibling wins)",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        {
+          "error": {
+            "code": "validation_run_ambiguous",
+            "details": {
+              "run_id": "run-20261008T000102Z"
+            },
+            "message": "2 run-shaped files share this stem",
+            "request_id": "aud_01M4E08W5R2Z34SKXRFAE49R5F"
+          }
+        }
+      ],
+      "name": "acl+unattributed S2 detail is 409 ambiguous",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        {
+          "error": {
+            "code": "validation_run_corrupt",
+            "details": {
+              "run_id": "run-20261008T000103Z"
+            },
+            "message": "unparseable: JSONDecodeError",
+            "request_id": "aud_01M4E08W5V93E5VA9PWPSDQB87"
+          }
+        }
+      ],
+      "name": "acl+unattributed S3 detail is 409 corrupt",
+      "ok": true
+    },
+    {
+      "actual": [
+        9,
+        9
+      ],
+      "name": "acl real-root page walk with limit=2 covers all nine",
+      "ok": true
+    },
+    {
+      "actual": [
+        9,
+        9
+      ],
+      "name": "acl real-root page walk has no repeats",
+      "ok": true
+    },
+    {
+      "actual": [
+        9
+      ],
+      "name": "acl real-root total is stable at 9",
+      "ok": true
+    },
+    {
+      "name": "acl real-root every page arithmetic holds",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        0
+      ],
+      "name": "acl read-only key sees no unattributed real record",
+      "ok": true
+    },
+    {
+      "actual": [
+        null,
+        200,
+        0.002
+      ],
+      "name": "acl: a FIFO named run-*.json does NOT hang the list reader",
+      "ok": true
+    },
+    {
+      "actual": 1,
+      "name": "acl: the FIFO is counted in ignored_entries",
+      "ok": true
+    },
+    {
+      "actual": [],
+      "name": "acl: ignored_samples[] is empty by design (AD2), so the reason is withheld and only the count is reported",
+      "ok": true
+    },
+    {
+      "actual": [
+        "run-20261008T000401Z"
+      ],
+      "name": "acl: the FIFO is not served as a run row",
+      "ok": true
+    },
+    {
+      "actual": 1048577,
+      "name": "validator's oversize manifest is over 1 MiB on disk",
+      "ok": true
+    },
+    {
+      "actual": 16777218,
+      "name": "validator's oversize record is over 16 MiB on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "oversize bundle root list is 200",
+      "ok": true
+    },
+    {
+      "actual": "corrupt",
+      "name": "the oversize manifest is reported corrupt on the list row",
+      "ok": true
+    },
+    {
+      "actual": "corrupt",
+      "name": "the oversize record is reported corrupt on the list row",
+      "ok": true
+    },
+    {
+      "actual": "",
+      "name": "the oversize record reports no digest (it was not read)",
+      "ok": true
+    },
+    {
+      "actual": "record exceeds 16777216 bytes",
+      "name": "the oversize record's reason names the size bound",
+      "ok": true
+    },
+    {
+      "actual": 1,
+      "name": "the oversize record counts as corrupt",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        {
+          "error": {
+            "code": "validation_run_corrupt",
+            "details": {
+              "run_id": "run-20261008T000302Z"
+            },
+            "message": "record exceeds 16777216 bytes",
+            "request_id": "aud_01M4E08W7EQPYMPHB1DA3K539J"
+          }
+        }
+      ],
+      "name": "oversize record detail is 409 validation_run_corrupt",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        {
+          "error": {
+            "code": "validation_manifest_corrupt",
+            "details": {
+              "rule": "manifest exceeds 1048576 bytes",
+              "run_id": "run-20261008T000301Z"
+            },
+            "message": "manifest exceeds 1048576 bytes",
+            "request_id": "aud_01M4E08W7FTTMAQ4CE26N8A2RX"
+          }
+        }
+      ],
+      "name": "oversize manifest is refused with 409 validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "manifest exceeds 1048576 bytes",
+        "run_id": "run-20261008T000301Z"
+      },
+      "name": "oversize manifest rule names the size bound",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "manifest exceeds 1048576 bytes",
+        "run_id": "run-20261008T000301Z"
+      },
+      "name": "no digest is reported for a manifest that was never read",
+      "ok": true
+    },
+    {
+      "actual": [
+        404,
+        {
+          "error": {
+            "code": "artifact_not_found",
+            "details": {
+              "id": "art_missing",
+              "kind": "artifact",
+              "reason": "manifest_corrupt"
+            },
+            "message": "artifact art_missing not found",
+            "request_id": "aud_01M4E08W7JV2TQ0MX03RQK1PQ1"
+          }
+        }
+      ],
+      "name": "an oversize manifest makes its artifacts unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": [
+        1,
+        1,
+        "corrupt"
+      ],
+      "name": "a corrupt-only root still lists the corrupt row",
+      "ok": true
+    },
+    {
+      "name": "a corrupt-only root is not reported as 'no_run_shaped_files'",
+      "ok": true
+    },
+    {
+      "actual": [
+        409,
+        {
+          "error": {
+            "code": "validation_run_corrupt",
+            "details": {
+              "run_id": "run-20261008T000004Z"
+            },
+            "message": "unparseable: JSONDecodeError",
+            "request_id": "aud_01M4E08W7NT03EM3JWQ0S9HQC3"
+          }
+        }
+      ],
+      "name": "a corrupt record refuses detail with 409 validation_run_corrupt",
+      "ok": true
+    },
+    {
+      "actual": "no_run_shaped_files",
+      "name": "a truly empty root reports no_run_shaped_files",
+      "ok": true
+    },
+    {
+      "actual": 503,
+      "name": "an unreadable subtree refuses the list (503)",
+      "ok": true
+    },
+    {
+      "actual": "validation_not_configured",
+      "name": "the refusal code is validation_not_configured",
+      "ok": true
+    },
+    {
+      "actual": {
+        "counts": {
+          "ignored_entries": 0,
+          "run_shaped_files": 1,
+          "scanned_dirs": 3,
+          "scanned_files": 1,
+          "unreadable_entries": 1
+        },
+        "reason": "index_incomplete",
+        "samples": [
+          {
+            "error": "PermissionError",
+            "path": "/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-5veefw5y/c5-broken/locked"
+          }
+        ]
+      },
+      "name": "the refusal reason is index_incomplete",
+      "ok": true
+    },
+    {
+      "actual": {
+        "ignored_entries": 0,
+        "run_shaped_files": 1,
+        "scanned_dirs": 3,
+        "scanned_files": 1,
+        "unreadable_entries": 1
+      },
+      "name": "the refusal counts the unreadable entry",
+      "ok": true
+    },
+    {
+      "actual": 1,
+      "name": "the refusal names at most 20 samples",
+      "ok": true
+    },
+    {
+      "actual": [
+        {
+          "error": "PermissionError",
+          "path": "/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-5veefw5y/c5-broken/locked"
+        }
+      ],
+      "name": "the refusal names the unreadable path",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "a by-id read of a known sibling still works while a sibling subtree is unreadable",
+      "ok": true
+    },
+    {
+      "actual": [
+        503,
+        {
+          "error": {
+            "code": "validation_not_configured",
+            "details": {
+              "counts": {
+                "ignored_entries": 0,
+                "run_shaped_files": 1,
+                "scanned_dirs": 3,
+                "scanned_files": 1,
+                "unreadable_entries": 1
+              },
+              "reason": "index_incomplete",
+              "samples": [
+                {
+                  "error": "PermissionError",
+                  "path": "/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-5veefw5y/c5-broken/locked"
+                }
+              ]
+            },
+            "message": "the Validation run root is not usable",
+            "request_id": "aud_01M4E08W7X7QXT38ND9CVB0XNM"
+          }
+        }
+      ],
+      "name": "by-id of an id that cannot be ruled out refuses 503 index_incomplete rather than asserting 404 (F5/ADR 5.0)",
+      "ok": true
+    },
+    {
+      "actual": 9,
+      "name": "real root still lists exactly nine",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "real root corrupt_count is still 0",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "real root duplicate_count is still 0",
+      "ok": true
+    },
+    {
+      "actual": 46,
+      "name": "criterion 5 issued a non-trivial number of requests",
+      "ok": true
+    },
+    {
+      "actual": {
+        "max_seconds": 0.0125,
+        "over_10s": [],
+        "over_5s": [],
+        "requests": 46,
+        "requests_without_status": [],
+        "total_seconds": 0.1639,
+        "transport_retries": 0
+      },
+      "name": "every criterion 5 request completed inside its client timeout (no request hung)",
+      "ok": true
+    },
+    {
+      "actual": 0.0125,
+      "name": "no criterion 5 request exceeded 10 s",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "no transport-level retry was needed in the recorded run",
+      "ok": true
+    },
+    {
+      "actual": [
+        0.0018,
+        null
+      ],
+      "name": "the FIFO list request was answered in well under the client timeout",
+      "ok": true
+    }
+  ],
+  "checks": 145,
+  "failed": 0,
+  "failures": [],
+  "label": "criterion 5"
+}

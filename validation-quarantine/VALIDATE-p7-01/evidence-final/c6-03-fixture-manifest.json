@@ -1,0 +1,39 @@
+{
+  "declared_mode": "component",
+  "files": [
+    {
+      "artifact_id": "art_good",
+      "bytes": 13,
+      "bytes_agree": true,
+      "credential_shaped": false,
+      "integrity": "match",
+      "media_type": "text/plain",
+      "path": "artifacts/good.txt",
+      "sha256": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+    },
+    {
+      "artifact_id": "art_assign",
+      "bytes": 59,
+      "bytes_agree": true,
+      "credential_shaped": false,
+      "integrity": "match",
+      "media_type": "text/plain",
+      "path": "artifacts/assign.log",
+      "sha256": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5"
+    }
+  ],
+  "frozen_at": "2026-10-08T00:10:00Z",
+  "manifest_authentication": "unauthenticated",
+  "manifest_sha256": "19dfce54479f3a1966f526107e699c21e95d0a49a3e13c88df0fb7d745e32ade",
+  "mode": "component",
+  "mode_basis": "declared by the manifest",
+  "projects": [],
+  "run_id": "run-20261008T000001Z",
+  "sources": {
+    "recorder": {
+      "path": "scripts/p0-acceptance.py",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "status": "frozen"
+}

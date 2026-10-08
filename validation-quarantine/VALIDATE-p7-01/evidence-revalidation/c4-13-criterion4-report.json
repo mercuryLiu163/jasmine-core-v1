@@ -1,0 +1,887 @@
+{
+  "all": [
+    {
+      "actual": 200,
+      "name": "good artifact metadata is 200",
+      "ok": true
+    },
+    {
+      "actual": "match",
+      "name": "good artifact integrity=match",
+      "ok": true
+    },
+    {
+      "actual": [
+        "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+        "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+      ],
+      "name": "good declared_sha256 equals the validator's own hash",
+      "ok": true
+    },
+    {
+      "actual": {
+        "masked": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+        "original": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+      },
+      "name": "good digests.original equals the validator's own hash",
+      "ok": true
+    },
+    {
+      "name": "good declared_bytes equals the file size",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "good content is 200",
+      "ok": true
+    },
+    {
+      "actual": [
+        "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+        "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+      ],
+      "name": "good served_sha256 matches the validator's own hash",
+      "ok": true
+    },
+    {
+      "name": "good masked==original when the masker is a no-op",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "missing artifact is 404",
+      "ok": true
+    },
+    {
+      "actual": "artifact_not_found",
+      "name": "missing artifact code artifact_not_found",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_missing",
+        "kind": "artifact",
+        "reason": "missing"
+      },
+      "name": "missing artifact reason is 'missing'",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "tampered artifact is 409",
+      "ok": true
+    },
+    {
+      "actual": "artifact_modified",
+      "name": "tampered artifact code artifact_modified",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "tampered content is refused too (409)",
+      "ok": true
+    },
+    {
+      "actual": "mismatch",
+      "name": "manifest reports the tampered file as mismatch",
+      "ok": true
+    },
+    {
+      "actual": "missing",
+      "name": "manifest reports the missing file as missing",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "symlink art_symfile artifact is 404",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_symfile",
+        "kind": "artifact",
+        "reason": "symlink_refused"
+      },
+      "name": "symlink art_symfile reason is symlink_refused",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "symlink art_symfile content is refused (404)",
+      "ok": true
+    },
+    {
+      "actual": "symlink_refused",
+      "name": "manifest integrity art_symfile is symlink_refused",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "symlink art_symdir artifact is 404",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_symdir",
+        "kind": "artifact",
+        "reason": "symlink_refused"
+      },
+      "name": "symlink art_symdir reason is symlink_refused",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "symlink art_symdir content is refused (404)",
+      "ok": true
+    },
+    {
+      "actual": "symlink_refused",
+      "name": "manifest integrity art_symdir is symlink_refused",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "name": "canonical.looks_like_credential is False for db_password=...",
+      "ok": true
+    },
+    {
+      "actual": true,
+      "name": "api_key JSON original is withheld whether or not looks_like_credential flags it",
+      "ok": true
+    },
+    {
+      "actual": "2026-10-08 INFO db_password=[REDACTED] in the log line\n",
+      "name": "canonical.redact_text actually masks the assignment",
+      "ok": true
+    },
+    {
+      "actual": "1",
+      "name": "mask_version is canonical.REDACT_TEXT_VERSION",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "assign masked form is 200",
+      "ok": true
+    },
+    {
+      "actual": "masked",
+      "name": "assign masked form reports form=masked",
+      "ok": true
+    },
+    {
+      "name": "assign masked content_is_original is false",
+      "ok": true
+    },
+    {
+      "actual": [
+        "2026-10-08 INFO db_password=[REDACTED] in the log line\n",
+        "2026-10-08 INFO db_password=[REDACTED] in the log line\n"
+      ],
+      "name": "assign masked content equals the validator's redact_text",
+      "ok": true
+    },
+    {
+      "actual": [
+        "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+        "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d"
+      ],
+      "name": "assign masked_sha256 equals the validator's own digest",
+      "ok": true
+    },
+    {
+      "name": "assign served_sha256 equals masked_sha256",
+      "ok": true
+    },
+    {
+      "name": "assign masked content withholds the secret",
+      "ok": true
+    },
+    {
+      "actual": "canonical.redact_text",
+      "name": "assign mask_algorithm is canonical.redact_text",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "assign original form is 403",
+      "ok": true
+    },
+    {
+      "actual": "original_withheld",
+      "name": "assign original code is original_withheld",
+      "ok": true
+    },
+    {
+      "actual": {
+        "masked_sha256": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+        "reason": "mask_not_noop"
+      },
+      "name": "assign original reason is mask_not_noop",
+      "ok": true
+    },
+    {
+      "name": "assign withheld details carry the masked_sha256",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "api_key JSON is masked by form=masked",
+      "ok": true
+    },
+    {
+      "actual": "{\"api_key\": \"[REDACTED]\"}\n",
+      "name": "api_key JSON masked content withholds the value",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "api_key JSON original form is withheld (403)",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "html content request is 200",
+      "ok": true
+    },
+    {
+      "actual": "application/json; charset=utf-8",
+      "name": "html response Content-Type is JSON, not text/html",
+      "ok": true
+    },
+    {
+      "actual": "nosniff",
+      "name": "html response sets X-Content-Type-Options: nosniff",
+      "ok": true
+    },
+    {
+      "actual": "default-src 'none'; sandbox",
+      "name": "html response sets a default-src 'none' CSP",
+      "ok": true
+    },
+    {
+      "actual": "attachment; filename=\"art_html.txt\"",
+      "name": "html download sets attachment Content-Disposition",
+      "ok": true
+    },
+    {
+      "actual": "{\"artifact_id\": \"art",
+      "name": "raw response bytes are a JSON envelope, not an HTML page",
+      "ok": true
+    },
+    {
+      "actual": [
+        "text/html",
+        "<html><body><script>"
+      ],
+      "name": "the HTML is carried as a JSON string field, not rendered",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "html original form is 200",
+      "ok": true
+    },
+    {
+      "actual": "application/json; charset=utf-8",
+      "name": "html original form Content-Type is still JSON",
+      "ok": true
+    },
+    {
+      "actual": "nosniff",
+      "name": "html original form still sets nosniff",
+      "ok": true
+    },
+    {
+      "actual": "{\"artifact",
+      "name": "html original form is a JSON envelope, not an HTML page",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "declared-credential masked form is 200",
+      "ok": true
+    },
+    {
+      "actual": 403,
+      "name": "declared-credential original form is 403",
+      "ok": true
+    },
+    {
+      "actual": {
+        "masked_sha256": "36a997b07b727c2b4005ad7d2097e2ebc62d59c4d7cdc163c9b84f379f997d3b",
+        "reason": "credential_shaped_declared"
+      },
+      "name": "declared-credential reason is credential_shaped_declared",
+      "ok": true
+    },
+    {
+      "actual": 415,
+      "name": "binary content is 415 unsupported_media_type",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "escape art_dotdot refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "escape art_dotdot names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_dotdot: dot segment path '../outside/loot.txt'",
+        "run_id": "run-20261008T000100Z"
+      },
+      "name": "escape art_dotdot names the offending entry in rule",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "escape art_dotdot makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_dotdot",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "escape art_dotdot artifact reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "escape art_nested_dotdot refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "escape art_nested_dotdot names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_nested_dotdot: dot segment path 'artifacts/../../outside/loot.txt'",
+        "run_id": "run-20261008T000101Z"
+      },
+      "name": "escape art_nested_dotdot names the offending entry in rule",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "escape art_nested_dotdot makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_nested_dotdot",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "escape art_nested_dotdot artifact reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "escape art_absolute refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "escape art_absolute names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_absolute: absolute/UNC prefix path '/tmp/outside/loot.txt'",
+        "run_id": "run-20261008T000102Z"
+      },
+      "name": "escape art_absolute names the offending entry in rule",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "escape art_absolute makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_absolute",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "escape art_absolute artifact reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "escape art_drive refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "escape art_drive names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_drive: drive-relative path 'C:foo.txt'",
+        "run_id": "run-20261008T000103Z"
+      },
+      "name": "escape art_drive names the offending entry in rule",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "escape art_drive makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_drive",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "escape art_drive artifact reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "escape art_unc refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "escape art_unc names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_unc: absolute/UNC prefix path '\\\\\\\\host\\\\share\\\\f.txt'",
+        "run_id": "run-20261008T000104Z"
+      },
+      "name": "escape art_unc names the offending entry in rule",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "escape art_unc makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_unc",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "escape art_unc artifact reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "escape art_url refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "escape art_url names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_url: URL scheme path 'https://evil.example/x.txt'",
+        "run_id": "run-20261008T000105Z"
+      },
+      "name": "escape art_url names the offending entry in rule",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "escape art_url makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_url",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "escape art_url artifact reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path empty_component ('a//b') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path empty_component names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: empty path component path 'a//b'",
+        "run_id": "run-20261008T000300Z"
+      },
+      "name": "raw declared path empty_component names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path empty_component makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path empty_component reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path dot_component ('a/./b') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path dot_component names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: empty or dot path component path 'a/./b'",
+        "run_id": "run-20261008T000301Z"
+      },
+      "name": "raw declared path dot_component names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path dot_component makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path dot_component reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path trailing_slash ('a/b/') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path trailing_slash names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: empty or dot path component path 'a/b/'",
+        "run_id": "run-20261008T000302Z"
+      },
+      "name": "raw declared path trailing_slash names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path trailing_slash makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path trailing_slash reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path leading_dot_slash ('./a') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path leading_dot_slash names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: empty or dot path component path './a'",
+        "run_id": "run-20261008T000303Z"
+      },
+      "name": "raw declared path leading_dot_slash names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path leading_dot_slash makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path leading_dot_slash reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path dot_alone ('.') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path dot_alone names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: empty or dot path component path '.'",
+        "run_id": "run-20261008T000304Z"
+      },
+      "name": "raw declared path dot_alone names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path dot_alone makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path dot_alone reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path dotdot_substring_name ('artifacts/note..txt') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path dotdot_substring_name names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: dot segment path 'artifacts/note..txt'",
+        "run_id": "run-20261008T000305Z"
+      },
+      "name": "raw declared path dotdot_substring_name names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path dotdot_substring_name makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path dotdot_substring_name reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path dotdot_substring_mid ('a..b') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path dotdot_substring_mid names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: dot segment path 'a..b'",
+        "run_id": "run-20261008T000306Z"
+      },
+      "name": "raw declared path dotdot_substring_mid names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path dotdot_substring_mid makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path dotdot_substring_mid reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path dotdot_segment_name ('artifacts/..hidden') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path dotdot_segment_name names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: dot segment path 'artifacts/..hidden'",
+        "run_id": "run-20261008T000307Z"
+      },
+      "name": "raw declared path dotdot_segment_name names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path dotdot_segment_name makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path dotdot_segment_name reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path dotdot_segment ('artifacts/../loot.txt') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path dotdot_segment names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: dot segment path 'artifacts/../loot.txt'",
+        "run_id": "run-20261008T000308Z"
+      },
+      "name": "raw declared path dotdot_segment names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path dotdot_segment makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path dotdot_segment reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 409,
+      "name": "raw declared path dotdot_encoded ('..%2Fb') refuses the manifest (409)",
+      "ok": true
+    },
+    {
+      "actual": "validation_manifest_corrupt",
+      "name": "raw declared path dotdot_encoded names validation_manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": {
+        "rule": "art_raw: dot segment path '..%2Fb'",
+        "run_id": "run-20261008T000309Z"
+      },
+      "name": "raw declared path dotdot_encoded names the path rule (rule mentions 'path')",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "raw declared path dotdot_encoded makes the artifact unaddressable (404)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "id": "art_raw",
+        "kind": "artifact",
+        "reason": "manifest_corrupt"
+      },
+      "name": "raw declared path dotdot_encoded reason is manifest_corrupt",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "legit nested bundle manifest is 200",
+      "ok": true
+    },
+    {
+      "actual": {
+        "art_flat": "match",
+        "art_nested": "match"
+      },
+      "name": "legit declared path artifacts/name.txt is served match",
+      "ok": true
+    },
+    {
+      "actual": {
+        "art_flat": "match",
+        "art_nested": "match"
+      },
+      "name": "legit nested path artifacts/sub/name.txt is served match",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "legit art_flat metadata is 200",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+      ],
+      "name": "legit art_flat content is 200 with the right digest",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "legit art_nested metadata is 200",
+      "ok": true
+    },
+    {
+      "actual": [
+        200,
+        "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+      ],
+      "name": "legit art_nested content is 200 with the right digest",
+      "ok": true
+    }
+  ],
+  "checks": 145,
+  "failed": 0,
+  "failures": [],
+  "label": "criterion 4"
+}

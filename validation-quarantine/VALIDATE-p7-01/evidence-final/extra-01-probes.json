@@ -1,0 +1,62 @@
+{
+  "all": [
+    {
+      "actual": 503,
+      "name": "unset root is 503 validation_not_configured",
+      "ok": true
+    },
+    {
+      "actual": {
+        "reason": "unset"
+      },
+      "name": "unset root reason is 'unset'",
+      "ok": true
+    },
+    {
+      "actual": 503,
+      "name": "symlinked root is 503",
+      "ok": true
+    },
+    {
+      "actual": {
+        "reason": "symlinked_root",
+        "root": "/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-mg_r_rf8/extra-link"
+      },
+      "name": "symlinked root reason is 'symlinked_root'",
+      "ok": true
+    },
+    {
+      "actual": 400,
+      "name": "malformed run id is 400 invalid_request",
+      "ok": true
+    },
+    {
+      "actual": "invalid_request",
+      "name": "malformed run id code is invalid_request",
+      "ok": true
+    },
+    {
+      "actual": 400,
+      "name": "unknown query key is 400 invalid_request",
+      "ok": true
+    },
+    {
+      "actual": 405,
+      "name": "POST to the list route is 405 method_not_allowed",
+      "ok": true
+    },
+    {
+      "actual": {
+        "allowed": [
+          "GET"
+        ]
+      },
+      "name": "the allowed method list is [GET]",
+      "ok": true
+    }
+  ],
+  "checks": 9,
+  "failed": 0,
+  "failures": [],
+  "label": "supplementary probes"
+}

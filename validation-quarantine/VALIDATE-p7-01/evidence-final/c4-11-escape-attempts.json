@@ -1,0 +1,176 @@
+{
+  "artifact::art_absolute": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_absolute",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_absolute not found",
+        "request_id": "aud_01M4E090HNHFFEA26RWT4VTC3T"
+      }
+    },
+    "status": 404
+  },
+  "artifact::art_dotdot": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_dotdot",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_dotdot not found",
+        "request_id": "aud_01M4E090HEVQ5Y564ZNWN8J1K2"
+      }
+    },
+    "status": 404
+  },
+  "artifact::art_drive": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_drive",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_drive not found",
+        "request_id": "aud_01M4E090HSQ3EV0GSHNAK8PXRX"
+      }
+    },
+    "status": 404
+  },
+  "artifact::art_nested_dotdot": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_nested_dotdot",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_nested_dotdot not found",
+        "request_id": "aud_01M4E090HJ4VMBFMZV4EVMNVQ7"
+      }
+    },
+    "status": 404
+  },
+  "artifact::art_unc": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_unc",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_unc not found",
+        "request_id": "aud_01M4E090HZ7A1VS20JYHS9AHH2"
+      }
+    },
+    "status": 404
+  },
+  "artifact::art_url": {
+    "body": {
+      "error": {
+        "code": "artifact_not_found",
+        "details": {
+          "id": "art_url",
+          "kind": "artifact",
+          "reason": "manifest_corrupt"
+        },
+        "message": "artifact art_url not found",
+        "request_id": "aud_01M4E090J3C2QK4XV1NK6ACF5E"
+      }
+    },
+    "status": 404
+  },
+  "manifest::art_absolute": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_absolute: absolute/UNC prefix path '/tmp/outside/loot.txt'",
+          "run_id": "run-20261008T000102Z"
+        },
+        "message": "art_absolute: absolute/UNC prefix path '/tmp/outside/loot.txt'",
+        "request_id": "aud_01M4E090HMMCMXGJDAVRPJS7QB"
+      }
+    },
+    "status": 409
+  },
+  "manifest::art_dotdot": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_dotdot: dot segment path '../outside/loot.txt'",
+          "run_id": "run-20261008T000100Z"
+        },
+        "message": "art_dotdot: dot segment path '../outside/loot.txt'",
+        "request_id": "aud_01M4E090HDWFG4QT9M7J7SQACT"
+      }
+    },
+    "status": 409
+  },
+  "manifest::art_drive": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_drive: drive-relative path 'C:foo.txt'",
+          "run_id": "run-20261008T000103Z"
+        },
+        "message": "art_drive: drive-relative path 'C:foo.txt'",
+        "request_id": "aud_01M4E090HQNQ0BTYADGYZSW60Z"
+      }
+    },
+    "status": 409
+  },
+  "manifest::art_nested_dotdot": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_nested_dotdot: dot segment path 'artifacts/../../outside/loot.txt'",
+          "run_id": "run-20261008T000101Z"
+        },
+        "message": "art_nested_dotdot: dot segment path 'artifacts/../../outside/loot.txt'",
+        "request_id": "aud_01M4E090HGTQZMHB83RZM862V9"
+      }
+    },
+    "status": 409
+  },
+  "manifest::art_unc": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_unc: absolute/UNC prefix path '\\\\\\\\host\\\\share\\\\f.txt'",
+          "run_id": "run-20261008T000104Z"
+        },
+        "message": "art_unc: absolute/UNC prefix path '\\\\\\\\host\\\\share\\\\f.txt'",
+        "request_id": "aud_01M4E090HYVBFSAGA60ZB6TF0A"
+      }
+    },
+    "status": 409
+  },
+  "manifest::art_url": {
+    "body": {
+      "error": {
+        "code": "validation_manifest_corrupt",
+        "details": {
+          "rule": "art_url: URL scheme path 'https://evil.example/x.txt'",
+          "run_id": "run-20261008T000105Z"
+        },
+        "message": "art_url: URL scheme path 'https://evil.example/x.txt'",
+        "request_id": "aud_01M4E090J25HWYJA5ZSPXNK99F"
+      }
+    },
+    "status": 409
+  }
+}
