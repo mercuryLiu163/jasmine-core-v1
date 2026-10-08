@@ -12,12 +12,13 @@ matrix** of the four routes over HTTP with keys P3 minted, then builds the dashb
 (`browser_trace.mjs --p3-reads --real-core`) against it. The bundle is frozen with
 `scripts/p6/freeze_bundle.py`.
 
-**One row is BLOCKED rather than faked.** P3's `ContextBuilder` requires its pinned tokenizer
-(`tiktoken` plus a BPE asset whose SHA-256 `context/tokens.py` fixes). Neither is present here and
-installing one is out of scope, so **no Context Pack exists** in this Core. That row is recorded as
-BLOCKED with the exact exception, in both the Core matrix and the browser pass; the other three
-routes are verified for real, and the context route's shape remains covered by the frozen contract
-and the simulated fixture.
+**The Context Pack row follows the environment.** P3's `ContextBuilder` requires its pinned
+tokenizer (`tiktoken` plus a BPE asset whose SHA-256 `context/tokens.py` fixes) and a workspace scan
+that can run `python -m jasmine_core.continuity_scan` in a child process. The isolated toolchain
+under `validation-runs/p6/realcore-toolchain/` provides the first, and this environment provides the
+second, so the pack is **built and read for real**; when either is absent the row is recorded as
+BLOCKED with the exact exception instead of being faked. The README the run writes reports whichever
+of the two actually happened, from the run's own evidence.
 
     python3.13 scripts/p6/run_p3_realcore.py --out validation-runs/p6/<stamp>-p6-03a-realcore
 """
@@ -252,13 +253,19 @@ def main(argv: list[str] | None = None) -> int:
                       "--p3-task-empty", seeded["empty_task_id"],
                       "--p3-unknown", seeded["unknown_checkpoint_id"],
                       "--p3-limited-token", tokens["limited"],
-                      "--p3-route-scope-token", tokens["route_scope"]]
+                      "--p3-route-scope-token", tokens["route_scope"],
+                      # The two value-bound records: the marker comes from this Core's own
+                      # rendered_content and the action count from this Core's own Resume.
+                      "--p3-resume-action-count", str(seeded["resume_next_actions_count"])]
+        if seeded["resume_next_actions_count"]:
+            trace_args += ["--p3-resume-action-kind", seeded["resume_next_action_kinds"][0]]
         if pack["status"] == "BLOCKED":
             trace_args.append("--p3-no-context")
         else:
             # Without this the walkthrough navigates to the fixture's context id, which a real Core
             # does not have: the pack must be read by the id P3's own builder produced.
-            trace_args += ["--p3-context", pack["context_id"]]
+            trace_args += ["--p3-context", pack["context_id"],
+                           "--p3-pack-marker", pack["rendered_content_marker"]]
         trace_log = (out / "trace.stdout.txt").open("w")
         trace = subprocess.run(trace_args, stdout=trace_log, stderr=subprocess.STDOUT, text=True)
         trace_log.close()
@@ -312,6 +319,37 @@ def main(argv: list[str] | None = None) -> int:
 
 def write_readme(out: Path, evidence: dict[str, Any]) -> None:
     summary = evidence["summary"]
+    # The two bullets below used to be hard-coded. That made the README assert a Context Pack was
+    # BLOCKED and the workspace scan a stand-in even in a run whose own evidence said the pack was
+    # `built` and the scan real — a generated document contradicting the bundle it ships in. Both are
+    # now read from the run.
+    scan_mode = str(evidence["mode"].get("workspace_scan", "unknown"))
+    if summary["context_pack"] == "BLOCKED":
+        pack_bullets = [
+            "* **The Context Pack row is BLOCKED, not passed.** P3's `ContextBuilder` needs its pinned",
+            "  tokenizer (`tiktoken` plus a BPE asset whose SHA-256 `context/tokens.py` fixes); neither",
+            "  is present in this environment, so no Context Pack exists and **nothing was fabricated**",
+            "  in its place. Its shape remains covered by the frozen contract and the simulated fixture.",
+        ]
+    else:
+        pack_bullets = [
+            "* **The Context Pack is real too.** P3's own `ContextBuilder` built it here, with the",
+            "  pinned tokenizer installed in the isolated toolchain and checked against",
+            "  `context/tokens.py`'s `tiktoken` version and asset SHA-256, and P3's own",
+            "  `scan_workspace` walking an isolated git workspace. The browser record asserts a literal",
+            "  slice of *this* Core's `rendered_content` is on screen — not the fixture's title.",
+        ]
+    if scan_mode.startswith("real"):
+        scan_bullets = [
+            f"* The workspace scan is **P3's own `scan_workspace`** (`{scan_mode}`) over an isolated",
+            "  git workspace created for this run: a real scan of a tiny throwaway tree, not of any",
+            "  operator project.",
+        ]
+    else:
+        scan_bullets = [
+            f"* The workspace scanner in these rows is a **component stand-in** (`{scan_mode}`), as",
+            "  P3's own continuity tests use: workspace snapshots are not a real workspace capture.",
+        ]
     lines = [
         "# P6-03a real-P3 acceptance — the continuity reads against an isolated real P3 Core",
         "",
@@ -332,13 +370,7 @@ def write_readme(out: Path, evidence: dict[str, Any]) -> None:
         "  also requires (the distinction the frozen contract records as `extra_scopes`).",
         "* It proves the browser pass against a real build: no reply carries the simulated-fixture",
         "  label, and `/v1/health` reports P3's schema version.",
-        "* **The Context Pack row is BLOCKED, not passed.** P3's `ContextBuilder` needs its pinned",
-        "  tokenizer (`tiktoken` plus a BPE asset whose SHA-256 `context/tokens.py` fixes); neither is",
-        "  present in this environment and installing one is out of scope, so no Context Pack exists",
-        "  and **nothing was fabricated** in its place. Its shape remains covered by the frozen",
-        "  contract and the simulated fixture.",
-        "* The workspace scanner in these rows is a **component stand-in**, as P3's own continuity",
-        "  tests use: workspace snapshots are not a real workspace capture.",
+    ] + pack_bullets + scan_bullets + [
         "",
         "## Core checks",
         "",

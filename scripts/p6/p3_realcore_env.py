@@ -58,6 +58,37 @@ def log(message: str) -> None:
     print(f"p3-realcore: {message}", file=sys.stderr, flush=True)
 
 
+#: `web/src/components/RawText.tsx` collapses a long value to this many characters until the
+#: operator expands it. The browser record reads the page without expanding, so the marker it
+#: asserts on must lie inside this prefix of `rendered_content`.
+RAW_TEXT_COLLAPSED = 480
+
+
+def rendered_content_marker(rendered: str, sections: list[str]) -> str:
+    """A literal slice of `rendered` that the Context Pack page shows without expanding it.
+
+    The P6-03a browser record used to assert the fixture's own task title, which a real Core does
+    not render. This derives the marker from the pack the real Core just built: the longest line of
+    the collapsed prefix that is not a section name (the page renders those from `section_metrics`
+    too, so asserting one would not prove the rendered text is on screen) and carries no JSON
+    punctuation (a JSON line can be cut in half by the collapse). Failing loudly here is deliberate:
+    a marker that cannot be found would silently weaken the record.
+    """
+    window = rendered[:RAW_TEXT_COLLAPSED]
+    lines = window.splitlines()
+    if len(rendered) > len(window) and lines:
+        lines = lines[:-1]  # the last line may be cut by the collapse
+    banned = {section.strip() for section in sections}
+    candidates = [line.strip() for line in lines]
+    candidates = [line for line in candidates
+                  if 8 <= len(line) <= 120 and line not in banned
+                  and not any(character in line for character in '{}"')]
+    if not candidates:
+        raise SystemExit("no line of the collapsed rendered_content can serve as the browser "
+                         f"record's marker; first line was {window.splitlines()[:1]!r}")
+    return max(candidates, key=len)
+
+
 def banner(ref: str, out: Path) -> None:
     print("=" * 78, file=sys.stderr)
     print("ISOLATED REAL P3 CORE — real P3 code, real continuity rows. NOT P3 phase acceptance.",
@@ -298,12 +329,26 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
                    "context_id": (context.get("context_pack_id") or context.get("context_id"))
                                  if context else None,
                    "resume_id": resume["resume_id"],
+                   # What the Resume the browser record reads actually carries. A real comparison of
+                   # a fresh checkpoint against an unchanged workspace needs no reconciliation, so
+                   # this is expected to be 0 here — the record is told, rather than left to assume
+                   # the fixture's single action.
+                   "resume_next_actions_count": len(resume["next_actions"]),
+                   "resume_next_action_kinds": [action.get("kind")
+                                                for action in resume["next_actions"]],
                    "empty_project_id": empty_project, "empty_task_id": empty_task,
                    "unknown_checkpoint_id": ids.new_id("ckp")},
         "scan_calls": scan_calls["count"],
         "context_pack": context_blocked or {
             "status": "built",
-            "context_id": context.get("context_pack_id") or context.get("context_id")},
+            "context_id": context.get("context_pack_id") or context.get("context_id"),
+            # The browser record asserts a literal slice of *this* Core's rendered content is on
+            # screen; derived here, from the pack P3's own builder just produced.
+            "rendered_content_marker": rendered_content_marker(
+                context["rendered_content"],
+                [metric.get("section", "") for metric in context.get("section_metrics", [])]),
+            "rendered_utf8_bytes": context["rendered_utf8_bytes"],
+        },
     }
     (out / "tokens.json").write_text(
         json.dumps({name: record["token"] for name, record in issued.items()}, indent=2),
