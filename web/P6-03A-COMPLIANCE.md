@@ -148,15 +148,39 @@ live allowlist, so enabling them cannot happen by drift or by a careless edit to
 
 ## Evidence
 
-* Browser click-through Gate, **12/12**, three times with identical step sequences:
+* Browser click-through Gate, **13/13**, three times with identical step sequences:
   `validation-runs/p6/<stamp>-p6-03a-clickthrough/` (+ `-stability1`, `-stability2`), with
   `README.md`, `BUNDLE-FROZEN.json`, `click-trace.jsonl`, `browser-requests.jsonl` and
-  screenshots `21`–`24`.
-* The product asset was rebuilt from committed source and hash-compared to the tree the
-  runs served, so the evidence comes from the commit and not from a stale build.
-* Component tests: `web/tests/p3Views.test.tsx` (11), `web/tests/p3Reads.test.ts` (5).
-* Contract tests: `tests/p6/test_p3_contract_snapshot.py` (14),
-  `tests/p6/test_p3_read_fixture.py` (10).
+  screenshots `21`–`24`. The current binding and the superseded bundles are registered in
+  `validation-runs/p6/P6-02B-INDEX.md`.
+* The product asset was rebuilt from committed source and compared file for file against the
+  tree the runs served, so the evidence comes from the commit and not from a stale build.
+* Component tests: `web/tests/p3Views.test.tsx` (18), `web/tests/p3Reads.test.ts` (15),
+  `web/tests/p3ReadsCoreProxy.test.ts` (9) — the last covers the Vite-plugin host, which had
+  no test until review pointed out that only `serve.mjs` was gated by one.
+* Contract tests: `tests/p6/test_p3_contract_snapshot.py` (15),
+  `tests/p6/test_p3_read_fixture.py` (13).
+
+## What independent review changed
+
+The first cut of this milestone was reviewed adversarially, and the review was right about
+four things worth recording rather than quietly fixing:
+
+* **The contract under-stated the scope set.** It recorded only the route-table scope; a
+  token carrying `context:read` alone was accepted by the fixture and refused by real P3. The
+  full set is now derived from each handler's own `principal.require(...)` calls, and
+  reverting it fails three independent tests. This was a real defect in the deliverable, not
+  a documentation slip.
+* **A guard that could not fail.** Widening `isDependencyPending` to treat Core's `not_found`
+  as the missing dependency passed the entire suite. Per-view 404 tests plus a direct
+  unit test now fail it.
+* **Two documentation claims were stronger than the code.** The drift guard *does* exit 0
+  when the P3 ref is absent (it skips), and the Checkpoint field set comes from a
+  `CREATE TABLE`, not from a dict literal. Both statements are corrected above.
+* **The fixture invented nested shapes.** `next_actions` was served as strings where P3
+  returns objects, so the "lists next_actions" evidence exercised a branch real P3 never
+  reaches. The fixture and the view now use P3's real shape, and a nested shape this build
+  does not recognise renders rather than being dropped.
 
 ## Deliverables
 
