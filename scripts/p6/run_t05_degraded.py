@@ -1,28 +1,34 @@
 #!/usr/bin/env python3.13
-"""P6-T05 degraded slice: Memory unavailable, Core and the P1 views still working.
+"""P6-T05 degraded slice: Memory unavailable, Core and the P1 views still working — then recovered.
 
 `web/P6-REMAINING-TASKS.md` names this as the next behavioural slice after P6-03. The taskbook's T05
-PASS condition has a half that no previous run covered: *"Memory 故障不挡 P1 视图，degraded 明确"*
-(the other half — a real failed job and a real retry — is in the real-Core matrix). This run covers
-it against the same isolated real P4 Core the other acceptances use, put into P4's own
-`unreachable` state:
+PASS condition has a half no previous run covered — *"Memory 故障不挡 P1 视图,degraded 明确"* — and a
+recovery half the operator asked for: after the engine returns, the same environment must be read
+again. This run covers both against the same isolated real P4 Core the other acceptances use:
 
-* `scripts/p6/p4_realcore_env.py --engine-state unavailable` stops the wire-double engine after
-  seeding and lets **P4's own probe** (`record_engine_probe`) record the refusal. Nothing edits the
-  engine row by hand: the `unreachable` report is what P4's own code path produces for a real outage.
-* The Core-level matrix checks `/v1/health` is still `ok`, `/v1/memory/health` reports
-  `unreachable` / `degraded: true` / `core_impact: memory_paused`, the P1 reads still answer with
-  rows, and — the honesty case — `POST /v1/memory/reflect` answers **HTTP 200 with a degraded
-  payload**, which is recorded as a degradation and not as a success.
-* The browser pass (`t05_degraded_trace.mjs`) checks the dashboard states the pause and that Core
-  keeps working, that the Memory lists are not blanked, and that the P1 views render with no
-  dependency panel and no alert.
-* The bundle is frozen with `freeze_bundle.py` at the commit it ran from.
+1. **Outage.** `scripts/p6/p4_realcore_env.py --engine-state unavailable` stops the wire-double engine
+   after seeding and lets **P4's own probe** (`record_engine_probe`) record the refusal, so
+   `/v1/memory/health` reports `unreachable` / `degraded: true` / `core_impact: memory_paused` /
+   `last_error_code: engine_unreachable` while `/v1/health` still says `ok`.
+2. **Recovery, in the same environment.** The engine port is pinned by a harness shim so the wire
+   double can return on the **same address** — P4 builds its transport once per process, so a new port
+   would not be the operator's situation — and a loopback-only control channel starts it again. P4's
+   probe then records `reachable: true`, and a real `reflect` reaches the restored engine. The Core is
+   **not** restarted: same process, same database, same ids, same engine URL.
 
-`mode: boundary-fake` still means **real Core, simulated engine boundary**: the unavailable engine is
-a stopped wire double on loopback, not a real Hindsight outage, so this is evidence about the
-dashboard's and Core's behaviour when Memory is unavailable — **not** about Hindsight, and not a P4
-Gate verdict. P4 phase acceptance is not claimed and the live entry stays closed.
+Honesty carried into the evidence:
+
+* `mode: boundary-fake` still means **real Core, simulated engine boundary**: the "outage" is a stopped
+  loopback wire double, not a real Hindsight outage, so nothing here is evidence about Hindsight,
+  extraction or reflection content, and it is not a P4 Gate verdict;
+* `POST /v1/memory/reflect` answers **HTTP 200 with a `degraded` payload** during the outage, and the
+  check records that as a degradation rather than a success; after recovery the same call reaches the
+  engine (`error_code: null`, banks `ok`);
+* the revision comparison reads the field from the response layer it actually lives in and **fails if
+  it is missing**, so it cannot pass by comparing two `null`s (an independent review found the first
+  version did exactly that);
+* `status: idle` after recovery is P4's own conservative vocabulary ("reachable again, nothing
+  pending, no operation has completed since"), and is recorded as such rather than rounded up to `ok`.
 
     python3.13 scripts/p6/run_t05_degraded.py --out validation-runs/p6/<stamp>-p6-t05-degraded \\
         --repo <worktree> --ref <commit> --node-modules <path>
@@ -46,11 +52,32 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FREEZE = REPO_ROOT / "scripts" / "p6" / "freeze_bundle.py"
-MODE = "real-core (P4) + unavailable wire-double engine"
+MODE = "real-core (P4) + unavailable-then-restored wire-double engine"
 
 
 def log(message: str) -> None:
     print(f"t05-degraded: {message}", file=sys.stderr, flush=True)
+
+
+def revision_of(payload: Any, wrapper: str) -> int:
+    """The `revision` of a wrapped object response, refusing to invent one.
+
+    `/v1/tasks/{id}` answers `{"task": {...}}` and `/v1/rules/{id}` answers `{"rule": {...}}`, each
+    with a `revision` field. Reading the wrong layer (or a missing field) used to yield `None` on both
+    sides of the before/after comparison, which made the check pass without comparing anything an
+    independent review reproduced that by changing a real revision. This raises instead, so a wrong
+    read is a FAIL with a reason rather than a silent pass.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError(f"expected a JSON object, got {type(payload).__name__}")
+    body = payload.get(wrapper)
+    if not isinstance(body, dict):
+        raise ValueError(f"expected the reply to carry a `{wrapper}` object; keys were "
+                         f"{sorted(payload)[:10]}")
+    revision = body.get("revision")
+    if not isinstance(revision, int):
+        raise ValueError(f"`{wrapper}.revision` is not an integer: {revision!r}")
+    return revision
 
 
 def free_port() -> int:
@@ -90,6 +117,13 @@ def call(origin: str, method: str, path: str, token: str | None,
         return status, json.loads(raw)
     except json.JSONDecodeError:
         return status, {"_raw": raw[:500]}
+
+
+def health_subset(payload: Any) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        return {"status": None}
+    return {key: payload.get(key) for key in ("status", "degraded", "core_impact", "configured",
+                                              "reachable", "last_error_code", "last_success_at")}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -147,6 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         tokens = json.loads((env_dir / "tokens.json").read_text())
         seeded = descriptor["seeded"]
         health_at_build = descriptor.get("health_at_build")
+        control_url = descriptor.get("engine_control_url")
         token = tokens["human_manage"]
 
         # --- C0/C1: the environment is really in the unavailable state ---------------------------
@@ -162,14 +197,16 @@ def main(argv: list[str] | None = None) -> int:
                    == "unreachable", {"engine_state": engine_state,
                                       "status": health_at_build["status"]})
         status, health = direct("GET", "/v1/memory/health", "human_manage", token)
-        got = {key: health.get(key) for key in ("status", "degraded", "core_impact", "configured",
-                                                "reachable", "last_error_code")}
+        unavailable = health_subset(health)
         record("C1.memory_health_unreachable",
                "Memory reports the engine unreachable and Core's own impact",
-               status == 200 and got == {"status": "unreachable", "degraded": True,
-                                         "core_impact": "memory_paused", "configured": True,
-                                         "reachable": False, "last_error_code": "engine_unreachable"},
-               {"http": status, **got, "jobs": health.get("jobs")})
+               status == 200 and unavailable["status"] == "unreachable"
+               and unavailable["degraded"] is True
+               and unavailable["core_impact"] == "memory_paused"
+               and unavailable["configured"] is True
+               and unavailable["reachable"] is False
+               and unavailable["last_error_code"] == "engine_unreachable",
+               {"http": status, **unavailable, "jobs": health.get("jobs")})
 
         # --- C2: Core itself is fine, and the P1 reads still answer ------------------------------
         status, core_health = direct("GET", "/v1/health", None, None)
@@ -201,10 +238,10 @@ def main(argv: list[str] | None = None) -> int:
 
         # --- C4: reflect degrades in its payload, and 200 is not read as success ------------------
         before = {
-            "task_revision": direct("GET", f"/v1/tasks/{seeded['task_id']}", "human_manage",
-                                    token)[1].get("task_revision"),
-            "rule_revision": direct("GET", f"/v1/rules/{seeded['rule_id']}", "human_manage",
-                                    token)[1].get("revision"),
+            "task_revision": revision_of(direct("GET", f"/v1/tasks/{seeded['task_id']}",
+                                                "human_manage", token)[1], "task"),
+            "rule_revision": revision_of(direct("GET", f"/v1/rules/{seeded['rule_id']}",
+                                                "human_manage", token)[1], "rule"),
         }
         status, reflect = direct("POST", "/v1/memory/reflect", "human_manage", token,
                                  {"project_id": seeded["project_id"], "query": "t05 degraded slice",
@@ -227,14 +264,72 @@ def main(argv: list[str] | None = None) -> int:
                and reflect_state["bank_statuses"] not in (None, [])
                and all(value == "failed" for value in reflect_state["bank_statuses"]),
                reflect_state)
-        after = {
-            "task_revision": direct("GET", f"/v1/tasks/{seeded['task_id']}", "human_manage",
-                                    token)[1].get("task_revision"),
-            "rule_revision": direct("GET", f"/v1/rules/{seeded['rule_id']}", "human_manage",
-                                    token)[1].get("revision"),
-        }
-        record("C5.no_truth_change", "a degraded Memory attempt changed no Task revision or Rule",
-               before == after, {"before": before, "after": after})
+
+        # --- C5/C6: recovery in the same environment, then read again -----------------------------
+        if not control_url:
+            for ident, check in (("C5.engine_restore", "the engine returns on the same address"),
+                                 ("C6.recovery_health", "Memory reports recovery after the restore"),
+                                 ("C7.recovery_reflect", "a real reflect reaches the restored engine")):
+                record(ident, check, None, {"engine_control_url": control_url},
+                       note="BLOCKED: this environment exposes no engine control channel, so the "
+                            "recovery half could not run and nothing is fabricated in its place")
+            recovery = None
+        else:
+            status, restore = call(control_url, "POST", "/restore", None)
+            same_address = (isinstance(restore, dict) and restore.get("restored") is True
+                            and restore.get("probe", {}).get("reachable") is True)
+            record("C5.engine_restore", "the engine returns on the same address",
+                   status == 200 and same_address,
+                   {"http": status, "engine_url": descriptor["engine_url"],
+                    "probe": restore.get("probe") if isinstance(restore, dict) else restore})
+            status, health = direct("GET", "/v1/memory/health", "human_manage", token)
+            recovered = health_subset(health)
+            recovery = {"http": status, **recovered, "jobs": health.get("jobs")}
+            record("C6.recovery_health",
+                   "Memory reports recovery after the restore (reachable, not degraded, no impact)",
+                   status == 200 and recovered["degraded"] is False
+                   and recovered["core_impact"] == "none" and recovered["reachable"] is True
+                   and recovered["last_error_code"] is None
+                   and recovered["status"] in ("idle", "ok"),
+                   recovery)
+            status, reflect_ok = direct("POST", "/v1/memory/reflect", "human_manage", token,
+                                        {"project_id": seeded["project_id"],
+                                         "query": "recovery check", "host_id": descriptor["host_id"]})
+            ok_banks = reflect_ok.get("banks") if isinstance(reflect_ok, dict) else None
+            ok_state = {
+                "http": status,
+                "status": reflect_ok.get("status") if isinstance(reflect_ok, dict) else None,
+                "error_code": reflect_ok.get("error_code") if isinstance(reflect_ok, dict) else None,
+                "non_authoritative": (reflect_ok.get("non_authoritative")
+                                      if isinstance(reflect_ok, dict) else None),
+                "bank_statuses": ([bank.get("status") for bank in ok_banks]
+                                  if isinstance(ok_banks, list) else None),
+            }
+            record("C7.recovery_reflect",
+                   "a real reflect reaches the restored engine and reports no engine error",
+                   status == 200 and ok_state["error_code"] is None
+                   and ok_state["status"] != "degraded"
+                   and ok_state["non_authoritative"] is True
+                   and ok_state["bank_statuses"] not in (None, [])
+                   and all(value == "ok" for value in ok_state["bank_statuses"]),
+                   ok_state)
+
+        # --- C8: no Task/Rule revision moved across the whole outage and recovery ----------------
+        try:
+            after = {
+                "task_revision": revision_of(direct("GET", f"/v1/tasks/{seeded['task_id']}",
+                                                    "human_manage", token)[1], "task"),
+                "rule_revision": revision_of(direct("GET", f"/v1/rules/{seeded['rule_id']}",
+                                                    "human_manage", token)[1], "rule"),
+            }
+        except ValueError as error:
+            record("C8.no_truth_change", "a degraded and a recovered Memory call changed no Task "
+                                         "revision or Rule", False, {"error": str(error)})
+            after = None
+        if after is not None:
+            record("C8.no_truth_change",
+                   "a degraded and a recovered Memory call changed no Task revision or Rule",
+                   before == after, {"before": before, "after": after})
 
         # --- the browser pass -------------------------------------------------------------------
         web_work.mkdir(parents=True, exist_ok=True)
@@ -253,10 +348,21 @@ def main(argv: list[str] | None = None) -> int:
         if not wait_for(f"http://127.0.0.1:{ui_port}/v1/health"):
             log("the dashboard host never answered")
             return 1
+        events = direct("GET", f"/v1/events?task_id={seeded['task_id']}&limit=1",
+                        "human_manage", token)[1]
+        event_id = None
+        if isinstance(events, dict) and isinstance(events.get("events"), list) and events["events"]:
+            event_id = events["events"][0].get("event_id")
+        expect = {"project_id": seeded["project_id"], "task_id": seeded["task_id"],
+                  "rule_id": seeded["rule_id"], "evidence_id": seeded["evidence_id"],
+                  "event_id": event_id}
+        (out / "expect.json").write_text(json.dumps(expect, indent=2), encoding="utf-8")
+        control_restore = "restored" if control_url else "not-available"
         trace = subprocess.run(
             ["node", str(REPO_ROOT / "scripts" / "p6" / "t05_degraded_trace.mjs"),
              "--ui", f"http://127.0.0.1:{ui_port}", "--tokens", str(env_dir / "tokens.json"),
-             "--descriptor", str(env_dir / "descriptor.json"), "--out", str(out)],
+             "--descriptor", str(env_dir / "descriptor.json"), "--expect", str(out / "expect.json"),
+             "--control-state", control_restore, "--out", str(out)],
             stdout=(out / "trace.stdout.txt").open("w"), stderr=subprocess.STDOUT, text=True)
         log(f"browser pass exit={trace.returncode}")
 
@@ -274,10 +380,13 @@ def main(argv: list[str] | None = None) -> int:
             "schema_version": descriptor["schema_version"],
             "mode": descriptor["mode"],
             "engine_url": descriptor["engine_url"],
+            "engine_control_url": control_url,
+            "engine_events": descriptor.get("engine_events"),
             "health_at_build": health_at_build,
             "core_entries": entries,
             "ui_records": ui_records,
             "calls": calls,
+            "expect": expect,
             "summary": {
                 "core_checks": len(entries), "ui_records": len(ui_records),
                 "passed": len(entries) + len(ui_records) - len(blocked) - len(failed),
@@ -315,18 +424,21 @@ def write_readme(out: Path, evidence: dict[str, Any]) -> None:
     summary = evidence["summary"]
     health = evidence["health_at_build"] or {}
     lines = [
-        "# P6-T05 degraded slice — Memory unavailable, Core and the P1 views still working",
+        "# P6-T05 degraded slice — Memory unavailable, Core and the P1 views still working, "
+        "then recovered",
         "",
         f"Core from `{evidence['ref']}` (schema {evidence['schema_version']}), its own tree, database",
         "and loopback port, built with `--engine-state unavailable`: the wire-double engine is stopped",
-        "and **P4's own probe** (`record_engine_probe`) recorded the refusal, so the engine row the",
-        "health endpoint reports is the one a real outage produces. Nothing edits that row by hand.",
+        "and **P4's own probe** (`record_engine_probe`) recorded the refusal. The engine port is",
+        "pinned by a harness shim so it can return on the **same address**, and a loopback-only",
+        "control channel starts it again — the Core process is not restarted, so the recovery is read",
+        "by the same Core that saw the outage.",
         "",
         f"Mode: `{MODE}`. `mode: boundary-fake` still means **real Core, simulated engine boundary**:",
-        "the unavailable engine is a stopped loopback wire double, not a real Hindsight outage, so",
-        "this is evidence about Core's and the dashboard's behaviour when Memory is unavailable —",
-        "**not** about Hindsight, not about extraction or reflection, and not a P4 Gate verdict.",
-        "P4 phase acceptance is not claimed and the live entry stays closed.",
+        "the outage is a stopped loopback wire double, not a real Hindsight outage, so this is",
+        "evidence about Core's and the dashboard's behaviour when Memory is unavailable — **not**",
+        "about Hindsight, extraction or reflection, and not a P4 Gate verdict. P4 phase acceptance is",
+        "not claimed and the live entry stays closed.",
         "",
         f"Result: **{summary['passed']}** passed, {summary['failed']} failed, "
         f"{summary['blocked']} blocked ({summary['core_checks']} Core checks + "
@@ -334,17 +446,25 @@ def write_readme(out: Path, evidence: dict[str, Any]) -> None:
         "",
         "## What this proves, and what it does not",
         "",
-        "* It proves, against the real Core: `/v1/health` stays `ok` while `/v1/memory/health` reports",
-        f"  `unreachable` (`degraded: {health.get('degraded')}`, `core_impact: "
-        f"{health.get('core_impact')}`, `last_error_code: {health.get('last_error_code')}`); the P1",
-        "  reads still answer with rows; and `POST /v1/memory/reflect` answers **HTTP 200 with a",
-        "  `degraded` payload** — recorded as a degradation, never as a success.",
-        "* It proves in a browser that the Memory health panel states the pause **and** that Core keeps",
-        "  working, that the Memory job and trace lists are not blanked, and that the P1 views render",
-        "  with no dependency-pending panel and no alert: a Memory outage does not cascade.",
+        "* **Outage:** `/v1/health` stays `ok` while `/v1/memory/health` reports `unreachable`",
+        f"  (`degraded: {health.get('degraded')}`, `core_impact: {health.get('core_impact')}`,",
+        f"  `last_error_code: {health.get('last_error_code')}`); every P1 read still answers with",
+        "  rows; `POST /v1/memory/reflect` answers **HTTP 200 with a `degraded` payload**, recorded as",
+        "  a degradation, never as a success.",
+        "* **Recovery, same environment:** the engine returns on the same address and P4's probe",
+        "  records `reachable: true`; `/v1/memory/health` then reports `degraded: false`,",
+        "  `core_impact: none`, no error; a real `reflect` reaches the restored engine (`error_code:",
+        "  null`, every bank `ok`). The Core process, database and ids are unchanged.",
+        "* **No Truth moved:** the Task and Rule revisions are read from the layer they actually live",
+        "  in (`task.revision` / `rule.revision`) and are compared before and after the whole outage",
+        "  and recovery; a missing field fails the check instead of comparing two nulls.",
+        "* **Browser:** the health panel states the pause **and** that Core keeps working, then states",
+        "  the recovery; the Memory job and trace lists are never blanked; and Overview, Task,",
+        "  Conversation, Rules and Evidence each render the object the page navigated to — a",
+        "  **freshly observed** 200 on their own read, not a historical request — with no",
+        "  dependency-pending panel and no dependency-failure alert.",
         "* It does **not** prove anything about a real Hindsight deployment, extraction or reflection",
-        "  content, and it is not a P4 Gate verdict. The retry half of T05 (a real failed job and a",
-        "  real retry) is covered by the real-Core matrix, not here.",
+        "  content, and it is not a P4 Gate verdict. The retry half of T05 is the real-Core matrix's.",
         "",
         "## Core checks",
         "",
@@ -360,11 +480,23 @@ def write_readme(out: Path, evidence: dict[str, Any]) -> None:
         lines.append(f"| {index} | {record['step']} | {mark} |")
     lines += [
         "",
+        "## Engine events, as the environment recorded them",
+        "",
+        "| at | action | health after | degraded | core impact |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for event in evidence.get("engine_events") or []:
+        lines.append(f"| {event.get('at')} | {event.get('action')} | {event.get('health_status')} | "
+                     f"{event.get('degraded')} | {event.get('core_impact')} |")
+    lines += [
+        "",
         "## Files",
         "",
         "* `evidence.json` — the Core checks with their request/response bodies, the browser records,",
-        "  and every HTTP call (no Authorization header is recorded).",
-        "* `descriptor.json` — the isolated Core's ids, the engine state, and `health_at_build`.",
+        "  the engine's stop/restore event log, and every HTTP call (no Authorization header).",
+        "* `descriptor.json` — the isolated Core's ids, the engine state and control URL, and",
+        "  `health_at_build`.",
+        "* `expect.json` — the ids the browser records require the current views to show.",
         "* `env.stderr.txt`, `serve.stderr.txt`, `trace.stdout.txt`, `click-trace.jsonl`,",
         "  `browser-requests.jsonl`, `screenshots/`.",
         "",
@@ -379,16 +511,18 @@ def freeze(out: Path, ref: str, evidence: dict[str, Any]) -> None:
     dependency = json.dumps({
         "name": "P4 memory slice", "status": "NOT MERGED", "source_ref": ref,
         "acceptance": "P4 phase acceptance NOT passed",
-        "consequence": "the Core is real P4 code; the engine is a labelled wire double, stopped for "
-                       f"this run, so the `{health.get('status')}` report is Core's own reaction to "
-                       "an unreachable engine rather than a real Hindsight outage, and this is not "
-                       "a P4 Gate verdict",
+        "consequence": "the Core is real P4 code; the engine is a labelled wire double that is "
+                       f"stopped and then restarted on the same address, so the "
+                       f"`{health.get('status')}` outage and the recovery are Core's own reactions "
+                       "to that endpoint rather than a real Hindsight outage, and this is not a P4 "
+                       "Gate verdict",
     })
     subprocess.run([sys.executable, str(FREEZE), "--freeze", str(out), "--commit", commit,
-                    "--kind", "T05 degraded slice (real P4 Core, engine unavailable)",
-                    "--runs", "one pass: 6 Core checks + the browser pass",
+                    "--kind", "T05 degraded slice (real P4 Core, engine unavailable then restored)",
+                    "--runs", "one pass: 9 Core checks + the browser pass, outage and recovery",
                     "--ran-from", "isolated real P4 Core in its own tree; dashboard from a git "
-                                  "archive of the commit; engine wire double stopped before serving",
+                                  "archive of the commit; wire double stopped, then restarted on the "
+                                  "same pinned port without restarting the Core",
                     "--dependency-json", dependency], check=True)
     subprocess.run([sys.executable, str(FREEZE), "--verify", str(out)], check=True)
 
