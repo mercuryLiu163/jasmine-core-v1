@@ -379,19 +379,33 @@ class Handler(BaseHTTPRequestHandler):
             return True
         if path == "/v1/hosts":
             self._require(self._scopes(), "objects:read")
-            self._send(200, {"hosts": [{"host_id": HOST, "display_name": "p4-fixture-host"}]})
+            self._send(200, {"hosts": [{"host_id": HOST, "kind": "local",
+                                        "display_name": "p4-fixture-host",
+                                        "first_seen_at": "2026-10-07T12:00:00Z",
+                                        "last_seen_at": "2026-10-07T12:00:00Z"}]})
             return True
-        # The dashboard shell reads these on its way to any view. Serving them keeps the
-        # shell from failing before a Memory view is reached — an unfaithful stub once
-        # crashed the overview and made a Gate look like a product failure.
+        # The dashboard shell reads these on its way to any view, and it reads them as the
+        # full shapes `docs/api/core-api-v1.md` defines. An earlier version of this fixture
+        # answered `/v1/meta/schema` with two of the four fields, so the overview read
+        # `migrations.length` of undefined and crashed the React tree before any Memory view
+        # rendered — a harness defect that made the Gate look like a product failure.
         if path == "/v1/meta/schema":
             self._require(self._scopes(), "objects:read")
-            self._send(200, {"schema_version": 11, "core_version": "p4-fixture"})
+            self._send(200, {
+                "core_version": "p4-fixture",
+                "schema_version": 11,
+                "expected_schema_version": 11,
+                "migrations": [{"name": "m0011_memory", "version": 11,
+                                "checksum": "f" * 64,
+                                "applied_at": "2026-10-07T12:00:00Z"}],
+            })
             return True
         if path == "/v1/actors":
             self._require(self._scopes(), "objects:read")
-            self._send(200, {"actors": [{"actor_id": ACTOR, "display_name": "p4-fixture-actor",
-                                         "kind": "human"}]})
+            self._send(200, {"actors": [{"actor_id": ACTOR, "kind": "human",
+                                         "display_name": "p4-fixture-actor",
+                                         "home_host_id": HOST,
+                                         "created_at": "2026-10-07T12:00:00Z"}]})
             return True
         return False
 
