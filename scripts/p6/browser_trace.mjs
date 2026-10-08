@@ -2121,6 +2121,16 @@ async function main() {
           () => requests.filter((r) => r.method === method && r.path === path).length,
           expected, `readback ${method} ${path}`)
       }
+      /** Re-read the item so the panel's `expected_revision` is the fixture's current one. */
+      const freshItem = async (label) => {
+        const before = requests.filter((r) => r.method === 'GET' &&
+          r.path === `/v1/memory/items/${MITEM}`).length
+        await clickByText(cdp, 'button', '从 Core 重新读取')
+        await waitForCount(
+          () => requests.filter((r) => r.method === 'GET' &&
+            r.path === `/v1/memory/items/${MITEM}`).length,
+          before + 1, label)
+      }
       const waitForPost = async (suffix, expected) => {
         for (let attempt = 0; attempt < 120; attempt += 1) {
           if (writeRequests(suffix).length >= expected) return
@@ -2442,9 +2452,13 @@ async function main() {
         await trace.screenshot(cdp, '34-memory-revision-conflict')
 
         // replay: arm the drop, submit, resubmit the SAME intent, and prove Core replays.
-        await fixtureJson('/v1/_p6_fixture/drop-next')
+        await fixturePost('/v1/_p6_fixture/drop-next')
         await goto(`memory/items/${MITEM}`, 'item detail before the dropped write',
           `document.querySelector('[data-testid="lifecycle-command"]') !== null`)
+        // The conflict matrix drifted the item four times, so the panel holds an old revision.
+        // A *stale* revision is refused before anything is applied, so the armed drop would
+        // never fire; read first, then drop.
+        await freshItem('fresh item read before the dropped write')
         await setControl('[data-testid="lifecycle-command"]', 'pin', 'HTMLSelectElement')
         const beforeReplay = (await simState()).commands?.length ?? 0
         await clickSubmit('Memory 生命周期写入 (memory:manage)')
@@ -2477,6 +2491,7 @@ async function main() {
         await trace.screenshot(cdp, '35-memory-write-replay')
 
         // 5. the destructive pair, and the state-before-revision rule they expose.
+        await freshItem('fresh item read before the destructive pair')
         const destructive = []
         for (const command of ['obsolete', 'delete']) {
           const postsBefore = writeRequests(`/${command}`).length
