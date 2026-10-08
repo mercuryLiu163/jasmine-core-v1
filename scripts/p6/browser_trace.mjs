@@ -1523,6 +1523,9 @@ async function main() {
       const PACK_MARKER = args.p3PackMarker ?? 'fixture task'
       const RESUME_ACTIONS = Number(args.p3ResumeActionCount ?? '1')
       const RESUME_ACTION_KIND = args.p3ResumeActionKind ?? 'RECONCILE_CURRENT_TRUTH'
+      // The note text the Core itself carries; declared here because the resume record (below the
+      // checkpoint records) asserts the page shows Core's own note, not only the static headline.
+      const FIRST_NOTE = args.p3FirstNoteText ?? 'stop here for today'
       if (!Number.isInteger(RESUME_ACTIONS) || RESUME_ACTIONS < 0) {
         throw new Error(`--p3-resume-action-count must be a non-negative integer, got ${args.p3ResumeActionCount}`)
       }
@@ -1629,9 +1632,13 @@ async function main() {
       await waitFor(cdp, `document.body.textContent.includes('实际渲染记录')`,
         { label: 'context pack' })
       const pack = await evaluate(cdp, `(() => {
-        // Read the rendered_content block itself, by its label. Asserting the marker somewhere in
-        // the page would pass even if the block never rendered, and the marker is a literal slice
-        // of what the Core itself says it rendered — so this fails if the page shows anything else.
+        // Read the rendered_content block itself, by its label. Asserting the marker somewhere in the
+        // page would pass even if the block never rendered. How strong the marker is depends on which
+        // rule produced it: the task_id slice of the rendered header identifies *this* pack, while the
+        // fallback line rule can degenerate to a renderer constant — p3_realcore_env.py records which
+        // rule ran as rendered_content_marker_source, so the evidence says so too. An independent
+        // review of the first version found the fallback could be picked and that the comment here
+        // overstated it; the marker now prefers the pack-identifying slice.
         const marker = ${JSON.stringify(PACK_MARKER)}
         const block = [...document.querySelectorAll('.rawtext')].find((node) => {
           const label = node.querySelector('.rawtext__label')
@@ -1667,31 +1674,42 @@ async function main() {
         // them as rows behind the "suggestion, not executed" framing; when the comparison needs no
         // reconciliation P3 returns `[]` and the view renders the raw field instead. Both are real
         // renderings of the Core's own payload, so the record reads *which* form is on screen and
-        // holds it to the count the Core returned: an action list for a Core that sent actions, the
-        // empty field for a Core that sent none. An action must never look like no action, and an
+        // holds it to what the Core returned: the rendered count and the Core's own kind for a list,
+        // and the raw field's body for an empty one. An action must never look like no action, and an
         // empty list must not disappear.
+        //
+        // An independent review of the first version made this stricter in three ways: the list
+        // branch now asserts the rendered count `(N 条)` rather than only the framing and the first
+        // kind (a Core returning three actions where one was recorded used to pass); the empty branch
+        // reads the JSON block's own `<pre>` body and requires it to *be* `[]`, rather than looking
+        // for `[]` anywhere in the block's text (a malformed value containing `[]` used to pass); and
+        // `expected.kind` is only recorded when a kind was actually asserted.
         nextActions: await evaluate(cdp, `(() => {
           const list = document.querySelector('[data-testid="next-actions"]')
-          if (list) return { form: 'list', text: list.textContent ?? '' }
+          if (list) return { form: 'list', text: list.textContent ?? '', body: '' }
           const block = [...document.querySelectorAll('.jsonblock')].find((node) =>
             (node.textContent ?? '').includes('next_actions'))
-          return block ? { form: 'raw', text: block.textContent ?? '' } : { form: 'absent', text: '' }
+          if (!block) return { form: 'absent', text: '', body: '' }
+          const body = block.querySelector('.jsonblock__body')
+          return { form: 'raw', text: block.textContent ?? '',
+                   body: body ? (body.textContent ?? '').trim() : '' }
         })()`),
         pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
       }
       const expected = {
-        form: RESUME_ACTIONS > 0 ? 'list' : 'raw', count: RESUME_ACTIONS, kind: RESUME_ACTION_KIND,
+        form: RESUME_ACTIONS > 0 ? 'list' : 'raw', count: RESUME_ACTIONS,
+        kind: RESUME_ACTIONS > 0 ? RESUME_ACTION_KIND : null,
       }
       const nextOk = res.nextActions.form === expected.form &&
         (RESUME_ACTIONS > 0
-          ? res.nextActions.text.includes('建议而非已执行') &&
+          ? res.nextActions.text.includes(`next_actions(${RESUME_ACTIONS} 条`) &&
+            res.nextActions.text.includes('建议而非已执行') &&
             res.nextActions.text.includes(RESUME_ACTION_KIND)
-          : res.nextActions.text.includes('next_actions') &&
-            res.nextActions.text.replace(/\s+/g, '').includes('[]'))
+          : res.nextActions.text.includes('next_actions') && res.nextActions.body === '[]')
       trace.record('a resume is a comparison, and its note is historical and non-authoritative',
         res.historical.includes('historical') && res.historical.includes('authority = false') &&
-          nextOk && res.pending === false,
-        JSON.stringify({ ...res, expected }))
+          res.historical.includes(FIRST_NOTE) && nextOk && res.pending === false,
+        JSON.stringify({ ...res, expected, expectedNote: FIRST_NOTE }))
       await trace.screenshot(cdp, '23-resume')
 
       // --- each view shows the scope the frozen contract requires ----------------
@@ -1747,8 +1765,8 @@ async function main() {
       const CKP2_REVISION = args.p3Checkpoint2Revision ?? 'r11'
       // The **first** checkpoint's note text: what a correct switch removes from the page. Named
       // for what it asserts, not for the record it came from — passing the second checkpoint's own
-      // text here (as the first real-P3 run did) inverts the check.
-      const FIRST_NOTE = args.p3FirstNoteText ?? 'stop here for today'
+      // text here (as the first real-P3 run did) inverts the check. (`FIRST_NOTE` itself is declared
+      // with the other P3 constants, because the resume record above also asserts it.)
       await cdp.send('Page.navigate', { url: `${args.ui}/#/checkpoints?checkpoint_id=${CKP2}` })
       await waitFor(cdp, `(() => {
         const text = document.body.textContent ?? ''
