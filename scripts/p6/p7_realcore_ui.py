@@ -441,14 +441,18 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
         f"{sum(1 for c in python_checks if c['ok'] is False)} FAIL / "
         f"{sum(1 for c in python_checks if c['ok'] is None)} BLOCKED**.",
         "",
-        "**This drill-down does not make P6 or P7 PASS.** P7-01's acceptance criterion 1 "
-        "(read an existing real FAIL Run, classified, raw output traceable) is BLOCKED on the "
-        "operator's own records: the census below reports "
-        f"{census['fail_cases']} FAIL cases, "
-        f"{census['failure_class_non_null']} `failure_class` and "
-        f"{census['failure_output_non_null']} "
-        "`failure_output`. The FAIL code path is exercised only by the clearly-labelled synthetic "
-        "fixture, which is not evidence and counts toward no criterion.",
+        # Derived from the census, so a tree that DOES carry a FAIL case cannot produce an intro
+        # that asserts BLOCKED three lines above a "## Criterion 1 — demonstrated" heading.
+        (f"**This drill-down does not by itself make P6 or P7 PASS.** P7-01's acceptance criterion 1 "
+         f"(read an existing real FAIL Run, classified, raw output traceable) is "
+         f"**{census['criterion_1']}** on the operator's own records: the census below reports "
+         f"{census['fail_cases']} FAIL cases, {census['failure_class_non_null']} `failure_class` "
+         f"and {census['failure_output_non_null']} `failure_output`."
+         + (" The FAIL code path is exercised only by the clearly-labelled synthetic fixture, "
+            "which is not evidence and counts toward no criterion."
+            if census["criterion_1"] == "BLOCKED" else
+            " The FAIL code path is exercised by a real record on the operator's tree, so it can "
+            "be assessed against real data rather than a fixture.")),
         "",
         "## Per-check outcomes",
         "",
@@ -531,9 +535,12 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
         "",
         "## Unverified scope, stated rather than implied",
         "",
-        "* **P7 criterion 1 is BLOCKED** (above). No real FAIL run, `failure_class` or "
-        "`failure_output` exists on the operator's tree; the fixture FAIL run is labelled and "
-        "counted nowhere.",
+        (f"* **P7 criterion 1 is {census['criterion_1']}** (above). "
+         + ("No real FAIL run, `failure_class` or `failure_output` exists on the operator's tree; "
+            "the fixture FAIL run is labelled and counted nowhere."
+            if census["criterion_1"] == "BLOCKED" else
+            "A real record on the operator's tree carries a FAIL case, `failure_class` or "
+            "`failure_output`, so the criterion can be assessed against real data.")),
         "* **No project-attributed real run exists.** All nine real records are `unattributed`, so "
         "the `acl` grant-filtered list can only show *all nine* (with `validation:unattributed`) or "
         "*zero* (without it); a partial, project-scoped subset is not demonstrable on real data. "
@@ -586,7 +593,7 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
 
 
 def render_scenario(out: Path, descriptor: dict[str, Any], real_runs: Path,
-                    p7_repo: Path) -> str:
+                    p7_repo: Path, census: dict[str, Any]) -> str:
     return "\n".join([
         "# Scenario — P6-03c Validation Inspector drill-down",
         "",
@@ -631,8 +638,8 @@ def render_scenario(out: Path, descriptor: dict[str, Any], real_runs: Path,
         "* The switch proxy is a **router, not a second allowlist**: the dashboard's proxy still "
         "decides what the browser may reach, and the switch proxy only chooses which real Core "
         "answers.",
-        "* The fixture root is **not evidence** and is not counted toward criterion 1. Criterion 1 "
-        "(""a real FAIL Run"") stays BLOCKED.",
+        f"* The fixture root is **not evidence** and is not counted toward criterion 1. "
+        f"Criterion 1 (a real FAIL Run) is {census['criterion_1']} on this tree.",
         "* No bearer token is written anywhere in this bundle; the two API-level probes the trace "
         "makes from the page hold the token in a page global for one call and delete it "
         "immediately.",
@@ -803,7 +810,8 @@ def main(argv: list[str] | None = None) -> int:
         artifact_observations = read_json(out / "artifact-observations.json", {})
 
         (out / "scenario.md").write_text(
-            render_scenario(out, descriptor, args.real_runs, args.repo), encoding="utf-8")
+            render_scenario(out, descriptor, args.real_runs, args.repo, census),
+            encoding="utf-8")
         log(f"bundle written to {out}")
         (out / "run.stdout.txt").write_text("\n".join(_LOG) + "\n", encoding="utf-8")
 
@@ -832,15 +840,21 @@ def main(argv: list[str] | None = None) -> int:
                      "after the whole run",
              "ok": real_tree["unchanged"],
              "evidence": "real-tree-before.json, real-tree-after.json, real-tree-comparison.json"},
-            {"step": "criterion 1 census: 0 FAIL cases, 0 failure_class, 0 failure_output on the "
-                     "real tree",
-             # BLOCKED is the documented finding (there is no real FAIL run to read), so it is
-             # declared here as the expected outcome. It still prints as BLOCKED in result.md and
-             # is never counted as a pass; the exit code stays 0 for a run whose only non-pass is
-             # this declared block.
-             "ok": None if census["criterion_1"] == "BLOCKED" else False,
+            {"step": f"criterion 1 census: {census['fail_cases']} FAIL cases, "
+                     f"{census['failure_class_non_null']} failure_class, "
+                     f"{census['failure_output_non_null']} failure_output on the real tree "
+                     f"(criterion 1 {census['criterion_1']})",
+             # Two documented outcomes, and neither is silent. BLOCKED is the finding while no
+             # real FAIL run exists, so it is declared here and does not fail an otherwise clean
+             # run; it still prints as BLOCKED and is never counted as a pass. DEMONSTRATED means
+             # the tree now carries the FAIL case the criterion asks to read, which is what the
+             # criterion wants, so it passes.
+             "ok": None if census["criterion_1"] == "BLOCKED" else True,
              "blocked_is_expected": census["criterion_1"] == "BLOCKED",
-             "evidence": "criterion1-census.json (BLOCKED is the finding, not a pass)"},
+             # Derived too: in the demonstrated case BLOCKED is not the finding.
+             "evidence": ("criterion1-census.json (BLOCKED is the finding, not a pass)"
+                          if census["criterion_1"] == "BLOCKED" else
+                          "criterion1-census.json (the criterion's FAIL run is present)")},
             {"step": "every verdict matches disk, and no PASS appears where the file says BLOCKED",
              "ok": verdicts["pagination_union_is_nine"] and verdicts["no_verdict_upgraded"]
                    and all(row["all_match"] for row in verdicts["rows"]),
@@ -892,9 +906,13 @@ def main(argv: list[str] | None = None) -> int:
                 "engine": "none — the Validation slice is read-only",
                 "validation_root": "operator tree (read-only) for Pass A and the acl pass; a "
                                    "labelled synthetic fixture root for the Pass B negatives",
-                "phase_acceptance": "NOT claimed: P7-01 criterion 1 stays BLOCKED (no real FAIL "
-                                    "run exists on the operator's tree), so this drill-down does "
-                                    "not make the P6 or P7 phase PASS",
+                "phase_acceptance": (
+                    "NOT claimed: P7-01 criterion 1 is BLOCKED (no real FAIL run exists on the "
+                    "operator's tree), so this drill-down does not make the P6 or P7 phase PASS"
+                    if census["criterion_1"] == "BLOCKED" else
+                    "NOT claimed: P7-01 criterion 1 is demonstrated on the operator's tree, but "
+                    "the P6 and P7 phases each need their own remaining Gates, so this drill-down "
+                    "does not make either phase PASS"),
             },
             "core": {"ref": descriptor["ref"], "branch_tip": descriptor["ref"],
                      "repo": descriptor["repo"], "schema_version": descriptor["schema_version"]},
