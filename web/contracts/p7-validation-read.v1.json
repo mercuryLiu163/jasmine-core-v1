@@ -1,7 +1,7 @@
 {
   "contract": "p7-validation-read.v1",
   "source": {
-    "ref": "46a33d78d03e4d8d9711c96ded62072de8a276be",
+    "ref": "264163b9406bbb0921ff0edb8692f4d9c7d6dcc8",
     "kind": "pinned commit (not a branch)",
     "derived_by": "scripts/p7/p7_contract.py",
     "derived_at_ref": null,
