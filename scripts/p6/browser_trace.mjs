@@ -64,6 +64,7 @@ function parseArgs(argv) {
       case '--descriptor': args.descriptor = next; index += 1; break
       case '--p3-reads': args.p3Reads = true; break
       case '--p3-limited-token': args.p3LimitedToken = next; index += 1; break
+      case '--p3-route-scope-token': args.p3RouteScopeToken = next; index += 1; break
       case '--evidence': args.evidence = next; index += 1; break
       case '--interpretation': args.interpretation = next; index += 1; break
       case '--pending-interpretation': args.pendingInterpretation = next; index += 1; break
@@ -1534,12 +1535,19 @@ async function main() {
           const note = document.querySelector('[data-testid="resume-note"]')
           return note ? (note.textContent ?? '') : ''
         })()`)),
-        nextActions: (await pageText()).includes('re-read the task before continuing'),
+        // P3 returns next_actions as objects; the fixture serves the real shape, so this
+        // asserts the action `kind` is on screen — not a string a fixture invented.
+        nextActions: (await evaluate(cdp, `(() => {
+          const node = document.querySelector('[data-testid="next-actions"]')
+          return node ? (node.textContent ?? '') : ''
+        })()`)),
         pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
       }
       trace.record('a resume is a comparison, and its note is historical and non-authoritative',
         res.historical.includes('historical') && res.historical.includes('authority = false') &&
-          res.nextActions && res.pending === false, JSON.stringify(res))
+          res.nextActions.includes('RECONCILE_CURRENT_TRUTH') &&
+          res.nextActions.includes('建议而非已执行') && res.pending === false,
+        JSON.stringify(res))
       await trace.screenshot(cdp, '23-resume')
 
       // --- switching scope must not leave the previous record on screen -----------
@@ -1576,6 +1584,38 @@ async function main() {
       } else {
         trace.record('a token missing a scope is refused by Core, not reported as the missing dependency',
           false, 'no --p3-limited-token supplied, so the scope refusal was not exercised')
+      }
+
+      // --- a scope the route table does not name is still required ------------------
+      // `GET /v1/context/{id}` carries the route scope `context:read`, but P3's handler
+      // also runs `_context_read`, which requires `checkpoint:read`. A contract derived
+      // from the route table alone would call this token sufficient. If the fixture ever
+      // accepts it, the frozen contract has lost a scope again.
+      if (args.p3RouteScopeToken) {
+        await clickByText(cdp, 'button', '退出')
+        await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
+          { label: 'sign-in before the route-scope-only check' })
+        await signIn(args.p3RouteScopeToken)
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/context/${PACK}` })
+        try {
+          await waitFor(cdp, `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('forbidden_scope'))`,
+            { label: 'route-scope-only refusal' })
+        } catch {
+          // A token that *does* satisfy the scope renders the pack instead of an alert.
+          // That is a failure of this check, not of the walkthrough, so it is recorded
+          // below with what was actually shown rather than aborting every later check.
+        }
+        const partial = {
+          forbidden: (await pageText()).includes('forbidden_scope'),
+          namesCheckpoint: (await pageText()).includes('checkpoint:read'),
+          pending: await evaluate(cdp, `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+        }
+        trace.record('a token with only the route-table scope is refused, naming the scope P3 adds',
+          partial.forbidden && partial.namesCheckpoint && partial.pending === false,
+          JSON.stringify(partial))
+      } else {
+        trace.record('a token with only the route-table scope is refused, naming the scope P3 adds',
+          false, 'no --p3-route-scope-token supplied, so this was not exercised')
       }
 
       // --- the simulation is labelled in the frozen traffic, not just asserted here ---

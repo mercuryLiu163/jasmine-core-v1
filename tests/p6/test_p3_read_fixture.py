@@ -82,6 +82,12 @@ class OverHttp(unittest.TestCase):
         fixture.Handler.tokens = {
             "full": set(fixture.ALL_SCOPES),
             "limited": {"objects:read", "checkpoint:read"},
+            # Carries the route-table scope for a context pack but NOT the `checkpoint:read`
+            # that P3's `_context_read` helper also requires. A contract that recorded only
+            # the route scope would call this token sufficient; real P3 refuses it, so the
+            # fixture must too.
+            "route-scope-only": {"context:read", "objects:read", "state:read",
+                                 "authority:read", "evidence:read", "events:read"},
         }
         cls.server = ThreadingHTTPServer(("127.0.0.1", 0), fixture.Handler)
         cls.port = cls.server.server_address[1]
@@ -131,6 +137,57 @@ class OverHttp(unittest.TestCase):
             with self.subTest(path=path):
                 status, body, _ = call(self.port, path, "full")
                 self.assertEqual((status, body["error"]["code"]), (expected, code))
+
+    #: A sample path per contract route, so a scope test can call the real route.
+    SAMPLE_PATHS = {
+        r"^/v1/context/([^/]+)$": "/v1/context/" + fixture.PACK,
+        r"^/v1/tasks/([^/]+)/checkpoints/latest$":
+            "/v1/tasks/" + fixture.TASK + "/checkpoints/latest",
+        r"^/v1/checkpoints/([^/]+)$": "/v1/checkpoints/" + fixture.CHECKPOINT,
+        r"^/v1/resumes/([^/]+)$": "/v1/resumes/" + fixture.RESUME,
+    }
+
+    def test_a_scope_the_route_table_does_not_mention_is_still_required(self) -> None:
+        """The route-table scope is not the whole requirement.
+
+        `GET /v1/context/{id}` also runs P3's `_context_read`, which requires
+        `checkpoint:read`. A token with `context:read` but without it must be refused —
+        otherwise the fixture would accept a credential real P3 rejects, and the frozen
+        contract would under-state the scope set an operator has to grant.
+        """
+        status, body, _ = call(self.port, self.SAMPLE_PATHS[r"^/v1/context/([^/]+)$"],
+                               "route-scope-only")
+        self.assertEqual(status, 403, body)
+        self.assertEqual(body["error"]["code"], "forbidden_scope")
+        self.assertEqual(body["error"]["details"]["required"], "checkpoint:read")
+
+    def test_every_route_enforces_the_full_contract_scope_set(self) -> None:
+        """Drop each required scope in turn; the route must refuse, naming that scope.
+
+        This is the guard against a contract that records only the route-table scope: it
+        fails the moment a scope P3 requires is missing from `extra_scopes`, because the
+        fixture would then answer 200 for a token that lacks it.
+        """
+        for route in CONTRACT["read_routes"]:
+            path = self.SAMPLE_PATHS[route["path_pattern"]]
+            full = [route["scope"], *route["extra_scopes"]]
+            for drop in full:
+                token = "minus-" + drop
+                fixture.Handler.tokens[token] = set(fixture.ALL_SCOPES) - {drop}
+                with self.subTest(pattern=route["path_pattern"], missing=drop):
+                    status, body, _ = call(self.port, path, token)
+                    self.assertEqual(status, 403, body)
+                    self.assertEqual(body["error"]["details"]["required"], drop)
+                    self.assertEqual(body["error"]["details"]["granted"], sorted(
+                        set(fixture.ALL_SCOPES) - {drop}))
+
+    def test_each_route_also_answers_with_every_scope_granted(self) -> None:
+        """The negative direction needs its positive control, or the test above would
+        pass even if the fixture refused everything."""
+        for route in CONTRACT["read_routes"]:
+            with self.subTest(pattern=route["path_pattern"]):
+                status, _, _ = call(self.port, self.SAMPLE_PATHS[route["path_pattern"]], "full")
+                self.assertEqual(status, 200)
 
     def test_a_missing_scope_is_403_and_names_itself(self) -> None:
         status, body, _ = call(self.port, f"/v1/context/{fixture.PACK}", "limited")

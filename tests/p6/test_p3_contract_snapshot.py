@@ -82,6 +82,30 @@ class P3ContractSnapshot(unittest.TestCase):
                 self.assertIn(route["response_key"], {"context", "checkpoint", "resume"})
                 self.assertIsInstance(route["handler"], str)
 
+    def test_each_route_records_every_scope_its_handler_requires(self) -> None:
+        """The route table names one scope per route; the handlers require more.
+
+        P3's `get_context` runs `_context_read`, which adds `checkpoint:read`, and all four
+        reads run `_continuity_read`, which adds five more. Recording only the route scope
+        would tell an operator that a token the contract calls sufficient is enough — and
+        real P3 would refuse it. This asserts the *semantics* rather than a hardcoded list,
+        so a contract that loses these scopes fails here.
+        """
+        contract = json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        shared = {"objects:read", "state:read", "authority:read", "evidence:read", "events:read"}
+        for route in contract["read_routes"]:
+            full = {route["scope"], *route["extra_scopes"]}
+            with self.subTest(pattern=route["path_pattern"]):
+                self.assertTrue(shared <= full,
+                                f"{route['path_pattern']} is missing {sorted(shared - full)}; "
+                                f"every P3 continuity read runs _continuity_read")
+                if route["response_key"] in ("context", "resume"):
+                    self.assertIn("checkpoint:read", full,
+                                  f"{route['path_pattern']} runs a helper that requires "
+                                  f"checkpoint:read, so the route-table scope is not enough")
+                self.assertEqual(len(full), len([route["scope"], *route["extra_scopes"]]),
+                                 "a scope is listed twice, once in scope and once in extra_scopes")
+
     def test_response_field_sets_are_not_empty(self) -> None:
         # A view cannot be honest about a shape nobody recorded, so an empty field set is
         # a failure rather than a pass with fewer assertions.
@@ -146,19 +170,35 @@ class BaselineDoesNotHaveP3Routes(unittest.TestCase):
     def test_pending_paths_are_not_in_the_live_read_allowlist(self) -> None:
         allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
         live = [re.compile(pattern) for pattern in allowlist["paths"]]
-        pending = [re.compile(route["path_pattern"])
-                   for route in json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))["read_routes"]]
-        # A pending route in the live read list would be forwarded to a Core that cannot
-        # answer it — the exact "plausible endpoint" failure the allowlist prevents.
-        for pattern in pending:
+        # Compare against the *shipped* pending patterns, not the snapshot's spelling. The
+        # snapshot writes ids loosely (`([^/]+)`); the proxy writes them strictly
+        # (`[a-z]{3}_[0-9A-Z]{26}`). Comparing the two by string missed the case that
+        # matters — the strict pattern being copied into `paths` — so both are checked.
+        shipped_pending = [re.compile(pattern) for pattern in allowlist["p3_pending_paths"]]
+        snapshot_pending = [re.compile(route["path_pattern"])
+                            for route in json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))["read_routes"]]
+
+        for pattern in [*shipped_pending, *snapshot_pending]:
             with self.subTest(pattern=pattern.pattern):
                 self.assertFalse(any(pattern.pattern == live_pattern.pattern
                                      for live_pattern in live),
                                  f"{pattern.pattern} must not be in the baseline read list")
-        for route in json.loads(SNAPSHOT_PATH.read_text(encoding="utf-8"))["read_routes"]:
-            for sample in ("/v1/context/ctx_1", "/v1/checkpoints/ckp_1", "/v1/resumes/rms_1"):
-                with self.subTest(sample=sample):
-                    self.assertFalse(any(pattern.fullmatch(sample) for pattern in live))
+
+        # And behaviourally, with **real id-shaped** paths. Probing 1-character ids would
+        # not match a strict pending pattern, so a leak would go unnoticed.
+        id_body = "01M4B6VGC29ESRDRQR62DX8AK8"
+        real_paths = [
+            f"/v1/context/ctx_{id_body}",
+            f"/v1/tasks/tsk_{id_body}/checkpoints/latest",
+            f"/v1/checkpoints/ckp_{id_body}",
+            f"/v1/resumes/rms_{id_body}",
+        ]
+        for path in real_paths:
+            with self.subTest(path=path):
+                matching = [pattern.pattern for pattern in live if pattern.fullmatch(path)]
+                self.assertEqual(matching, [],
+                                 f"{path} would be forwarded by the baseline proxy; the P3 "
+                                 f"dependency would then not be missing and this test is stale")
 
 
 class DashboardTypesMatchTheContract(unittest.TestCase):

@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest'
 
 import { join } from 'node:path'
 
-import { loadAllowlist, isAllowed } from '../server/serve.mjs'
+import { P3_READS_ENV, loadAllowlist, isAllowed } from '../server/serve.mjs'
 
 // `HERE` falls back to `process.cwd()` when serve.mjs is imported rather than run, so the
 // directory is passed explicitly — the other host tests do the same.
@@ -65,10 +65,49 @@ describe('P3 continuity reads are opt-in', () => {
   })
 
   it('defaults to off, so an unconfigured host is the safe one', () => {
-    // No options object at all: the loader must read the environment and, with the flag
-    // absent, keep the pending paths out.
-    const allowlist = load(false)
-    expect(allowlist.p3_reads_enabled).toBe(false)
-    expect(isAllowed(allowlist, 'GET', PENDING[0]!)).toBe(false)
+    // No options object at all: the loader must read the environment itself. Passing
+    // `false` here would have tested the explicit argument and left the default untested.
+    const before = process.env[P3_READS_ENV]
+    try {
+      delete process.env[P3_READS_ENV]
+      const allowlist = loadAllowlist(ALLOWLIST_DIR)
+      expect(allowlist.p3_reads_enabled).toBe(false)
+      expect(isAllowed(allowlist, 'GET', PENDING[0]!)).toBe(false)
+    } finally {
+      if (before === undefined) delete process.env[P3_READS_ENV]
+      else process.env[P3_READS_ENV] = before
+    }
   })
+
+  it.each(['1', 'true', 'yes', 'TRUE', ' yes '])(
+    'reads %j from the environment as enabled',
+    (value) => {
+      const before = process.env[P3_READS_ENV]
+      try {
+        process.env[P3_READS_ENV] = value
+        const allowlist = loadAllowlist(ALLOWLIST_DIR)
+        expect(allowlist.p3_reads_enabled).toBe(true)
+        expect(isAllowed(allowlist, 'GET', PENDING[0]!)).toBe(true)
+      } finally {
+        if (before === undefined) delete process.env[P3_READS_ENV]
+        else process.env[P3_READS_ENV] = before
+      }
+    },
+  )
+
+  it.each(['', '0', 'no', 'off', 'maybe'])(
+    'reads %j from the environment as disabled',
+    (value) => {
+      const before = process.env[P3_READS_ENV]
+      try {
+        process.env[P3_READS_ENV] = value
+        const allowlist = loadAllowlist(ALLOWLIST_DIR)
+        expect(allowlist.p3_reads_enabled).toBe(false)
+        expect(isAllowed(allowlist, 'GET', PENDING[0]!)).toBe(false)
+      } finally {
+        if (before === undefined) delete process.env[P3_READS_ENV]
+        else process.env[P3_READS_ENV] = before
+      }
+    },
+  )
 })

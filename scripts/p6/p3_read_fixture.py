@@ -127,14 +127,30 @@ def resume_payload(contract: dict[str, Any]) -> dict[str, Any]:
         "truth_digest": "e" * 64,
         "workspace": {"files": [{"path": "src/app.py", "sha256": "f" * 64}]},
         "sample_window": {"scanned": 12, "bytes": 4096},
+        # Nested shapes mirror P3's `continuity._comparison` and `continuity.next_actions`
+        # key for key. The fixture cannot serve the real *values* — it has no Truth store —
+        # but serving the real *shape* matters: `next_actions` in P3 is a list of objects
+        # (`{"kind": ...}`, or `{"kind", "step_id", "status"}`), not a list of strings, and
+        # a fixture that sent strings would exercise a UI branch real P3 never reaches.
         "comparison": {
-            "same": False,
-            "changed": [{"kind": "task_revision", "checkpoint": 7, "current": 9}],
+            "checkpoint_freshness": "STALE",
+            "workspace": "CHANGED",
+            "warnings": ["CHECKPOINT_WORKSPACE_CHANGED"],
+            "reconciliation_required": True,
+            "diff": {
+                "added": [["step", "stp_01M4B6VGC29ESRDRQR62DX8AK8"]],
+                "removed": [],
+                "changed": [["task", TASK]],
+                "evidence_changed": False,
+                "workspace_paths": {"added": [], "removed": [],
+                                    "changed": ["src/app.py"]},
+            },
         },
         "note": {"value": {"text": "stop here for today"}, "authority": False,
                  "historical": True},
-        "next_actions": ["re-read the task before continuing",
-                         "confirm the workspace diff"],
+        # `reconciliation_required` is True above, which is exactly the case P3 answers
+        # with this single object.
+        "next_actions": [{"kind": "RECONCILE_CURRENT_TRUTH"}],
     }
     assert set(payload) == set(contract["response_fields"]["resume"]), (
         "fixture resume shape drifted from the frozen contract")
@@ -215,11 +231,25 @@ class Handler(BaseHTTPRequestHandler):
         token = self._token()
         return None if token is None else self.tokens.get(token)
 
+    def _require_route(self, scopes: set[str] | None, pattern: str) -> bool:
+        """Enforce the *full* scope set the frozen contract records for a route.
+
+        The route-table scope alone is not the requirement: P3's handlers also reach
+        `_continuity_read` (five scopes) and, for a context pack or a resume,
+        `checkpoint:read`. Deriving this from the contract rather than hardcoding it here
+        means the fixture cannot drift from the contract it claims to serve.
+        """
+        route = next(r for r in self.contract["read_routes"] if r["path_pattern"] == pattern)
+        return self._require(scopes, route["scope"], *route["extra_scopes"])
+
     def _require(self, scopes: set[str] | None, *needed: str) -> bool:
         if scopes is None:
             self._error(401, "unauthenticated", "token missing, unknown or revoked")
             return False
-        missing = sorted(set(needed) - scopes)
+        # Reported in the order Core requires them, not alphabetically: Core stops at the
+        # first failing `principal.require`, so a fixture that sorted would name a
+        # different scope than Core would for the same token.
+        missing = [scope for scope in dict.fromkeys(needed) if scope not in scopes]
         if missing:
             self._error(403, "forbidden_scope", f"this key does not carry the {missing[0]} scope",
                         required=missing[0], granted=sorted(scopes))
@@ -259,7 +289,7 @@ class Handler(BaseHTTPRequestHandler):
 
         context = re.fullmatch(r"/v1/context/([^/]+)", path)
         if context:
-            if not self._require(scopes, "context:read"):
+            if not self._require_route(scopes, r"^/v1/context/([^/]+)$"):
                 return
             ident = context.group(1)
             if not ID_RE.fullmatch(ident) or not ident.startswith("ctx_"):
@@ -273,7 +303,7 @@ class Handler(BaseHTTPRequestHandler):
 
         latest = re.fullmatch(r"/v1/tasks/([^/]+)/checkpoints/latest", path)
         if latest:
-            if not self._require(scopes, "checkpoint:read"):
+            if not self._require_route(scopes, r"^/v1/tasks/([^/]+)/checkpoints/latest$"):
                 return
             task = latest.group(1)
             unknown = sorted(set(query) - {"session_id"})
@@ -299,7 +329,7 @@ class Handler(BaseHTTPRequestHandler):
 
         one = re.fullmatch(r"/v1/checkpoints/([^/]+)", path)
         if one:
-            if not self._require(scopes, "checkpoint:read"):
+            if not self._require_route(scopes, r"^/v1/checkpoints/([^/]+)$"):
                 return
             ident = one.group(1)
             if not ID_RE.fullmatch(ident) or not ident.startswith("ckp_"):
@@ -322,7 +352,7 @@ class Handler(BaseHTTPRequestHandler):
 
         resume = re.fullmatch(r"/v1/resumes/([^/]+)", path)
         if resume:
-            if not self._require(scopes, "resume:read", "checkpoint:read"):
+            if not self._require_route(scopes, r"^/v1/resumes/([^/]+)$"):
                 return
             ident = resume.group(1)
             if not ID_RE.fullmatch(ident) or not ident.startswith("rms_"):

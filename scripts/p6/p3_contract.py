@@ -9,14 +9,23 @@ accurately — which only means anything if the contract is the *real* one.
 
 So this script derives the contract from the P3 ref rather than from anyone's memory:
 
-* the four read routes and their scopes, parsed out of P3's `handlers.py` route table;
-* the response field sets, parsed with `ast` out of the dict literals P3 actually
-  builds — `continuity._persist` for a checkpoint and a resume, `context.builder
-  ._persist` for a context pack — so a renamed or added field shows up as a diff
-  instead of a quietly wrong view.
+* the four read routes, their handlers and their route-table scopes, parsed out of P3's
+  `handlers.py` route table;
+* every *other* scope each handler requires, by parsing the handler's own
+  `principal.require(...)` calls and following the helpers it calls — the route table lists
+  one scope per route, but P3's handlers also reach `_continuity_read` and
+  `_context_read`. Deriving only the route scope would under-state the contract;
+* the response field sets, parsed with `ast` out of the dict literals P3 actually builds —
+  `continuity._persist` for a checkpoint and a resume, `context.builder._persist` for a
+  context pack — so a renamed or added field shows up as a diff instead of a quietly wrong
+  view. The Checkpoint set is the exception: a checkpoint is stored as a table row, so its
+  fields are the *columns of that table* in P3's `m0009_continuity.py`, read from the
+  `CREATE TABLE checkpoints` statement and not from a dict literal.
 
-`--check` re-derives and compares against the checked-in snapshot, so drift is caught
-where the branch is available (and skipped where it is not). `--write` regenerates it.
+`--check` re-derives and compares against the checked-in snapshot. Where the P3 ref is
+absent it **skips** and exits 0 — a skip is reported, not a failure, so a checkout without
+the branch still passes; the field-set/type tests that need no ref still run.
+`--write` regenerates the snapshot.
 """
 
 from __future__ import annotations
@@ -90,6 +99,72 @@ def _returns_dict_keys(source: str, func_name: str) -> list[str]:
     return []
 
 
+def _handler_scopes(source: str, handler: str) -> list[str]:
+    """Every scope `handler` requires, following the helpers it calls.
+
+    The route table names one scope per route, but that is not the whole requirement: P3's
+    handlers also call `_continuity_read`, which requires five more, and `_context_read`,
+    which adds `checkpoint:read`. Reading only the route table would under-report the
+    contract — and a token the contract calls sufficient would be refused by real P3.
+
+    So the scopes are collected from the handler's own `principal.require(...)` calls,
+    including those reached through local helpers, and including the `for scope in (...)`
+    loop `_continuity_read` uses. Ordered by first appearance so the output is stable.
+    """
+    tree = ast.parse(source)
+    funcs = {node.name: node for node in ast.walk(tree)
+             if isinstance(node, ast.FunctionDef)}
+
+    def direct(node: ast.AST) -> tuple[list[str], set[str]]:
+        """(literal scopes in order, local helper names called) for one function body."""
+        scopes: list[str] = []
+        called: set[str] = set()
+        for inner in ast.walk(node):
+            if not isinstance(inner, ast.Call):
+                continue
+            func = inner.func
+            if isinstance(func, ast.Name) and func.id in funcs:
+                called.add(func.id)
+            if not (isinstance(func, ast.Attribute) and func.attr == "require"
+                    and isinstance(func.value, ast.Name) and func.value.id == "principal"):
+                continue
+            if not inner.args:
+                continue
+            arg = inner.args[0]
+            if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+                scopes.append(arg.value)
+            elif isinstance(arg, ast.Name):
+                # `for scope in ('a', 'b'): principal.require(scope)` — resolve the loop
+                # variable to the literal tuple it iterates over.
+                for loop in ast.walk(node):
+                    if not isinstance(loop, ast.For) or not isinstance(loop.target, ast.Name):
+                        continue
+                    if loop.target.id != arg.id:
+                        continue
+                    if isinstance(loop.iter, (ast.Tuple, ast.List, ast.Set)):
+                        for element in loop.iter.elts:
+                            if isinstance(element, ast.Constant) and isinstance(element.value, str):
+                                scopes.append(element.value)
+        return scopes, called
+
+    ordered: list[str] = []
+    seen: set[str] = set()
+    visited: set[str] = set()
+    stack = [handler]
+    while stack:
+        name = stack.pop(0)
+        if name in visited or name not in funcs:
+            continue
+        visited.add(name)
+        scopes, called = direct(funcs[name])
+        for scope in scopes:
+            if scope not in seen:
+                seen.add(scope)
+                ordered.append(scope)
+        stack.extend(sorted(called))
+    return ordered
+
+
 def _spread_names(source: str, func_name: str, marker: str) -> list[str]:
     tree = ast.parse(source)
     for node in ast.walk(tree):
@@ -117,18 +192,27 @@ def derive(ref: str) -> dict[str, Any]:
     schema = int(re.search(r"SCHEMA_VERSION\s*=\s*(\d+)", init).group(1))
 
     # Route -> scope, taken from P3's own route table so a changed scope is a diff.
+    # `extra_scopes` is *derived from the handler body*, not assumed: the route table
+    # records one scope per route, while the handler also pulls in whatever its helpers
+    # require. P3's `get_resume` and `get_context` both call `_context_read`-style helpers
+    # that add `checkpoint:read`, and every one of the four pulls in `_continuity_read`'s
+    # five. Recording only the route scope would tell an operator that a token the
+    # contract calls sufficient is enough — and real P3 would refuse it.
     routes: list[dict[str, Any]] = []
     for method, pattern, scope, response_key in READ_ROUTES:
         needle = re.compile(r'Route\(\s*"' + method + r'"\s*,\s*re\.compile\(r"'
                             + re.escape(pattern) + r'"\)\s*,\s*([a-z_]+)\s*,\s*"([^"]+)"')
         match = needle.search(handlers)
+        handler = match.group(1) if match else None
+        derived = _handler_scopes(handlers, handler) if handler else []
         routes.append({
             "method": method,
             "path_pattern": pattern,
             "scope": match.group(2) if match else None,
-            "handler": match.group(1) if match else None,
+            "handler": handler,
             "response_key": response_key,
-            "extra_scopes": (["checkpoint:read"] if response_key == "resume" else []),
+            # The route-table scope is already `scope`; those helper scopes are not.
+            "extra_scopes": [s for s in derived if s != (match.group(2) if match else None)],
             "query": (["session_id"] if pattern.endswith("/checkpoints/latest$") else []),
         })
 

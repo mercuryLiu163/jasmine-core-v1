@@ -19,7 +19,14 @@
       "scope": "context:read",
       "handler": "get_context",
       "response_key": "context",
-      "extra_scopes": [],
+      "extra_scopes": [
+        "checkpoint:read",
+        "objects:read",
+        "state:read",
+        "authority:read",
+        "evidence:read",
+        "events:read"
+      ],
       "query": []
     },
     {
@@ -28,7 +35,13 @@
       "scope": "checkpoint:read",
       "handler": "latest_checkpoint",
       "response_key": "checkpoint",
-      "extra_scopes": [],
+      "extra_scopes": [
+        "objects:read",
+        "state:read",
+        "authority:read",
+        "evidence:read",
+        "events:read"
+      ],
       "query": [
         "session_id"
       ]
@@ -39,7 +52,13 @@
       "scope": "checkpoint:read",
       "handler": "get_checkpoint",
       "response_key": "checkpoint",
-      "extra_scopes": [],
+      "extra_scopes": [
+        "objects:read",
+        "state:read",
+        "authority:read",
+        "evidence:read",
+        "events:read"
+      ],
       "query": []
     },
     {
@@ -49,7 +68,12 @@
       "handler": "get_resume",
       "response_key": "resume",
       "extra_scopes": [
-        "checkpoint:read"
+        "checkpoint:read",
+        "objects:read",
+        "state:read",
+        "authority:read",
+        "evidence:read",
+        "events:read"
       ],
       "query": []
     }

@@ -20,6 +20,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { App } from '../src/App'
 import { SessionProvider } from '../src/app/session'
+import { CoreApiError, PROXY_PATH_REFUSED, isDependencyPending } from '../src/api/errors'
 import { coreError, installFakeCore, type FakeCore } from './helpers/fakeCore'
 
 let fake: FakeCore | null = null
@@ -84,9 +85,9 @@ function resume(overrides: Record<string, unknown> = {}): Record<string, unknown
     truth_digest: 'd'.repeat(64),
     workspace: { files: [] },
     sample_window: {},
-    comparison: { changed: true },
+    comparison: { reconciliation_required: true, checkpoint_freshness: 'STALE' },
     note: { value: { text: 'stop here for today' }, authority: false, historical: true },
-    next_actions: ['re-read the task'],
+    next_actions: [{ kind: 'RECONCILE_CURRENT_TRUTH' }],
     ...overrides,
   }
 }
@@ -215,6 +216,39 @@ describe('a real P3 read renders the record it was given', () => {
   })
 })
 
+describe('Core saying "no such object" is not the missing dependency', () => {
+  // `isDependencyPending` keys on `proxy_path_not_allowed` alone. If it also treated a
+  // Core 404 as pending, a deleted checkpoint would be reported as an unmerged branch —
+  // a wrong explanation, and the opposite of actionable. The browser Gate covers this
+  // end to end; these pin it per view so widening the check fails here too.
+  it.each([
+    ['checkpoint', `#/checkpoints?checkpoint_id=${CHECKPOINT}`,
+      'GET /v1/checkpoints/' + CHECKPOINT, /读取 Checkpoint/],
+    ['context pack', `#/context/${PACK}`, 'GET /v1/context/' + PACK, /Context Pack/],
+    ['resume', `#/resume/${RESUME}`, 'GET /v1/resumes/' + RESUME, /Resume/],
+  ])('shows a %s 404 as an error, not as pending P3', async (_name, hash, route, region) => {
+    const user = userEvent.setup()
+    await enter(user, hash, {
+      ...SIGNED_IN,
+      [route]: coreError(404, 'not_found', 'no such object'),
+    })
+    const panel = await screen.findByRole('region', { name: region })
+    await waitFor(() => expect(within(panel).getByRole('alert').textContent).toContain('not_found'))
+    expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
+  })
+
+  it('classifies the states from the error code, not the status', async () => {
+    // A direct unit check on the boundary: the proxy's refusal is the *only* pending
+    // input, and Core's own 404/403 are not.
+    const refusal = new CoreApiError({ kind: 'missing', status: 404, code: PROXY_PATH_REFUSED, message: 'x' })
+    const notFound = new CoreApiError({ kind: 'missing', status: 404, code: 'not_found', message: 'x' })
+    const forbidden = new CoreApiError({ kind: 'forbidden', status: 403, code: 'forbidden_scope', message: 'x' })
+    expect(isDependencyPending(refusal)).toBe(true)
+    expect(isDependencyPending(notFound)).toBe(false)
+    expect(isDependencyPending(forbidden)).toBe(false)
+  })
+})
+
 describe('a malformed id is refused with the right reason', () => {
   it('does not blame the missing P3 for a bad checkpoint id', async () => {
     // The proxy's allowlist spells ids the same way, so a malformed id is refused by the
@@ -238,6 +272,17 @@ describe('a malformed id is refused with the right reason', () => {
     expect(fake!.requests.filter((r) => r.path.startsWith('/v1/context/'))).toHaveLength(0)
   })
 
+  it('refuses a malformed task_id even when the checkpoint_id is valid', async () => {
+    // A malformed field that nothing happens to request must still be reported: silently
+    // ignoring it reads as "the dashboard ignored what I typed".
+    const user = userEvent.setup()
+    await enter(user, `#/checkpoints?checkpoint_id=${CHECKPOINT}&task_id=tsk_short`, SIGNED_IN)
+    const panel = await screen.findByRole('region', { name: /读取 Checkpoint/ })
+    await waitFor(() => expect(within(panel).getByTestId('invalid-id').textContent).toContain('task_id'))
+    expect(fake!.requests.filter((r) => r.path.startsWith('/v1/checkpoints/'))).toHaveLength(0)
+    expect(fake!.requests.filter((r) => r.path.includes('/checkpoints/latest'))).toHaveLength(0)
+  })
+
   it('refuses a malformed resume id without requesting it', async () => {
     const user = userEvent.setup()
     await enter(user, '#/resume/rms_short', SIGNED_IN)
@@ -257,7 +302,47 @@ describe('the resume shows what a reader opens it for', () => {
       ['GET /v1/resumes/' + RESUME]: { body: { resume: resume() } },
     })
     const list = await screen.findByTestId('next-actions')
-    expect(list.textContent).toContain('re-read the task')
+    expect(list.textContent).toContain('RECONCILE_CURRENT_TRUTH')
     expect(list.textContent).toContain('建议而非已执行')
+  })
+
+  it('renders the object shape P3 actually returns', async () => {
+    // P3's `next_actions` is a list of objects, not strings: `{"kind", "step_id",
+    // "status"}` for a step action. A view that only handled strings would fall back to a
+    // collapsed block, so this pins the real shape.
+    const user = userEvent.setup()
+    await enter(user, `#/resume/${RESUME}`, {
+      ...SIGNED_IN,
+      ['GET /v1/resumes/' + RESUME]: {
+        body: {
+          resume: resume({
+            next_actions: [
+              { kind: 'VERIFY_EVIDENCE', step_id: 'stp_01M4B6VGC29ESRDRQR62DX8AK8', status: 'EXECUTED' },
+              { kind: 'INSPECT_STEP', step_id: 'stp_01M4B6VGC29ESRDRQR62DX8AK9', status: 'BLOCKED' },
+            ],
+          }),
+        },
+      },
+    })
+    const rows = await screen.findAllByTestId('next-action')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]!.textContent).toContain('VERIFY_EVIDENCE')
+    expect(rows[0]!.textContent).toContain('stp_01M4B6VGC29ESRDRQR62DX8AK8')
+    expect(rows[0]!.textContent).toContain('EXECUTED')
+  })
+
+  it('shows an unrecognised action rather than dropping it', async () => {
+    // An action this build does not know must not look like no action.
+    const user = userEvent.setup()
+    await enter(user, `#/resume/${RESUME}`, {
+      ...SIGNED_IN,
+      ['GET /v1/resumes/' + RESUME]: {
+        body: { resume: resume({ next_actions: [{ future_kind: 'SOMETHING_NEW' }, 'plain string'] }) },
+      },
+    })
+    const rows = await screen.findAllByTestId('next-action')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]!.textContent).toContain('SOMETHING_NEW')
+    expect(rows[1]!.textContent).toContain('plain string')
   })
 })

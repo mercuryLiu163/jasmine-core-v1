@@ -62,32 +62,68 @@ function pending(error: CoreApiError | null): boolean {
   return error !== null && isDependencyPending(error)
 }
 
-/** The one place that decides how "P3 is not in this baseline" looks. */
+/**
+ * The scopes each read requires, copied from the frozen contract's `scope` +
+ * `extra_scopes`. The full set matters: P3's handlers also reach `_continuity_read`, so a
+ * token carrying only the route-table scope is refused by real P3. A test asserts each list
+ * against `contracts/p3-continuity-read.v1.json`, so a contract change that is not mirrored
+ * here fails rather than quietly showing an incomplete requirement.
+ */
+const CHECKPOINT_READ_SCOPES = [
+  'checkpoint:read',
+  'objects:read',
+  'state:read',
+  'authority:read',
+  'evidence:read',
+  'events:read',
+] as const
+const CONTEXT_READ_SCOPES = [
+  'context:read',
+  'checkpoint:read',
+  'objects:read',
+  'state:read',
+  'authority:read',
+  'evidence:read',
+  'events:read',
+] as const
+const RESUME_READ_SCOPES = [
+  'resume:read',
+  'checkpoint:read',
+  'objects:read',
+  'state:read',
+  'authority:read',
+  'evidence:read',
+  'events:read',
+] as const
+
+/** The one place that decides how "this path is not being forwarded" looks. */
 function DependencyPending({
   what,
   method,
   path,
-  scope,
+  scopes,
 }: {
   what: string
   method: string
   path: string
-  scope: string
+  scopes: readonly string[]
 }): JSX.Element {
   return (
     <div className="state state--pending" role="status" data-testid="dependency-pending">
       <p className="state__headline">
-        依赖未满足:{what} 需要 P3(Context / Checkpoint / Resume),而 P3 尚未合并
+        依赖未满足:{what} 属于 P3(Context / Checkpoint / Resume),仪表盘当前不转发这条路径
       </p>
       <p>
-        本页读取的 <code>{method}</code> <code>{path}</code> 只存在于 P3 分支,本基线
-        (<code>850fbec</code>,schema 8)的 Core 没有这条路由,因此仪表盘的 live 白名单
-        <strong>不会转发它</strong> —— 代理以 <code>proxy_path_not_allowed</code> 拒绝,
-        而不是把请求送给一个必然 404 的 Core。这是刻意的。
+        本页读取的 <code>{method}</code> <code>{path}</code> 只存在于 P3 分支。仪表盘的
+        live 白名单<strong>不会转发它</strong> —— 代理以 <code>proxy_path_not_allowed</code>
+        拒绝,而不是把请求送给一个必然 404 的 Core。有两种情况会这样:P3 尚未合并进本基线
+        (<code>850fbec</code>,schema 8),或者 Core 已是 P3、但代理启动时没有打开
+        <code> P6_ENABLE_P3_READS</code>。代理的拒绝理由无法区分这两者,所以这里也不替你
+        断定是哪一个。
       </p>
       <ul className="plain">
         <li>
-          需要的 scope:<code>{scope}</code>(由 Core 校验,前端从不代持)
+          需要的 scope:<code>{scopes.join(' + ')}</code>(由 Core 校验,前端从不代持)
         </li>
         <li>
           契约来源:分支 <code>p3-checkpoint-context-resume</code>,派生并冻结在
@@ -255,12 +291,23 @@ export function CheckpointsView({
   const checkpointIdValid = checkpointId === null || isCoreId(checkpointId, 'ckp')
   const taskIdValid = taskId === null || isCoreId(taskId, 'tsk')
   const sessionIdValid = sessionId === null || isCoreId(sessionId, 'ses')
+  // Any malformed id in the URL refuses the whole view, not just the request that would
+  // have used it: a bad `task_id` beside a valid `checkpoint_id` used to be dropped in
+  // silence, which reads as "the dashboard ignored what I typed".
+  const badId =
+    checkpointId !== null && !checkpointIdValid
+      ? { prefix: 'ckp', field: 'checkpoint_id', value: checkpointId }
+      : taskId !== null && !taskIdValid
+        ? { prefix: 'tsk', field: 'task_id', value: taskId }
+        : sessionId !== null && !sessionIdValid
+          ? { prefix: 'ses', field: 'session_id', value: sessionId }
+          : null
   const byId =
-    checkpointId === null || !checkpointIdValid || !sessionIdValid
+    badId !== null || checkpointId === null
       ? null
       : (signal: AbortSignal) => endpoints.getCheckpoint(checkpointId, signal)
   const latest =
-    checkpointId === null && taskId !== null && taskIdValid && sessionIdValid
+    badId === null && checkpointId === null && taskId !== null
       ? (signal: AbortSignal) => endpoints.latestCheckpoint(taskId, sessionId, signal)
       : null
 
@@ -288,14 +335,6 @@ export function CheckpointsView({
   }
 
   const isPending = pending(detail.error) || pending(latestResource.error)
-  const badId =
-    checkpointId !== null && !checkpointIdValid
-      ? { prefix: 'ckp', field: 'checkpoint_id', value: checkpointId }
-      : taskId !== null && checkpointId === null && !taskIdValid
-        ? { prefix: 'tsk', field: 'task_id', value: taskId }
-        : sessionId !== null && !sessionIdValid
-          ? { prefix: 'ses', field: 'session_id', value: sessionId }
-          : null
 
   return (
     <div className="stack">
@@ -355,7 +394,7 @@ export function CheckpointsView({
             what="Checkpoint"
             method="GET"
             path={checkpointId ? `/v1/checkpoints/${checkpointId}` : `/v1/tasks/${taskId ?? '{tsk}'}/checkpoints/latest`}
-            scope="checkpoint:read"
+            scopes={CHECKPOINT_READ_SCOPES}
           />
         ) : null}
 
@@ -514,7 +553,7 @@ export function ContextPackView({ contextPackId }: { contextPackId: string }): J
             what="Context Pack"
             method="GET"
             path={`/v1/context/${contextPackId}`}
-            scope="context:read"
+            scopes={CONTEXT_READ_SCOPES}
           />
         ) : null}
         {idValid && !pending(pack.error) && pack.status === 'loading' && pack.data === null ? (
@@ -532,7 +571,41 @@ export function ContextPackView({ contextPackId }: { contextPackId: string }): J
 
 /* -------------------------------------------------------------------------- */
 
+/**
+ * One entry of P3's `next_actions`.
+ *
+ * P3 returns objects: `{"kind": "RECONCILE_CURRENT_TRUTH"}`, or
+ * `{"kind": "VERIFY_EVIDENCE" | "INSPECT_STEP", "step_id": ..., "status": ...}`. The
+ * `kind` is the action, so it leads; `step_id`/`status` are the subject. An entry of a
+ * shape this build does not know is still shown, as its JSON, rather than dropped — an
+ * unrecognised action must not read as no action.
+ */
+function NextAction({ action }: { action: unknown }): JSX.Element {
+  if (action !== null && typeof action === 'object' && !Array.isArray(action)) {
+    const record = action as Record<string, unknown>
+    const kind = typeof record.kind === 'string' ? record.kind : null
+    const rest = Object.entries(record).filter(([key]) => key !== 'kind')
+    if (kind !== null) {
+      return (
+        <>
+          <code>{kind}</code>
+          {rest.length ? (
+            <span className="muted">
+              {' '}
+              {rest
+                .map(([key, value]) => `${key} = ${typeof value === 'string' ? value : JSON.stringify(value)}`)
+                .join(', ')}
+            </span>
+          ) : null}
+        </>
+      )
+    }
+  }
+  return <code>{typeof action === 'string' ? action : JSON.stringify(action)}</code>
+}
+
 function ResumeBody({ resume, onReadback }: { resume: Resume; onReadback: () => void }): JSX.Element {
+  const nextActions = Array.isArray(resume.next_actions) ? resume.next_actions : []
   return (
     <>
       <StatRow
@@ -570,15 +643,20 @@ function ResumeBody({ resume, onReadback }: { resume: Resume; onReadback: () => 
         <p className="muted">没有 note。</p>
       )}
       <JsonBlock value={resume.comparison} label="comparison(checkpoint 与当前投影的差异)" />
-      {/* `next_actions` is a short list of operator-facing strings, and the slice exists to
-          show it — a collapsed JSON block would hide the one thing a reader opens the page
-          for. It renders as a list when Core sent strings, and falls back to the block. */}
-      {Array.isArray(resume.next_actions) && resume.next_actions.every((a) => typeof a === 'string') ? (
+      {/* `next_actions` is what a reader opens this page for, and P3 returns it as a list of
+          *objects* — `{"kind": "RECONCILE_CURRENT_TRUTH"}`, or `{"kind", "step_id",
+          "status"}`. Rendering it as a collapsed JSON block would hide the one actionable
+          part behind a click, so each entry is rendered as its own row. Anything this
+          build does not recognise still renders (as JSON on that row) rather than being
+          dropped: an unknown action must not look like no action. */}
+      {nextActions.length ? (
         <div className="stack" data-testid="next-actions">
-          <span className="muted">next_actions({resume.next_actions.length} 条,建议而非已执行)</span>
+          <span className="muted">next_actions({nextActions.length} 条,建议而非已执行)</span>
           <ul className="plain">
-            {resume.next_actions.map((action, index) => (
-              <li key={`${index}:${action}`}>{String(action)}</li>
+            {nextActions.map((action, index) => (
+              <li key={index} data-testid="next-action">
+                <NextAction action={action} />
+              </li>
             ))}
           </ul>
         </div>
@@ -643,7 +721,7 @@ export function ResumeView({ resumeId }: { resumeId: string }): JSX.Element {
             what="Resume"
             method="GET"
             path={`/v1/resumes/${resumeId}`}
-            scope="resume:read + checkpoint:read"
+            scopes={RESUME_READ_SCOPES}
           />
         ) : null}
         {idValid && !pending(resume.error) && resume.status === 'loading' && resume.data === null ? (

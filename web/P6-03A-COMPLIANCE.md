@@ -15,12 +15,20 @@ branch `p3-checkpoint-context-resume`, commit
 serves, `850fbec` (schema 8), has no `context/`, no `continuity.py`, no
 `task_snapshot.py`, and **no route for any of the four endpoints**:
 
-| View | Method and path | Scope | Response key |
+| View | Method and path | Scopes required by P3 | Response key |
 | --- | --- | --- | --- |
-| Checkpoint (by id) | `GET /v1/checkpoints/{ckp}` | `checkpoint:read` | `checkpoint` |
-| Latest Checkpoint | `GET /v1/tasks/{tsk}/checkpoints/latest?session_id=` | `checkpoint:read` | `checkpoint` |
-| Context Pack | `GET /v1/context/{ctx}` | `context:read` | `context` |
-| Resume | `GET /v1/resumes/{rms}` | `resume:read` **and** `checkpoint:read` | `resume` |
+| Checkpoint (by id) | `GET /v1/checkpoints/{ckp}` | `checkpoint:read` + the five shared | `checkpoint` |
+| Latest Checkpoint | `GET /v1/tasks/{tsk}/checkpoints/latest?session_id=` | `checkpoint:read` + the five shared | `checkpoint` |
+| Context Pack | `GET /v1/context/{ctx}` | `context:read` **and** `checkpoint:read` + the five shared | `context` |
+| Resume | `GET /v1/resumes/{rms}` | `resume:read` **and** `checkpoint:read` + the five shared | `resume` |
+
+The **five shared** scopes are `objects:read`, `state:read`, `authority:read`,
+`evidence:read`, `events:read` — every one of the four runs P3's `_continuity_read`. None of
+this is guesswork: `scripts/p6/p3_contract.py` parses each handler's own
+`principal.require(...)` calls, including the ones it reaches through helpers, and the
+frozen contract records the result in `scope` + `extra_scopes`. The route table alone names
+one scope per route and would have under-stated every one of them, which is precisely the
+defect an independent review found in the first cut of this contract.
 
 So the four views are delivered, wired, and exercised — against a **simulated fixture**,
 with the missing dependency marked prominently in the product itself. That is the honest
@@ -29,17 +37,26 @@ maximum for this milestone without P3.
 ### How the contract is pinned
 
 `scripts/p6/p3_contract.py` derives the contract **from the P3 branch**, not from
-documentation: routes, scopes and handler names come from P3's own route table; the
-response field sets are read with `ast` from the dict literals P3 builds, with the
-`**rendering` spread resolved against the renderer's `render()`. The result is frozen as
+documentation: routes, handler names and route-table scopes come from P3's own route table;
+every *other* scope a handler requires is parsed from that handler's own
+`principal.require(...)` calls, following the helpers it calls (`_continuity_read` adds
+five, and a context pack or a resume also reaches `checkpoint:read`) — the route table alone
+under-states the requirement. The response field sets are read with `ast` from the dict
+literals P3 builds, with the `**rendering` spread resolved against the renderer's
+`render()`; the Checkpoint set is the exception, taken from the columns of the
+`CREATE TABLE checkpoints` statement in P3's `m0009_continuity.py`, because a checkpoint is
+a stored row rather than a dict literal. The result is frozen as
 `contracts/p3-continuity-read.v1.json` with `source.commit 7016dabb8926` and
 `baseline.these_routes_exist: false`.
 
 `tests/p6/test_p3_contract_snapshot.py` re-derives the contract from the branch and fails
-on any drift (it skips if the ref is absent, so a checkout without the P3 branch does not
-silently pass), and separately asserts that the TypeScript interfaces carry exactly the
-frozen fields. Deriving the contract from prose would have let the docs and the code drift
-together; deriving it from P3's own AST cannot.
+on any drift, and separately asserts that the TypeScript interfaces carry exactly the frozen
+fields plus that each route records every scope its handler requires. Where the P3 ref is
+absent that first guard **skips and the suite still exits 0** — a skip is reported, not a
+failure, so a checkout without the branch passes with one test skipped and the rest still
+running. That is a real limitation of the guard, not a design win: it means the branch
+comparison is only as good as the checkout. Deriving the contract from prose would have let
+the docs and the code drift together; deriving it from P3's own source does not.
 
 Derived shapes: **19** Checkpoint fields, **17** Resume fields, **31** Context Pack fields
 (23 of its own plus the 8 renderer keys that `**rendering` spreads in).
@@ -84,9 +101,13 @@ Three distinct states are kept apart, and each is separately tested:
 
 `isDependencyPending` keys on `proxy_path_not_allowed` alone. If it also treated Core's
 `not_found` as "P3 missing", a genuinely deleted checkpoint would be reported as an
-unmerged dependency; if it treated `forbidden_scope` that way, a permission problem would
-be blamed on a missing branch. Both are covered by tests, and the tests are mutually
-falsifying: widening the check breaks the 403 case, narrowing it breaks the pending cases.
+unmerged dependency; if it treated `forbidden_scope` that way, a permission problem would be
+blamed on a missing branch. Both are covered by tests, and the tests are mutually
+falsifying: widening the check to Core's `not_found` fails the 404 cases, widening it to the
+403 code fails the refusal case, and narrowing it breaks the pending cases. That
+`not_found` direction was **missing at first** — only the 403 side was covered, so widening
+the check passed the whole suite. The gap was found by review and is now closed; the
+falsification was re-run and fails as it should.
 
 A malformed id deserves its own note. The proxy's allowlist spells ids as
 `<prefix>_<26 Crockford chars>`, so a typo would be refused **by the proxy** and reported as
