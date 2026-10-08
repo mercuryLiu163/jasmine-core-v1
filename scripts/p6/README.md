@@ -153,3 +153,60 @@ python3 scripts/p6/p6_lazy_recovery_probe.py --db /private/tmp/p6-p2/core.db \
 Observed: `interpretation_results` 8 → 9 with
 `status=INTERRUPTED, error_code=provider_interrupted`. Therefore P6-02 describes
 these endpoints as "GET, but not guaranteed side-effect free".
+
+## `p4_write_fixture.py` — the **simulated** P4 write Core (P6-03b2)
+
+P4 is unmerged, so the six Memory writes have nothing real to run against. This fixture
+subclasses `p4_read_fixture.Handler` (so the shell routes and the seven reads are the same code)
+and adds `do_POST` for exactly the frozen contract's six writes, plus a by-id read override so a
+mutation is visible on readback and `GET /v1/events/{evt}` so the audit readback has something to
+read.
+
+```bash
+python3.13 scripts/p6/p4_write_fixture.py --port 8918 \
+  --token <human>  --scopes "objects:read,memory:read,memory:manage,memory:reflect" \
+  --token <agent>  --scopes "objects:read,memory:read,memory:manage,memory:reflect,actor:agent" \
+  --token <reader> --scopes "objects:read,memory:read"
+```
+
+It stamps `X-P6-Fixture: simulated-p4-writes` on every reply, asserts every recorded response
+shape against the frozen contract before serving, and says in its banner which parts follow the
+pinned `errors.py`/`memory/jobs.py` and which are invented. Its docstring lists what it cannot
+reproduce — no Truth store, engine or real jobs, a scope stand-in for actor kind, a replay
+identity looser than P4's command hash, a fixture-invented nested `event`, `job: null` on a
+lifecycle reply, and readback on the by-id routes only.
+
+Four `/v1/_p6_fixture/` controls exist for the Gate and are **not** product surface (no token, not
+in any allowlist, called directly on the fixture port): `state` (the simulation's command log and
+revisions), `drift` (another actor moved the item), `drop-next` (apply the next transition and then
+fail the reply), `set-job-status` (reach `DONE`/`RUNNING`/`PENDING`).
+
+## `run_p4_write_gate.sh` — the P6-03b2 Gate, end to end
+
+```bash
+scripts/p6/run_p4_write_gate.sh [--keep]
+```
+
+It archives `HEAD` with `git archive`, borrows `web/node_modules` read-only, builds with
+`vite build`, starts its own fixture and **two** proxies on free-chosen ports (writes on, writes
+off), records per-run throwaway tokens in the temporary tree only, runs
+`browser_trace.mjs --p4-writes` twice with the fixture restarted in between (the Gate mutates it)
+and once with `--p4-writes-off`, requires the two ON runs to describe identical step sequences and
+every record to pass, writes the bundle README from the run's own click-trace files, and freezes
+the bundle. It runs against a Core **it started**: each host's startup line is required in its own
+log, because the first version used fixed ports and one run talked to a stale dashboard from an
+earlier session.
+
+## `freeze_bundle.py` — write once, and prove it
+
+```bash
+python3.13 scripts/p6/freeze_bundle.py --freeze <bundle> --commit <sha> --kind <what> \
+  [--asset index-*.js --asset-sha256 … --tree-sha256 … --fixture-value … --dependency-json …]
+python3.13 scripts/p6/freeze_bundle.py --verify <bundle>     # exit 1 on any change, 2 with no manifest
+```
+
+`--freeze` hashes every file in the bundle (except the manifest itself) and records the binding
+facts; `--verify` re-hashes and reports changed, added and missing files, exiting **2** when there
+is no manifest at all so "could not look" is never read as "verified". `tests/p6/test_freeze_bundle.py`
+covers each of those, and also verifies the real P6-03b1 bundle — which was frozen by hand before
+this tool existed — so the tool is checked against evidence it did not produce.
