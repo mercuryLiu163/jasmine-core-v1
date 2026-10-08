@@ -65,6 +65,8 @@ function parseArgs(argv) {
       case '--p3-reads': args.p3Reads = true; break
       case '--p3-limited-token': args.p3LimitedToken = next; index += 1; break
       case '--p3-route-scope-token': args.p3RouteScopeToken = next; index += 1; break
+      case '--p4-reads': args.p4Reads = true; break
+      case '--p4-limited-token': args.p4LimitedToken = next; index += 1; break
       case '--evidence': args.evidence = next; index += 1; break
       case '--interpretation': args.interpretation = next; index += 1; break
       case '--pending-interpretation': args.pendingInterpretation = next; index += 1; break
@@ -371,7 +373,9 @@ async function main() {
       }
     })
 
-    if (!args.p3Reads) {
+    // The standard walkthrough needs a full Core. A slice run points the proxy at a
+    // slice fixture instead, so it is skipped there — the shared negatives below still run.
+    if (!args.p3Reads && !args.p4Reads) {
     // 1. sign-in. First prove the negative: a bogus token must be refused, which
     // is only possible because sign-in validates with an *authenticated* read.
     // `GET /v1/health` is public and answers 200 for any token, so a sign-in that
@@ -1673,6 +1677,174 @@ async function main() {
         `${continuityReads.length} continuity reads, ${unlabelled.length} unlabelled` +
           (unlabelled.length ? ` (${unlabelled.map((r) => r.path).join(', ')})` : ''),
       )
+    }
+
+
+    // 8e. P6-03b1: the P4 memory reads, end to end in a real browser.
+    //
+    // The Core behind this proxy is the SIMULATED P4 read fixture
+    // (`scripts/p6/p4_read_fixture.py`), which stamps every reply `X-P6-Fixture:
+    // simulated-p4-reads`. This proves the Memory views render P4 shapes and keep the
+    // states apart; it does NOT verify P4, and the evidence says so.
+    if (args.p4Reads) {
+      const MJOB = 'mjb_01M4B6VGC29ESRDRQR62DX8AK8'
+      const MITEM = 'mem_01M4B6VGC29ESRDRQR62DX8AK8'
+      const MTRACE = 'mtr_01M4B6VGC29ESRDRQR62DX8AK8'
+      const MUNKNOWN = 'mem_01M4B6VGC29ESRDRQR62DX8AK7'
+
+      const gotoMemory = async (hash, label, waitForText) => {
+        await cdp.send('Page.navigate', { url: `${args.ui}/#/${hash}` })
+        await waitFor(cdp, waitForText, { label })
+      }
+
+      // --- health, and Memory marked non-authoritative by Core's own field ------------
+      await gotoMemory('memory/health', 'memory health',
+        `document.body.textContent.includes('Memory 健康')`)
+      const health = {
+        nonAuthoritative: await evaluate(cdp,
+          `document.querySelector('[data-testid="non-authoritative"]') !== null`),
+        coreImpact: (await pageText()).includes('core_impact'),
+        pending: await evaluate(cdp,
+          `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+      }
+      trace.record('memory health renders, and Memory is marked NON_AUTHORITATIVE from Core',
+        health.nonAuthoritative && health.coreImpact && health.pending === false,
+        JSON.stringify(health))
+      await trace.screenshot(cdp, '25-memory-health')
+
+      // --- jobs list and detail -------------------------------------------------------
+      await gotoMemory('memory/jobs', 'memory jobs',
+        `document.querySelector('[data-testid="memory-jobs"]') !== null`)
+      const jobsList = {
+        rows: await evaluate(cdp,
+          `document.querySelectorAll('[data-testid="memory-jobs"] tbody tr').length`),
+        pending: await evaluate(cdp,
+          `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+      }
+      await gotoMemory(`memory/jobs/${MJOB}`, 'memory job detail',
+        `document.body.textContent.includes('attempts(')`)
+      const jobDetail = {
+        attempts: (await pageText()).includes('attempts('),
+        // A job's provenance must be reachable, and the status readable.
+        status: (await pageText()).includes('DONE'),
+      }
+      trace.record('memory jobs list and detail render, with attempts and provenance',
+        jobsList.rows >= 1 && jobsList.pending === false && jobDetail.attempts && jobDetail.status,
+        JSON.stringify({ ...jobsList, ...jobDetail }))
+      await trace.screenshot(cdp, '26-memory-jobs')
+
+      // --- items list and detail, non-authoritative, provenance reachable -------------
+      await gotoMemory('memory/items', 'memory items',
+        `document.querySelector('[data-testid="memory-items"]') !== null`)
+      const itemsList = {
+        rows: await evaluate(cdp,
+          `document.querySelectorAll('[data-testid="memory-items"] tbody tr').length`),
+        nonAuthoritative: await evaluate(cdp,
+          `document.querySelector('[data-testid="non-authoritative"]') !== null`),
+        sourceLink: await evaluate(cdp, `(() => {
+          const table = document.querySelector('[data-testid="memory-items"]')
+          return table ? table.querySelectorAll('a').length >= 2 : false
+        })()`),
+      }
+      await gotoMemory(`memory/items/${MITEM}`, 'memory item detail',
+        `document.body.textContent.includes('sanitized_text')`)
+      const itemDetail = {
+        body: (await pageText()).includes('memory_id'),
+        lifecycle: (await pageText()).includes('recallable'),
+        hashesWhole: await evaluate(cdp, `(() => {
+          const text = document.body.textContent ?? ''
+          return text.includes('sha256')
+        })()`),
+      }
+      trace.record('memory items list and detail render, non-authoritative, with provenance',
+        itemsList.rows >= 1 && itemsList.nonAuthoritative && itemsList.sourceLink &&
+          itemDetail.body && itemDetail.lifecycle,
+        JSON.stringify({ ...itemsList, ...itemDetail }))
+      await trace.screenshot(cdp, '27-memory-items')
+
+      // --- traces: the query hash and length, never the query text --------------------
+      await gotoMemory(`memory/traces/${MTRACE}`, 'memory trace detail',
+        `document.body.textContent.includes('query_sha256')`)
+      const traceView = {
+        hash: (await pageText()).includes('query_sha256'),
+        length: (await pageText()).includes('query_length'),
+        // P4 does not store the query text; a "query" row would be inventing one.
+        queryText: /(^|[^_])query_text/.test(await pageText()),
+      }
+      trace.record('a memory trace shows the query hash and length, and never a query text',
+        traceView.hash && traceView.length && traceView.queryText === false,
+        JSON.stringify(traceView))
+      await trace.screenshot(cdp, '28-memory-traces')
+
+      // --- an unknown id is Core's not_found, not the missing dependency --------------
+      await gotoMemory(`memory/items/${MUNKNOWN}`, 'unknown memory item',
+        `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('not_found'))`)
+      const unknownItem = {
+        alert: (await pageText()).includes('not_found'),
+        pending: await evaluate(cdp,
+          `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+      }
+      trace.record('an unknown memory id is Core not_found, not the missing dependency',
+        unknownItem.alert && unknownItem.pending === false, JSON.stringify(unknownItem))
+
+      // --- a malformed id is refused locally, with no request ------------------------
+      await gotoMemory('memory/items/mem_short', 'malformed memory id',
+        `document.querySelector('[data-testid="invalid-id"]') !== null`)
+      const beforeMalformed = requests.length
+      await new Promise((r) => setTimeout(r, 400))
+      const malformedItem = {
+        invalid: await evaluate(cdp,
+          `document.querySelector('[data-testid="invalid-id"]') !== null`),
+        pending: await evaluate(cdp,
+          `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+        requested: requests.slice(beforeMalformed)
+          .filter((r) => r.path.startsWith('/v1/memory/items/')).length,
+      }
+      trace.record('a malformed memory id is refused locally, with the right reason and no request',
+        malformedItem.invalid && malformedItem.pending === false && malformedItem.requested === 0,
+        JSON.stringify(malformedItem))
+
+      // --- no write affordance, and every reply labelled as simulated -----------------
+      const controls = await evaluate(cdp, `(() => {
+        const out = []
+        for (const node of document.querySelectorAll('button, input[type=submit]')) {
+          out.push((node.textContent ?? '').trim())
+        }
+        return out
+      })()`)
+      const allowedControls = ['从 Core 重新读取', '打开']
+      const unexpected = controls.filter((name) =>
+        !allowedControls.includes(name) && !/^[▸▾]/.test(name) && !name.startsWith('复制'))
+      const memoryReads = requests.filter((request) => request.path.startsWith('/v1/memory/'))
+      const unlabelledMemory = memoryReads.filter(
+        (request) => (responses.get(request.requestId)?.fixtureLabel ?? null) !== 'simulated-p4-reads')
+      trace.record('the memory views offer no write control, and every P4 read is labelled simulated',
+        unexpected.length === 0 && memoryReads.length >= 4 && unlabelledMemory.length === 0,
+        `${memoryReads.length} P4 reads, ${unlabelledMemory.length} unlabelled, ` +
+          `unexpected controls: ${JSON.stringify(unexpected)}`)
+
+      // --- a token without memory:read is refused by Core ----------------------------
+      if (args.p4LimitedToken) {
+        await clickByText(cdp, 'button', '退出')
+        await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
+          { label: 'sign-in before the memory scope check' })
+        await signIn(args.p4LimitedToken)
+        await gotoMemory('memory/items', 'memory items without the scope',
+          `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('forbidden_scope'))`)
+        const refusedMemory = {
+          forbidden: (await pageText()).includes('forbidden_scope'),
+          namesScope: (await pageText()).includes('memory:read'),
+          pending: await evaluate(cdp,
+            `document.querySelector('[data-testid="dependency-pending"]') !== null`),
+        }
+        trace.record('a token without memory:read is refused by Core, not reported as the missing dependency',
+          refusedMemory.forbidden && refusedMemory.namesScope && refusedMemory.pending === false,
+          JSON.stringify(refusedMemory))
+        await trace.screenshot(cdp, '29-memory-scope-refusal')
+      } else {
+        trace.record('a token without memory:read is refused by Core, not reported as the missing dependency',
+          false, 'no --p4-limited-token supplied, so the scope refusal was not exercised')
+      }
     }
 
 
