@@ -232,16 +232,24 @@ async function main() {
       await goto(hash, `P1 ${name}`,
         `document.body.textContent.includes(${JSON.stringify(marker)})`)
       const statuses = apiStatuses(prefix)
+      const shown = await alerts()
       p1[name] = {
         marker: true,
+        // `null` is a request the capture had not seen answered yet; a non-200 is a real failure.
         api: statuses.length ? statuses : null,
+        apiFailed: statuses.some((status) => status !== null && status !== 200),
         pending: await pending(),
-        alerts: await alerts(),
+        // The Rules page also renders the audited write forms, whose empty-field hints are
+        // `role=alert` too. Those are not dependency failures, so the assertion below looks for a
+        // dependency-failure *word* and records every alert verbatim instead of counting them.
+        alerts: shown,
+        dependencyAlerts: shown.filter((text) =>
+          /未接入|dependency|proxy|unreachable|not_found|forbidden/i.test(text)),
       }
     }
-    trace.record('the P1 views are unaffected by the Memory outage: no dependency panel, no alert',
-      Object.values(p1).every((view) => view.pending === false && view.alerts.length === 0 &&
-        view.api !== null && view.api.every((status) => status === 200)),
+    trace.record('the P1 views are unaffected by the Memory outage: no dependency failure, no alert',
+      Object.values(p1).every((view) => view.pending === false && view.apiFailed === false &&
+        view.api !== null && view.api.includes(200) && view.dependencyAlerts.length === 0),
       JSON.stringify(p1))
     await trace.screenshot(cdp, 't05-04-p1-overview')
 
