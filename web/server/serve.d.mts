@@ -30,12 +30,17 @@ export interface Allowlist {
   /** Real P3 paths, forwarded only when the operator states the Core has P3. */
   p3_pending_paths: RegExp[]
   p3_reads_enabled: boolean
+  /** Real P4 memory paths, forwarded only when the operator states the Core has P4. */
+  p4_pending_paths: RegExp[]
+  p4_reads_enabled: boolean
   write_methods?: string[]
   write_paths?: string[]
 }
 
 export const P3_READS_ENV: string
+export const P4_READS_ENV: string
 export function p3ReadsEnabled(env?: Record<string, string | undefined>): boolean
+export function p4ReadsEnabled(env?: Record<string, string | undefined>): boolean
 export function parseArgs(argv: string[]): ParsedArgs
 export function loadAllowlist(
   directory?: string,

@@ -24,14 +24,26 @@ import allowlist from './core-paths.json' with { type: 'json' }
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '::1', 'localhost'])
 const ALLOWED_METHODS = new Set(allowlist.methods.map((method) => method.toUpperCase()))
 
-/** Must match `serve.mjs`: the P3 reads are opt-in for a P3 Core, never implicit. */
-const p3ReadsEnabled = ((): boolean => {
-  const raw = (process.env.P6_ENABLE_P3_READS ?? '').trim().toLowerCase()
+/**
+ * Must match `serve.mjs`: the P3 and P4 reads are opt-in for a Core that has them, never
+ * implicit, and both hosts spell "the operator says yes" the same way. The environment is
+ * read once at module load, which is why the tests reset the module registry rather than
+ * passing an option.
+ */
+function flagEnabled(name: string): boolean {
+  const raw = (process.env[name] ?? '').trim().toLowerCase()
   return raw === '1' || raw === 'true' || raw === 'yes'
-})()
+}
+const p3ReadsEnabled = flagEnabled('P6_ENABLE_P3_READS')
+const p4ReadsEnabled = flagEnabled('P6_ENABLE_P4_READS')
+const pendingPaths = allowlist as {
+  p3_pending_paths?: string[]
+  p4_pending_paths?: string[]
+}
 const ALLOWED_PATHS = [
   ...allowlist.paths,
-  ...(p3ReadsEnabled ? (allowlist as { p3_pending_paths?: string[] }).p3_pending_paths ?? [] : []),
+  ...(p3ReadsEnabled ? pendingPaths.p3_pending_paths ?? [] : []),
+  ...(p4ReadsEnabled ? pendingPaths.p4_pending_paths ?? [] : []),
 ].map((pattern) => new RegExp(pattern))
 const WRITE_METHODS = new Set(
   (allowlist.write_methods ?? []).map((method) => method.toUpperCase()),

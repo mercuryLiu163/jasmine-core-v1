@@ -1,0 +1,408 @@
+{
+  "contract": "p4-memory-read.v1",
+  "source": {
+    "ref": "0c4f8f0e2118711ac9aa2a7006fddc6982962248",
+    "kind": "pinned commit (full SHA, not a branch)",
+    "schema_version_in_p4": 11,
+    "derived_by": "scripts/p6/p4_contract.py",
+    "acceptance": "P4 phase acceptance NOT passed: nothing here was validated against a real P4 Core"
+  },
+  "baseline": {
+    "commit": "850fbec",
+    "schema_version": 8,
+    "these_routes_exist": false,
+    "why": "P4 (Memory adapter, jobs, recall, lifecycle) is not merged into this baseline: Core here has no src/jasmine_core/memory/ and no route under /v1/memory/. P6-03b1 is therefore delivered against this contract with the dependency marked pending, and the live proxy stays closed."
+  },
+  "read_routes": [
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/memory/health$",
+      "handler": "memory_health",
+      "scope": "memory:read",
+      "response_key": "health",
+      "response_fields": [
+        "api_version",
+        "checked_at",
+        "configured",
+        "core_impact",
+        "degraded",
+        "deployment",
+        "engine_id",
+        "features",
+        "items",
+        "jobs",
+        "last_check_at",
+        "last_error_code",
+        "last_success_at",
+        "non_authoritative",
+        "origin_host",
+        "reachable",
+        "safe_error_summary",
+        "status"
+      ],
+      "id_prefix": null,
+      "query": [],
+      "default_limit": null
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/memory/jobs$",
+      "handler": "list_jobs",
+      "scope": "memory:read",
+      "response_key": "jobs",
+      "response_fields": [
+        "count",
+        "counts",
+        "jobs"
+      ],
+      "id_prefix": null,
+      "query": [
+        "after_job_id",
+        "kind",
+        "limit",
+        "memory_type",
+        "project_id",
+        "status"
+      ],
+      "default_limit": 100
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/memory/jobs/([^/]+)$",
+      "handler": "get_job",
+      "scope": "memory:read",
+      "response_key": "job",
+      "response_fields": [
+        "attempts",
+        "job"
+      ],
+      "id_prefix": "mjb",
+      "query": [],
+      "default_limit": null
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/memory/items$",
+      "handler": "list_items",
+      "scope": "memory:read",
+      "response_key": "items",
+      "response_fields": [
+        "count",
+        "items",
+        "non_authoritative"
+      ],
+      "id_prefix": null,
+      "query": [
+        "after_memory_id",
+        "bank_id",
+        "limit",
+        "memory_type",
+        "project_id",
+        "status",
+        "task_id"
+      ],
+      "default_limit": 100
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/memory/items/([^/]+)$",
+      "handler": "get_item",
+      "scope": "memory:read",
+      "response_key": "item",
+      "response_fields": [
+        "engine_claim",
+        "jobs",
+        "lifecycle",
+        "memory",
+        "non_authoritative",
+        "recallable",
+        "sources"
+      ],
+      "id_prefix": "mem",
+      "query": [],
+      "default_limit": null
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/memory/traces$",
+      "handler": "list_traces",
+      "scope": "memory:read",
+      "response_key": "traces",
+      "response_fields": [
+        "count",
+        "traces"
+      ],
+      "id_prefix": null,
+      "query": [
+        "after_trace_id",
+        "limit",
+        "project_id",
+        "task_id"
+      ],
+      "default_limit": 50
+    },
+    {
+      "method": "GET",
+      "path_pattern": "^/v1/memory/traces/([^/]+)$",
+      "handler": "get_trace",
+      "scope": "memory:read",
+      "response_key": "trace",
+      "response_fields": [
+        "trace"
+      ],
+      "id_prefix": "mtr",
+      "query": [],
+      "default_limit": null
+    }
+  ],
+  "not_in_this_slice": [
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/memory/jobs/([^/]+)/retry$",
+      "handler": "retry_job",
+      "scope": "memory:manage",
+      "why": "a write or a generator action; P6-03b2, behind its own permission and audit Gate"
+    },
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/memory/items/([^/]+)/obsolete$",
+      "handler": "_lifecycle_command(\"obsolete\")",
+      "scope": "memory:manage",
+      "why": "a write or a generator action; P6-03b2, behind its own permission and audit Gate"
+    },
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/memory/items/([^/]+)/delete$",
+      "handler": "_lifecycle_command(\"delete\")",
+      "scope": "memory:manage",
+      "why": "a write or a generator action; P6-03b2, behind its own permission and audit Gate"
+    },
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/memory/items/([^/]+)/pin$",
+      "handler": "_lifecycle_command(\"pin\")",
+      "scope": "memory:manage",
+      "why": "a write or a generator action; P6-03b2, behind its own permission and audit Gate"
+    },
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/memory/items/([^/]+)/unpin$",
+      "handler": "_lifecycle_command(\"unpin\")",
+      "scope": "memory:manage",
+      "why": "a write or a generator action; P6-03b2, behind its own permission and audit Gate"
+    },
+    {
+      "method": "POST",
+      "path_pattern": "^/v1/memory/reflect$",
+      "handler": "reflect",
+      "scope": "memory:reflect",
+      "why": "a write or a generator action; P6-03b2, behind its own permission and audit Gate"
+    }
+  ],
+  "nested_fields": {
+    "job": [
+      "bank_id",
+      "claim_generation",
+      "completed_at",
+      "content_sha256",
+      "created_at",
+      "document_id",
+      "job_id",
+      "kind",
+      "last_error_code",
+      "lease_expires_at",
+      "lease_owner",
+      "max_attempts",
+      "memory_id",
+      "memory_type",
+      "next_attempt_at",
+      "project_id",
+      "receipt",
+      "retry_count",
+      "safe_error_summary",
+      "source_event_id",
+      "status",
+      "task_id",
+      "updated_at"
+    ],
+    "attempt": [
+      "attempt_id",
+      "attempt_number",
+      "error_code",
+      "finished_at",
+      "job_id",
+      "lease_owner",
+      "outcome",
+      "phase",
+      "receipt",
+      "safe_error_summary",
+      "started_at"
+    ],
+    "job_counts": [
+      "done",
+      "failed",
+      "pending",
+      "running"
+    ],
+    "item": [
+      "bank_id",
+      "content_sha256",
+      "created_at",
+      "document_id",
+      "engine_state",
+      "evidence_ids",
+      "last_error_code",
+      "last_recalled_at",
+      "lifecycle_reason",
+      "memory_id",
+      "memory_type",
+      "origin_event_id",
+      "origin_rule_id",
+      "origin_rule_version",
+      "pinned",
+      "project_id",
+      "recall_count",
+      "receipt",
+      "remote_deleted_at",
+      "revision",
+      "safe_error_summary",
+      "sanitized_text",
+      "scope_kind",
+      "source_event_id",
+      "status",
+      "task_id",
+      "updated_at"
+    ],
+    "lifecycle": [
+      "engine_state",
+      "last_recalled_at",
+      "lifecycle_reason",
+      "pin_affects",
+      "pinned",
+      "recall_count",
+      "recallable",
+      "remote_document_deleted",
+      "status"
+    ],
+    "health": [
+      "api_version",
+      "checked_at",
+      "configured",
+      "core_impact",
+      "degraded",
+      "deployment",
+      "engine_id",
+      "features",
+      "items",
+      "jobs",
+      "last_check_at",
+      "last_error_code",
+      "last_success_at",
+      "origin_host",
+      "reachable",
+      "safe_error_summary",
+      "status"
+    ],
+    "health_items": [
+      "delete_failed",
+      "delete_pending",
+      "items_active",
+      "items_deleted",
+      "items_obsolete",
+      "retain_failed"
+    ],
+    "trace": [
+      "actor_id",
+      "authority_refs",
+      "banks",
+      "budget_tokens",
+      "created_at",
+      "error_code",
+      "filtered",
+      "mode",
+      "project_id",
+      "query_length",
+      "query_sha256",
+      "requested_types",
+      "safe_error_summary",
+      "session_id",
+      "state_revision",
+      "status",
+      "task_id",
+      "trace_id",
+      "used_tokens"
+    ]
+  },
+  "non_authoritative_handlers": [
+    "get_item",
+    "list_items",
+    "memory_health"
+  ],
+  "semantics": {
+    "derived": {
+      "writes_are_separate": true,
+      "retain_endpoint_absent": true,
+      "bank_selector_route_absent": true,
+      "bank_filter_is_a_validated_query": "bank_id",
+      "read_scopes": [
+        "memory:read"
+      ],
+      "write_scopes": [
+        "memory:manage",
+        "memory:reflect"
+      ],
+      "id_prefixes": [
+        "mem",
+        "mjb",
+        "mtr"
+      ]
+    },
+    "recorded": [
+      {
+        "key": "non_authoritative_from_core",
+        "statement": "Core's own item-list, item-detail and health payloads carry `non_authoritative: true`; the inspector reads that field rather than asserting it. Source: memory/api.py."
+      },
+      {
+        "key": "no_retain_endpoint",
+        "statement": "There is no public retain endpoint: content reaches the engine only through a worker acting on a job derived from committed truth. Source: memory/api.py docstring."
+      },
+      {
+        "key": "no_bank_selector",
+        "statement": "There is no public bank selector: the bank is derived from the item's own scope, so an agent cannot choose `jasmine-global` or promote project content into it. Source: memory/api.py docstring."
+      },
+      {
+        "key": "reflect_is_human_only",
+        "statement": "`reflect` requires `memory:reflect`, which key issuance will not grant to an agent; it is the only path that runs the engine's generator and is unreachable from a Context build. It is out of this slice. Source: memory/api.py docstring."
+      },
+      {
+        "key": "authorisation_from_actor",
+        "statement": "Project authorisation is decided from the authenticated actor, never from a body field or a query parameter; an unauthorised project is reported as `not_found` so the inspector cannot enumerate another project's work. Source: memory/api.py docstring."
+      },
+      {
+        "key": "empty_not_everything",
+        "statement": "An actor with no grants gets an empty list rather than the whole database. Source: memory/api.py `list_jobs`/`list_items`/`list_traces`."
+      },
+      {
+        "key": "agent_redaction",
+        "statement": "An agent key may read jobs but only for a project it may read, and engine-derived text is withheld because error summaries can carry it. Source: memory/api.py `list_jobs`."
+      },
+      {
+        "key": "memory_is_not_authority",
+        "statement": "Memory is NON_AUTHORITATIVE: it cannot change Rule or State, and no view may present it as Truth. Sources: taskbook §6 and memory/api.py."
+      },
+      {
+        "key": "credentials_stay_in_core",
+        "statement": "Engine credentials never reach the browser; the engine lives behind Core. Sources: taskbook §6 and memory/transport.py."
+      },
+      {
+        "key": "health_probe_not_in_a_request",
+        "statement": "`health.report(probe=True)` can add a `probe` key, but probe is reachable only from the CLI and the worker, never from a request handler, so a request response carries the 17 report keys plus `non_authoritative`. Source: memory/health.py, memory/api.py."
+      },
+      {
+        "key": "contract_pinned_acceptance_unpassed",
+        "statement": "The contract source is pinned to a commit, but P4 phase acceptance has NOT passed: nothing here has been validated against a real P4 Core."
+      }
+    ],
+    "recorded_note": "Prose semantics are recorded from reading the pinned commit, each naming its source file. They are not auto-derived, and asserting otherwise would be an overclaim."
+  }
+}

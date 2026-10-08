@@ -47,5 +47,15 @@
     "^/v1/checkpoints/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
     "^/v1/resumes/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
   ],
-  "p3_pending_note": "P6-03a continuity reads. These four paths are real on branch p3-checkpoint-context-resume (schema 10) and are NOT served by this baseline's Core (850fbec, schema 8), so they are deliberately absent from `paths`: forwarding them would send the browser to a Core that cannot answer. They become live only when the operator starts a proxy for a P3 Core with P6_ENABLE_P3_READS=1, and even then Core enforces context:read / checkpoint:read / resume:read itself. `/v1/context/build`, `POST /v1/checkpoints` and `POST /v1/tasks/{id}/resume` are build operations and are not part of this read slice. The contract is derived from the P3 branch by scripts/p6/p3_contract.py and frozen in web/contracts/p3-continuity-read.v1.json."
+  "p3_pending_note": "P6-03a continuity reads. These four paths are real on branch p3-checkpoint-context-resume (schema 10) and are NOT served by this baseline's Core (850fbec, schema 8), so they are deliberately absent from `paths`: forwarding them would send the browser to a Core that cannot answer. They become live only when the operator starts a proxy for a P3 Core with P6_ENABLE_P3_READS=1, and even then Core enforces context:read / checkpoint:read / resume:read itself. `/v1/context/build`, `POST /v1/checkpoints` and `POST /v1/tasks/{id}/resume` are build operations and are not part of this read slice. The contract is derived from the P3 branch by scripts/p6/p3_contract.py and frozen in web/contracts/p3-continuity-read.v1.json.",
+  "p4_pending_paths": [
+    "^/v1/memory/health$",
+    "^/v1/memory/jobs$",
+    "^/v1/memory/jobs/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/memory/items$",
+    "^/v1/memory/items/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
+    "^/v1/memory/traces$",
+    "^/v1/memory/traces/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
+  ],
+  "p4_pending_note": "P6-03b1 memory reads. These seven paths are real on the P4 commit 0c4f8f0e2118711ac9aa2a7006fddc6982962248 (schema 11) and are NOT served by this baseline's Core (850fbec, schema 8), so they are deliberately absent from `paths`: forwarding them would send the browser to a Core that cannot answer. They become live only when the operator starts a proxy for a P4 Core with P6_ENABLE_P4_READS=1, and even then Core enforces memory:read itself. The five lifecycle/retry writes and `reflect` are P6-03b2 and are not part of this read slice. The contract is derived from the pinned P4 commit by scripts/p6/p4_contract.py and frozen in web/contracts/p4-memory-read.v1.json."
 }

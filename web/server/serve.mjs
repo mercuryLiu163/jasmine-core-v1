@@ -72,13 +72,27 @@ export function parseArgs(argv) {
 
 /** Env var that says the Core behind this proxy is a P3 build. */
 export const P3_READS_ENV = 'P6_ENABLE_P3_READS'
+/** Env var that says the Core behind this proxy is a P4 build. */
+export const P4_READS_ENV = 'P6_ENABLE_P4_READS'
 
-export function p3ReadsEnabled(env = process.env) {
-  const raw = (env[P3_READS_ENV] ?? '').trim().toLowerCase()
+/** One spelling of "the operator says yes" for every opt-in, so the hosts cannot diverge. */
+function flagEnabled(env, name) {
+  const raw = (env[name] ?? '').trim().toLowerCase()
   return raw === '1' || raw === 'true' || raw === 'yes'
 }
 
-export function loadAllowlist(directory = HERE, { enableP3Reads = p3ReadsEnabled() } = {}) {
+export function p3ReadsEnabled(env = process.env) {
+  return flagEnabled(env, P3_READS_ENV)
+}
+
+export function p4ReadsEnabled(env = process.env) {
+  return flagEnabled(env, P4_READS_ENV)
+}
+
+export function loadAllowlist(directory = HERE, {
+  enableP3Reads = p3ReadsEnabled(),
+  enableP4Reads = p4ReadsEnabled(),
+} = {}) {
   const raw = JSON.parse(readFileSync(join(directory, 'core-paths.json'), 'utf8'))
   const baseline = raw.paths.map((pattern) => new RegExp(pattern))
   // The P3 continuity reads are real paths on a P3 Core and absent from this baseline,
@@ -86,12 +100,21 @@ export function loadAllowlist(directory = HERE, { enableP3Reads = p3ReadsEnabled
   // the Core behind this proxy has P3; a baseline run therefore refuses them by name
   // (`proxy_path_not_allowed`) instead of forwarding them to a Core that cannot answer.
   const pending = (raw.p3_pending_paths ?? []).map((pattern) => new RegExp(pattern))
+  // The P4 memory reads are the same arrangement for a different unmerged dependency: real
+  // on a P4 Core, absent here, and appended only on the operator's say-so.
+  const pendingP4 = (raw.p4_pending_paths ?? []).map((pattern) => new RegExp(pattern))
   return {
     methods: new Set(raw.methods.map((method) => method.toUpperCase())),
-    paths: enableP3Reads ? [...baseline, ...pending] : baseline,
+    paths: [
+      ...baseline,
+      ...(enableP3Reads ? pending : []),
+      ...(enableP4Reads ? pendingP4 : []),
+    ],
     baseline_paths: baseline,
     p3_pending_paths: pending,
     p3_reads_enabled: enableP3Reads,
+    p4_pending_paths: pendingP4,
+    p4_reads_enabled: enableP4Reads,
     write_methods: raw.write_methods ?? [],
     write_paths: raw.write_paths ?? [],
   }
