@@ -1917,7 +1917,11 @@ async function main() {
     // 409 the stale-preview probe. The P3 mode additionally requests an unknown id and
     // a malformed one, both of which answer 404. So 404 counts as expected only in P3
     // mode — never as a blanket allowance, or a real 404 would slip through unnoticed.
-    const expectedStatuses = args.p3Reads ? /(401|403|404|409)/ : /(401|403|409)/
+    // 404 is expected only in a slice run, where an unknown id is requested on purpose:
+    // never as a blanket allowance, or a real 404 would slip through unnoticed.
+    const expectedStatuses = args.p3Reads || args.p4Reads
+      ? /(401|403|404|409)/
+      : /(401|403|409)/
     const expectedRefusals = consoleErrors.filter((line) => {
       if (!/Failed to load resource/.test(line)) return false
       return expectedStatuses.test(line)
