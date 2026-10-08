@@ -1550,6 +1550,35 @@ async function main() {
         JSON.stringify(res))
       await trace.screenshot(cdp, '23-resume')
 
+      // --- each view shows the scope the frozen contract requires ----------------
+      // The scope is what an operator has to grant, and the contract is where it comes
+      // from: the route table alone names one per route, so a panel showing only that
+      // would under-state the requirement. Read the rendered `dl.kv` row, not a constant.
+      const scopeRow = `(() => {
+        for (const row of document.querySelectorAll('dl.kv > div')) {
+          if (row.querySelector('dt')?.textContent === 'required scope') {
+            return row.querySelector('dd')?.textContent ?? ''
+          }
+        }
+        return ''
+      })()`
+      const shownScopes = {}
+      for (const [name, hash] of [['checkpoint', `#/checkpoints?checkpoint_id=${CKP}`],
+                                  ['context', `#/context/${PACK}`],
+                                  ['resume', `#/resume/${RMS}`]]) {
+        await cdp.send('Page.navigate', { url: `${args.ui}/${hash}` })
+        await waitFor(cdp, `document.querySelectorAll('dl.kv > div').length > 0`, { label: name })
+        shownScopes[name] = await evaluate(cdp, scopeRow)
+      }
+      const wantedScopes = {
+        checkpoint: 'checkpoint:read + objects:read + state:read + authority:read + evidence:read + events:read',
+        context: 'context:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read',
+        resume: 'resume:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read',
+      }
+      trace.record('each view shows the full scope set the frozen contract requires',
+        Object.keys(wantedScopes).every((key) => shownScopes[key] === wantedScopes[key]),
+        JSON.stringify(shownScopes))
+
       // --- switching scope must not leave the previous record on screen -----------
       await cdp.send('Page.navigate', { url: `${args.ui}/#/checkpoints?checkpoint_id=${CKP2}` })
       await waitFor(cdp, `(() => {

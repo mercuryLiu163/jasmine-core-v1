@@ -88,12 +88,12 @@ const CONTEXT_READ_SCOPES = [
 ] as const
 const RESUME_READ_SCOPES = [
   'resume:read',
-  'checkpoint:read',
   'objects:read',
   'state:read',
   'authority:read',
   'evidence:read',
   'events:read',
+  'checkpoint:read',
 ] as const
 
 /** The one place that decides how "this path is not being forwarded" looks. */
@@ -224,6 +224,10 @@ function CheckpointBody({
         rows={[
           { label: 'checkpoint_id', value: <code>{checkpoint.checkpoint_id}</code> },
           { label: 'reason', value: <code>{checkpoint.reason}</code> },
+          {
+            label: 'required scope',
+            value: <code>{CHECKPOINT_READ_SCOPES.join(' + ')}</code>,
+          },
           ...identityRows(checkpoint),
           {
             label: 'task_revision',
@@ -461,6 +465,10 @@ function ContextPackBody({
         rows={[
           { label: 'context_pack_id', value: <code>{pack.context_pack_id}</code> },
           { label: 'reason', value: <code>{pack.reason}</code> },
+          {
+            label: 'required scope',
+            value: <code>{CONTEXT_READ_SCOPES.join(' + ')}</code>,
+          },
           ...identityRows(pack),
           { label: 'current_step_id', value: <code>{pack.current_step_id ?? '—'}</code> },
           {
@@ -615,6 +623,10 @@ function ResumeBody({ resume, onReadback }: { resume: Resume; onReadback: () => 
       <KeyValue
         rows={[
           { label: 'resume_id', value: <code>{resume.resume_id}</code> },
+          {
+            label: 'required scope',
+            value: <code>{RESUME_READ_SCOPES.join(' + ')}</code>,
+          },
           ...identityRows(resume),
           {
             label: 'checkpoint',

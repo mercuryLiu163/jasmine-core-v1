@@ -21,6 +21,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { App } from '../src/App'
 import { SessionProvider } from '../src/app/session'
 import { CoreApiError, PROXY_PATH_REFUSED, isDependencyPending } from '../src/api/errors'
+import contract from '../contracts/p3-continuity-read.v1.json'
 import { coreError, installFakeCore, type FakeCore } from './helpers/fakeCore'
 
 let fake: FakeCore | null = null
@@ -65,6 +66,43 @@ function checkpoint(overrides: Record<string, unknown> = {}): Record<string, unk
     workspace_digest: 'c'.repeat(64),
     note: { text: 'stop here for today' },
     created_at: '2026-10-07T12:00:00Z',
+    ...overrides,
+  }
+}
+
+function pack(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    context_pack_id: PACK,
+    command_event_id: 'evt_01M4B6VGC29ESRDRQR62DX8AK8',
+    source_event_id: 'evt_01M4B6VGC29ESRDRQR62DX8AK9',
+    actor_id: 'act_01M4B6VGC29ESRDRQR62DX8AK8',
+    host_id: 'hst_01M4B6VGC29ESRDRQR62DX8AK8',
+    project_id: 'prj_01M4B6VGC29ESRDRQR62DX8AK8',
+    task_id: TASK,
+    session_id: null,
+    current_step_id: null,
+    reason: 'SESSION_STOP',
+    trigger_provenance: { level: 'UNVERIFIED_REQUEST' },
+    created_at: '2026-10-07T12:00:00Z',
+    projection: { task: { title: 'fixture task' } },
+    truth_digest: 'e'.repeat(64),
+    selector: {},
+    resume_comparison: {},
+    workspace: { files: [] },
+    workspace_digest: 'f'.repeat(64),
+    sample_window: {},
+    configuration: {},
+    config_digest: '1'.repeat(64),
+    tokenizer: {},
+    memory: { status: 'ok', items: [], provider_id: 'component_simulation' },
+    rendered_content: '## Task\nfixture task\n',
+    rendered_sha256: '2'.repeat(64),
+    rendered_utf8_bytes: 21,
+    renderer_version: 'jasmine.context-renderer.v1',
+    token_count: 8,
+    section_metrics: [],
+    omissions: [],
+    selected_optional_ids: [],
     ...overrides,
   }
 }
@@ -151,7 +189,11 @@ describe('a refused P3 read is shown as a missing dependency', () => {
     })
     const panel = await screen.findByRole('region', { name: /Resume/ })
     await waitFor(() => expect(within(panel).getByTestId('dependency-pending')).toBeTruthy())
-    expect(panel.textContent).toContain('resume:read + checkpoint:read')
+    // The panel names the whole required set the contract records, not just the two
+    // slice-specific scopes: P3's handler also runs `_continuity_read`.
+    expect(panel.textContent).toContain('resume:read')
+    expect(panel.textContent).toContain('checkpoint:read')
+    expect(panel.textContent).toContain('objects:read')
     expect(within(panel).queryByRole('alert')).toBeNull()
   })
 })
@@ -289,6 +331,63 @@ describe('a malformed id is refused with the right reason', () => {
     const resume = await screen.findByRole('region', { name: /Resume/ })
     await waitFor(() => expect(within(resume).getByTestId('invalid-id')).toBeTruthy())
     expect(fake!.requests.filter((r) => r.path.startsWith('/v1/resumes/'))).toHaveLength(0)
+  })
+})
+
+describe('the views show the scope each read requires', () => {
+  /** The full required set for a route, straight from the frozen contract. */
+  function requiredScopes(responseKey: string): string {
+    const route = contract.read_routes.find((r) => r.response_key === responseKey)!
+    return [route.scope, ...route.extra_scopes].join(' + ')
+  }
+
+  /** Read one `dl.kv` row by its label, the way a reader would. */
+  function rowValue(panel: HTMLElement, label: string): string | null {
+    for (const row of panel.querySelectorAll('dl.kv > div')) {
+      if (row.querySelector('dt')?.textContent === label) {
+        return row.querySelector('dd')?.textContent ?? null
+      }
+    }
+    return null
+  }
+
+  it('shows the checkpoint scope the contract records, not just the route-table one', async () => {
+    // The scope is what an operator has to grant, and the contract is where it comes from.
+    // Asserting the rendered row (not a constant) also catches the two drifting apart.
+    const user = userEvent.setup()
+    await enter(user, `#/checkpoints?checkpoint_id=${CHECKPOINT}`, {
+      ...SIGNED_IN,
+      ['GET /v1/checkpoints/' + CHECKPOINT]: { body: { checkpoint: checkpoint() } },
+    })
+    const panel = await screen.findByRole('region', { name: /读取 Checkpoint/ })
+    await waitFor(() => expect(rowValue(panel, 'required scope')).toBeTruthy())
+    expect(rowValue(panel, 'required scope')).toBe(requiredScopes('checkpoint'))
+  })
+
+  it('shows the context pack scope, including checkpoint:read', async () => {
+    const user = userEvent.setup()
+    await enter(user, `#/context/${PACK}`, {
+      ...SIGNED_IN,
+      ['GET /v1/context/' + PACK]: { body: { context: pack() } },
+    })
+    const panel = await screen.findByRole('region', { name: /Context Pack/ })
+    await waitFor(() => expect(rowValue(panel, 'required scope')).toBeTruthy())
+    expect(rowValue(panel, 'required scope')).toBe(requiredScopes('context'))
+    // The scope the route table omits is exactly the one review found missing.
+    expect(rowValue(panel, 'required scope')).toContain('checkpoint:read')
+  })
+
+  it('shows the resume scope, which needs two slice scopes', async () => {
+    const user = userEvent.setup()
+    await enter(user, `#/resume/${RESUME}`, {
+      ...SIGNED_IN,
+      ['GET /v1/resumes/' + RESUME]: { body: { resume: resume() } },
+    })
+    const panel = await screen.findByRole('region', { name: /Resume/ })
+    await waitFor(() => expect(rowValue(panel, 'required scope')).toBeTruthy())
+    expect(rowValue(panel, 'required scope')).toBe(requiredScopes('resume'))
+    expect(rowValue(panel, 'required scope')).toContain('resume:read')
+    expect(rowValue(panel, 'required scope')).toContain('checkpoint:read')
   })
 })
 
