@@ -78,10 +78,14 @@ class ConformanceCase(unittest.TestCase):
         self.assertEqual(result, 0)
 
     def source_hashes(self) -> dict[str, str]:
+        return self.source_hashes_from(self.bundle)
+
+    @staticmethod
+    def source_hashes_from(bundle: Path) -> dict[str, str]:
         import hashlib
-        return {path.relative_to(self.bundle).as_posix():
+        return {path.relative_to(bundle).as_posix():
                 hashlib.sha256(path.read_bytes()).hexdigest()
-                for path in sorted(self.bundle.rglob("*")) if path.is_file()}
+                for path in sorted(bundle.rglob("*")) if path.is_file()}
 
     def read_jsonl(self, path: Path) -> list[dict]:
         return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
@@ -200,7 +204,11 @@ class Refusals(ConformanceCase):
         self.assertEqual(freeze_main(["--verify", str(self.bundle)]), 0)
 
     def test_refuses_a_target_that_is_a_symlink_to_a_source_file(self) -> None:
-        """The first version wrote through this link and clobbered the source, then returned 0."""
+        """The first version wrote through this link and clobbered the source, then returned 0.
+
+        With "new directories only" the whole directory is refused before any link matters, which is
+        the point: the link is never followed, whichever rule stops the run first.
+        """
         out = self.tmp / "derived"
         out.mkdir()
         (out / "result.md").symlink_to(self.bundle / "README.md")
@@ -208,6 +216,39 @@ class Refusals(ConformanceCase):
         self.assertEqual(conformance_main(["--bundle", str(self.bundle), "--out", str(out)]), 2)
         self.assertEqual(self.source_hashes(), before, "the source must not be written through a link")
         self.assertEqual(freeze_main(["--verify", str(self.bundle)]), 0)
+
+    def test_refuses_an_existing_output_directory(self) -> None:
+        """An existing derivation is only ever compared, never rewritten."""
+        out = self.tmp / "derived"
+        self.assertEqual(conformance_main(["--bundle", str(self.bundle), "--out", str(out)]), 0)
+        before = {name: (out / name).read_bytes() for name in DERIVED_FILES}
+        self.assertEqual(conformance_main(["--bundle", str(self.bundle), "--out", str(out)]), 2)
+        self.assertEqual({name: (out / name).read_bytes() for name in DERIVED_FILES}, before)
+        self.assertEqual(conformance_main(["--bundle", str(self.bundle), "--out", str(out),
+                                           "--check"]), 0)
+
+    def test_refuses_when_the_bundle_is_inside_the_output(self) -> None:
+        """The regression the operator reproduced: refreshing such an output deleted the bundle."""
+        parent = self.tmp / "container"
+        parent.mkdir()
+        nested = parent / "bundle"
+        shutil.copytree(self.bundle, nested)
+        before = self.source_hashes_from(nested)
+        self.assertEqual(conformance_main(["--bundle", str(nested), "--out", str(parent)]), 2)
+        self.assertTrue(nested.is_dir(), "the source bundle must still exist")
+        self.assertEqual(self.source_hashes_from(nested), before)
+        self.assertEqual(freeze_main(["--verify", str(nested)]), 0)
+
+    def test_does_not_touch_a_fixed_backup_path(self) -> None:
+        """The second regression: a bundle sitting at `<out>.p6-previous` was deleted by cleanup."""
+        bundle = self.tmp / ".derived.p6-previous"
+        shutil.copytree(self.bundle, bundle)
+        before = self.source_hashes_from(bundle)
+        out = self.tmp / "derived"
+        self.assertEqual(conformance_main(["--bundle", str(bundle), "--out", str(out)]), 0)
+        self.assertTrue(bundle.is_dir(), "no fixed backup path may be cleaned up")
+        self.assertEqual(self.source_hashes_from(bundle), before)
+        self.assertEqual(freeze_main(["--verify", str(bundle)]), 0)
 
     def test_refuses_an_out_that_is_a_symlink(self) -> None:
         real = self.tmp / "real-out"
@@ -228,29 +269,31 @@ class Refusals(ConformanceCase):
 class FailureHandling(ConformanceCase):
     def test_a_failed_install_leaves_no_output_and_no_staging(self) -> None:
         out = self.tmp / "derived"
-        with mock.patch.object(bc, "install", side_effect=OSError("simulated install failure")):
+        with mock.patch.object(bc, "install_new",
+                               side_effect=OSError("simulated install failure")):
             self.assertEqual(conformance_main(["--bundle", str(self.bundle), "--out", str(out)]), 1)
         self.assertFalse(out.exists(), "a fresh output must not exist after a failed derivation")
         self.assertEqual(self.leftovers(), [])
 
-    def test_a_failed_refresh_restores_the_previous_derivation(self) -> None:
+    def test_a_failed_install_removes_nothing_but_its_own_staging(self) -> None:
+        """Whatever else sits beside --out must survive a failed run untouched."""
+        bystander = self.tmp / "bystander"
+        bystander.mkdir()
+        (bystander / "keep.txt").write_text("do not delete me\n", encoding="utf-8")
         out = self.tmp / "derived"
-        self.assertEqual(conformance_main(["--bundle", str(self.bundle), "--out", str(out)]), 0)
-        before = {name: (out / name).read_bytes() for name in DERIVED_FILES}
         real_replace = os.replace
 
         def flaky(source, destination, *args, **kwargs):
-            # Compare resolved paths: `main` resolves --out, and on macOS /var is a symlink to
-            # /private/var, so the unresolved test path would never match.
             if (Path(destination).resolve() == out.resolve()
                     and ".p6-conformance-staging-" in str(source)):
-                raise OSError("simulated failure while installing the refresh")
+                raise OSError("simulated failure while installing")
             return real_replace(source, destination, *args, **kwargs)
 
         with mock.patch.object(bc.os, "replace", side_effect=flaky):
             self.assertEqual(conformance_main(["--bundle", str(self.bundle), "--out", str(out)]), 1)
-        self.assertEqual({name: (out / name).read_bytes() for name in DERIVED_FILES}, before,
-                         "the previous derivation must be restored, not left half-replaced")
+        self.assertFalse(out.exists())
+        self.assertEqual((bystander / "keep.txt").read_text(encoding="utf-8"),
+                         "do not delete me\n")
         self.assertEqual(self.leftovers(), [])
 
 
