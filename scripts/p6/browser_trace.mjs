@@ -37,7 +37,7 @@ function headerValue(headers, name) {
   return undefined
 }
 
-const CHROME_CANDIDATES = [
+export const CHROME_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
   process.env.CHROME_PATH ?? '',
@@ -100,7 +100,7 @@ function parseArgs(argv) {
   return args
 }
 
-class Cdp {
+export class Cdp {
   constructor(url) {
     this.url = url
     this.nextId = 1
@@ -148,7 +148,7 @@ class Cdp {
   }
 }
 
-function httpJson(url, method = 'GET') {
+export function httpJson(url, method = 'GET') {
   return new Promise((resolvePromise, reject) => {
     const request = http.request(url, { method }, (response) => {
       let body = ''
@@ -166,7 +166,7 @@ function httpJson(url, method = 'GET') {
   })
 }
 
-async function waitForCdp(port, timeoutMs = 15000) {
+export async function waitForCdp(port, timeoutMs = 15000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
@@ -202,7 +202,7 @@ export class Trace {
   }
 }
 
-async function evaluate(cdp, expression) {
+export async function evaluate(cdp, expression) {
   const result = await cdp.send('Runtime.evaluate', {
     expression,
     returnByValue: true,
@@ -214,7 +214,7 @@ async function evaluate(cdp, expression) {
   return result.result.value
 }
 
-async function waitFor(cdp, expression, { timeoutMs = 12000, label = expression } = {}) {
+export async function waitFor(cdp, expression, { timeoutMs = 12000, label = expression } = {}) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     try {
@@ -245,7 +245,7 @@ async function waitFor(cdp, expression, { timeoutMs = 12000, label = expression 
 }
 
 /** Click the first element matching a visible-text predicate, like a user would. */
-async function clickByText(cdp, selector, text) {
+export async function clickByText(cdp, selector, text) {
   const point = await evaluate(
     cdp,
     `(() => {
@@ -270,7 +270,7 @@ async function clickByText(cdp, selector, text) {
   return point
 }
 
-async function typeInto(cdp, selector, value) {
+export async function typeInto(cdp, selector, value) {
   await evaluate(cdp, `document.querySelector(${JSON.stringify(selector)}).focus()`)
   await cdp.send('Input.insertText', { text: value })
 }
@@ -283,7 +283,7 @@ async function typeInto(cdp, selector, value) {
  * actually received and asserts on *that* — the field is present and null for the withholding
  * case, present and non-null for the human one — and records it in the bundle.
  */
-async function responseBody(cdp, requestId) {
+export async function responseBody(cdp, requestId) {
   try {
     const { body, base64Encoded } = await cdp.send('Network.getResponseBody', { requestId })
     const text = base64Encoded ? Buffer.from(body, 'base64').toString('utf8') : body
