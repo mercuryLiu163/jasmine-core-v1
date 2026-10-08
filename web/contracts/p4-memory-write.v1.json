@@ -7,7 +7,7 @@
     "schema_version_in_p4": 11,
     "derived_by": "scripts/p6/p4_write_spec.py",
     "acceptance": "P4 phase acceptance NOT passed: nothing here was validated against a real P4 Core, and no write may ship before its own permission and audit Gate",
-    "derived_at_ref": "d3231259e53ef85531affc2ff0f58e71847fe19b",
+    "derived_at_ref": "bfa7f86109cf3a0ef1315d2285bae1fc7c4b6f11",
     "derived_at_identical": true,
     "derived_at_differences": []
   },
