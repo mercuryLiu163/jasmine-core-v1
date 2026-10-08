@@ -152,18 +152,32 @@ drill-down is re-run and the criterion re-validated. Record the P6-03a **injecti
 question with the Agent/Context owner (unblocks T04's second half). Ask the P4 owner for the
 interpreter-symlink fix task (`TASK-p4-interpreter-symlink.md`, registered separately).
 
-**Harness follow-ups that must precede that re-run** (found while validating the exit-code gate;
-all non-blocking today but they would misrecord a real-FAIL bundle, so fix them before criterion 1
-can be validated):
-1. `p7_realcore_ui_trace.mjs`'s `detailState()` takes the **last** row labelled `verdict(按记录)`, and
-   every case card renders that same label, so for a run whose run-level verdict differs from its
-   last case the DOM verdict recorded is the *case's*. Real records hide this because their run
-   verdict equals the worst case; a real FAIL run need not.
-2. `render_result()` hardcodes the "0 FAIL cases … BLOCKED" prose and the "criterion 1 —
-   independently confirmed BLOCKED" heading instead of deriving them from `census["criterion_1"]`,
-   so a real FAIL run would produce a `result.md` that contradicts its own machine-readable fields.
-3. `fixture-census.json`'s `measurement` sentence is a static string that asserts disjointness; it is
-   false in the shipped `NEGATIVE-*` bundle even though the computed fields are right.
+**Harness gates closed before that re-run** (all found by the independent review/validation rounds
+and fixed, so the harness is now fit for the tenth record):
+1. the exit code is a gate — `check_exit_code` decides it from the browser records and the python
+   checks, with `False` failing the run and `None` failing it unless the check declares
+   `blocked_is_expected` (criterion 1 is that declared block). Failure negatives:
+   `tests/p6/test_p7_realcore_ui_exit_code.py` and the end-to-end
+   `scripts/p6/p7_realcore_ui_exit_negative.py`, whose falsified bundle is written under
+   `NEGATIVE-*/` with a `NOT-AN-ACCEPTANCE-RUN.md` banner.
+2. the DOM verdict extraction reads the run row's `data-testid="run-verdict"` hook instead of the
+   last `verdict(按记录)` label, which every case card also renders;
+3. the criterion-1 heading, intro, unverified-scope bullet, `scenario.md`, `manifest.json`'s
+   `phase_acceptance`/`validation_root`/`dirty_note`, the census check's name and its `ok`, and the
+   env banner/`descriptor.json` note are all **derived** from the census, so a tree that carries a
+   FAIL case produces a coherent bundle that says so;
+4. the record count is derived: the env builder accepts any usable tree, the driver hands the trace
+   a `p7-trace-expectations.json` read from disk, and the list/paging/ACL/agent assertions compare
+   exact id sets, so the harness produces a bundle for the tenth record too.
+
+**Open advisories on the harness** (recorded, none blocking): the run-verdict hook's fallback can
+still pick a case's verdict if the hook is present but `run.verdict` is null (unreachable through
+the P7-01 detail route, which requires a verdict); a falsified expectations file whose id does not
+exist makes the trace navigate to it and throw rather than record a FAIL for that step (cannot
+happen when the expectations come from the records); nothing unit-tests `render_result`; the
+criterion-1 section body says "finds a FAIL case" where `failure_class`/`failure_output` alone also
+demonstrate it; derived strings render "1 FAIL cases"; and each trace run leaves a small
+`$TMPDIR/p6-03c-chrome-*` profile directory behind.
 
 ## 7. 明确不做
 

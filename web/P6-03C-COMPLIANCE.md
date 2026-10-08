@@ -98,6 +98,37 @@ configured run root**, after which criterion 1 is re-validated against that real
 
 All four reports are in `validation-runs/p6/` (gitignored), together with the harness bundles.
 
+## The harness as a gate
+
+The drill-down is evidence, so the harness that produces it had to become a gate rather than a
+script that usually passes. Four independent review/validation rounds drove that, and each finding
+was fixed and re-gated:
+
+* **The exit code decides on the recorded checks.** It originally consulted the browser trace's own
+  exit, the tree comparison, the token scan and the verdict-upgrade flag but **not**
+  `python_checks`, so a run whose python checks failed still exited 0. `check_exit_code` now
+  aggregates both lists: `True` passes, `False` fails the run, and `None` fails it unless the check
+  declares `blocked_is_expected` — which is exactly P7-01 criterion 1, printed as BLOCKED and never
+  as a pass. Negatives: `tests/p6/test_p7_realcore_ui_exit_code.py` (pure) and
+  `scripts/p6/p7_realcore_ui_exit_negative.py` (end to end: it plants a fixture id in a temporary
+  records tree and requires a non-zero harness exit, writing the falsified bundle under
+  `NEGATIVE-*/` with a `NOT-AN-ACCEPTANCE-RUN.md` banner).
+* **The DOM verdict is read from the run's own row** (`data-testid="run-verdict"`), not from the
+  last `verdict(按记录)` label — every case card renders that label too, so a run whose run-level
+  verdict differed from its last case was recorded with the case's verdict. Proven by running the
+  pre-fix extraction on the same planted case.
+* **No conclusion is hard-coded.** The criterion-1 heading, the `result.md` intro and
+  unverified-scope bullet, `scenario.md`, `manifest.json`'s `phase_acceptance`, `validation_root`
+  and `dirty_note`, the census check's name and `ok`, and the env banner/`descriptor.json` note are
+  all derived from the census, so a records tree that carries a FAIL case produces a bundle that
+  says so coherently (verified by simulating one on a temporary copy) and a clean tree still reads
+  BLOCKED.
+* **The record count is derived.** The env builder no longer aborts on any count but a usable tree;
+  the driver hands the trace a `p7-trace-expectations.json` read from disk; and the list, paging,
+  ACL and agent checks compare exact id sets, so the harness produces a bundle for the tenth record
+  that unblocks criterion 1. A ten-record temporary tree passes 24/24, and perturbing one expected
+  id still fails the run — the assertions were strengthened, not loosened.
+
 ## Advisory follow-ups (recorded, not blocking)
 
 * With `visibility` absent — a Core older than the frozen contract — the empty-state text falls back to
@@ -111,7 +142,12 @@ All four reports are in `validation-runs/p6/` (gitignored), together with the ha
 * `manifest.json`'s `dashboard.dirty_note` says the views were uncommitted; it is true of the run that
   happened before `3577987` was committed and stale afterwards.
 * Cosmetics: two literal `**` markers reach the DOM in the duplicate note; `token-scan.json.not_scanned`
-  is a literal list; one `_LOG.append` is now redundant.
+  is a literal list; one `_LOG.append` is now redundant; derived strings render "1 FAIL cases".
+* Harness: the run-verdict hook's fallback can still pick a case's verdict if the hook is present
+  but `run.verdict` is null (unreachable through the P7-01 detail route, which requires it); a
+  falsified expectations file naming a record that does not exist makes the trace throw rather than
+  record a FAIL for that step (impossible when the expectations come from disk); nothing unit-tests
+  `render_result`; and each trace run leaves a small `$TMPDIR/p6-03c-chrome-*` profile directory.
 
 ## Note on the evidence directory
 
