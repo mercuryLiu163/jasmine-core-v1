@@ -24,6 +24,9 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from test_contract_provenance_stamp import assert_derived_at_stamp  # noqa: E402
 
 SPEC_PATH = ROOT / "web" / "contracts" / "p4-memory-write.v1.json"
 READ_PATH = ROOT / "web" / "contracts" / "p4-memory-read.v1.json"
@@ -43,6 +46,17 @@ class P4WriteSpecIsStillP4s(unittest.TestCase):
         self.assertEqual(PINNED, READ["source"]["ref"],
                          "the write spec and the read contract must pin the same commit, or the "
                          "two halves describe different P4s")
+
+    def test_the_integration_stamp_is_absent_or_consistent(self) -> None:
+        """The stamp adds provenance without replacing the pinned dependency.
+
+        It is absent until the integration worktree regenerates the contract; once present it
+        must be complete, name only a full SHA, and its `identical` flag must agree with its own
+        difference list.
+        """
+        assert_derived_at_stamp(
+            self, SPEC["source"],
+            dependency_ref="0c4f8f0e2118711ac9aa2a7006fddc6982962248")
 
     def test_the_contract_keeps_p4_acceptance_unpassed_and_points_at_the_status_doc(self) -> None:
         """The contract records P4's facts; our implementation status lives elsewhere.

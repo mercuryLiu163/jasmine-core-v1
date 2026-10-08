@@ -26,8 +26,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 sys.path.insert(0, str(ROOT / "scripts" / "p6"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from jasmine_core.api.handlers import ROUTES  # noqa: E402
+from test_contract_provenance_stamp import assert_derived_at_stamp  # noqa: E402
 
 SNAPSHOT_PATH = ROOT / "web" / "contracts" / "p3-continuity-read.v1.json"
 ALLOWLIST_PATH = ROOT / "web" / "server" / "core-paths.json"
@@ -72,6 +74,17 @@ class P3ContractSnapshot(unittest.TestCase):
         self.assertEqual(source["derived_by"], "scripts/p6/p3_contract.py")
         self.assertGreater(source["schema_version_in_p3"], 8,
                            "P3 raises the schema; the baseline is 8")
+
+    def test_the_integration_stamp_is_absent_or_consistent(self) -> None:
+        """The stamp adds provenance without replacing the P3 branch and commit.
+
+        It is absent until the integration worktree regenerates the contract; once present it
+        must be complete, name only a full SHA, and its `identical` flag must agree with its own
+        difference list.
+        """
+        assert_derived_at_stamp(
+            self, self.snapshot["source"], dependency_ref=P3_REF,
+            dependency_commit="7016dabb8926d6bd6599f1f56b8f39cbda253ebf")
 
     def test_snapshot_is_the_four_read_endpoints_only(self) -> None:
         routes = self.snapshot["read_routes"]

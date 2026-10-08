@@ -18,6 +18,10 @@ Same discipline as `p4_contract.py`, for the same reasons:
   they were derived would be the overclaim this project keeps having to correct;
 * where the pinned commit is absent, `--check` exits **2**, not 0.
 
+`--derived-at <ref>` re-derives at that ref as well and records the integration provenance
+stamp (`source.derived_at_*`) alongside this dependency's `source.ref`. Without it the stamp is
+absent, so the frozen spec and every existing invocation stay byte-identical.
+
 One thing this deliberately does **not** do: decide whether b2 should be built. It records what P4
 offers and what would have to be true before a UI may offer it.
 """
@@ -45,6 +49,11 @@ from p4_contract import (  # noqa: E402
     _id_prefix,
     _routes,
     show,
+)
+from contract_provenance import (  # noqa: E402
+    apply_derived_at,
+    resolve_commit,
+    without_derived_at,
 )
 
 #: Routes that take a body but write nothing on their own. `reflect` runs the engine's generator,
@@ -291,6 +300,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--print", dest="show", action="store_true")
+    parser.add_argument("--derived-at", default=None, metavar="REF",
+                        help="also derive at this git ref (normally the integration commit) and "
+                             "record the provenance stamp in `source`")
     args = parser.parse_args(argv)
 
     try:
@@ -300,6 +312,20 @@ def main(argv: list[str] | None = None) -> int:
               f"re-derived ({error.__class__.__name__}). A drift guard that passes because it "
               f"could not look is worse than no guard.", file=sys.stderr)
         return 2
+
+    if args.derived_at:
+        try:
+            resolved_at = resolve_commit(args.derived_at)
+            integration = derive(resolved_at)
+        except subprocess.CalledProcessError as error:
+            print(f"--derived-at {args.derived_at!r} is not in this checkout, so the write spec "
+                  f"cannot be re-derived there ({error.__class__.__name__}).", file=sys.stderr)
+            return 2
+        except ValueError as error:
+            print(f"--derived-at {args.derived_at!r} is not a full commit SHA: {error}",
+                  file=sys.stderr)
+            return 2
+        apply_derived_at(derived, resolved_at, integration)
 
     if args.show:
         json.dump(derived, sys.stdout, indent=2, ensure_ascii=False)
@@ -316,12 +342,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{SNAPSHOT.relative_to(ROOT)} does not exist; run --write", file=sys.stderr)
             return 1
         frozen = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
-        if frozen == derived:
+        # The stamp records where the content was re-derived, not what it is: strip only the
+        # stamp, so `source.ref`/`source.commit` are still compared and a wrong pin fails.
+        frozen_content = without_derived_at(frozen)
+        derived_content = without_derived_at(derived)
+        if frozen_content == derived_content:
             print(f"P4 write spec matches {args.ref}")
             return 0
         print(f"P4 write spec DRIFTED from {args.ref}", file=sys.stderr)
-        for key in sorted(set(frozen) | set(derived)):
-            if frozen.get(key) != derived.get(key):
+        for key in sorted(set(frozen_content) | set(derived_content)):
+            if frozen_content.get(key) != derived_content.get(key):
                 print(f"  differs: {key}", file=sys.stderr)
         return 1
     parser.error("choose --write, --check or --print")
