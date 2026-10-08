@@ -375,10 +375,11 @@ Recorded as open follow-ups rather than fixed here: no unit test covers the P4 U
 derivation, and its `480`-character window is still a hand-copied duplicate of `RawText.tsx`.
 
 **Documentation sync.** The status text in this file and in `web/P6-03A-COMPLIANCE.md` was updated in
-documentation-only commits (`8c153b3`, `fd0e1f8`, `8f393db`), each changing only those two Markdown
-files relative to the commit it sits on. The current tip is
-`3102cbc7773e727a9b0228a9af3e78960d277903` and the battery the table above reports was run and
-frozen at `f323c779bc91893b5908218d8c5c148619159180`: `git diff --name-only f323c779… 3102cbc`
-lists only those two Markdown files, so the results still bind the same code. The earlier
-`e7f322ae…` battery is a separate binding with its own bundles; the harness commit `caeb947` sits
-between it and the current tip, and its battery was re-run rather than assumed.
+documentation-only commits: `8c153b3` and `fd0e1f8` after the first battery, then `8f393db`,
+`6bdc52d` and any later one after the post-review battery. Each changed only those two Markdown
+files, so the checkable form of "the documentation did not move the code" is
+`git diff --name-only f323c779bc91893b5908218d8c5c148619159180… HEAD`, which lists exactly them.
+This text names the acceptance commit rather than the tip on purpose: a commit that named its own
+tip would go stale the moment it was committed. The earlier `e7f322ae…` battery is a separate
+binding with its own bundles, and the harness commit `caeb947` sits between it and the current code
+— its battery was re-run, not assumed.
