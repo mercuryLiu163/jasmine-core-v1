@@ -592,6 +592,7 @@ function MemoryItemBody({ item }: { item: MemoryItem }): JSX.Element {
           { label: 'recall_count', value: String(item.recall_count) },
           { label: 'last_recalled_at', value: formatTimestamp(item.last_recalled_at) },
           { label: 'lifecycle_reason', value: item.lifecycle_reason ?? '—' },
+          { label: 'last_error_code', value: <code>{item.last_error_code ?? '—'}</code> },
           { label: 'remote_deleted_at', value: formatTimestamp(item.remote_deleted_at) },
           { label: 'created_at', value: formatTimestamp(item.created_at) },
           { label: 'updated_at', value: formatTimestamp(item.updated_at) },
@@ -603,6 +604,12 @@ function MemoryItemBody({ item }: { item: MemoryItem }): JSX.Element {
           { label: 'evidence_ids', value: <code>{item.evidence_ids.length} 条</code> },
         ]}
       />
+      {/* P4 withholds this from a non-human actor by nulling the value and keeping the key,
+          so rendering it conditionally is what makes the withholding visible rather than
+          papered over with a placeholder. */}
+      {item.safe_error_summary ? (
+        <RawText value={item.safe_error_summary} label="safe_error_summary" machine={false} />
+      ) : null}
       {/* The stored text is Core's own sanitized copy; it renders as text, never markup. */}
       <RawText value={item.sanitized_text} label="sanitized_text" machine={false} />
       <JsonBlock value={item.evidence_ids} label="evidence_ids" />

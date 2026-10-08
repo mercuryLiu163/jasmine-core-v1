@@ -409,6 +409,41 @@ describe('the view renders the engine text exactly as Core sent it', () => {
     expect(panel.textContent).not.toContain('simulated text')
   })
 
+  it('renders an item engine summary when Core sent one', async () => {
+    const user = userEvent.setup()
+    await enter(user, `#/memory/items/${ITEM}`, {
+      ...SIGNED_IN,
+      ['GET /v1/memory/items/' + ITEM]: {
+        body: {
+          memory: item({ safe_error_summary: 'the engine rejected this item',
+                         last_error_code: 'engine_rejected' }),
+          sources: [], jobs: [], recallable: true, lifecycle: lifecycle(),
+          engine_claim: 'x', non_authoritative: true,
+        },
+      },
+    })
+    const panel = await screen.findByRole('region', { name: /Memory Item/ })
+    await waitFor(() => expect(panel.textContent).toContain('the engine rejected this item'))
+    expect(within(panel).getByText('safe_error_summary')).toBeTruthy()
+  })
+
+  it('renders nothing where an item engine summary was withheld', async () => {
+    const user = userEvent.setup()
+    await enter(user, `#/memory/items/${ITEM}`, {
+      ...SIGNED_IN,
+      ['GET /v1/memory/items/' + ITEM]: {
+        body: {
+          memory: item({ safe_error_summary: null, last_error_code: 'engine_rejected' }),
+          sources: [], jobs: [], recallable: true, lifecycle: lifecycle(),
+          engine_claim: 'x', non_authoritative: true,
+        },
+      },
+    })
+    const panel = await screen.findByRole('region', { name: /Memory Item/ })
+    await waitFor(() => expect(panel.textContent).toContain('engine_rejected'))
+    expect(within(panel).queryByText('safe_error_summary')).toBeNull()
+  })
+
   it('renders the sentinel Core actually sent', async () => {
     // The control: if this passed with the text withheld, the test above would prove nothing.
     const user = userEvent.setup()

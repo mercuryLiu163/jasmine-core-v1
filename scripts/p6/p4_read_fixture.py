@@ -89,8 +89,10 @@ def health_payload(contract: dict[str, Any]) -> dict[str, Any]:
         "features": {"recall": True},
         "last_check_at": "2026-10-07T12:00:00Z",
         "last_success_at": "2026-10-07T12:00:00Z",
-        "last_error_code": None,
-        "safe_error_summary": None,
+        "last_error_code": "engine_unavailable",
+        # Text here for the same reason as the FAILED job: a fixture whose engine text is
+        # already null cannot show that the withholding rule reaches this route.
+        "safe_error_summary": "fixture: the engine is unreachable (simulated text)",
         # `jobs` and `items` are count maps, so they carry their own key sets.
         "jobs": {key: 0 for key in nested["job_counts"]},
         "items": {key: 0 for key in nested["health_items"]},
@@ -198,8 +200,9 @@ def item_row(contract: dict[str, Any], *, ident: str, status: str = "ACTIVE") ->
         "revision": 1,
         "engine_state": "RETAINED",
         "receipt": None,
-        "last_error_code": None,
-        "safe_error_summary": None,
+        "last_error_code": "engine_rejected",
+        # Text so the withholding rule is observable on the item routes too.
+        "safe_error_summary": "fixture: the engine rejected this item (simulated text)",
         "remote_deleted_at": None,
         "lifecycle_reason": None,
         "last_recalled_at": "2026-10-07T12:02:00Z",
@@ -227,8 +230,8 @@ def trace_row(contract: dict[str, Any], *, ident: str, mode: str = "recall") -> 
         "banks": [f"bank_{ID_BODY}"],
         "budget_tokens": 512,
         "used_tokens": 128,
-        "error_code": None,
-        "safe_error_summary": None,
+        "error_code": "engine_degraded",
+        "safe_error_summary": "fixture: recall was degraded (simulated text)",
         "created_at": "2026-10-07T12:03:00Z",
     })
     assert set(trace) == set(contract["nested_fields"]["trace"]), (
@@ -299,7 +302,8 @@ def item_payload(contract: dict[str, Any]) -> dict[str, Any]:
         "memory": item_row(contract, ident=ITEM),
         "sources": [{"source_event_id": EVENT, "role": "origin",
                      "at": "2026-10-07T12:00:00Z"}],
-        "jobs": [job_row(contract, ident=JOB)],
+        "jobs": [job_row(contract, ident=JOB),
+                 job_row(contract, ident=JOB_2, status="FAILED")],
         "recallable": True,
         "lifecycle": lifecycle_summary(contract),
         "engine_claim": "fixture: Core recorded the retain; the engine has not been asked.",

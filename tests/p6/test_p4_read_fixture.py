@@ -327,19 +327,43 @@ class OverHttp(unittest.TestCase):
         self.assertIsNotNone(job["job"]["safe_error_summary"])
         self.assertIsNotNone(failed["safe_error_summary"])
 
-    def test_an_agent_key_has_the_engine_text_withheld(self) -> None:
-        """P4's `_withhold_engine_text`: the key stays, the value does not."""
-        _, job, _ = call(self.port, f"/v1/memory/jobs/{fixture.JOB_2}", "agent")
-        self.assertIn("safe_error_summary", job["job"])
-        self.assertIsNone(job["job"]["safe_error_summary"])
+    def test_every_read_withholds_the_engine_text_from_an_agent(self) -> None:
+        """P4's `_withhold_engine_text` runs inside `_respond`, so it covers every handler.
 
-        _, listing, _ = call(self.port, "/v1/memory/jobs", "agent")
-        failed = next(row for row in listing["jobs"] if row["job_id"] == fixture.JOB_2)
-        self.assertIsNone(failed["safe_error_summary"])
-        # Nested occurrences too: the same job appears inside an item's jobs.
-        _, item, _ = call(self.port, f"/v1/memory/items/{fixture.ITEM}", "agent")
-        for nested in item["jobs"]:
-            self.assertIsNone(nested["safe_error_summary"])
+        Checked on all seven reads, not a sample: the claim is that the walker is applied
+        everywhere, and three routes would not support it. Each payload must carry the key
+        and lose only its value.
+        """
+        def summaries(payload, found):
+            if isinstance(payload, dict):
+                for key, value in payload.items():
+                    if key == "safe_error_summary":
+                        found.append(value)
+                    else:
+                        summaries(value, found)
+            elif isinstance(payload, list):
+                for entry in payload:
+                    summaries(entry, found)
+            return found
+
+        for path in ("/v1/memory/health", "/v1/memory/jobs",
+                     f"/v1/memory/jobs/{fixture.JOB_2}", "/v1/memory/items",
+                     f"/v1/memory/items/{fixture.ITEM}", "/v1/memory/traces",
+                     f"/v1/memory/traces/{fixture.TRACE}"):
+            with self.subTest(path=path):
+                agent_status, agent_body, _ = call(self.port, path, "agent")
+                human_status, human_body, _ = call(self.port, path)
+                self.assertEqual(agent_status, 200, agent_body)
+                self.assertEqual(human_status, 200, human_body)
+                # The human key must see at least one non-null summary, or withholding on
+                # this route would be unobservable and the assertion below vacuous.
+                human_seen = summaries(human_body, [])
+                self.assertTrue(any(value is not None for value in human_seen),
+                                f"{path} carries no engine text, so withholding proves nothing")
+                agent_seen = summaries(agent_body, [])
+                self.assertTrue(agent_seen, f"{path} lost the key entirely: P4 nulls it")
+                self.assertTrue(all(value is None for value in agent_seen),
+                                f"{path} leaked engine text to an agent: {agent_seen}")
 
     def test_withholding_does_not_drop_the_field(self) -> None:
         """A dropped key would change the shape; P4 nulls the value and keeps the key."""
