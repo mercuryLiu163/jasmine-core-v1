@@ -142,9 +142,12 @@ from the click-trace's prose — which is exactly what the P6-03b1 bundle could 
    built from `0c4f8f0e2118711ac9aa2a7006fddc6982962248` with `P6_ENABLE_P4_WRITES=1`, and re-run
    this Gate's assertions against it. Until then, 9b is unmet and the status is PARTIAL /
    DEPENDENCY_PENDING.
-2. **Both independent passes are done** and recorded in the evidence index. The validation pass ran
-   against `b6fcee8`; its two findings are fixed and the final bundle binds `8be4352`, which contains
-   those fixes. It did not itself re-run against `8be4352` — the difference between the two commits
-   is the review fixes plus this documentation, and the suites and the Gate were re-run here after
-   them (328 web, 521 Python, 16/16 twice, 4/4 off). Stated rather than glossed: the *independent*
-   pass predates the last two commits.
+2. **Both independent passes are done, and the follow-up binds the final SHA.** The validation pass
+   first ran against `b6fcee8` and returned REPRODUCED for every claim it tested, with two findings
+   (the credential leak, and post-bundle `web/src` drift). Both are fixed; the current bundle binds
+   `8be4352`, which contains the fixes, and nothing under `web/src/`, `web/server/` or `src/` has
+   changed since. The follow-up pass then re-verified at the final SHA: suites (521 Python, 328 web,
+   `tsc` clean), bundle integrity 45/45, no full token in the bundle, a **rebuild from
+   `git archive 8be4352` matching the manifest's asset digest and tree exactly**, the three
+   previously-vacuous records now carrying distinguishing detail, and a full Gate run of its own at
+   `70ae389` with a step sequence identical to the frozen bundle's. No open discrepancy remains.
