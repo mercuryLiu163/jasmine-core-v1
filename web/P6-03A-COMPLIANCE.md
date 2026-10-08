@@ -288,13 +288,40 @@ reported as ignored rather than dropped in silence.
 * P6-03b, and anything that depends on the P4 memory provider beyond rendering its
   non-authoritative output.
 * Any P3 write, and any view for the four POST routes.
-* Verification against real P3, or against a v8 database migrated to schema 10.
+* **The Context Pack read against real P3.** The other three routes are now verified against an
+  isolated real P3 Core (`validation-runs/p6/20261008T063605Z-p6-03a-realcore/`, 23 passed / 0 failed
+  / 3 blocked), but P3's `ContextBuilder` requires its pinned tokenizer (`tiktoken` plus a BPE asset
+  whose SHA-256 `context/tokens.py` fixes). Neither is present in this environment, so **no Context
+  Pack row exists** and those three checks are recorded **BLOCKED** with that reason. Nothing was
+  fabricated in its place; the route's shape remains covered by the frozen contract and the
+  simulated fixture.
+* Verification against a v8 database migrated to schema 10.
 * Any change to `src/`, the schema, or the existing services. P6-03a touches `web/`,
   `tests/p6/` and `scripts/p6/` only.
 
+## Real-P3 verification (added after this slice was delivered)
+
+`scripts/p6/p3_realcore_env.py` starts an **isolated real P3 Core** at the pinned commit: its own
+tree, database and loopback port, checkpoints and resumes created by P3's own `ContinuityStore`,
+keys minted by P3's `auth.issue_key`. `scripts/p6/run_p3_realcore.py` runs a Core-level matrix and
+then the browser pass (`browser_trace.mjs --p3-reads --real-core`) against it, and freezes a bundle.
+
+Result: **23 passed, 0 failed, 3 blocked** (`20261008T063605Z-p6-03a-realcore/`). Verified for real:
+checkpoint by id and `latest`, the empty Task, the resume by id, the resume note P3 builds from the
+checkpoint's own note, switching between two real checkpoints, Core's own `not_found` and
+`invalid_request`, both scope refusals (the missing route scope, and the `checkpoint:read` P3's
+handler adds on top of the route table), no simulation label in the traffic, and `/v1/health`
+reporting P3's schema. The three blocked rows are the Context Pack, for the tokenizer reason above.
+
+What that still does not establish: anything about the Context Pack's real shape, the P3 Gate's own
+acceptance (its own runner needs a real deployment of the native lifecycle), or the integration
+baseline — re-deriving the contracts at the final integration commit is a separate step, rehearsed
+in `web/REAL-CORE-ACCEPTANCE-PLAN.md` §11.
+
 ## Standing status
 
-`P6-03a: PARTIAL / DEPENDENCY_PENDING` — the views are delivered and exercised against a
-labelled simulated fixture, and the missing dependency is unmistakable in the product, the
-proxy, the contract and this document. **This is not P3 verification and not P6
-completion.** P6-02 remains PARTIAL for its own reasons; see `P6-02-COMPLIANCE.md`.
+`P6-03a: PARTIAL / DEPENDENCY_PENDING` — the views are delivered and, since the real-P3 run, also
+exercised against real P3 code for three of the four routes; the Context Pack remains blocked on its
+pinned tokenizer, and the missing dependency is unmistakable in the product, the proxy, the contract
+and this document. **P3 phase acceptance is not claimed and P6 is not complete.** P6-02 remains
+PARTIAL for its own reasons; see `P6-02-COMPLIANCE.md`.
