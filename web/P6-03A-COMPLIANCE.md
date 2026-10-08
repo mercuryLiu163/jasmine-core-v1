@@ -148,7 +148,8 @@ live allowlist, so enabling them cannot happen by drift or by a careless edit to
 
 ## Evidence
 
-* Browser click-through Gate, **13/13**, three times with identical step sequences:
+* Browser click-through Gate, **13/13**, three times with identical step sequences, run
+  from an isolated `git archive` of the commit with its own fixture, proxy and ports:
   `validation-runs/p6/<stamp>-p6-03a-clickthrough/` (+ `-stability1`, `-stability2`), with
   `README.md`, `BUNDLE-FROZEN.json`, `click-trace.jsonl`, `browser-requests.jsonl` and
   screenshots `21`–`24`. The current binding and the superseded bundles are registered in
@@ -158,8 +159,9 @@ live allowlist, so enabling them cannot happen by drift or by a careless edit to
 * Component tests: `web/tests/p3Views.test.tsx` (18), `web/tests/p3Reads.test.ts` (15),
   `web/tests/p3ReadsCoreProxy.test.ts` (9) — the last covers the Vite-plugin host, which had
   no test until review pointed out that only `serve.mjs` was gated by one.
-* Contract tests: `tests/p6/test_p3_contract_snapshot.py` (15),
-  `tests/p6/test_p3_read_fixture.py` (14).
+* Contract tests: `tests/p6/test_p3_contract_snapshot.py` (16),
+  `tests/p6/test_p3_read_fixture.py` (15) — 31 in total, including two that pin the scope
+  *order* Core would report, not only the set.
 
 ## What independent review changed
 
