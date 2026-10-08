@@ -5,24 +5,30 @@ The taskbook's §8 lists what every bundle must contain: `manifest.json`, `scena
 `click-trace.jsonl`, masked `api-requests.jsonl` / `api-responses.jsonl`,
 `truth-before-after.json`, the relevant source mappings, `screenshots/`, raw test output and
 `result.md`. The bundles this project produced carry a different but overlapping set
-(`BUNDLE-FROZEN.json`, `README.md`, `click-trace.jsonl`, `browser-requests.jsonl`,
-`evidence.json`, raw logs, screenshots). This tool closes that naming/set gap **without touching a
-frozen bundle and without inventing anything**:
+(`BUNDLE-FROZEN.json`, `README.md`, `click-trace.jsonl`, `browser-requests.jsonl`, `evidence.json`,
+raw logs, screenshots). This tool closes that naming/set gap **without touching a frozen bundle and
+without inventing anything**:
 
-* it writes into a **separate derived directory** and refuses to run if the output is the bundle or
-  inside it;
+* it writes into a **separate derived directory** and refuses if the output is the bundle, is inside
+  it, or is a symlink;
 * it refuses a bundle that is not frozen, and it re-verifies every file against the bundle's own
-  `BUNDLE-FROZEN.json` (the same check `freeze_bundle.py --verify` performs) before deriving —
-  **a tampered, missing or added source file aborts the derivation**;
-* it records the source bundle, the acceptance commit and the sha256 of every source file in the
-  derived `manifest.json`, so a reader can tie the derived files to exact bytes;
-* where the §8 file has no recorded content it writes an explicit `not-recorded` marker with the
+  `BUNDLE-FROZEN.json` (the same check `freeze_bundle.py --verify` performs) before deriving — a
+  tampered, missing or added source file aborts the derivation;
+* it carries **every field** of every source record it renders (request bodies included) and
+  computes a `field_accounting` block in the derived `manifest.json`; anything it could not carry is
+  listed there and in `NOTES.md` rather than dropped silently;
+* where a §8 file has no recorded content it writes an explicit `not-recorded` marker naming the
   files it looked at. It never synthesises a request, a response or a Truth comparison;
 * the derived `result.md` **restates** the counts the source bundle records and says in words that
-  format conformance is not acceptance: the binding verdict stays the source bundle's.
+  format conformance is not acceptance: the binding verdict stays the source bundle's;
+* it never writes through a link: the derived files are staged in a private directory and moved into
+  place with `os.replace`, so a symlink at a target name cannot redirect a write into the source (a
+  pre-existing symlink or non-file target is refused), and a failure never leaves a half-written
+  output directory — a fresh output appears by one atomic directory rename, and refreshing an
+  existing one moves the old directory aside first and restores it if the move fails.
 
-Idempotent by construction: no timestamps, no environment-dependent fields, deterministic key and
-file order. Two runs over the same bundle are byte-identical (`--check` proves it).
+Idempotent by construction: no timestamps, no environment-dependent fields, deterministic walk and
+key order. Two runs over the same bundle are byte-identical (`--check` proves it).
 
 Usage::
 
@@ -31,8 +37,14 @@ Usage::
     python3.13 scripts/p6/bundle_conformance.py --bundle <bundle> --out <dir> \
         --expect-commit f323c779bc91893b5908218d8c5c148619159180
 
-Exit codes: 0 derived / identical; 1 source failed verification or `--check` differs; 2 not frozen,
-bad paths, or a usage problem. "Could not look" is never 0.
+Exit codes: 0 derived / identical; 1 source failed verification, a write failed, or `--check`
+differs; 2 not frozen, bad paths, or a usage problem. "Could not look" is never 0.
+
+History: the first version of this tool (reviewed and reproduced against by the operator) dropped
+every non-empty request body (`browser-requests.jsonl`'s `postData`, `evidence.json`'s
+`request_body`) and every record in nested files such as `stability/`, wrote through a symlink placed
+at a target name, and claimed a cleanup it did not implement. All three are fixed here and covered by
+tests; the derivation produced by the first version is superseded, not edited.
 """
 
 from __future__ import annotations
@@ -40,6 +52,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -49,7 +63,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from freeze_bundle import verify as verify_bundle  # noqa: E402
 
 GENERATOR = "scripts/p6/bundle_conformance.py"
-GENERATOR_VERSION = "1"
+GENERATOR_VERSION = "2"
 MANIFEST = "BUNDLE-FROZEN.json"
 
 #: The files this tool writes, in a fixed order, so a diff between two derived directories is stable.
@@ -62,6 +76,10 @@ DERIVED_FILES = (
     "result.md",
     "NOTES.md",
 )
+
+
+class Refused(Exception):
+    """A precondition failed; nothing was written."""
 
 
 def sha256_file(path: Path) -> str:
@@ -85,7 +103,53 @@ def not_recorded(reason: str, checked: list[str]) -> dict[str, Any]:
     return {"status": "not-recorded", "reason": reason, "sources_that_were_checked": checked}
 
 
-def derive_manifest(bundle: Path, source: dict[str, Any], commit: str) -> dict[str, Any]:
+def source_records(bundle: Path) -> dict[str, list[dict[str, Any]]]:
+    """Every record the bundle carries, by source file, including nested sub-runs.
+
+    A bundle may hold more than one run (b2 keeps its `stability/` repeat and its `writes-off/` run
+    as subdirectories). Walking the whole tree means no record is silently left out of the derived
+    files; each line names the file it came from.
+    """
+    found: dict[str, list[dict[str, Any]]] = {}
+    for path in sorted(bundle.rglob("browser-requests.jsonl")):
+        if path.is_file():
+            found[path.relative_to(bundle).as_posix()] = read_jsonl(path)
+    for path in sorted(bundle.rglob("evidence.json")):
+        if path.is_file():
+            payload = read_json(path)
+            if isinstance(payload, dict) and isinstance(payload.get("calls"), list):
+                found[f"{path.relative_to(bundle).as_posix()}:calls"] = [
+                    call for call in payload["calls"] if isinstance(call, dict)]
+    return found
+
+
+def carry(records: list[dict[str, Any]], *, source: str, side: str) -> list[dict[str, Any]]:
+    """Every field of every record, verbatim, plus where it came from and which side it is."""
+    return [{"recorded_in": source, "side": side, **record} for record in records]
+
+
+def accounting(records: dict[str, list[dict[str, Any]]],
+               carried: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
+    """What each source file's records contained, and whether every field was carried."""
+    report: dict[str, Any] = {}
+    for source, rows in sorted(records.items()):
+        source_keys = sorted({key for row in rows for key in row})
+        carried_keys = sorted({key for row in carried.get(source, []) for key in row})
+        report[source] = {
+            "records": len(rows),
+            "source_fields": source_keys,
+            "carried_fields": carried_keys,
+            "not_carried": [key for key in source_keys if key not in carried_keys],
+            "records_with_a_non_empty_body": sum(
+                1 for row in rows
+                if any(row.get(key) not in (None, "", "null")
+                       for key in ("postData", "request_body", "body"))),
+        }
+    return report
+
+
+def derive_manifest(bundle: Path, source: dict[str, Any], commit: str,
+                    field_accounting: dict[str, Any]) -> dict[str, Any]:
     files = {entry["path"]: entry["sha256"] for entry in source.get("files", [])}
     return {
         "generator": {"path": GENERATOR, "version": GENERATOR_VERSION,
@@ -102,6 +166,8 @@ def derive_manifest(bundle: Path, source: dict[str, Any], commit: str) -> dict[s
                           "product_bundle": source.get("product_bundle")},
         "source_files": dict(sorted(files.items())),
         "source_manifest_sha256": sha256_file(bundle / MANIFEST),
+        "field_accounting": field_accounting,
+        "not_carried_total": sum(len(entry["not_carried"]) for entry in field_accounting.values()),
         "derived_files": list(DERIVED_FILES),
     }
 
@@ -119,81 +185,40 @@ def derive_scenario(bundle: Path, source: dict[str, Any]) -> str:
         "the source's, not a re-judgement.",
         "",
     ]
-    trace = bundle / "click-trace.jsonl"
-    evidence = bundle / "evidence.json"
-    if trace.is_file():
-        records = read_jsonl(trace)
-        lines += [f"## Browser records ({len(records)}), from `click-trace.jsonl`", ""]
+    traces = sorted(path for path in bundle.rglob("click-trace.jsonl") if path.is_file())
+    for path in traces:
+        relative = path.relative_to(bundle).as_posix()
+        records = read_jsonl(path)
+        lines += [f"## Browser records ({len(records)}), from `{relative}`", ""]
         for index, record in enumerate(records, start=1):
             mark = "BLOCKED" if record.get("ok") is None else ("PASS" if record.get("ok") else "FAIL")
             lines.append(f"{index}. {mark} — {record.get('step')}")
         lines.append("")
-    other_traces = sorted(p.relative_to(bundle).as_posix() for p in bundle.rglob("click-trace.jsonl")
-                          if p != trace)
-    for relative in other_traces:
-        records = read_jsonl(bundle / relative)
-        lines += [f"## Records in `{relative}` ({len(records)})", ""]
-        for index, record in enumerate(records, start=1):
-            mark = "BLOCKED" if record.get("ok") is None else ("PASS" if record.get("ok") else "FAIL")
-            lines.append(f"{index}. {mark} — {record.get('step')}")
-        lines.append("")
-    if evidence.is_file():
-        payload = read_json(evidence)
+    for path in sorted(candidate for candidate in bundle.rglob("evidence.json")
+                       if candidate.is_file()):
+        relative = path.relative_to(bundle).as_posix()
+        payload = read_json(path)
         entries = payload.get("entries") or payload.get("core_entries") or []
-        lines += [f"## Core checks ({len(entries)}), from `evidence.json`", ""]
+        lines += [f"## Core checks ({len(entries)}), from `{relative}`", ""]
         for index, entry in enumerate(entries, start=1):
             mark = "BLOCKED" if entry.get("ok") is None else ("PASS" if entry.get("ok") else "FAIL")
             lines.append(f"{index}. {mark} — {entry.get('check') or entry.get('id')}")
         lines.append("")
-    if not trace.is_file() and not evidence.is_file() and not other_traces:
+    if not traces and not list(bundle.rglob("evidence.json")):
         lines += ["No record list was found in this bundle; the run's actions are not enumerated here.",
                   "See the bundle's own `README.md` and raw logs.", ""]
     return "\n".join(lines)
 
 
-def derive_requests(bundle: Path, source: dict[str, Any]) -> tuple[list[dict], list[dict]]:
+def derive_requests(records: dict[str, list[dict[str, Any]]]) -> tuple[list[dict], list[dict]]:
     requests: list[dict] = []
     responses: list[dict] = []
-    browser = bundle / "browser-requests.jsonl"
-    if browser.is_file():
-        for record in read_jsonl(browser):
-            requests.append({
-                "recorded_in": "browser-requests.jsonl",
-                "at": record.get("at"),
-                "method": record.get("method"),
-                "path": record.get("path"),
-                "query": record.get("query"),
-                "authorization": record.get("authorization"),
-            })
-            responses.append({
-                "recorded_in": "browser-requests.jsonl",
-                "at": record.get("at"),
-                "method": record.get("method"),
-                "path": record.get("path"),
-                "status": record.get("status"),
-                "mimeType": record.get("mimeType"),
-                "fixtureLabel": record.get("fixtureLabel"),
-            })
-    evidence = bundle / "evidence.json"
-    if evidence.is_file():
-        payload = read_json(evidence)
-        for call in payload.get("calls", []):
-            requests.append({
-                "recorded_in": "evidence.json:calls",
-                "method": call.get("method"),
-                "path": call.get("path"),
-                "actor_key": call.get("actor_key"),
-            })
-            responses.append({
-                "recorded_in": "evidence.json:calls",
-                "method": call.get("method"),
-                "path": call.get("path"),
-                "status": call.get("status"),
-                "response_body": call.get("response_body"),
-            })
-    checked = ["browser-requests.jsonl", "evidence.json:calls"]
+    for source, rows in sorted(records.items()):
+        requests += carry(rows, source=source, side="request")
+        responses += carry(rows, source=source, side="response")
     if not requests:
-        marker = not_recorded("this bundle records no HTTP request or response list", checked)
+        marker = not_recorded("this bundle records no HTTP request, response or Core call",
+                              ["browser-requests.jsonl (any depth)", "evidence.json:calls"])
         requests = [marker]
         responses = [marker]
     return requests, responses
@@ -225,36 +250,41 @@ def derive_result(bundle: Path, source: dict[str, Any]) -> str:
         "",
     ]
     counts = []
-    trace = bundle / "click-trace.jsonl"
-    if trace.is_file():
-        records = read_jsonl(trace)
+    for path in sorted(candidate for candidate in bundle.rglob("click-trace.jsonl")
+                       if candidate.is_file()):
+        relative = path.relative_to(bundle).as_posix()
+        records = read_jsonl(path)
         passed = sum(1 for r in records if r.get("ok") is True)
         failed = sum(1 for r in records if r.get("ok") is False)
         blocked = sum(1 for r in records if r.get("ok") is None)
-        counts.append(f"* `click-trace.jsonl`: {len(records)} records — {passed} PASS, {failed} FAIL, "
+        counts.append(f"* `{relative}`: {len(records)} records — {passed} PASS, {failed} FAIL, "
                       f"{blocked} BLOCKED")
-    evidence = bundle / "evidence.json"
-    if evidence.is_file():
-        payload = read_json(evidence)
+    for path in sorted(candidate for candidate in bundle.rglob("evidence.json")
+                       if candidate.is_file()):
+        payload = read_json(path)
         summary = payload.get("summary")
         if isinstance(summary, dict):
-            counts.append(f"* `evidence.json:summary`: {json.dumps(summary, sort_keys=True)}")
+            counts.append(f"* `{path.relative_to(bundle).as_posix()}:summary`: "
+                          f"{json.dumps(summary, sort_keys=True)}")
     if not counts:
         counts.append("* No record counts were found in this bundle; see its `README.md` and raw logs.")
     lines += counts + [
         "",
         "## What the source bundle does not carry in §8 form",
         "",
-        "* `api-requests.jsonl` / `api-responses.jsonl` here are renderings of the source's own",
-        "  request and call records; entries missing from those records are absent, not filled in.",
+        "* `api-requests.jsonl` / `api-responses.jsonl` carry every field of every source record",
+        "  (request bodies included) plus `recorded_in` and `side`; `manifest.json.field_accounting`",
+        "  proves nothing was left out.",
         "* `truth-before-after.json` is `not-recorded` unless the source bundle itself carries one.",
         "",
     ]
     return "\n".join(lines)
 
 
-def derive_notes(bundle: Path, source: dict[str, Any]) -> str:
-    return "\n".join([
+def derive_notes(bundle: Path, source: dict[str, Any], field_accounting: dict[str, Any]) -> str:
+    missing = {name: entry["not_carried"] for name, entry in sorted(field_accounting.items())
+               if entry["not_carried"]}
+    lines = [
         "# Notes on this derived directory",
         "",
         "* It was written by `scripts/p6/bundle_conformance.py`, into a directory of its own. The",
@@ -263,34 +293,115 @@ def derive_notes(bundle: Path, source: dict[str, Any]) -> str:
         "* Provenance: the source bundle path, the commit it records, and the sha256 of every source",
         "  file are in `manifest.json` (`source_files`), together with the sha256 of the source's own",
         f"  `{MANIFEST}`.",
+        "* Records: every `browser-requests.jsonl` and every `evidence.json:calls` record in the",
+        "  bundle, at any depth, is carried whole — all fields, including request bodies — into",
+        "  `api-requests.jsonl` and `api-responses.jsonl`, with `recorded_in` and `side` added.",
+        "  `manifest.json.field_accounting` lists the fields each source file had and confirms they",
+        "  were all carried.",
         "* Absent content is marked `not-recorded`; nothing here is synthesised. No request, response",
         "  or Truth comparison was invented to fill a §8 file name.",
+        "* Writing: derived files are staged privately and moved into place with `os.replace`, which",
+        "  cannot write through a symlink at the target name; a pre-existing symlink or non-file",
+        "  target is refused. A fresh output directory appears by one atomic rename, and refreshing an",
+        "  existing one moves the old directory aside first, so a failure leaves the previous",
+        "  derivation instead of a half-written one.",
         "* Verdict: unchanged, and not restated as a pass. See `result.md`.",
         "",
-    ])
+    ]
+    if missing:
+        lines += ["## Fields that were NOT carried", "",
+                  "The generator could not carry the fields below; they are listed rather than dropped",
+                  "silently. Read the source file for them.", ""]
+        for name, keys in missing.items():
+            lines.append(f"* `{name}`: {', '.join(keys)}")
+        lines.append("")
+    return "\n".join(lines)
 
 
-def derive(bundle: Path, out: Path, commit: str) -> dict[str, Path]:
-    source = read_json(bundle / MANIFEST)
-    requests, responses = derive_requests(bundle, source)
-    written: dict[str, Path] = {}
-    out.mkdir(parents=True, exist_ok=True)
-    payloads: dict[str, str] = {
-        "manifest.json": json.dumps(derive_manifest(bundle, source, commit),
-                                    indent=2, ensure_ascii=False) + "\n",
+def build_payloads(bundle: Path, source: dict[str, Any], commit: str) -> dict[str, str]:
+    """The derived file contents. Pure: reads the bundle, writes nothing."""
+    records = source_records(bundle)
+    requests, responses = derive_requests(records)
+    carried = {name: carry(rows, source=name, side="request") for name, rows in records.items()}
+    field_accounting = accounting(records, carried)
+    return {
+        "manifest.json": json.dumps(
+            derive_manifest(bundle, source, commit, field_accounting),
+            indent=2, ensure_ascii=False) + "\n",
         "scenario.md": derive_scenario(bundle, source),
-        "api-requests.jsonl": "".join(json.dumps(entry, ensure_ascii=False) + "\n" for entry in requests),
-        "api-responses.jsonl": "".join(json.dumps(entry, ensure_ascii=False) + "\n" for entry in responses),
+        "api-requests.jsonl": "".join(
+            json.dumps(entry, ensure_ascii=False) + "\n" for entry in requests),
+        "api-responses.jsonl": "".join(
+            json.dumps(entry, ensure_ascii=False) + "\n" for entry in responses),
         "truth-before-after.json": json.dumps(derive_truth(bundle, source),
                                               indent=2, ensure_ascii=False) + "\n",
         "result.md": derive_result(bundle, source),
-        "NOTES.md": derive_notes(bundle, source),
+        "NOTES.md": derive_notes(bundle, source, field_accounting),
     }
-    for name in DERIVED_FILES:
-        path = out / name
-        path.write_text(payloads[name], encoding="utf-8")
-        written[name] = path
-    return written
+
+
+def refuse_linked_targets(out: Path) -> None:
+    """Refuse a target that is a symlink or not a regular file.
+
+    `os.replace` cannot write *through* a link, but silently replacing one would hide a reviewer's
+    or an attacker's redirection, so it is refused and named.
+    """
+    if out.is_symlink():
+        raise Refused(f"--out {out} is a symlink; refusing to write through it")
+    if out.exists() and not out.is_dir():
+        raise Refused(f"--out {out} exists and is not a directory")
+    if out.is_dir():
+        for name in DERIVED_FILES:
+            target = out / name
+            if target.is_symlink():
+                raise Refused(f"{target} is a symlink; refusing to write through it")
+            if target.exists() and not target.is_file():
+                raise Refused(f"{target} exists and is not a regular file")
+
+
+def install(staging: Path, out: Path) -> None:
+    """Make `out` the staging directory, atomically, without ever showing a half-written tree."""
+    if not out.exists() and not out.is_symlink():
+        os.replace(staging, out)
+        return
+    backup = out.parent / f".{out.name}.p6-previous"
+    if backup.is_symlink() or (backup.exists() and not backup.is_dir()):
+        backup.unlink()
+    elif backup.is_dir():
+        shutil.rmtree(backup, ignore_errors=True)
+    os.replace(out, backup)
+    try:
+        os.replace(staging, out)
+    except BaseException:
+        os.replace(backup, out)  # put the previous derivation back
+        raise
+    if backup.is_symlink() or not backup.is_dir():
+        backup.unlink(missing_ok=True)
+    else:
+        shutil.rmtree(backup, ignore_errors=True)
+
+
+def derive(bundle: Path, out: Path, commit: str) -> dict[str, Path]:
+    """Stage the derived files privately, then move them into place. Never a partial output."""
+    created = not out.exists()
+    refuse_linked_targets(out)
+    payloads = build_payloads(bundle, source=read_json(bundle / MANIFEST), commit=commit)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(dir=out.parent, prefix=".p6-conformance-staging-"))
+    try:
+        for name in DERIVED_FILES:
+            (staging / name).write_text(payloads[name], encoding="utf-8")
+        if any(not (staging / name).is_file() for name in DERIVED_FILES):
+            raise Refused("staging is incomplete; refusing to install it")
+        refuse_linked_targets(out)
+        install(staging, out)
+    except BaseException:
+        shutil.rmtree(staging, ignore_errors=True)
+        if created and out.exists() and not out.is_symlink():
+            # Cannot happen through `install`, but if anything created it, do not leave a partial.
+            shutil.rmtree(out, ignore_errors=True)
+        raise
+    return {name: out / name for name in DERIVED_FILES}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -304,6 +415,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     bundle = args.bundle.resolve()
+    # Check the *unresolved* --out for a symlink first: `resolve()` would hide it, and a linked
+    # output directory is exactly the redirection this tool refuses to write through.
+    if args.out.is_symlink():
+        print(f"REFUSING: --out {args.out} is a symlink; refusing to write through it",
+              file=sys.stderr)
+        return 2
     out = args.out.resolve()
     if not bundle.is_dir():
         print(f"{bundle} is not a directory", file=sys.stderr)
@@ -340,11 +457,16 @@ def main(argv: list[str] | None = None) -> int:
         if not out.is_dir():
             print(f"REFUSING: --check needs an existing derived directory at {out}", file=sys.stderr)
             return 2
+        try:
+            refuse_linked_targets(out)
+        except Refused as refusal:
+            print(f"REFUSING: {refusal}", file=sys.stderr)
+            return 2
         with tempfile.TemporaryDirectory(prefix="p6-conformance-check-") as tmp:
-            derive(bundle, Path(tmp), commit)
+            derive(bundle, Path(tmp) / "derived", commit)
             differing = [name for name in DERIVED_FILES
                          if not (out / name).is_file()
-                         or (out / name).read_bytes() != (Path(tmp) / name).read_bytes()]
+                         or (out / name).read_bytes() != (Path(tmp) / "derived" / name).read_bytes()]
             extra = sorted(p.name for p in out.iterdir()
                            if p.is_file() and p.name not in DERIVED_FILES)
         if differing or extra:
@@ -354,17 +476,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"identical: {len(DERIVED_FILES)} derived files match the source bundle {bundle.name}")
         return 0
 
-    written = derive(bundle, out, commit)
+    try:
+        written = derive(bundle, out, commit)
+    except Refused as refusal:
+        print(f"REFUSING: {refusal}", file=sys.stderr)
+        return 2
+    except Exception as error:  # noqa: BLE001 - a failed write is the observation
+        print(f"FAILED: could not derive {bundle} into {out}: "
+              f"{error.__class__.__name__}: {error}", file=sys.stderr)
+        return 1
+
+    # Defence in depth: if anything at all wrote through to the source, say so and fail rather than
+    # report success over a damaged bundle.
+    if verify_bundle(bundle) != 0:
+        print(f"FAILED: {bundle} no longer matches its own {MANIFEST} after derivation; the derived "
+              f"directory at {out} must not be trusted", file=sys.stderr)
+        return 1
+
     for name in DERIVED_FILES:
         print(f"wrote {written[name]}")
     print(f"derived {len(DERIVED_FILES)} files from {bundle} (commit {commit}); the bundle is "
           f"untouched — verify it with freeze_bundle.py --verify")
-    # Leave no half-written directory behind if something above raised: derive writes atomically
-    # enough for this use, but a partially written out dir must not look complete.
-    missing = [name for name in DERIVED_FILES if not (out / name).is_file()]
-    if missing:
-        print(f"INCOMPLETE: {missing}", file=sys.stderr)
-        return 1
     return 0
 
 
