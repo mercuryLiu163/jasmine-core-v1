@@ -22,9 +22,8 @@
  */
 
 import { spawn } from 'node:child_process'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
-import { readFileSync } from 'node:fs'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -69,6 +68,9 @@ async function main() {
   const rule = descriptor.seeded.rule_id
   const evidence = descriptor.seeded.evidence_id
 
+  // The screenshots directory is written into by `Trace.screenshot`; a pass that fails before
+  // creating it would lose the very screenshot that shows the failure.
+  await mkdir(join(args.out, 'screenshots'), { recursive: true })
   const chromePath = CHROME_CANDIDATES.find((candidate) => candidate && existsSync(candidate))
   if (!chromePath) throw new Error('no Chrome/Chromium found; set CHROME_PATH')
   const port = 9333 + Math.floor(Math.random() * 500)
@@ -155,8 +157,10 @@ async function main() {
     await signIn(token)
 
     // --- 1. the Memory health panel states the outage, and that Core keeps working --------------
+    // Wait for the *data*, not the panel title: the rows are what the record asserts, and the
+    // first version read them while `/v1/memory/health` was still in flight (all-null detail).
     await goto('memory/health', 'memory health',
-      `document.body.textContent.includes('Memory 健康')`)
+      `[...document.querySelectorAll('dl.kv dt')].some((n) => (n.textContent ?? '').trim() === 'status')`)
     const health = {
       status: await kvRow('status'),
       degraded: await kvRow('degraded'),
@@ -180,7 +184,7 @@ async function main() {
 
     // --- 2. the job and trace lists still show Core's own rows, not blank tables ----------------
     await goto('memory/jobs', 'memory jobs',
-      `document.querySelector('[data-testid="memory-jobs"]') !== null`)
+      `document.querySelectorAll('[data-testid="memory-jobs"] tbody tr').length > 0`)
     const jobs = {
       rows: await rowsIn('memory-jobs'),
       statuses: (await pageText()).includes('DONE') || (await pageText()).includes('PENDING'),
@@ -193,7 +197,7 @@ async function main() {
     await trace.screenshot(cdp, 't05-02-memory-jobs')
 
     await goto('memory/traces', 'memory traces',
-      `document.querySelector('[data-testid="memory-traces"]') !== null`)
+      `document.querySelectorAll('[data-testid="memory-traces"] tbody tr').length > 0`)
     const traces = {
       rows: await rowsIn('memory-traces'),
       failed: (await pageText()).includes('FAILED') || (await pageText()).includes('failed'),
@@ -214,7 +218,9 @@ async function main() {
       ['rules', `rules?project_id=${project}&task_id=${task}&rule_id=${rule}`, 'ACTIVE Rule'],
       ['evidence', `evidence?evidence_id=${evidence}`, 'Evidence'],
     ]) {
-      await goto(hash, `P1 ${name}`, `document.body.textContent.includes(${JSON.stringify(marker)})`)
+      await goto(hash, `P1 ${name}`,
+        `document.body.textContent.includes(${JSON.stringify(marker)}) && ` +
+        `document.querySelectorAll('dl.kv > div').length > 0`)
       p1[name] = {
         rows: await evaluate(cdp, `document.querySelectorAll('dl.kv > div').length`),
         pending: await pending(),
