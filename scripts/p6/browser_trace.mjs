@@ -67,6 +67,7 @@ function parseArgs(argv) {
       case '--p3-route-scope-token': args.p3RouteScopeToken = next; index += 1; break
       case '--p4-reads': args.p4Reads = true; break
       case '--p4-limited-token': args.p4LimitedToken = next; index += 1; break
+      case '--p4-scope-only': args.p4ScopeOnly = true; break
       case '--evidence': args.evidence = next; index += 1; break
       case '--interpretation': args.interpretation = next; index += 1; break
       case '--pending-interpretation': args.pendingInterpretation = next; index += 1; break
@@ -1735,6 +1736,7 @@ async function main() {
         await waitFor(cdp, waitForText, { label })
       }
 
+      if (!args.p4ScopeOnly) {
       // --- health, and Memory marked non-authoritative by Core's own field ------------
       // Wait for a *data-dependent* string, not the panel title: the title renders before
       // the payload arrives, and asserting too early read the marker as absent.
@@ -1867,12 +1869,14 @@ async function main() {
         `${memoryReads.length} P4 reads, ${unlabelledMemory.length} unlabelled, ` +
           `unexpected controls: ${JSON.stringify(unexpected)}`)
 
+      }
+
       // --- a token without memory:read is refused by Core ----------------------------
-      if (args.p4LimitedToken) {
-        await clickByText(cdp, 'button', '退出')
-        await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
-          { label: 'sign-in before the memory scope check' })
-        await signInMemory(args.p4LimitedToken)
+      // This runs as its OWN invocation (`--p4-scope-only`) with the limited token supplied
+      // as `--token-key`: signing out and back in mid-run left the app rendering the
+      // previous route while the URL already carried the target hash, and the check waited
+      // on a panel that could never appear. One sign-in per run removes that entirely.
+      if (args.p4ScopeOnly) {
         await gotoMemory('memory/items', 'memory items without the scope',
           `[...document.querySelectorAll('[role=alert]')].some((n) => (n.textContent ?? '').includes('forbidden_scope'))`)
         const refusedMemory = {
@@ -1885,9 +1889,6 @@ async function main() {
           refusedMemory.forbidden && refusedMemory.namesScope && refusedMemory.pending === false,
           JSON.stringify(refusedMemory))
         await trace.screenshot(cdp, '29-memory-scope-refusal')
-      } else {
-        trace.record('a token without memory:read is refused by Core, not reported as the missing dependency',
-          false, 'no --p4-limited-token supplied, so the scope refusal was not exercised')
       }
     }
 
