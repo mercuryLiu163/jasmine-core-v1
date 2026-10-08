@@ -40,6 +40,11 @@ What this fixture cannot reproduce (stated rather than discovered)
   unauthorised reflect project is `project_not_found`. The CamelCase names
   (`MissingExpectedRevision`, `RevisionConflict`, `ForbiddenActorKind`, `InvalidStateTransition`)
   are Python classes, not wire codes. The refusal *messages* are the fixture's paraphrase.
+* **Retry validates no body field, exactly as P4 does not.** `memory/api.py::retry_job` passes
+  `host_id` and `event_id` straight to `request_retry` without checking either, so a malformed
+  value is accepted here too; the lifecycle commands do validate both, through `_transition`.
+  An earlier version of this fixture refused a malformed retry value with 400 — stricter than
+  the Core it stands in for — which adversarial review found.
 * **Retry follows `memory/jobs.py::request_retry`.** Only a `FAILED` job is retried, and the
   update is `status='PENDING', retry_count=0` — the budget is **reset**, not incremented.
   `DONE`, `RUNNING` and `PENDING` are each refused with `invalid_state_transition` (a
@@ -893,10 +898,13 @@ class Handler(base.Handler):
     # -- retry -------------------------------------------------------------------
     def _retry(self, ident: str, body: dict[str, Any], scopes: set[str] | None,
                agent: bool, spec: dict[str, Any]) -> None:
-        if not self._host_id(body, required=False):
-            return
-        if not self._event_id(body):
-            return
+        # **No `host_id`/`event_id` shape validation here, because P4 has none.**
+        # `memory/api.py::retry_job` passes `body.get("host_id", "")` and `body.get("event_id")`
+        # straight to `request_retry` without checking either, while the lifecycle path does
+        # validate them through `_transition`. An earlier version of this fixture checked both
+        # and answered 400, which would have made the simulation *stricter* than the thing it
+        # stands in for — found by adversarial review, and it is the kind of difference that
+        # would turn a real Core's acceptance into a fixture refusal.
         if ident not in self.state["jobs"]:
             self._error(404, "memory_job_not_found", f"memory_job {ident} not found")
             return
@@ -1127,7 +1135,10 @@ def main(argv: list[str] | None = None) -> int:
           f"POST {CONTROL_PREFIX}drift, POST {CONTROL_PREFIX}set-job-status, "
           f"POST {CONTROL_PREFIX}drop-next, GET {CONTROL_PREFIX}state", file=sys.stderr)
     for token, scopes in tokens.items():
-        print(f"accepts token {token!r} with scopes: {', '.join(sorted(scopes))}",
+        # Masked, not printed: this banner is redirected into evidence bundles, and the bundle's
+        # own README claims no token appears in any file. The first six characters are enough for
+        # an operator to tell their keys apart in a terminal.
+        print(f"accepts token {token[:6]}… with scopes: {', '.join(sorted(scopes))}",
               file=sys.stderr)
     print("=" * 78, file=sys.stderr)
 

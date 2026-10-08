@@ -348,14 +348,32 @@ class OverHttp(HttpHarness):
             {"expected_revision": 1, "host_id": fixture.HOST, "reason": "x" * 500})
         self.assertEqual(status, 200, body)
 
-    def test_a_malformed_event_id_is_400_named(self) -> None:
-        for path in (f"/v1/memory/items/{fixture.ITEM}/pin",
-                     f"/v1/memory/jobs/{fixture.JOB_2}/retry"):
-            with self.subTest(path=path):
-                body = allowed_body(path, event_id="evt_short")
-                status, reply, _ = self.post(path, body)
-                self.assertEqual(status, 400, reply)
-                self.assertEqual(reply["error"]["details"]["field"], "event_id")
+    def test_a_malformed_event_id_is_400_on_a_lifecycle_command(self) -> None:
+        path = f"/v1/memory/items/{fixture.ITEM}/pin"
+        status, reply, _ = self.post(path, allowed_body(path, event_id="evt_short"))
+        self.assertEqual(status, 400, reply)
+        self.assertEqual(reply["error"]["details"]["field"], "event_id")
+
+    def test_retry_passes_a_malformed_event_id_and_host_id_through(self) -> None:
+        """P4 validates neither on retry, so the fixture must not either.
+
+        `memory/api.py::retry_job` calls `request_retry` with `body.get("host_id", "")` and
+        `body.get("event_id")` and checks nothing; the shape checks live in the lifecycle path.
+        The fixture used to answer 400 for both — stricter than the Core it stands in for, which
+        would have turned a real Core's acceptance into a fixture refusal. Found by adversarial
+        review.
+        """
+        path = f"/v1/memory/jobs/{fixture.JOB_2}/retry"
+        self.post(f"/v1/_p6_fixture/set-job-status?job={fixture.JOB_2}&status=FAILED")
+        status, reply, _ = self.post(path, {"host_id": "host-1", "event_id": "not-an-evt"})
+        self.assertEqual(status, 200, reply)
+        self.assertEqual(reply["replayed"], False)
+        self.assertEqual(reply["event"]["event_id"], "not-an-evt")
+        # …and the lifecycle path still refuses the same malformed value.
+        item = f"/v1/memory/items/{fixture.ITEM}/pin"
+        status, reply, _ = self.post(item, allowed_body(item, host_id="host-1"))
+        self.assertEqual(status, 400, reply)
+        self.assertEqual(reply["error"]["details"]["field"], "host_id")
 
     def test_a_malformed_path_id_is_400(self) -> None:
         for path in (f"/v1/memory/items/mem_short/pin",

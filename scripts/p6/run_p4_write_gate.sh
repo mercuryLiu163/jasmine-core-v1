@@ -239,7 +239,7 @@ lines = [
     f"Commit `{commit}` (see `BUNDLE-FROZEN.json`). Product asset `{asset}` / `{asset_sha}`.",
     "",
     f"Result: **{sum(1 for e in on if e['ok'])}/{len(on)}** with the write switch ON, run twice"
-    f"{' with identical step sequences' if same else ' AND THE TWO RUNS DIFFER'}; "
+    f"{' with identical step sequences and outcomes' if same else ' AND THE TWO RUNS DIFFER'}; "
     f"**{sum(1 for e in off if e['ok'])}/{len(off)}** with the switch OFF. The fixture is restarted"
     " between the two ON runs, because this Gate mutates it.",
     "",
@@ -292,9 +292,12 @@ lines += [
     "from the click-trace's prose — the P6-03b1 bundle could not evidence its redaction rule because",
     "it recorded no bodies.",
     "",
-    "`browser-requests.jsonl` records Authorization only as `present(redacted)`/`absent`; no token",
-    "appears in any bundle file. The tokens are generated per run, written to the isolated tree only",
-    "(mode 600) and deleted with it.",
+    "`browser-requests.jsonl` records Authorization only as `present(redacted)`/`absent`, and the",
+    "fixture's startup banner masks the tokens it accepts. The launcher additionally **refuses to",
+    "freeze a bundle that contains any token it generated** — a check, not a promise: an earlier",
+    "bundle recorded the fixture's banner verbatim and carried all three cleartext tokens while",
+    "this paragraph claimed otherwise. Tokens are generated per run, written to the isolated tree",
+    "only (mode 600) and deleted with it.",
     "",
     "## The artificial keys, stated rather than glossed",
     "",
@@ -329,6 +332,10 @@ lines += [
     "* Nothing here exercises real P4 code, a merged P4, or a live engine.",
     "* `P6_ENABLE_P4_WRITES` defaults **off**; the live read allowlist is unchanged at 25 paths and",
     "  the always-on milestone-B write list is unchanged at 4.",
+    "The two ON runs are compared on **step name and outcome**, not on their detail strings: those",
+    "legitimately carry per-run values (generated ids, timestamps), so comparing them would fail for",
+    "a reason that says nothing about the product.",
+    "",
     "* Status is **PARTIAL / DEPENDENCY_PENDING**, P4 phase acceptance has **not** passed, and the",
     "  real-P4 verification remains a separate outstanding item.",
     "",
@@ -337,7 +344,22 @@ lines += [
 print(f"README written from {len(on)} ON and {len(off)} OFF records", file=sys.stderr)
 READMEPY
 
-# --- 8. freeze ---------------------------------------------------------------------------------
+# --- 8. the bundle must not contain a credential ------------------------------------------------
+# The fixture banner used to print the tokens it accepts, and this script redirects that banner
+# into the bundle, so the frozen evidence carried all three cleartext tokens while its own README
+# claimed none did — found by adversarial review. The banner is masked now, and this checks the
+# claim instead of asserting it: a bundle that contains any token this run generated is not
+# frozen at all.
+for secret in "$HUMAN" "$AGENT" "$READONLY"; do
+  if grep -rqF -- "$secret" "$OUT"; then
+    echo "REFUSING TO FREEZE: a generated token appears in $OUT" >&2
+    grep -rlF -- "$secret" "$OUT" >&2
+    exit 1
+  fi
+done
+echo "credential check: no generated token appears anywhere in the bundle" >&2
+
+# --- 9. freeze ---------------------------------------------------------------------------------
 rm -f "$OUT/BUNDLE-FROZEN.json" "$OUT/stability/BUNDLE-FROZEN.json"
 "$PYTHON" "$WORK/scripts/p6/freeze_bundle.py" \
   --freeze "$OUT" \
@@ -346,7 +368,7 @@ rm -f "$OUT/BUNDLE-FROZEN.json" "$OUT/stability/BUNDLE-FROZEN.json"
   --runs "ON twice with identical step sequences (fixture restarted between runs); OFF once for the default-closed evidence" \
   --asset "$ASSET" --asset-sha256 "$ASSET_SHA" --tree-sha256 "$TREE_SHA" \
   --fixture-value "simulated-p4-writes" \
-  --supersedes "none — the first P6-03b2 bundle" \
+  --supersedes "20261008T053138Z (withdrawn: its frozen fixture.stderr.txt recorded the run's throwaway tokens; see the index)" \
   --dependency-json '{"name":"P4 memory write slice","status":"NOT MERGED","source_ref":"0c4f8f0e2118711ac9aa2a7006fddc6982962248","acceptance":"P4 phase acceptance NOT passed","consequence":"the Core behind this proxy was a simulated fixture, not P4 code"}'
 "$PYTHON" "$WORK/scripts/p6/freeze_bundle.py" --verify "$OUT"
 echo "bundle: $OUT" >&2

@@ -155,7 +155,15 @@ async function enter(
 function contractPath(suffix: string): string {
   const write = writeContract.writes.find((entry) => entry.path_pattern.includes(suffix))
   if (!write) throw new Error(`no frozen write route matching ${suffix}`)
-  return write.path_pattern.replace(/^\^/, '').replace(/\$$/, '').replace(/\(\[\^\/\]\+\)/g, ID)
+  // The route's own `id_prefix`, not a bare id: without it the path is
+  // `/v1/memory/items/<id>/pin` instead of `.../mem_<id>/pin`, no fake route matches, and the
+  // assertion fails against a panel that is behaving correctly. The previous version of this
+  // helper had no caller that checked, so the mistake was invisible.
+  const prefix = write.id_prefix ?? ''
+  return write.path_pattern
+    .replace(/^\^/, '')
+    .replace(/\$$/, '')
+    .replace(/\(\[\^\/\]\+\)/g, prefix ? `${prefix}_${ID}` : ID)
 }
 
 describe('the lifecycle panel sends the contract body and reads the object back', () => {
@@ -485,21 +493,57 @@ describe('the write surface is a deep link, not a navigation entry', () => {
     expect(nav?.textContent ?? '').not.toContain('reflect')
   })
 
-  it('every write route in the frozen contract has a panel that can reach it', () => {
-    // A contract route with no panel is an unimplemented write; a panel path absent from the
-    // contract is a route the proxy would refuse. Both directions are checked here.
-    const reachable = [
-      contractPath('retry'),
-      contractPath('/obsolete'),
-      contractPath('/delete'),
-      contractPath('/pin'),
-      contractPath('/unpin'),
-      contractPath('reflect'),
-    ]
-    expect(reachable).toHaveLength(6)
-    for (const path of reachable) {
-      expect(writeContract.writes.some((write) =>
-        new RegExp(write.path_pattern).test(path)), path).toBe(true)
-    }
+  /**
+   * The old version of this test rewrote each contract pattern into a literal and asserted that
+   * literal matched the contract again — the contract checking itself. Deleting every panel left
+   * it green, which review caught. This version drives the **panels**: each of the four lifecycle
+   * commands is submitted from the item view, and the retry and reflect panels are submitted
+   * from theirs, so every one of the six frozen routes is shown being reached by the UI.
+   *
+   * The paths are taken from the frozen contract (a literal for each route), not from the
+   * panels' own strings, so a panel pointing somewhere else fails here.
+   */
+  it.each(['pin', 'unpin', 'obsolete', 'delete'] as const)(
+    'the lifecycle panel reaches the frozen %s route', async (command) => {
+      const user = userEvent.setup()
+      const path = contractPath(`/${command}`)
+      await enter(user, `#/memory/items/${ITEM}`, {
+        [`GET /v1/memory/items/${ITEM}`]: { body: ITEM_DETAIL },
+        [`POST ${path}`]: { body: freshLifecycle() },
+      })
+      const panel = await screen.findByRole('region', { name: /Memory Item/ })
+      await user.selectOptions(await within(panel).findByTestId('lifecycle-command'), command)
+      await user.click(within(panel).getByTestId('write-submit'))
+      await waitFor(() => expect(fake!.callsTo('POST', path)).toHaveLength(1))
+    })
+
+  it('the retry panel reaches the frozen retry route', async () => {
+    const user = userEvent.setup()
+    const retry = contractPath('retry')
+    await enter(user, `#/memory/jobs/${JOB}`, {
+      [`GET /v1/memory/jobs/${JOB}`]: { body: JOB_DETAIL },
+      [`POST ${retry}`]: { body: { job: job(), event: { event_id: EVENT }, replayed: false } },
+    })
+    const jobPanel = await screen.findByRole('region', { name: /Memory Job/ })
+    await user.click(await within(jobPanel).findByTestId('write-submit'))
+    await waitFor(() => expect(fake!.callsTo('POST', retry)).toHaveLength(1))
+  })
+
+  it('the reflect panel reaches the frozen reflect route', async () => {
+    const user = userEvent.setup()
+    const reflect = contractPath('reflect')
+    await enter(user, '#/memory/reflect', { [`POST ${reflect}`]: { body: REFLECT } })
+    const reflectPanel = await screen.findByRole('region', { name: /Memory reflect/ })
+    await user.type(within(reflectPanel).getByTestId('reflect-query'), '反思一下')
+    await user.click(within(reflectPanel).getByTestId('write-submit'))
+    await waitFor(() => expect(fake!.callsTo('POST', reflect)).toHaveLength(1))
+  })
+
+  it('has a panel for every frozen write route and no seventh route in the contract', () => {
+    // The reverse direction: the four lifecycle routes share one panel, so the contract must
+    // still record exactly six routes and three proxy patterns — a seventh write in the frozen
+    // contract would need a panel and a proxy pattern this suite does not cover.
+    expect(writeContract.writes).toHaveLength(6)
+    expect(new Set(writeContract.writes.map((write) => write.method))).toEqual(new Set(['POST']))
   })
 })

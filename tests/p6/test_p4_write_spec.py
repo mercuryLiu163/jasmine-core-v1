@@ -1,15 +1,17 @@
-"""P6-03b2 guards: the write specification is still P4's, and nothing of it has leaked in.
+"""P6-03b2 guards: the frozen contract is still P4's, and the surface is closed by default.
 
-The specification is written before the implementation precisely so the payloads and permissions
-are settled on paper. That only helps if it stays true, so:
+The specification was written before the implementation so the payloads and permissions were
+settled on paper. The surface is now built behind its own switch, so "nothing of it has leaked
+in" would be the wrong claim and the guards say what is true instead:
 
-1. the frozen spec is re-derived from the pinned commit and diffed, and the CLI exits **2** where
-   that commit is absent rather than passing because it could not look;
+1. the frozen contract is re-derived from the pinned commit and diffed, and the CLI exits **2**
+   where that commit is absent rather than passing because it could not look;
 2. the six writes are exactly the ones the read contract recorded as out of its slice — a write
    quietly moving into the read slice, or a read into the write spec, fails here;
-3. **none of the six is reachable today**: not in the proxy's live allowlist, not among the pending
-   reads, and not in the client. That is what "specification only" has to mean, and an
-   untested claim of it would be worth nothing.
+3. the six are reachable **only** through the gated `p4_write_paths` list: absent from the live
+   read list and from the always-on milestone-B write list, never reachable with GET;
+4. the client issues exactly the six, and the specification documents what is built, what is
+   verified against a simulation, and that criterion 9b (a real P4 Core) is unmet.
 """
 
 from __future__ import annotations

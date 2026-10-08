@@ -48,8 +48,8 @@ Event" row.
 | Field | Rule |
 | --- | --- |
 | `expected_revision` | present, an `int`, `>= 1`; absent → `missing_expected_revision` (400); stale → `revision_conflict` (409) |
-| `host_id` | a `hst_` id |
-| `event_id` | an `evt_` id when present; **this is the idempotency key** |
+| `host_id` | a `hst_` id **on a lifecycle command**; a retry passes it through unvalidated (P4's `retry_job` checks neither body field, which is why §1 records retry as requiring none) |
+| `event_id` | an `evt_` id when present **on a lifecycle command**; **this is the idempotency key**. A retry passes it through unvalidated too, and Core records whatever value it is given |
 | `reason` | text, at most 500 characters; allowed but not required on lifecycle commands, and not accepted at all on retry or reflect |
 | `project_id` (reflect) | a `prj_` id, and the actor must be permitted for it |
 | `query` (reflect) | non-empty text, at most 4000 characters |

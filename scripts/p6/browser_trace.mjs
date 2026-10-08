@@ -2075,10 +2075,6 @@ async function main() {
       })()`)
       const clickSubmit = (panelTitle) => clickByText(
         cdp, `[data-write-panel=${JSON.stringify(panelTitle)}] [data-testid="write-submit"]`, '')
-      const panelText = (panelTitle) => evaluate(cdp, `(() => {
-        const panel = document.querySelector('[data-write-panel=' + ${JSON.stringify(JSON.stringify(panelTitle))} + ']')
-        return panel ? (panel.textContent ?? '') : ''
-      })()`)
       const waitForWriteResult = (panelTitle, needle) => waitFor(cdp, `(() => {
         const panel = document.querySelector('[data-write-panel=' + ${JSON.stringify(JSON.stringify(panelTitle))} + ']')
         return panel ? (panel.textContent ?? '').includes(${JSON.stringify(needle)}) : false
@@ -2209,7 +2205,12 @@ async function main() {
           pinPayload.ok && pinEvidence?.status === 200 &&
             pinEvidence?.fixtureLabel === 'simulated-p4-writes' &&
             pinEvidence?.responseBody?.replayed === false &&
-            Array.isArray(pinEvidence?.responseBody?.before) === false &&
+            // `Array.isArray(x) === false` is also true when `x` is absent, so it asserted
+            // nothing about the fresh shape. Require both keys and the contract's 7-key set.
+            ['before', 'after'].every((key) => key in (pinEvidence?.responseBody ?? {})) &&
+            Object.keys(pinEvidence?.responseBody ?? {}).sort().join(',') ===
+              ['after', 'before', 'event', 'job', 'memory', 'non_authoritative', 'replayed']
+                .join(',') &&
             pinReadback.block && pinReadback.commandEvent &&
             pinReadback.readsAfter > readsBefore && pinState.pinned === true &&
             pinState.revision === expectedRevision,
@@ -2546,6 +2547,13 @@ async function main() {
         // The item is a tombstone now. P4 checks the STATE before the revision, so an obsolete
         // on a deleted item is answered as "you cannot obsolete a tombstone" rather than as a
         // revision conflict — and the panel must show exactly that, from Core.
+        // Drift first. With `expected_revision` equal to the tombstone's current revision a
+        // revision-first implementation would pass the revision check and *then* answer
+        // `invalid_state_transition`, so the recorded evidence could not tell the two orderings
+        // apart — which review caught. Sending a stale revision does: only a state-first Core
+        // answers `invalid_state_transition` rather than `revision_conflict`.
+        await fixturePost(`/v1/_p6_fixture/drift?item=${MITEM}`)
+        const tombstoneState = (await simState()).items?.find((entry) => entry.memory_id === MITEM) ?? {}
         const tombstoneBefore = writeRequests('/obsolete').length
         await setControl('[data-testid="lifecycle-command"]', 'obsolete', 'HTMLSelectElement')
         await clickSubmit('Memory 生命周期写入 (memory:manage)')
@@ -2557,8 +2565,14 @@ async function main() {
           destructive.length === 2 && destructive.every((entry) =>
             entry.status === 200 && entry.replayed === false && entry.hasBeforeAfter) &&
             destructive[1].engineState !== destructive[0].engineState &&
-            tombstone?.responseBody?.error?.code === 'invalid_state_transition',
-          JSON.stringify({ destructive, tombstoneCode: tombstone?.responseBody?.error?.code ?? null }))
+            tombstone?.responseBody?.error?.code === 'invalid_state_transition' &&
+            // The load-bearing half: the revision really was stale, so a revision-first Core
+            // would have answered `revision_conflict` instead.
+            tombstone?.requestBody?.expected_revision !== tombstoneState.revision &&
+            tombstoneState.status === 'DELETED',
+          JSON.stringify({ destructive, tombstoneCode: tombstone?.responseBody?.error?.code ?? null,
+            sentRevision: tombstone?.requestBody?.expected_revision,
+            currentRevision: tombstoneState.revision, currentStatus: tombstoneState.status }))
 
         // --- reflect: explicit request, Core's marker, trace audit, and the withholding pair
         await goto('memory/reflect', 'reflect view',
@@ -2613,7 +2627,6 @@ async function main() {
           const agentEvidence = await evidenceFor('/reflect')
           const agentBody = agentEvidence?.responseBody ?? {}
           const agentPage = await pageText()
-          const reflectPanelText = await panelText('reflect 写入 (memory:reflect)')
           trace.record(
             'redaction on a write reply: P4 nulls safe_error_summary for a non-human actor while keeping the key, and the page shows the withheld state instead of the text',
             agentEvidence?.status === 200 && 'safe_error_summary' in agentBody &&
@@ -2627,7 +2640,6 @@ async function main() {
               agentKeys: Object.keys(agentBody).sort(),
               agentSummary: agentBody.safe_error_summary,
               humanSummaryIsString: typeof humanBody.safe_error_summary === 'string',
-              panelHasWithheld: reflectPanelText.includes('safe_error_summary'),
             }))
           await trace.screenshot(cdp, '37-memory-write-redaction')
           await signOut()
@@ -2678,16 +2690,32 @@ async function main() {
     trace.record('unknown route is reported, not mapped to Overview', true)
 
     // 10. sign out stops Authorization
+    //
+    // This used to navigate to one route and assert `every(request => authorization === 'absent')`,
+    // which is **true for an empty list** — and the recorded evidence said "0 api requests after
+    // sign-out", so the property was never exercised. It now drives the app through several
+    // routes that fetch when signed in, and requires that none of them sends anything: with the
+    // token cleared the app has nothing to send, which is the property worth proving. The count
+    // is required to be zero *and* the navigation to have happened, so a run where the page never
+    // rendered cannot pass by doing nothing.
     await clickByText(cdp, 'button', '退出')
     await waitFor(cdp, `document.querySelector('input[type=password]') !== null`, { label: 'sign-in again' })
     const beforeSignOut = requests.length
-    await cdp.send('Page.navigate', { url: `${args.ui}/#/overview` })
-    await new Promise((r) => setTimeout(r, 600))
+    const signedOutRoutes = ['#/overview', '#/memory/items', '#/memory/health']
+    for (const route of signedOutRoutes) {
+      await cdp.send('Page.navigate', { url: `${args.ui}/${route}` })
+      await waitFor(cdp, `document.querySelector('input[type=password]') !== null`,
+        { label: `sign-in form on ${route} after 退出` })
+    }
+    await new Promise((r) => setTimeout(r, 400))
     const afterSignOut = requests.slice(beforeSignOut).filter((request) => request.path.startsWith('/v1/'))
+    const signedOutOk = await evaluate(cdp,
+      `document.querySelector('input[type=password]') !== null`)
     trace.record(
-      'after 退出 no request carries an Authorization header',
-      afterSignOut.every((request) => request.authorization === 'absent'),
-      `${afterSignOut.length} api requests after sign-out`,
+      'after 退出 the app issues no Core request at all while the operator drives it through three routes',
+      signedOutOk === true && afterSignOut.length === 0,
+      `${signedOutRoutes.length} routes driven, ${afterSignOut.length} api requests, ` +
+        `authorizations: ${JSON.stringify(afterSignOut.map((r) => r.authorization))}`,
     )
     await trace.screenshot(cdp, '09-signed-out')
 

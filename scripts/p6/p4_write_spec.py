@@ -86,8 +86,11 @@ SEMANTICS = (
      "already succeeded is recognised as the same command. Source: memory/jobs.py, "
      "memory/lifecycle.py."),
     ("memory_is_never_authority",
-     "No write here may change Rule or State, and every response that describes memory says it is "
-     "not Truth. Sources: taskbook §6, memory/api.py."),
+     "No write here may change Rule or State, and every reply that describes a memory object says "
+     "it is not Truth: the four lifecycle commands carry `non_authoritative` and `reflect` carries "
+     "it too, while a retry reply is only `job`/`event`/`replayed` and names no memory at all — "
+     "which is why this rule is stated per reply rather than per endpoint. Sources: taskbook §6, "
+     "memory/api.py."),
     ("write_responses_are_actor_scoped",
      "P4 withholds engine free text from any actor that is not human or system, inside `_respond`, "
      "so it applies to every write response too. Source: memory/api.py."),

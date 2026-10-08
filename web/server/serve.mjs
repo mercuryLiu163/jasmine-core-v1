@@ -165,7 +165,9 @@ export function isAllowed(allowlist, method, pathname) {
   if (allowlist.methods.has(verb)) {
     return allowlist.paths.some((pattern) => pattern.test(pathname))
   }
-  if ((allowlist.write_methods ?? []).includes(verb)) {
+  // Uppercased like `core-proxy.ts`: the JSON could carry a lowercase entry, and the two hosts
+  // must not disagree about which methods the write list covers.
+  if ((allowlist.write_methods ?? []).map((method) => method.toUpperCase()).includes(verb)) {
     return (allowlist.write_paths ?? []).some((pattern) => new RegExp(pattern).test(pathname))
   }
   return false
