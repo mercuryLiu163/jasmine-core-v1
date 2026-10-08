@@ -160,6 +160,25 @@ function DependencyPending({
   )
 }
 
+/**
+ * The standing status of this slice, shown on every continuity view whether or not the
+ * read succeeded.
+ *
+ * P3 is not merged into this baseline, so these views are P6-03a *partial* work whatever
+ * answered them. Without this line a screenshot taken against a P3-enabled proxy would show
+ * a populated record and nothing else — exactly the "P6 passed" reading this milestone must
+ * not invite. It states the status, not a cause: the contract comes from an unmerged branch
+ * either way.
+ */
+function SliceStatus(): JSX.Element {
+  return (
+    <p className="state state--meta" data-testid="slice-status">
+      <strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— 本页契约派生自尚未合并的分支{' '}
+      <code>p3-checkpoint-context-resume</code>(<code>7016dab</code>),不是已通过的 P6 能力。
+    </p>
+  )
+}
+
 /** Digests are the point of these records, so they render whole, wrapped. */
 function Digest({ label, value }: { label: string; value: string | null | undefined }): JSX.Element {
   return (
@@ -235,6 +254,7 @@ function CheckpointBody({
 }): JSX.Element {
   return (
     <>
+      <SliceStatus />
       <StatRow
         label="不可变快照:"
         value={`这是 task_revision ${checkpoint.task_revision} 时的快照(projection_version ${checkpoint.projection_version}),是记录,不是当前 Truth。`}
@@ -497,6 +517,7 @@ function ContextPackBody({
 }): JSX.Element {
   return (
     <>
+      <SliceStatus />
       <StatRow
         label="这是实际渲染记录:"
         value={`rendered_content 是当时真正渲染的内容(renderer ${pack.renderer_version}),token ${pack.token_count} / ${pack.rendered_utf8_bytes} 字节。`}
@@ -656,6 +677,7 @@ function ResumeBody({ resume, onReadback }: { resume: Resume; onReadback: () => 
   const nextActions = Array.isArray(resume.next_actions) ? resume.next_actions : []
   return (
     <>
+      <SliceStatus />
       <StatRow
         label="这是比较,不是恢复:"
         value="comparison / next_actions 描述 checkpoint 与当前投影的差异;本页不会应用任何东西,Truth 未被改动。"

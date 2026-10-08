@@ -362,6 +362,26 @@ describe('a malformed id is refused with the right reason', () => {
   })
 })
 
+describe('a successful read still says the milestone is pending', () => {
+  it.each([
+    ['checkpoint', `#/checkpoints?checkpoint_id=${CHECKPOINT}`, /读取 Checkpoint/,
+      'GET /v1/checkpoints/' + CHECKPOINT, () => ({ checkpoint: checkpoint() })],
+    ['context pack', `#/context/${PACK}`, /Context Pack/,
+      'GET /v1/context/' + PACK, () => ({ context: pack() })],
+    ['resume', `#/resume/${RESUME}`, /Resume/,
+      'GET /v1/resumes/' + RESUME, () => ({ resume: resume() })],
+  ])('shows PARTIAL / DEPENDENCY_PENDING on a populated %s', async (_n, hash, region, route, body) => {
+    // A screenshot of a *populated* record is the one that could be read as "P6 passed":
+    // P3 being unmerged is a property of the milestone, not of this response.
+    const user = userEvent.setup()
+    await enter(user, hash as string, { ...SIGNED_IN, [route as string]: { body: (body as () => unknown)() } })
+    const panel = await screen.findByRole('region', { name: region as RegExp })
+    const status = await within(panel).findByTestId('slice-status')
+    expect(status.textContent).toContain('PARTIAL / DEPENDENCY_PENDING')
+    expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
+  })
+})
+
 describe('the views show the scope each read requires', () => {
   /** The full required set for a route, straight from the frozen contract. */
   function requiredScopes(responseKey: string): string {

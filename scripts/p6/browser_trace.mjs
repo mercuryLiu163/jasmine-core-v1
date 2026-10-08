@@ -1563,13 +1563,23 @@ async function main() {
         return ''
       })()`
       const shownScopes = {}
+      const shownStatus = {}
       for (const [name, hash] of [['checkpoint', `#/checkpoints?checkpoint_id=${CKP}`],
                                   ['context', `#/context/${PACK}`],
                                   ['resume', `#/resume/${RMS}`]]) {
         await cdp.send('Page.navigate', { url: `${args.ui}/${hash}` })
         await waitFor(cdp, `document.querySelectorAll('dl.kv > div').length > 0`, { label: name })
         shownScopes[name] = await evaluate(cdp, scopeRow)
+        // The standing marker must survive a *populated* read: a screenshot of real data
+        // with no pending note is what could be read as "P6 passed".
+        shownStatus[name] = await evaluate(cdp, `(() => {
+          const node = document.querySelector('[data-testid="slice-status"]')
+          return node ? (node.textContent ?? '') : ''
+        })()`)
       }
+      trace.record('a populated read still states PARTIAL / DEPENDENCY_PENDING',
+        Object.values(shownStatus).every((text) => text.includes('PARTIAL / DEPENDENCY_PENDING')),
+        JSON.stringify(shownStatus))
       const wantedScopes = {
         checkpoint: 'checkpoint:read + objects:read + state:read + authority:read + evidence:read + events:read',
         context: 'context:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read',
