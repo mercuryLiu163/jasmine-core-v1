@@ -261,6 +261,13 @@ def _walk(root: Path, *, stop_on_caps: bool) -> _Walk:
             if candidate.is_symlink():
                 result.ignored.append((str(rel_dir / name), "symlinked_file"))
                 continue
+            # N3: §2 says "only regular files are considered". `is_file()` is a
+            # stat, so a FIFO, socket or device named `run-*.json` is refused
+            # here rather than handed to `_classify`, which would open it and
+            # block forever on a FIFO with no writer.
+            if not candidate.is_file():
+                result.ignored.append((str(rel_dir / name), "not_regular_file"))
+                continue
             result.paths.append(candidate)
             result.relative[candidate] = str(rel_dir / name)
             if stop_on_caps and len(result.paths) > MAX_RUN_SHAPED:

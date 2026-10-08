@@ -1111,9 +1111,11 @@ class ReviewRegression(ValidationApiTestCase):
     def test_f3_raw_declared_path_components_refuse_the_manifest(self) -> None:
         # `pathlib` normalises these away before a component check can see them,
         # so the rule has to read the raw string.
-        for declared in ("a//b", "a/./b", "a/b/", "./a", "..%2Fb", "."):
+        # Deterministic ids: keying them off `hash()` made the test depend on
+        # PYTHONHASHSEED and risked a collision (review N5).
+        for index, declared in enumerate(("a//b", "a/./b", "a/b/", "./a", "..%2Fb", ".")):
             with self.subTest(declared=declared):
-                run_dir = self.root / "p7-raw" / f"run-20261008T{abs(hash(declared)) % 1000000:06d}Z"
+                run_dir = self.root / "p7-raw" / f"run-20261008T{100000 + index:06d}Z"
                 run_id = run_dir.name
                 self.write_run(run_dir, run_id)
                 entry = self.artifact_entry(run_dir, "art_raw", "artifacts/plain.txt",
@@ -1152,6 +1154,32 @@ class ReviewRegression(ValidationApiTestCase):
             self.assertEqual([row["record_status"] for row in body["runs"]], ["corrupt"])
             self.assertEqual(body["corrupt_count"], 1)
             self.assertEqual(body["runs"][0]["record_sha256"], "")
+
+    def test_n3_a_non_regular_run_shaped_entry_is_ignored_not_opened(self) -> None:
+        # A FIFO named `run-*.json` must not be opened: §2 says only regular
+        # files are considered, and opening a FIFO with no writer blocks forever.
+        import stat as stat_module
+
+        run_dir = self.root / "p7-fifo"
+        run_dir.mkdir(parents=True, exist_ok=True)
+        fifo = run_dir / RUN_ONE / f"{RUN_ONE}.json"
+        fifo.parent.mkdir(parents=True, exist_ok=True)
+        os.mkfifo(fifo)
+        self.addCleanup(os.remove, fifo)
+        try:
+            self.assertTrue(stat_module.S_ISFIFO(os.stat(fifo).st_mode))
+        except (AttributeError, OSError):  # pragma: no cover - not POSIX
+            self.skipTest("mkfifo is unavailable on this platform")
+        self.build_bundle(rel_dir="p7-ok")
+        with self.env():
+            token = self.key(["validation:read"])
+            status, body = self.call("GET", "/v1/validation/runs", token=token)
+            self.assertEqual(status, 200, body)
+            self.assertEqual([row["run_id"] for row in body["runs"]], [RUN_ONE])
+            fifo_samples = [sample for sample in body["ignored_samples"]
+                            if sample["reason"] == "not_regular_file"]
+            self.assertEqual(len(fifo_samples), 1, body["ignored_samples"])
+            self.assertTrue(fifo_samples[0]["relative_path"].endswith(f"{RUN_ONE}.json"))
 
     def test_f7_counters_describe_the_served_filtered_set(self) -> None:
         self.build_bundle(rel_dir="p7-ok")

@@ -183,6 +183,23 @@ kilobytes) is therefore reported `corrupt` with `record_sha256: ""` rather than
 read. Both bounds are implementation limits, not contract vocabulary: no response
 field names them, and a record between the two bounds is still read normally.
 
+### 5.3 Two deliberate over-rejections, and the non-regular-file rule
+
+* The declared-path rule refuses **any literal `..` substring**, not only a `..`
+  path segment, so a legitimate name such as `artifacts/note..txt` is refused.
+  That is the proposal's literal wording ("contains no `..`") and it fails
+  closed; the alternative — a per-component test — would have to reason about
+  which reader later normalises the path, which is exactly the assumption this
+  slice refuses to make.
+* A run-shaped entry that is not a **regular file** (a FIFO, socket or device) is
+  not treated as a record: it is counted in `ignored_entries` with reason
+  `not_regular_file`. This is §2's "only regular files are considered" and it
+  also means an open is never attempted on something that could block forever.
+* `discovery.duplicate rows` carry no `mode`/`attribution`/`evidence_grade`,
+  because a stem with more than one parseable member is refused rather than
+  resolved; a `mode`/`attribution`/`project` filter therefore never matches a
+  duplicate row. That follows from the fail-closed rule, not from a missing field.
+
 ## 6. Artifact reads and the masker revision
 
 A declared path is opened with the repo's per-component descriptor-relative
