@@ -196,7 +196,14 @@ depend on the merge is the `live` default: `web/server/core-paths.json` stays as
 entry stays closed, and no operator service is started or reconfigured until the real target
 baseline has passed this plan and the operator says so.
 
-## 10. First probe — exploratory, not yet a frozen bundle
+## 10. First probe — exploratory, since re-derived by the harness
+
+**Superseded by the executed run** in `validation-runs/p6/20261008T061309Z-p6-03-realcore/`
+(**35/35**, no failures, no blockers, `mode: real-core+wire`), which re-derived every observation
+below from a clean environment and added the withholding pair, the retry invariants on real jobs,
+and the four-divergence settlement. The probe is kept because it is what the design was checked
+against, and because two of its observations changed the harness: the redaction row needs a row that
+really carries engine text, and a healthy row's `safe_error_summary` is `None` for the human too.
 
 The environment was built and driven by hand to find out whether the plan's design works before a
 harness is written around it. **These observations are real but exploratory**: they come from one

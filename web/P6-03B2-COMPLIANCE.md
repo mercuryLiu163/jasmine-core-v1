@@ -56,7 +56,7 @@ Criterion numbers are the frozen specification's. `9a`/`9b` is the split the spe
 | 7 | `reflect` requires an explicit request; output marked non-authoritative from Core's field | met (simulated) | Gate record 11: the submit is disabled with no query, the body is the frozen one, the marker comes from Core's `non_authoritative`, and the trace is read back. `web/tests/memoryWriteViews.test.tsx` covers the same |
 | 8 | No `before`/`after` assumption: both lifecycle shapes handled | met (simulated) | Gate record 10 (7-key fresh) and record 9 (5-key replay); `web/tests/memoryWriteViews.test.tsx` renders each shape and asserts the replayed one does not claim a fresh transition |
 | **9a** | Not reachable in the default configuration | **met** | `web/tests/p4Writes.test.ts` (19) and `web/tests/p4WritesCoreProxy.test.ts` (16) check both hosts: default off, independent of the reads' switch in **both** directions, absent from `paths` and from the milestone-B `write_paths` (still 25 and 4), not reachable with GET, malformed ids refused. Gate `writes-off/` (4/4) shows the real proxy refusing by name and no command reaching the fixture |
-| **9b** | Verified against a real P4 Core | **NOT met** | Nothing in this slice has been served by P4 code. The Gate's Core is a simulation |
+| **9b** | Verified against a real P4 Core | **met for Core behaviour; engine layer is a labelled wire double** | `validation-runs/p6/20261008T061309Z-p6-03-realcore/`: **35/35** against an isolated **real P4 Core** at the pinned SHA (schema 11) — seven reads, real permissions **including key issuance**, replay and `event_id_conflict`, `revision_conflict`, real command Events read back by id, real traces, retry invariants on real `FAILED`/`DONE`/`RUNNING`/`PENDING` jobs, the withholding pair on a row that really carries engine text, and no Rule/State change. **Still not established**: anything engine-dependent (the engine is P4's `StubHindsightServer`, `mode: real-core+wire`, so P4's own Gate's `mode: real` bar is not met and P4 phase acceptance is not claimed), and the six writes have not yet been *submitted through the browser* against a real Core |
 
 ### Redaction on a write reply
 
@@ -125,12 +125,15 @@ from the click-trace's prose — which is exactly what the P6-03b1 bundle could 
 
 ## What is NOT evidenced
 
-* **Real P4**: no route, no validator, no engine, no job. The fixture's own docstring lists what it
-  cannot reproduce (no Truth store or engine; the actor kind is a scope stand-in; its replay
-  identity is `(object_id, command)` while P4 hashes the command payload; the nested command
-  `event` shape is fixture-invented; `job` is always `null` on a lifecycle reply; the read **list**
-  routes do not reflect mutations; `explicit_user_request=False` is not modelled because the
-  fixture *is* the explicit route).
+* **Real P4** — since the real-Core run, the Core half is no longer in this list: the four
+  divergences the fixture admitted are **settled** against real P4 (P4 hashes the command payload ⇒
+  the same `event_id` with a changed field is `event_id_conflict`; the nested event is a real Event
+  row; a lifecycle reply carries a real queued job; the list reflects mutations). What remains
+  unproven is engine-dependent behaviour and the browser pass against a real Core:
+  * no real engine (the real-Core run uses P4's `StubHindsightServer`, `mode: real-core+wire`);
+  * `explicit_user_request=False` is not modelled, because P4's reflect route *is* the explicit one;
+  * the dashboard has not yet driven the six writes through the browser against real P4 — the
+    simulated Gate covers the UI behaviours, and that pass is the remaining step.
 * **The operator's own Core**: nothing here was pointed at it, and the live allowlist is untouched.
 * **A browser user's own credential choices**: the Gate signs in with generated throwaway tokens;
   it cannot evidence what a real key with a different scope set would see.
@@ -138,10 +141,12 @@ from the click-trace's prose — which is exactly what the P6-03b1 bundle could 
 
 ## Outstanding
 
-1. **Real-P4 verification** — the single item the operator deferred: point the dashboard at a Core
-   built from `0c4f8f0e2118711ac9aa2a7006fddc6982962248` with `P6_ENABLE_P4_WRITES=1`, and re-run
-   this Gate's assertions against it. Until then, 9b is unmet and the status is PARTIAL /
-   DEPENDENCY_PENDING.
+1. **Real-P4 verification** — **the Core half is done** (35/35, bundle
+   `20261008T061309Z-p6-03-realcore`). What remains: (a) the browser pass — point the dashboard at
+   that Core with `P6_ENABLE_P4_WRITES=1` and submit the six writes from the UI, which the simulated
+   Gate covers but real P4 has not yet seen; (b) a real Hindsight deployment, which would move the
+   engine layer from `mode: boundary-fake` to `real` and is what P4's own Gate requires. Status
+   stays **PARTIAL / DEPENDENCY_PENDING** until (a) is done; (b) is the operator's environment.
 2. **Both independent passes are done, and the follow-up binds the final SHA.** The validation pass
    first ran against `b6fcee8` and returned REPRODUCED for every claim it tested, with two findings
    (the credential leak, and post-bundle `web/src` drift). Both are fixed; the current bundle binds
