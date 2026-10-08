@@ -1713,6 +1713,7 @@ async function main() {
         { label: 'P4 fixture sign-in form' })
       await signInMemory(token)
 
+      const pageText = () => evaluate(cdp, `document.body.textContent ?? ''`)
       const gotoMemory = async (hash, label, waitForText) => {
         await cdp.send('Page.navigate', { url: `${args.ui}/#/${hash}` })
         await waitFor(cdp, waitForText, { label })
