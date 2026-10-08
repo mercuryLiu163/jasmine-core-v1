@@ -1,6 +1,7 @@
 # P6-03b — scope, dependency check, and acceptance criteria
 
-**Status: P6-03b1 DELIVERED as PARTIAL / DEPENDENCY_PENDING; P6-03b2 NOT STARTED.**
+**Status: P6-03b1 DELIVERED as PARTIAL / DEPENDENCY_PENDING; P6-03b2 SPECIFICATION FROZEN,
+NOT IMPLEMENTED** — see [`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md).
 
 This began as the task breakdown and dependency check the operator asked for before
 implementation. The operator then authorised b1, and E1–E5 below are built, tested and
@@ -29,7 +30,7 @@ P6-03b is the **P4 (Memory)** inspector, split by operator decision:
 | --- | --- | --- |
 | P6-03a | Checkpoint / Context Pack / Resume (P3) | delivered, PARTIAL / DEPENDENCY_PENDING |
 | **P6-03b1** | **7 read endpoints** — health, jobs ×2, items ×2, traces ×2 | **delivered**, PARTIAL / DEPENDENCY_PENDING (this file) |
-| **P6-03b2** | **5 `memory:manage` writes + `reflect`** | **not started**, separate milestone, needs an audited-write Gate |
+| **P6-03b2** | **5 `memory:manage` writes + `reflect`** | **specification frozen, not implemented**; separate milestone, needs an audited-write Gate ([`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md)) |
 | P6-03c | Validation inspector (P7-01) | not started |
 
 ## 1. Scope, as the taskbook defines it
@@ -241,6 +242,12 @@ Falsifiable, each a test or a Gate record rather than a sentence.
 
 **P6-03b2 — additional, before any of it ships:**
 
+Criterion 10 is now partly discharged on paper: the frozen payload/permission table exists in
+[`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md) with snapshot
+`contracts/p4-memory-write.v1.json`, derived by `scripts/p6/p4_write_spec.py` and guarded by
+`tests/p6/test_p4_write_spec.py`. Freezing it satisfies none of the criteria below; it only
+settles what is to be built.
+
 10. A frozen payload/permission table per write, an explicit permission Gate, and per-action
     audit readback, mirroring P6-02 milestone B.
 11. `reflect` is human/system only, requires an explicit user request, and is unreachable from
@@ -264,6 +271,7 @@ the criterion claims. `R#` is a Gate record in `scripts/p6/browser_trace.mjs`.
 | 7 redaction respected | `test_a_human_key_sees_the_engine_text`, `test_every_read_withholds_the_engine_text_from_an_agent` (all seven routes, each with a per-route control so an unobservable route fails rather than passing), `test_withholding_does_not_drop_the_field`, `renders nothing where Core withheld the text`, `renders the sentinel Core actually sent` — the last pair runs on the **detail** view, because the list table never renders the field and the first version of it was vacuous |
 | 8 no engine client | `test_the_bundle_can_only_talk_to_its_own_origin`, `test_the_bundle_carries_no_engine_credential_identifier`, `test_the_memory_endpoints_stay_under_the_same_origin_client`, `test_no_engine_client_exists_in_the_slice`, `test_the_memory_endpoint_layer_issues_get_only`, `test_absent_retain_and_bank_selector_routes`; `test_every_write_is_refused_because_writes_are_p6_03b2` |
 | 9 status | `test_snapshot_says_the_dependency_is_missing_and_acceptance_unpassed`; `states PARTIAL / DEPENDENCY_PENDING on the view itself`; the `%s offers only read controls` cases; Gate R7 |
+| b2 spec frozen (not a b1 criterion) | the b2 write-spec guards — 13 cases in the Python test tree: the frozen snapshot still matches the pinned SHA, the six writes are exactly the ones the read slice excluded, `--check` exits 2 when the commit is absent, and none of the six is in the proxy allowlist, the pending reads, or the client |
 
 ## 5. Non-goals
 
@@ -292,7 +300,8 @@ Still open:
 
 Both are settled: **Q3** — the dependency-pending views land now, with simulation labelled,
 the pending paths isolated from the live allowlist and forwarding off by default. **Q4** —
-E1–E5 are authorised and built; everything in P6-03b2 remains plan-only.
+E1–E5 are authorised and built; P6-03b2 is frozen on paper in
+`P6-03B2-WRITE-SPEC.md` and nothing of it is implemented.
 
 Still open, for the operator:
 
@@ -331,6 +340,6 @@ contract, the gated paths and the Gate are built and evidenced; contract pinned 
 `0c4f8f0e2118711ac9aa2a7006fddc6982962248`, **P4 phase acceptance not passed**, live proxy
 closed by default. This header said "NOT STARTED" for five commits after the implementation
 landed, which a reader could have taken either as "nothing to review" or as a reason to skip
-the acceptance caveats. `P6-03b2: NOT STARTED` and gated behind its own audited-write Gate.
+the acceptance caveats. `P6-03b2: SPECIFICATION FROZEN, NOT IMPLEMENTED` and gated behind its own audited-write Gate.
 The baseline serves none of the thirteen routes, so no part of this slice is available, and
 none of it may be described as such until §4 has been executed against a real Core.
