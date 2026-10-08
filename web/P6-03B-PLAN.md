@@ -1,20 +1,30 @@
 # P6-03b — scope, dependency check, and acceptance criteria
 
 **Status: NOT IMPLEMENTED. Nothing in this document has been built.** It is the task
-breakdown and dependency check the operator asked for *before* implementation, so that a
-capability whose backend is not merged cannot be presented as available.
+breakdown and dependency check the operator asked for *before* implementation.
 
-P6-03b is the **P4 (Memory)** inspector in the P6-03 family:
+**Contract source: pinned.** `p4-integration` @
+`0c4f8f0e2118711ac9aa2a7006fddc6982962248` — the full SHA, not the branch name, so the
+contract cannot move when that branch does.
 
-| | Slice | Owner | This document |
-| --- | --- | --- | --- |
-| P6-03a | Checkpoint / Context Pack / Resume | P3 | delivered, PARTIAL / DEPENDENCY_PENDING |
-| **P6-03b** | **Memory Jobs / Recall / Inspector** | **P4** | **planned only — this file** |
-| P6-03c | Validation inspector | P7-01 | not started |
+**P4 phase acceptance: NOT PASSED.** Nothing here has been validated against a real P4 Core.
+The pinned commit is an unmerged feature branch, not an accepted phase.
+
+**Dependency status: DEPENDENCY_PENDING.** The target Core does not serve these routes, so the
+live proxy stays closed by default.
+
+P6-03b is the **P4 (Memory)** inspector, split by operator decision:
+
+| Slice | Contents | Status |
+| --- | --- | --- |
+| P6-03a | Checkpoint / Context Pack / Resume (P3) | delivered, PARTIAL / DEPENDENCY_PENDING |
+| **P6-03b1** | **7 read endpoints** — health, jobs ×2, items ×2, traces ×2 | **planned only — this file** |
+| **P6-03b2** | **5 `memory:manage` writes + `reflect`** | planned, separate milestone, needs an audited-write Gate |
+| P6-03c | Validation inspector (P7-01) | not started |
 
 ## 1. Scope, as the taskbook defines it
 
-The P6 taskbook (`docs/Jasmine-Core-V1-P6-阶段任务书.md` §6) splits P6-03 by domain. The two
+The P6 taskbook (`docs/Jasmine-Core-V1-P6-阶段任务书.md` §6) splits P6-03 by domain. Its two
 P6-03b rows are the Memory Jobs/Recall view and the Memory Inspector management view:
 
 | View | Frozen prerequisite and display | Stated failure modes / non-goals |
@@ -24,8 +34,11 @@ P6-03b rows are the Memory Jobs/Recall view and the Memory Inspector management 
 
 The taskbook also fixes the boundary: the P4 line owns the Memory adapter, jobs, recall and
 management API; the UI must not talk to Hindsight directly, must not choose a bank, and must
-not write Memory into Truth. And, generally for P6-03: **"不能将未接入部分写成已通过 P6"** — an
-unconnected part must not be written up as passing P6.
+not write Memory into Truth. And, generally for P6-03: **"不能将未接入部分写成已通过 P6"**.
+
+**The operator's split puts the first row's reads in b1 and every write in b2.** "Retry" and
+"management permission" belong to b2; b1 renders and links, and issues no state-changing
+request.
 
 ## 2. Dependency check — the decisive part
 
@@ -35,19 +48,33 @@ unconnected part must not be written up as passing P6.
 | --- | --- |
 | Baseline `850fbec` (schema 8) memory routes | **0** |
 | Baseline `src/jasmine_core/memory/` | does not exist |
-| P4 source of truth | branch `p4-integration` @ `0c4f8f0e2118711ac9aa2a7006fddc6982962248` (2026-10-06), schema **11**, 128 commits ahead of the baseline |
-| Is `p4-integration` merged into `main`? | **No** |
-| Other P4 refs | `p4-memory` @ `b88efc5` (an **ancestor** of `p4-integration`); `p4-memory-checkpoint` @ `a0e8539` (diverges — **not** an ancestor) |
-| Route surface across the three P4 refs | all three declare the same 13 routes; the shapes and semantics still need pinning to one ref |
+| Pinned contract source | `p4-integration` @ `0c4f8f0e2118711ac9aa2a7006fddc6982962248` (2026-10-06), schema **11**, 128 commits ahead of the baseline |
+| Is that commit in `main`? | **No** |
+| Other P4 refs | `p4-memory` @ `b88efc5` (an **ancestor** of the pinned commit); `p4-memory-checkpoint` @ `a0e8539` (diverges — **not** an ancestor) |
+| Route surface across the three P4 refs | all three declare the same 13 routes; the shapes and semantics are pinned to the commit above |
 
-So P6-03b is in the *same class* as P6-03a: a real contract exists on an unmerged branch, the
+P6-03b is in the *same class* as P6-03a: a real contract exists on an unmerged branch, the
 baseline cannot answer it, and the honest delivery is a dependency-marked scaffold. The
-difference worth noting is that P4 is a **separate line** from P3 — P6-03b does not become
-available just because P3 lands.
+difference is that P4 is a **separate line** from P3 — P6-03b does not become available just
+because P3 lands.
 
-### The P4 read surface, from `src/jasmine_core/memory/api.py`
+### Pinning rule (operator requirement)
 
-Thirteen routes, all under `/v1/memory/*`. Seven are reads and belong to a read-only slice:
+The contract is pinned to the **full commit SHA**, never to a branch name. Every derived
+artefact records that SHA, so:
+
+* the contract does not drift when `p4-integration` moves;
+* a drift check can compare the frozen snapshot against that exact commit, and fails if the
+  commit is absent rather than silently passing;
+* re-pinning to a newer P4 commit is an explicit, reviewable change — not a side effect of a
+  `git pull`.
+
+The same rule already applies to P6-03a, which pins `7016dabb8926…`, and both are recorded the
+same way in their frozen snapshots.
+
+### The P4 read surface — `src/jasmine_core/memory/api.py` at the pinned SHA
+
+Thirteen routes, all under `/v1/memory/*`. Seven are reads and make up **P6-03b1**:
 
 | # | Method and path | Handler | Scope | Response |
 | --- | --- | --- | --- | --- |
@@ -59,7 +86,7 @@ Thirteen routes, all under `/v1/memory/*`. Seven are reads and belong to a read-
 | 6 | `GET /v1/memory/traces` | `list_traces` | `memory:read` | `{traces, count}` |
 | 7 | `GET /v1/memory/traces/{mtr}` | `get_trace` | `memory:read` | `{trace}` |
 
-The other six are writes or generator actions and are **out of the read slice**:
+The other six are writes or generator actions and are **P6-03b2**:
 
 | Method and path | Handler | Scope |
 | --- | --- | --- |
@@ -74,19 +101,20 @@ Id prefixes: `mjb` (job), `mem` (item), `mtr` (trace).
 
 ### Semantics the UI must not contradict
 
-These come from P4's own module docstring and handler bodies, and each one is a testable
-constraint rather than a style preference:
+Derived from the pinned commit's module docstring and handler bodies. Each is a testable
+constraint, and per the operator's requirement the derivation covers **semantics** as well as
+routes, scopes and shapes:
 
 * **`non_authoritative: true` is emitted by Core itself** on item, item-detail and health
-  payloads. The inspector must surface it; Memory is not Authority and must never be
-  rendered as if it were.
+  payloads. The inspector must surface it; Memory is not Authority and must never be rendered
+  as if it were.
 * **There is no public retain endpoint and no public bank selector.** Content reaches the
   engine only through a worker acting on a job derived from committed truth, and the bank is
   derived from the item's own scope. A UI affordance to retain text or choose a bank would be
   inventing an API that deliberately does not exist.
 * **Reflect is human/system only, behind `memory:reflect`**, is the only path that runs the
   engine's generator, and is unreachable from a Context build. The taskbook adds: only on an
-  explicit user request.
+  explicit user request. It is b2.
 * **Project authorisation comes from the authenticated actor**, never a body field or query
   parameter, and an unauthorised project is reported as `not_found` — so the inspector cannot
   be used to enumerate another project's work. The UI must render that as *not found*, and in
@@ -98,81 +126,98 @@ constraint rather than a style preference:
 
 ## 3. Executable before P4 merges, and blocked until it does
 
-**Executable now** — all of it dependency-marked scaffolding, mirroring what P6-03a did for
-P3. None of it makes the feature available:
+**Executable now — P6-03b1 scaffolding**, all of it dependency-marked. None of it makes the
+feature available:
 
 | # | Item | Notes |
 | --- | --- | --- |
-| E1 | `scripts/p6/p4_contract.py`, pinned to one P4 ref, deriving the seven read routes' scopes and response field sets and freezing `web/contracts/p4-memory-read.v1.json` with its source commit | `p3_contract.py` is the template; the same drift guard applies |
-| E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own default-off switch, with the live `paths` list untouched | the existing test that pending paths never enter the live allowlist extends to these |
-| E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | values are the fixture's; shapes are P4's |
-| E4 | Types, endpoints and views behind the dependency-pending panel; the `未接入` row becomes a P4-dependency row | no action buttons |
-| E5 | Component tests plus a Gate section with the negatives listed in §4 | same shape as P6-03a's record set |
+| E1 | `scripts/p6/p4_contract.py` pinned to the full SHA above, deriving the seven read routes' scopes, response field sets **and** the semantics in §2, frozen as `web/contracts/p4-memory-read.v1.json` with the source commit | `p3_contract.py` is the template; the drift check re-derives from the pinned commit and fails on any change, and skips loudly where the commit is absent |
+| E2 | `p4_pending_paths` in `web/server/core-paths.json` (strict-id patterns) behind its own **default-off** switch, with the live `paths` list untouched at 25 | the existing test that pending paths never enter the live allowlist extends to these |
+| E3 | A simulated P4 fixture, labelled on every reply and asserting each payload against the frozen contract before serving | values are the fixture's; shapes and semantics are the pinned commit's |
+| E4 | Types, endpoints and views behind the dependency-pending panel; the `未接入` row becomes a P4-dependency row | **no action buttons** — every write is b2 |
+| E5 | Component tests plus a Gate section with the negatives in §4 | same shape as P6-03a's record set |
 
 **Blocked until P4 is merged and independently validated:**
 
 * acceptance against a real Core with a real `memory:read` token;
-* the management flows (`memory:manage`) and `reflect` (`memory:reflect`) — these are writes,
-  and P6-02's precedent is that writes need their own frozen payload/permission table and an
+* anything in P6-03b2. The five lifecycle/retry writes and `reflect` are state-changing, and
+  P6-02's precedent is that writes need their own frozen payload/permission table and an
   independent permission-and-audit Gate before any UI ships them;
 * any statement that the Memory inspector works, or that Memory is wired.
 
 ## 4. Acceptance criteria
 
-Falsifiable, and each one is a test or a Gate record rather than a sentence:
+Falsifiable, each a test or a Gate record rather than a sentence.
 
-1. **Contract.** `p4_contract.py --check` reproduces the frozen snapshot from the pinned P4
-   ref; changing a scope or a field in the snapshot fails the drift guard.
+**P6-03b1 — the read slice:**
+
+1. **Contract.** `p4_contract.py --check` reproduces the frozen snapshot from the pinned SHA;
+   changing a scope, a field or a recorded semantic fails the drift check, and an absent
+   commit fails loudly rather than passing.
 2. **Baseline untouched.** The live allowlist is still exactly 25 paths and contains none of
-   the seven memory reads; the default-off switch is asserted, and no default path reaches
-   Core for a memory route.
+   the seven memory reads; the switch defaults off; with it off no memory path reaches Core.
 3. **Gate, per read.** All seven reads render from the labelled fixture, with network
    readback; screenshots for the jobs list/detail, the items list/detail and a trace.
-4. **Non-authoritative is visible.** The rendered item, item-detail and health views state
-   that Memory is non-authoritative, read from Core's own `non_authoritative` field rather
-   than from a hardcoded string.
-5. **Empty vs error vs refused are three distinct states.** No grants → empty list, not an
-   error; unauthorised project → `not_found`, not an error banner and not the
-   dependency-pending panel; missing `memory:read` → Core's `forbidden_scope`.
+4. **Non-authoritative is visible.** Item, item-detail and health views state that Memory is
+   non-authoritative, read from Core's own `non_authoritative` field rather than a hardcoded
+   string.
+5. **Empty vs error vs refused vs not-found are four distinct states.** No grants → empty
+   list, not an error; unauthorised project → `not_found`, not an error banner and not the
+   dependency-pending panel; missing `memory:read` → Core's `forbidden_scope`; P4 absent →
+   the dependency-pending panel.
 6. **Malformed ids are refused locally** with the right field named and **zero** requests sent.
 7. **Redaction is respected.** With an agent key, engine-derived text is absent from the
    rendered job payloads.
 8. **No forbidden affordance exists.** No retain, no bank selector, no direct-engine call, no
-   `reflect` control in the read slice; a grep over the bundle for engine credentials and
+   `reflect` control, no lifecycle button; a grep over the bundle for engine credentials and
    endpoints comes back empty.
-9. **Status.** The pages and the report say **PARTIAL / DEPENDENCY_PENDING**; nothing claims
+9. **Status.** The pages and the report say **PARTIAL / DEPENDENCY_PENDING** and state that
+   the contract source is pinned while **P4 phase acceptance has not passed**; nothing claims
    P6 passed, and Memory is never presented as Truth.
+
+**P6-03b2 — additional, before any of it ships:**
+
+10. A frozen payload/permission table per write, an explicit permission Gate, and per-action
+    audit readback, mirroring P6-02 milestone B.
+11. `reflect` is human/system only, requires an explicit user request, and is unreachable from
+    a Context build.
+12. A retry does not duplicate a retain.
 
 ## 5. Non-goals
 
 * No retain, no bank selection, no direct Hindsight access, no engine credential in the
   browser.
 * No Memory write into Truth, and no Memory shown as Authority.
-* No `reflect` in the read slice.
+* No `reflect` and no lifecycle writes in b1.
 * No P4 benefit experiments — they remain stopped, and this document neither runs nor plans
   one.
 * No changes to `src/`, the schema, or the existing services.
 
-## 6. Open questions for the operator
+## 6. Decisions and remaining question
 
-These change the deliverable, so they are asked rather than assumed:
+Settled by the operator:
 
-* **Q1 — which ref is the contract source?** `p4-integration` @ `0c4f8f0` is the newest and
-  `p4-memory` is an ancestor of it, so pinning to `p4-integration` is the defensible default;
-  `p4-memory-checkpoint` diverges and would be a deliberate choice.
-* **Q2 — split, or one milestone?** The taskbook's P6-03b mixes seven reads with six
-  manage/reflect actions. Proposal: **P6-03b1** = the seven reads (this plan), and
-  **P6-03b2** = the five lifecycle/retry writes plus `reflect`, each needing the P6-02-style
-  audited-write Gate. Shipping them together would put write authority behind a read-only
-  review.
+* **Contract source** — pinned to `p4-integration` @
+  `0c4f8f0e2118711ac9aa2a7006fddc6982962248`, by full SHA; routes, permissions, response
+  shapes and semantics are derived from that commit with a drift check; the contract's
+  provenance is marked as pinned while **P4 phase acceptance remains unpassed**; and every
+  interface not yet integrated with the target Core stays DEPENDENCY_PENDING with the live
+  proxy closed by default.
+* **Split** — P6-03b1 is the seven reads; P6-03b2 is the five `memory:manage` writes plus
+  `reflect`, behind its own audited-write Gate.
+
+Still open:
+
 * **Q3 — the placeholder.** Should `未接入` stay until P4 merges, or should P6-03b1's
   dependency-pending views land first, as P6-03a did for P3? Landing them earlier makes the
   pending state demonstrable but adds a second set of pending paths to maintain.
-* **Q4 — is any of E1–E5 wanted now?** The operator's instruction was to plan before
-  implementing. This document assumes **nothing** is built until that is confirmed.
+* **Q4 — is any of E1–E5 wanted now?** The instruction was to plan before implementing. This
+  document assumes **nothing** is built until that is confirmed.
 
 ## 7. Standing status
 
-`P6-03b: NOT STARTED, DEPENDENCY UNMERGED` (P4 on `p4-integration`, schema 11, not in `main`).
-The baseline serves none of these routes, so no part of this slice is available, and none of
-it may be described as such until §4 has been executed against a real Core.
+`P6-03b1: NOT STARTED, DEPENDENCY_PENDING` — contract pinned to
+`0c4f8f0e2118711ac9aa2a7006fddc6982962248`, P4 phase acceptance **not passed**, live proxy
+closed by default. `P6-03b2: NOT STARTED` and gated behind its own audited-write Gate. The
+baseline serves none of the thirteen routes, so no part of this slice is available, and none
+of it may be described as such until §4 has been executed against a real Core.
