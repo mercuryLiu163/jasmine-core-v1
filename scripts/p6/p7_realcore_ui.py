@@ -17,7 +17,7 @@ Read `scripts/p6/p7_realcore_env.py`, `scripts/p6/p7_realcore_ui_trace.mjs` and
    router, not a second allowlist: the dashboard's own `core-paths.json` still decides what the
    browser may reach, and every forwarded request goes to a real Core;
 4. the dashboard, built with `npm run build` in `web/` **from the working tree** (the P6-03c
-   views are uncommitted, so a `git archive` of `HEAD` would not contain them), served by
+   working tree may be dirty), served by
    `web/server/serve.mjs` with `P6_ENABLE_P7_READS=1` and `P6_CORE_ORIGIN` pointed at the switch
    proxy.
 
@@ -446,7 +446,8 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
                   python_checks: list[dict[str, Any]], census: dict[str, Any],
                   verdicts: dict[str, Any], real_tree: dict[str, Any],
                   trace_exit: int, responses: list[dict[str, Any]],
-                  artifact_observations: dict[str, Any]) -> str:
+                  artifact_observations: dict[str, Any],
+                  git_status: list[str]) -> str:
     passed = sum(1 for record in trace_records if record.get("ok") is True)
     failed = sum(1 for record in trace_records if record.get("ok") is False)
     blocked = sum(1 for record in trace_records if record.get("ok") is None)
@@ -580,11 +581,15 @@ def render_result(out: Path, *, trace_records: list[dict[str, Any]],
         "let the UI state the reason without a request. This is a recorded contract request, not a "
         "validated contract property.",
         f"  Observed in this run: `{json.dumps(artifact_observations.get('withheldUi'))[:400]}`",
-        "* **The dashboard is built from a dirty working tree.** The P6-03c views "
-        "(`web/src/views/ValidationViews.tsx`, `ValidationDependency.tsx` and the touched "
-        "`App.tsx`/router/endpoint files) are uncommitted, so `npm run build` from `web/` — not a "
-        "`git archive` of `HEAD` — is what produced `web/dist`. The manifest records the exact "
-        "`git status --porcelain` and the dist digests.",
+        # Derived from the same `git status` the manifest records: on a clean tree the old
+        # unconditional "dirty working tree / are uncommitted" sentence was simply false.
+        ("* **The dashboard is built from a dirty working tree.** `git status --porcelain` was "
+         "non-empty when `npm run build` ran, so the bundle's `web/dist` may not be reproducible "
+         "from `HEAD` alone. The manifest records the exact `git status --porcelain` and the dist "
+         "digests."
+         if git_status else
+         "* **The dashboard is built from the committed tree.** `git status --porcelain` was empty "
+         "when `npm run build` ran, and the manifest records the head commit and the dist digests."),
         "* **There is no engine, no Hindsight and no write path here.** The slice is read-only; "
         "nothing in this run can speak to a live deployment, to P7 phase acceptance, or to the "
         "recorder changes the ADR excludes (the unmarked-mocked-`agent_response` residual).",
@@ -912,13 +917,7 @@ def main(argv: list[str] | None = None) -> int:
                        f"{fixture_census_note['fixture_ids_inside_census']}",
              "evidence": "fixture-census.json"},
         ]
-        (out / "result.md").write_text(
-            render_result(out, trace_records=trace_records, python_checks=python_checks,
-                          census=census, verdicts=verdicts, real_tree=real_tree,
-                          trace_exit=trace_exit, responses=responses,
-                          artifact_observations=artifact_observations),
-            encoding="utf-8")
-        _LOG.append(f"p6-03c: bundle written to {out}")
+        # Computed before result.md, which now reports whether the tree was dirty.
         git_head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
                                   capture_output=True, text=True).stdout.strip()
         git_status = [line for line in subprocess.run(
@@ -926,6 +925,14 @@ def main(argv: list[str] | None = None) -> int:
             capture_output=True, text=True).stdout.splitlines() if line]
         p7_head = subprocess.run(["git", "-C", str(args.repo), "rev-parse", "HEAD"],
                                  capture_output=True, text=True).stdout.strip()
+        (out / "result.md").write_text(
+            render_result(out, trace_records=trace_records, python_checks=python_checks,
+                          census=census, verdicts=verdicts, real_tree=real_tree,
+                          trace_exit=trace_exit, responses=responses,
+                          artifact_observations=artifact_observations,
+                          git_status=git_status),
+            encoding="utf-8")
+        _LOG.append(f"p6-03c: bundle written to {out}")
         versions = {
             "python": sys.version.split()[0],
             "node": subprocess.run(["node", "--version"], capture_output=True,
