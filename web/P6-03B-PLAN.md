@@ -177,9 +177,15 @@ Falsifiable, each a test or a Gate record rather than a sentence.
 6. **Malformed ids are refused locally** with the right field named and **zero** requests sent.
 7. **Redaction is respected.** With an agent key, engine-derived text is absent from the
    rendered job payloads.
-8. **No forbidden affordance exists.** No retain, no bank selector, no direct-engine call, no
-   `reflect` control, no lifecycle button; a grep over the bundle for engine credentials and
-   endpoints comes back empty.
+8. **No forbidden affordance and no engine client exists.** No retain, no bank selector, no
+   direct-engine call, no `reflect` control, no lifecycle button. Asserted structurally rather
+   than by word search, because the first draft of this criterion said "a grep over the bundle
+   comes back empty" and that is false: the bundle contains the word *Hindsight* in
+   disclaimers saying the browser does **not** touch it. What is asserted instead: the built
+   bundle carries no origin other than XML namespace URIs and React's error-decoder link; no
+   engine credential identifier (`api_key`, `access_token`, `refresh_token`, `password=`,
+   `client_secret`); every memory call is a same-origin `/memory/...` path; and no memory
+   module names an engine client.
 9. **Status.** The pages and the report say **PARTIAL / DEPENDENCY_PENDING** and state that
    the contract source is pinned while **P4 phase acceptance has not passed**; nothing claims
    P6 passed, and Memory is never presented as Truth.

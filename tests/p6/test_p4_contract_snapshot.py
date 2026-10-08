@@ -272,3 +272,72 @@ class DashboardTypesMatchTheP4Contract(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NoEngineAccessFromTheBrowser(unittest.TestCase):
+    """Acceptance criterion 8, made checkable.
+
+    The criterion was first written as "a grep over the bundle for engine credentials and
+    endpoints comes back empty", which is **false as stated**: the bundle contains the word
+    "Hindsight" three times, in disclaimers that say the browser does *not* touch it, and a
+    word search cannot tell a disclaimer from a credential. What actually matters is that no
+    engine origin, no engine credential identifier and no engine call exists — so that is what
+    is asserted here, and the plan now says so.
+    """
+
+    #: Origins a bundled front-end legitimately carries: XML namespace URIs and React's own
+    #: error-decoder link. Anything else would be a host this page could talk to.
+    ALLOWED_ORIGINS = {
+        "http://www.w3.org/1998/Math/MathML",
+        "http://www.w3.org/1999/xhtml",
+        "http://www.w3.org/1999/xlink",
+        "http://www.w3.org/2000/svg",
+        "http://www.w3.org/XML/1998/namespace",
+        "https://reactjs.org/docs/error-decoder.html",
+    }
+
+    def built_bundle(self) -> str:
+        assets = sorted((ROOT / "web" / "dist" / "assets").glob("index-*.js"))
+        if not assets:
+            raise unittest.SkipTest(
+                "no built bundle in web/dist; run `cd web && vite build` to check this")
+        return assets[-1].read_text(encoding="utf-8", errors="replace")
+
+    def test_the_bundle_can_only_talk_to_its_own_origin(self) -> None:
+        origins = set(re.findall(r"https?://[A-Za-z0-9./_-]+", self.built_bundle()))
+        self.assertEqual(origins - self.ALLOWED_ORIGINS, set(),
+                         "the bundle carries an origin the dashboard has no business reaching")
+
+    def test_the_bundle_carries_no_engine_credential_identifier(self) -> None:
+        text = self.built_bundle().lower()
+        for identifier in ("api_key", "apikey", "access_token", "refresh_token", "password=",
+                           "client_secret"):
+            with self.subTest(identifier=identifier):
+                self.assertNotIn(identifier, text,
+                                 f"{identifier!r} suggests a credential the browser should "
+                                 f"never hold")
+
+    def test_the_memory_endpoints_stay_under_the_same_origin_client(self) -> None:
+        """Every memory call goes through `client`, which is relative to our own origin."""
+        source = (ROOT / "web" / "src" / "api" / "endpoints.ts").read_text(encoding="utf-8")
+        start = source.index("memoryHealth:")
+        section = source[start:source.index("listHosts:")]
+        calls = re.findall(r"client\.get<[^>]*>\(\s*'([^']+)'", section)
+        self.assertTrue(calls)
+        for path in calls:
+            with self.subTest(path=path):
+                self.assertTrue(path.startswith("/memory/"),
+                                f"{path!r} is not a same-origin memory path")
+                self.assertNotIn("http", path)
+
+    def test_no_engine_client_exists_in_the_slice(self) -> None:
+        """The engine lives behind Core; a front-end module naming it would be the leak."""
+        for path in ("web/src/views/MemoryViews.tsx", "web/src/views/MemoryDependency.tsx",
+                     "web/src/api/endpoints.ts"):
+            text = (ROOT / path).read_text(encoding="utf-8")
+            for forbidden in ("hindsight", "engine_url", "engineUrl", "bank_selector",
+                              "bankSelector", "MEMORY_ENGINE"):
+                with self.subTest(path=path, forbidden=forbidden):
+                    self.assertNotIn(forbidden, text.lower(),
+                                     f"{path} names {forbidden!r}; the browser must not have an "
+                                     f"engine client")
