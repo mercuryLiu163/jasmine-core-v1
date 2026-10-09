@@ -86,7 +86,7 @@ def serve_private(args):
                 if name=='review_approve':
                     preview=resolver.preview(row['id']);body={'idempotency_key':'seed-resolve-'+task,'host_id':host,'policy_version':preview['policy_version'],'expected_revisions':preview['expected_revisions'],'expected_context_digest':preview['expected_context_digest']}
                     resolved=resolver.resolve(row['id'],body,actor_id=human);assert resolved['resolution']['result']['disposition']=='PENDING_REVIEW'
-                    row['id']=resolved['resolution']['result']['review_id'];row['review']=ReviewStore(resolver).get(row['id']);row['actions']=[{'candidate_index':0,'action':'CREATE_RULE','payload':{'kind':'RULE','severity':'NORMAL','enforcement':'CONTEXT','content':'Human approved synthetic browser requirement','matcher':{}}}]
+                    row['id']=resolved['resolution']['result']['review_id'];row['review']=ReviewStore(resolver).get(row['id']);row['actions']=[{'candidate_index':0,'action':'CREATE_RULE','payload':{'kind':'RULE','severity':'NORMAL','enforcement':'CONTEXT','content':row['review']['preview']['plan']['items'][0]['candidate']['content'],'matcher':{}}}]
             else:
                 proposed=authority.propose({'rule_key':'fixture-'+task.lower().replace('_','-'),'kind':'RULE','severity':'NORMAL','enforcement':'CONTEXT','content':'Synthetic version 1','matcher':{},'scope':{'kind':'task','project_id':project,'task_id':task},'origin_event_id':source['event_id'],'host_id':host},actor_id=human)
                 active=authority.transition(proposed['rule']['rule_id'],'approve',{'host_id':host,'expected_revision':1},actor_id=human);row['id']=active['rule']['rule_id'];row['rule']=active['rule']
