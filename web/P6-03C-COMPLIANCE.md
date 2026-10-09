@@ -138,10 +138,16 @@ was fixed and re-gated:
   "unavailable" branch and would deny fields a row displays.
 * `fixture-census.json`'s `measurement` prose is a static string, so it would contradict the flag in a
   deliberately falsified bundle.
-* The harness's process exit code is not driven by `python_checks`: a failing check is recorded in
-  `result.md` and `manifest.json`, but the driver still exits 0.
-* `manifest.json`'s `dashboard.dirty_note` says the views were uncommitted; it is true of the run that
-  happened before `3577987` was committed and stale afterwards.
+* **CLOSED — was: "the harness's process exit code is not driven by `python_checks`".** The exit
+  code now decides on the recorded checks (`check_exit_code`: `False` fails the run, `None` fails it
+  unless the check declares `blocked_is_expected`), with the two failure negatives named in the
+  section above. Independently re-verified on `e5f6b09`: the 10 unit tests pass, a browser process
+  that exits 0 with a failing recorded check still returns 1, and the saved end-to-end negative
+  exits 1 with all 45 manifest-bound file digests matching.
+* **CLOSED — was: "`manifest.json`'s `dashboard.dirty_note` is stale".** The note, the
+  `result.md` paragraph about the build tree, and `mode.validation_root` are all derived from
+  `git status` / the configured root now, so an overridden root is labelled as such and a clean
+  tree is not described as dirty.
 * Cosmetics: two literal `**` markers reach the DOM in the duplicate note; `token-scan.json.not_scanned`
   is a literal list; one `_LOG.append` is now redundant; derived strings render "1 FAIL cases".
 * Harness: the run-verdict hook's fallback can still pick a case's verdict if the hook is present
