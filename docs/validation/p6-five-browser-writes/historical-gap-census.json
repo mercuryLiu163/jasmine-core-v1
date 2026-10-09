@@ -1,0 +1,607 @@
+{
+  "mode": "read-only historical browser-request census; not semantic acceptance",
+  "index": {
+    "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/P6-02B-INDEX.md",
+    "sha256": "7c636464a90ad7d99a069f063dcb566270f39ce2bce5b20d660a1acca3b78671"
+  },
+  "source_files": [
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T075256Z-p6-03a-realcore/browser-requests.jsonl",
+      "sha256": "795e6d3244387f3c264770b7e56dc2b2e1aa2411f0d3acc5535ad020edb9d07d"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T075346Z-p6-03b2-clickthrough/browser-requests.jsonl",
+      "sha256": "412ca32c509288717e44a4256a1251a78854a56531b222b63bc15cf9fb5e2545"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T075346Z-p6-03b2-clickthrough/writes-off/browser-requests.jsonl",
+      "sha256": "986257ef98603fd7728b189f821a758b37b99571412ec231992a382f1994ae31"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T075346Z-p6-03b2-clickthrough/stability/browser-requests.jsonl",
+      "sha256": "4b8c621a6d05165d6e3d5af1ef4bcbe1d6aabfb7de6e489925ed44cacd29b5e1"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T135254Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "57d4b0f131e60fcef4c992d35b79c42cee9fb3981c034bb157a8af9dfbb97507"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T075355Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "a4b886614c21eb437bab94756a467b6f3bb85e00d6d8b27be894729ee182356c"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T063605Z-p6-03a-realcore/browser-requests.jsonl",
+      "sha256": "cc9e8090811b47fff80f6ff3eda9076fc57a25812baea7459a0b800ead7b7747"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011025Z-p6-03a-clickthrough-stability2/browser-requests.jsonl",
+      "sha256": "c4786c9ea0b0865c0d11bf5e2b2dfd9369a40aa779ce0761c7d2aeb050f222e2"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010440Z-p6-03a-clickthrough/browser-requests.jsonl",
+      "sha256": "92ccc517d6a1b780e450acc5d02430a2d668c983ffa76e04c528bc58186f3077"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T023854Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "dbe37534b07a9b9d9b340826f8fe9c0c8fdfb34b2887b69559de2e30f943f472"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011326Z-p6-03a-clickthrough-stability2/browser-requests.jsonl",
+      "sha256": "ea26b6244a57b7bdfecf877a2a79c0c28dcd99c651529ffb7288fc23dfc62056"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T053936Z-p6-03b2-clickthrough/browser-requests.jsonl",
+      "sha256": "73d0ef8fe7b32c66995320035a32f865f889c2b4120cbf50f4c46b97bfc8ddad"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T053936Z-p6-03b2-clickthrough/writes-off/browser-requests.jsonl",
+      "sha256": "421566fbb3a846a9c677df27bb90f8c24c46849870b2fb43e844f39f2c38727f"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T053936Z-p6-03b2-clickthrough/stability/browser-requests.jsonl",
+      "sha256": "84b91c9e3ba8ed150c625fc4f8dd0e2d2e51829c8d6da49e0713e2b80cd993c1"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010707Z-p6-03a-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "67347a9ea105e53403d87b601c3d1a85cb28efcdb5d93f156330f97f1fb2f648"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T130455Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "527b09da74fd9110a1c68dd1da0d9f54f5c7c5210d9f7aa620e0ccdee0a3dd9d"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T024822Z-p6-03b1-clickthrough-scope/browser-requests.jsonl",
+      "sha256": "b76b00f34f0821820d7625b820e0251fdb02b1416b074fe3ff03398f58194a5e"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T060437Z-p6-01-gate/browser-requests.jsonl",
+      "sha256": "390b05d09bfad397e57982d5672e037703d04dbfc888e017eccd3a690b04de8b"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T130008Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "8a9bc749d4c1efd45dff66c61b2155efa075af5aee72340ae91604112b4823fe"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T023051Z-p6-03b1-clickthrough-scope/browser-requests.jsonl",
+      "sha256": "9fec0ab6f0fcad16836aa5898458e9bba36355408c8e32f0f94e9890d612df89"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T023404Z-p6-03b1-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "b8793ecd2feb0b97b26efbbcc10a8f7cdc03d8084c45ee87ada6bca431c2fcab"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010211Z-p6-03a-clickthrough-scope-falsification/browser-requests.jsonl",
+      "sha256": "3a61415db948c534363d464fbbdcd30983f5931c0ba640c0ab2fb9887574da9a"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011025Z-p6-03a-clickthrough-scope-falsification/browser-requests.jsonl",
+      "sha256": "237617b979d8f1a6e3a8b401d6a2ff09f43fd05a01bc0a9da004788f3cdb4a9f"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011326Z-p6-03a-clickthrough/browser-requests.jsonl",
+      "sha256": "704ac12a1515bde21d5b3c7809f2576297e3432d752d1047c99520a681c928e3"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T135314Z-p6-02b-clickthrough/browser-requests.jsonl",
+      "sha256": "fe7abf88009c0d2932b94096999a6b93c06f2fb9ee46477c90fc25ff673a4371"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T123950Z-p6-02a-read/browser-requests.jsonl",
+      "sha256": "ec0958a597ed9e19fc81c9408758ef354a584af6b1170712894387509736aed6"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011326Z-p6-03a-clickthrough-scope-falsification/browser-requests.jsonl",
+      "sha256": "5e7b14598a7dd75773b29fcc115024393dca2de8361b0b550a6c5409338fb6dd"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T023404Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "01ae658053a6f9da2258b911f61c887de0c37a6d3b47f8fe6b10a86189cddafd"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T023854Z-p6-03b1-clickthrough-scope/browser-requests.jsonl",
+      "sha256": "14231617e7303f576fa59579e828aca78e1fbc014f1de2a61d16ddb7b333b732"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T141656Z-p6-03a-clickthrough/browser-requests.jsonl",
+      "sha256": "7e48b6a5f5f406aa0927609d17bbbbccaa947baca3cf370b69f5fb1335514fb6"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T034549Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "527775af4693153fd64ed22133bfefb0e20eb01634b865a0b0c1ab27a6e76f60"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T134237Z-p6-02b-clickthrough/browser-requests.jsonl",
+      "sha256": "3dbfb6efd8f90fd1ab10a8ed8cec547e9b86085a00a62045554d607f03b12d88"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T020743Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "a91fcabb1a24a6aef49abfc3aa43e2d8ad302a3ee0016997219f0f59f96372d2"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T124335Z-p6-02a-read/browser-requests.jsonl",
+      "sha256": "d950f9956d8c4bf9e2fb490541f57352a0e9871f49b7813e94f260852368b5c5"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T132454Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "89ce9087adacd4a7eae096e057a81b4330ca87e44e803defee72752e769c23b2"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T131342Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "6e5eea75c1554a43dd6d389aaf52ef32952f75f8d93558a506062551b1354fae"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T123409Z-p6-02-read/browser-requests.jsonl",
+      "sha256": "2b0744f0680f8f93b68004a252b2d90317bcf9d0c2b59409bf9351c26a0c6060"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T054653Z-p6-01-browser/browser-requests.jsonl",
+      "sha256": "eba5fa1a48acc2ef063e83e8a40951bcbaeef7796441328e00a2d09ca3738791"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T125623Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "31f5383d82b587573b10b2e9be2929cbaaddcc3f49c289f8ff891164fe3e9e1f"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T142043Z-p6-03a-clickthrough-stability2/browser-requests.jsonl",
+      "sha256": "3eb62f491ef68a39117bb4100dc4e9841962d787f7dc8754dd5a1c51dc8901c0"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010211Z-p6-03a-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "ef084bf091532b8c648b34deab1a4a1078d8b7d8ce8cfe2d1cc0268ceba09cf5"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T124404Z-p6-02a-independent-r2/browser-trace/browser-requests.jsonl",
+      "sha256": "5767834da5067b6beac0b4987114238ebe1326688e35ed0ff660d63f7df3e3d9"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T122155Z-p6-02-read/browser-requests.jsonl",
+      "sha256": "a4fe7a18b326be54c2ded9dea4b867da66bad17a1831d6237f1fe6859f352f6b"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T130648Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "a55a80b2410f42e248957fa0bce175c13d06f283802fa874ab0ae8437dbd6f48"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T124303Z-p6-02a-read/browser-requests.jsonl",
+      "sha256": "1728999eb68fc7ee78a794eb38c7ec81c02cefb98fd2736509f97a07417fc85c"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010440Z-p6-03a-clickthrough-stability2/browser-requests.jsonl",
+      "sha256": "209dcfbd27502422785391da7a335e4327f1fede009dc55cf495b9b4ea9cbb7d"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/VALIDATE-p6-02-taskstep-write/evidence/browser-requests.jsonl",
+      "sha256": "905e71ce469fb1deecd560caee5a0b371d21c34ea151affeace94b442524e5eb"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011542Z-p6-03a-clickthrough/browser-requests.jsonl",
+      "sha256": "61e2aefcb63a27518e9cd28f7cd07ca19866b919ea3c0e846e7d115ef2512ef9"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T054500Z-p6-03b1-gate-regression/browser-requests.jsonl",
+      "sha256": "80802ac7e1875ed2275b49beda2466a61bc5cde5706f22ba7aeecaf007010ca4"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T054500Z-p6-03b1-gate-regression/rerun-after-harness-exports/browser-requests.jsonl",
+      "sha256": "9670d0ff5a07e99b4e9cd4cc061969d34e2e1357cd21c926e5e57866907e8acf"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T055046Z-p6-01-gate/browser-requests.jsonl",
+      "sha256": "61f04ef5731573a13145e8a3ec296e5112f5ba84fa848a917d7b1270ec707c96"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T024822Z-p6-03b1-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "a7b86be494cb6af26752407e4a04557e78e9683cc28c73987dcbf9b6469d578f"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T055930Z-p6-01-gate/browser-requests.jsonl",
+      "sha256": "864beaeab52fd0155a3591f3fe0d7c616c6e350ad12f1047ec6311571af8af0f"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T055733Z-p6-01-gate/browser-requests.jsonl",
+      "sha256": "17861743f1284787e97fe2b0057e646ab56b491e11605b161b355ceb535bf0b4"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010707Z-p6-03a-clickthrough-scope-falsification/browser-requests.jsonl",
+      "sha256": "e54d63cd44f6578433db704509e18a3c88902bfd045c255281eb8d36f66a2ef0"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011542Z-p6-03a-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "71f9aa8f766128bd3d27bd1d93854abf3f5a7874428c6e790319d0ea753983b8"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T133019Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "aa85eaff0663eaac4de7aff29f26e49f32cb6e6dacb63dcaf8763bb584854196"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T070847Z-p6-03a-realcore-pre-fix-contradiction/browser-requests.jsonl",
+      "sha256": "b221fbea5cfb45cb4ca85a7622a9f046e873db6829e89e0e8344e125ff350cd9"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T032422Z-p6-03b1-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "a12741e86185277790df3cec2963eed21a860b0c91150b8aa2fee0d29e7b5a4b"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T072010Z-p6-03a-realcore/browser-requests.jsonl",
+      "sha256": "7b5aedc9ba7f5fd224220b655ee86d12e08cca72795fc95cc69af60b30412ddb"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T020743Z-p6-03b1-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "1eb83e835dd2e2ab86a76b8ac579f6a35eb28e88a42fbcc949a6252edef38891"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T075317Z-p6-03a-gate-regression/browser-requests.jsonl",
+      "sha256": "21d49808a1a0bb22546033c6cb005508fdc5fffd984e82eae5cae40190e3e6b5"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T134836Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "0ea1085cdfee3644dbc792c9e4250135ae069f147f1085f14c693d9b36a8cf03"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T023051Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "56ea71c447894afbaccb2ffb5d25cd7084f004d61f8a179d4c7a5dc3fc8790e1"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011025Z-p6-03a-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "0c2d08ead60bad355e20edd85446a4bfc7ce7b4240e2d808b1b8e9e58845e24e"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T142043Z-p6-03a-clickthrough-label-falsification/browser-requests.jsonl",
+      "sha256": "d6f9f8c54c3c323ffc6c502627add21cb90ba1f2834aa027b4e3ac28d6981d33"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T134926Z-p6-02b-clickthrough/browser-requests.jsonl",
+      "sha256": "7be025fc8602d0d5b4632279170c4b46b3b0150aa2e140a2f20677cfaee161f1"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T055721Z-p6-01-gate/browser-requests.jsonl",
+      "sha256": "765fc556ed31aab522da0dea0f612b388178d262406b7ea6a56e472de95e13be"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T123350Z-p6-02-read/browser-requests.jsonl",
+      "sha256": "034247935cd315ae97fbac665e214c76666d4f4cd09d7e00b163b3d777e13c84"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T124241Z-p6-02a-read/browser-requests.jsonl",
+      "sha256": "1a17237244e37d47490de6fefe2cabfab9806d5152455426eaf4d937cc88efc1"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T123611Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "48aee55c5d7847790df7f6f667fb7c431bc8dac6b3b2d930ea129822ee6f4f70"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T032422Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "b9cbfcd1c1f28cefb223bd5ce95915f33551c35419ed43805b7b506580775757"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010707Z-p6-03a-clickthrough-stability2/browser-requests.jsonl",
+      "sha256": "1b75772f4c7657f3533a8d1f8ab9656a8568498c86f03c864c43f24b7cbbb901"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T023404Z-p6-03b1-clickthrough-scope/browser-requests.jsonl",
+      "sha256": "1fdf1078eec802fd8bc075b4fa0fd07da9251c66fede204bb2f18fcaea5fd0bb"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T141656Z-p6-03a-clickthrough-rerun/browser-requests.jsonl",
+      "sha256": "6b6efc3ace87f60f2b8a19c463a949c830c19dafc8405e0eb955876e480d020e"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T123430Z-p6-02-read/browser-requests.jsonl",
+      "sha256": "4ab24a4a8411b27d3c0a3b622f3b587c978aa5fec34544e00e7936ab9049ecae"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011326Z-p6-03a-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "3d286a01a864c8508691a5f1c75cca0fc22e6294cd93d611a39339634b1983f6"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T072054Z-p6-03b2-clickthrough/browser-requests.jsonl",
+      "sha256": "5837bf4fbd7cfb068b7a9a8e3b731d11e9e53455fcae787f1572fe3a94efafa6"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T072054Z-p6-03b2-clickthrough/writes-off/browser-requests.jsonl",
+      "sha256": "aeabfe23ca97c3c0b087bae9583e6fa34e0250f22211ed6e0557b59798f8ee13"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T072054Z-p6-03b2-clickthrough/stability/browser-requests.jsonl",
+      "sha256": "d0f9a8e026850873107906f499c7f2ade46616e867d7be12618c719089cc042b"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T020743Z-p6-03b1-clickthrough-scope/browser-requests.jsonl",
+      "sha256": "344a74b43e6258af7a7755f2ebd95a3f2e32d8e8acb5e9c0b15f24a6da49cb95"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T024217Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "8fcd59fbf5b947a305deb831036090a09889f7c61b57dc9268bf1425c5e4d7e6"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T130315Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "848c158d4d2a322aab1c6849cb472e534bff3b515af1e60e988b031266790095"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T055754Z-p6-01-gate/browser-requests.jsonl",
+      "sha256": "99a71117a97c7bbd259d5265090fb6b55716e31cecc2d266cd14f60000292c0a"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T024217Z-p6-03b1-clickthrough-scope/browser-requests.jsonl",
+      "sha256": "52feeb9314a7a71627d35138ac099077f3ad5c5fed6a5ae7f3d7601cdd0256ff"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T055101Z-p6-01-gate/browser-requests.jsonl",
+      "sha256": "cffba740fd07c505f8b466e0bb3701e1548888d9769d1d3fec111bae692170d1"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T142043Z-p6-03a-clickthrough/browser-requests.jsonl",
+      "sha256": "478b1ae0edf3bd75fe0d749dc490c0d9bad05fe8b43e1770077a16946bec6321"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T023051Z-p6-03b1-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "d2016ee5a7717ad63d6afb41dddbcd62b79535406e822067880e03d17e7cc5b2"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T072053Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "75fe1bc5e05374d6bb0e92be56e6972de04e459e79c48b20a382652656cf8e0e"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T124749Z-p6-02b-wires/browser-requests.jsonl",
+      "sha256": "6e7de27274998c513e520fab4ddc93968a7dbba80d9b1dc6c996c2b245f75a2d"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T123618Z-p6-02a-read/browser-requests.jsonl",
+      "sha256": "08fc7735f53de851f8bd75af8052a341d8b83b2519f74661e8d0bf013c82313f"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T024822Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "07ddf0f02bd0a4476b631e5ff3322c36108107bb226ba2137564ad57711b4335"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T063700Z-p6-03a-gate-regression/browser-requests.jsonl",
+      "sha256": "7f153a869e0889ca41496b913179757bf007decaa0ddd677ff68379ab0218b48"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T055812Z-p6-01-independent-r2/browser-trace/browser-requests.jsonl",
+      "sha256": "2629f16d182cd0f53050d79d6205588e0e1152944dadf622e6620300838f73fe"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T060528Z-p6-01-independent-r3/browser-trace-readback/browser-requests.jsonl",
+      "sha256": "791b35935db64cd9c8b37af36b585759ff1e5f033881fb95897c4bc4b15f3d03"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T060528Z-p6-01-independent-r3/browser-trace/browser-requests.jsonl",
+      "sha256": "d87da68a9344e35f4a51ee78952e86e3aba6cc8170cde20bf0db88770b81ea34"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T142043Z-p6-03a-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "ab1ebb5cf43b4db9d4716a110bab47af17a23322eeeff27da2088e1824e35708"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T124319Z-p6-02a-read/browser-requests.jsonl",
+      "sha256": "8a1331f2e683321be1490c286a06138dab4c163257467b99e251227d4925b565"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010707Z-p6-03a-clickthrough/browser-requests.jsonl",
+      "sha256": "d6dd8a218e345a14881f8afc7378a4f401df2d1f18d7ed1798547af146ae2d74"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T105630Z-p6-01-rebased-v8/browser-requests.jsonl",
+      "sha256": "12ba3e5c2c8ce34e2d25b0ad5ae8d5287ca4021294113419eddacacc26304dcf"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010440Z-p6-03a-clickthrough-scope-falsification/browser-requests.jsonl",
+      "sha256": "fde1ad6080c79e73d2128cf6ee8cc090a24408f70a85a8d8fd6e7ea3172e20ff"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T055437Z-p6-01-gate/browser-requests.jsonl",
+      "sha256": "3acf6dd4bb203ddbc23505506b369c60dfe44fb8073c87e3297384e40aeb28e8"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T023854Z-p6-03b1-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "9ef2389a018de1be17070dff89c831c608518ab0c13c22beceb5374073d131b8"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010440Z-p6-03a-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "23d92a5fdfc7e000a3918d1d3074782adbca508efd667f92d9a9cc6019db531c"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T131442Z-p6-02b-t03-gate/browser-requests.jsonl",
+      "sha256": "842cca195174978cbbe93453d951a923e4ce6643854718372558e8ff25b2929c"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010211Z-p6-03a-clickthrough-stability2/browser-requests.jsonl",
+      "sha256": "1294e2d335268e5102489a6966df6be7016eab139dd3f47c23a3fdc438a67792"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T034549Z-p6-03b1-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "cb994193c48480083d062d47c030c12c929f1aa956f4d7bd4d606d53c774cb48"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/VALIDATE-p6-02-item5-verified-accepted/run1-original-sha-incomplete/browser-requests.jsonl",
+      "sha256": "e9bf7e767dd0bd91542bdc64ceb1a63887f9308b391c4bfe75683e94a675d736"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/VALIDATE-p6-02-item5-verified-accepted/run3-original-sha-frozen-harness/browser-requests.jsonl",
+      "sha256": "83970d998dbe1bf22e65eeaff35b4425e11c76707554362920bab27cb84bbeb2"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/VALIDATE-p6-02-item5-verified-accepted/run2-original-sha/browser-requests.jsonl",
+      "sha256": "68cc206bc5ee1690d9ba6579b94d712d4ed171f5c1de1d4b0ab2255efcbc7a62"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/VALIDATE-p6-02-item5-verified-accepted/run4-final-sha-frozen-harness/browser-requests.jsonl",
+      "sha256": "99533e36690f56a84ac3e0588904c19728e422c17ff3351b791f573802abe5b8"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011542Z-p6-03a-clickthrough-stability2/browser-requests.jsonl",
+      "sha256": "68a440760774b01cb0d8e542871a2b89c6ba5c4908e4539525320b7e5dad7644"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011025Z-p6-03a-clickthrough/browser-requests.jsonl",
+      "sha256": "f6a122c903760b7446d898a221eba285df16e4796202dfa4fdd876c3d5cbacf6"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T011542Z-p6-03a-clickthrough-scope-falsification/browser-requests.jsonl",
+      "sha256": "feee7e438a9062e5130859da663f00ac6bf464efe631d82d2f4f93acdf6a4eb7"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T010211Z-p6-03a-clickthrough/browser-requests.jsonl",
+      "sha256": "7bf886d4b80135602ef47d9498bc34284498d934ffc92605d0698dc3d700f958"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T024217Z-p6-03b1-clickthrough-stability1/browser-requests.jsonl",
+      "sha256": "453e5dd993f668531ecf1be77bef98fcf29aaddc90d5af280431ef4ef34829ba"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261008T072142Z-p6-03a-gate-regression/browser-requests.jsonl",
+      "sha256": "ae51441cb2e1ba1c89626169879130fdd7aa0fa065ca7b8af923e88caa1b3352"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20260930T055129Z-p6-01-independent/browser-trace/browser-requests.jsonl",
+      "sha256": "1bf207d14a68e127e077b2c2a96ebf6d92f94d4d4295b443b45579bc33a06c9a"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T123715Z-p6-02a-independent/browser-trace-daa618a/browser-requests.jsonl",
+      "sha256": "7cbd99a7c2a626c60fd8af749794cfd47a0a8e2a5f57a3c6c3dfb22d8107d2eb"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-01/validation-runs/p6/20261007T123715Z-p6-02a-independent/browser-trace/browser-requests.jsonl",
+      "sha256": "f883e5a00d0d830edb7d2852a47afca65cd42975ad4befdb11ce483636668d53"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T075256Z-p6-03a-realcore/browser-requests.jsonl",
+      "sha256": "795e6d3244387f3c264770b7e56dc2b2e1aa2411f0d3acc5535ad020edb9d07d"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T075346Z-p6-03b2-clickthrough/browser-requests.jsonl",
+      "sha256": "412ca32c509288717e44a4256a1251a78854a56531b222b63bc15cf9fb5e2545"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T075346Z-p6-03b2-clickthrough/writes-off/browser-requests.jsonl",
+      "sha256": "986257ef98603fd7728b189f821a758b37b99571412ec231992a382f1994ae31"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T075346Z-p6-03b2-clickthrough/stability/browser-requests.jsonl",
+      "sha256": "4b8c621a6d05165d6e3d5af1ef4bcbe1d6aabfb7de6e489925ed44cacd29b5e1"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T075355Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "a4b886614c21eb437bab94756a467b6f3bb85e00d6d8b27be894729ee182356c"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T123425Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "70fd11ab786cbe0db7bac986df86554492a98c42547ac3a44f5090251096895c"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T071249Z-p6-03a-realcore/browser-requests.jsonl",
+      "sha256": "7a71d4e1f9cc4246b6fd78eb4d3504ae44be92e466a4aa70618ce84e1f633dfe"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T123359Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "30eb2ea51b8c1c4ae7a443d97212f503be92b1c84057e31012ba405980a5627a"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T071650Z-p6-03a-realcore/browser-requests.jsonl",
+      "sha256": "e178533d53ca3448183298343b9dc326d6ff739ed9e07fcd08d046addd153846"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T130254Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "20c7ea34d2cf8214809b1948cf5838d4be8a224b8e89207a6b92b4897bec3672"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T123523Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "d7320a488889478f6891ffe5cd4ada248b33d7163b57e4f137f117608ba320bf"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T072010Z-p6-03a-realcore/browser-requests.jsonl",
+      "sha256": "7b5aedc9ba7f5fd224220b655ee86d12e08cca72795fc95cc69af60b30412ddb"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T075317Z-p6-03a-gate-regression/browser-requests.jsonl",
+      "sha256": "21d49808a1a0bb22546033c6cb005508fdc5fffd984e82eae5cae40190e3e6b5"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T123611Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "48aee55c5d7847790df7f6f667fb7c431bc8dac6b3b2d930ea129822ee6f4f70"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T130149Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "bd3abdd06abcd78ffa5c8a66c2a99681d34b536ee5da752c9720da1e11b8f88c"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T072054Z-p6-03b2-clickthrough/browser-requests.jsonl",
+      "sha256": "5837bf4fbd7cfb068b7a9a8e3b731d11e9e53455fcae787f1572fe3a94efafa6"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T072054Z-p6-03b2-clickthrough/writes-off/browser-requests.jsonl",
+      "sha256": "aeabfe23ca97c3c0b087bae9583e6fa34e0250f22211ed6e0557b59798f8ee13"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T072054Z-p6-03b2-clickthrough/stability/browser-requests.jsonl",
+      "sha256": "d0f9a8e026850873107906f499c7f2ade46616e867d7be12618c719089cc042b"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T123534Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "d3adb48f37c4e0bf25e663a93dd1cd47ea765c1625b587d7ad814c1ddee38441"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T130315Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "848c158d4d2a322aab1c6849cb472e534bff3b515af1e60e988b031266790095"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T123505Z-p6-t05-degraded/browser-requests.jsonl",
+      "sha256": "a4703b27d4c38070bf1be084407c18fa45f892663c302d6d399eee13c2ac2763"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T072053Z-p6-03b1-clickthrough/browser-requests.jsonl",
+      "sha256": "75fe1bc5e05374d6bb0e92be56e6972de04e459e79c48b20a382652656cf8e0e"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T071914Z-p6-03a-gate-regression/browser-requests.jsonl",
+      "sha256": "513c8f81f06c57ffdc913cd5ffbdff47efbdda9e7c0a8e136f4d9f67ff5ef2b2"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T070847Z-p6-03a-realcore/browser-requests.jsonl",
+      "sha256": "b221fbea5cfb45cb4ca85a7622a9f046e873db6829e89e0e8344e125ff350cd9"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T071417Z-p6-03a-gate-regression/browser-requests.jsonl",
+      "sha256": "2a9657bc39850a96281074178cb8ce45eb6b82e033cde4b613cda00d3e4eece8"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T072142Z-p6-03a-gate-regression/browser-requests.jsonl",
+      "sha256": "ae51441cb2e1ba1c89626169879130fdd7aa0fa065ca7b8af923e88caa1b3352"
+    }
+  ],
+  "five_path_matches": {
+    "correct": [],
+    "rerun": [],
+    "review_approve": [],
+    "supersede": [],
+    "retire": []
+  },
+  "missing_paths": [
+    "correct",
+    "rerun",
+    "review_approve",
+    "supersede",
+    "retire"
+  ]
+}
