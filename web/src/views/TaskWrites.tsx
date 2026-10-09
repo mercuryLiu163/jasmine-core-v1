@@ -41,6 +41,7 @@ import {
   transitionBody,
 } from '../api/taskWrites'
 import { useSession } from '../app/session'
+import { sourceHref } from '../app/router'
 import { useResource } from '../app/useResource'
 import { useWriteAction, type WriteState } from '../app/useWriteAction'
 import { WritePanel } from '../components/WritePanel'
@@ -329,7 +330,10 @@ export function TaskWrites({ taskId }: { taskId: string }): JSX.Element {
           可迁移边与 criteria↔Evidence 的充分性都由 Core 判定:
           <code>409 invalid_state_transition</code> 会带回 Core 的
           <code>from_status</code>/<code>to_status</code>,<code>422 missing_evidence</code>
-          会带回 Core 的 requirement 详情。本页不会把前端参考矩阵当作可提交的依据。
+          会带回 Core 的 requirement 详情。本页不会把前端参考矩阵当作可提交的依据。只读的
+          <a href={sourceHref.task(taskId, 'evidence')}>criteria → Evidence 参考矩阵</a>
+          在 Evidence 标签页:它只显示 Core <code>_fresh</code> 的浏览器可读部分与
+          F1/F2/F8/F9d/F9e 残差,永远不是通过结论。
         </p>
       </Panel>
     </div>

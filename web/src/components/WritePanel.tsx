@@ -262,6 +262,9 @@ export function WritePanel<T = WriteResult>({
               {action.error.status !== null ? ` (HTTP ${action.error.status})` : ''}
             </p>
             <p>{action.error.message}</p>
+            <p className="state__meta" data-testid="write-evidence-branch">
+              {missingEvidenceBranch(action.error)}
+            </p>
             <p className="state__meta">
               没有发生写入:对象的状态与 revision 不变,也没有追加 command Event。这不是失败,也不是成功;
               Core 的判定依据原样显示在下面。
@@ -360,6 +363,45 @@ function RequestIdLine({ requestId }: { requestId: string | null }): JSX.Element
 }
 
 /**
+ * Name the `422 missing_evidence` branch from Core's own `details` (§5.1, §5.2).
+ *
+ * The confirmation and fingerprint branches carry no `details`; the absence is stated rather
+ * than guessed, because "no requirement_key" is not "no requirement failed". Branch 5 spells the
+ * Rule version `version`, not `rule_version`.
+ */
+export function missingEvidenceBranch(error: CoreApiError): string {
+  const details = (error.details ?? null) as Record<string, unknown> | null
+  if (details === null || typeof details !== 'object') {
+    return 'Core 未给出 requirement_key:这一分支没有 details(例如当前 human USER_CONFIRMATION 缺失,或当前 fingerprint 不可用),不能替 Core 推断缺的是哪一项。'
+  }
+  const requirementKey = details['requirement_key']
+  if (typeof requirementKey === 'string' && requirementKey !== '') {
+    const ruleId = details['rule_id']
+    const ruleVersion = details['rule_version']
+    if (typeof ruleId === 'string' && ruleId !== '') {
+      return `Core 判定的缺项:requirement_key = ${requirementKey},rule_id = ${ruleId}${
+        typeof ruleVersion === 'number' ? `,rule_version = ${ruleVersion}` : ''
+      }`
+    }
+    return `Core 判定的缺项:requirement_key = ${requirementKey}(直接 requirement)`
+  }
+  const ruleId = details['rule_id']
+  if (typeof ruleId === 'string' && ruleId !== '') {
+    const version = details['version'] ?? details['rule_version']
+    return `Core 判定的缺项:rule_id = ${ruleId}${
+      version === undefined ? '' : `,version = ${String(version)}`
+    }(该 ACTIVE Rule 没有 verification_requirements)`
+  }
+  if (typeof details['step_id'] === 'string') {
+    return `Core 判定的缺项:step_id = ${String(details['step_id'])}(该 Step 没有 acceptance requirements)`
+  }
+  if (typeof details['task_id'] === 'string') {
+    return `Core 判定的缺项:task_id = ${String(details['task_id'])}(该 Task 没有 acceptance requirements)`
+  }
+  return 'Core 未给出 requirement_key:这一分支的 details 没有缺项键,不能替 Core 推断缺的是哪一项。'
+}
+
+/**
  * Core's own fields for a refusal, named so a reader sees which revisions, which edge or which
  * scope was refused without decoding the JSON. The raw `details` block is still rendered beside
  * it — this is a reading aid, not a substitute.
@@ -385,6 +427,9 @@ export function RefusalFields({ error }: { error: CoreApiError }): JSX.Element |
     'requirement_key',
     'rule_id',
     'rule_version',
+    // §5.1 branch 5 spells the Rule version `version`, not `rule_version`; the raw `details`
+    // block is the contract-level guarantee, and naming it here is the expected aid.
+    'version',
     'step_id',
     'task_id',
   ]

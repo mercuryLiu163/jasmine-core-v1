@@ -9,16 +9,16 @@
  * 2. "Evidence 列表" — every `evd_` row for the task with its `kind`, `status`
  *    (PASS/FAIL/INFO), `reference_status` and fingerprint. INFO is labelled as
  *    INFO, never shown as PASS.
- * 3. "criteria → Evidence 参考矩阵" — a *read aid* that matches requirements to
- *    loaded Evidence by `kind` and explicit requirement fields. It is labelled
- *    as UI matching; the UI never promotes a Step to VERIFIED, and Core remains
- *    the only judge (a request that does not qualify still returns
+ * 3. "criteria → Evidence 参考矩阵" — the P6-02 item 5 read-only candidate matrix
+ *    (`CriteriaEvidenceMatrix`). It computes only the browser-readable half of Core's
+ *    `_fresh` predicate and names the F1/F2/F8/F9d/F9e residual; it is never a verdict.
+ *    Core remains the only judge (a request that does not qualify still returns
  *    `422 missing_evidence`).
  */
 
 import { useMemo } from 'react'
 
-import type { AcceptanceRequirement, Evidence, RawEvent } from '../api/types'
+import type { RawEvent } from '../api/types'
 import { sourceHref } from '../app/router'
 import { useSession } from '../app/session'
 import { useResource } from '../app/useResource'
@@ -27,6 +27,7 @@ import { Empty, ErrorPanel, Loading, Panel, StaleBanner, Unavailable } from '../
 import { TableScroll } from '../components/TableScroll'
 import { SourceLink } from '../components/Trace'
 import { formatTimestamp } from '../lib/text'
+import { CriteriaEvidenceMatrix } from './CriteriaEvidenceMatrix'
 
 interface GateRecord {
   stepId: string | null
@@ -86,37 +87,13 @@ function gateRecords(events: RawEvent[]): GateRecord[] {
   return records
 }
 
-function matches(requirement: AcceptanceRequirement, evidence: Evidence): boolean {
-  // Only the fields the requirement actually states are compared, mirroring the
-  // frozen requirement structure. Artifact/tool/command constraints that Core
-  // checks are shown, not relaxed.
-  if (evidence.kind !== requirement.kind) return false
-  if (evidence.status !== requirement.required_result) return false
-  if (requirement.tool_name && evidence.tool_name !== requirement.tool_name) return false
-  if (requirement.command_sha256 && evidence.command_sha256 !== requirement.command_sha256) return false
-  if (requirement.artifact_sha256 && evidence.artifact_sha256 !== requirement.artifact_sha256) return false
-  if (evidence.reference_status === 'BROKEN_REFERENCE') return false
-  return true
-}
-
 export function TaskEvidence({ taskId }: { taskId: string }): JSX.Element {
   const { endpoints } = useSession()
   const evidence = useResource((signal) => endpoints.listTaskEvidence(taskId, signal), [taskId])
   const history = useResource((signal) => endpoints.taskHistory(taskId, signal), [taskId])
-  const steps = useResource((signal) => endpoints.listSteps(taskId, signal), [taskId])
 
   const gates = useMemo(() => gateRecords(history.data?.events ?? []), [history.data])
   const items = evidence.data?.evidence ?? []
-
-  const requirements = useMemo(() => {
-    const collected: Array<{ scope: string; requirement: AcceptanceRequirement }> = []
-    for (const step of steps.data?.steps ?? []) {
-      for (const requirement of step.acceptance_criteria.requirements) {
-        collected.push({ scope: step.step_id, requirement })
-      }
-    }
-    return collected
-  }, [steps.data])
 
   return (
     <div className="stack">
@@ -241,63 +218,7 @@ export function TaskEvidence({ taskId }: { taskId: string }): JSX.Element {
         ) : null}
       </Panel>
 
-      <Panel title="criteria → Evidence 参考矩阵(前端匹配,仅供参考)">
-        {steps.status === 'loading' && steps.data === null ? <Loading what="Step criteria" /> : null}
-        {steps.error ? (
-          <ErrorPanel error={steps.error} what="Step criteria" onRetry={steps.reload} />
-        ) : null}
-        {steps.error ? null : requirements.length === 0 ? (
-          <Empty what="Step acceptance requirements" hint="没有 requirements 就没有矩阵。" />
-        ) : (
-          <TableScroll label="criteria 与 Evidence 参考矩阵">
-          <table className="table">
-            <caption className="sr-only">criteria 与已载入 Evidence 的参考匹配</caption>
-            <thead>
-              <tr>
-                <th scope="col">Step</th>
-                <th scope="col">requirement</th>
-                <th scope="col">已载入 Evidence 中的匹配</th>
-              </tr>
-            </thead>
-            <tbody>
-              {requirements.map(({ scope, requirement }) => {
-                const matched = items.filter((record) => matches(requirement, record))
-                return (
-                  <tr key={`${scope}:${requirement.key}`}>
-                    <th scope="row">
-                      <code>{scope}</code>
-                    </th>
-                    <td>
-                      <code>{requirement.key}</code> · {requirement.kind} →{' '}
-                      {requirement.required_result}
-                    </td>
-                    <td>
-                      {matched.length === 0 ? (
-                        <span className="muted">未在已载入 Evidence 中找到匹配</span>
-                      ) : (
-                        matched.map((record) => (
-                          <SourceLink
-                            key={record.evidence_id}
-                            kind="evidence"
-                            id={record.evidence_id}
-                            label={record.status}
-                            taskId={taskId}
-                          />
-                        ))
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          </TableScroll>
-        )}
-        <p className="state state--meta">
-          这是前端按 requirement 字段做的只读匹配,不是验收结论。真正的判定发生在 Core:
-          requirement 不满足时请求会得到 <code>422 missing_evidence</code>,本页不会提升任何状态。
-        </p>
-      </Panel>
+      <CriteriaEvidenceMatrix taskId={taskId} />
 
       <Panel title="未接入">
         <Unavailable
