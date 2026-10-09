@@ -10,7 +10,7 @@ from pathlib import Path
 
 NAMES=('correct','rerun','review_approve','supersede','retire')
 REQUIRED=tuple(f'{name}.{kind}' for name in NAMES for kind in ('success','conflict','replay','changed_body'))
-COMMON=('prewrite_exact_object_get200','fresh_success_POST','browser_body_uses_actual_basis','correct_replay_field_family','independent_command_GET','separate_operator_audit_http200','exact_audit_request_actor_scope_decision','original_raw_source_byte_identity','changed_object_GET200','forced_reload_fresh_exact_object_GET')
+COMMON=('prewrite_exact_object_get200','fresh_success_POST','browser_body_uses_actual_basis','correct_replay_field_family','independent_command_GET','command_object_source_binding','independent_command_body_sha256','separate_operator_audit_http200','exact_audit_request_actor_scope_decision','original_raw_source_byte_identity','changed_object_GET200','forced_reload_fresh_exact_object_GET')
 EXTRA={
  'correct':('new_child_current_head_provenance','no_automatic_business_truth_apply','exact_corrected_result'),
  'rerun':('new_child_current_head_provenance','no_automatic_business_truth_apply','rerun_config_and_completion'),
