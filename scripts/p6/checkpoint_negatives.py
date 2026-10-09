@@ -214,10 +214,12 @@ class Client:
         trace = lines(self.runtime / 'observer.jsonl')
         observed = [e for e in trace if e.get('request_id') == r['request_id']]
         audit = self.request('GET', '/v1/audit?limit=1000&actor_id=' + r['actor_id'], key='admin', phase='separate-audit-validator')
-        return {'http': r, 'before': before, 'after': after, 'observer': observed,
+        proof = {'http': r, 'before': before, 'after': after, 'observer': observed,
                 'observer_started': next(e for e in reversed(trace) if e['kind'] == 'observer_started' and e['pid'] == observed[0]['pid']),
                 'audit_read': audit, 'audit': [a for a in audit['body'].get('entries', []) if a['request_id'] == r['request_id']],
                 'database_receipts': [name + '-before.db', name + '-after.db']}
+        write(self.evidence / (name + '-operation.json'), proof)
+        return proof
 
     def fixture(self, label, steps=False, rule=False):
         h = self.credentials['host']
@@ -514,6 +516,7 @@ def run(args):
             subprocess.run(cmd, cwd=workspace, check=True, stdout=subprocess.DEVNULL)
         env = {k: os.environ[k] for k in ('HOME', 'USER', 'LANG', 'TMPDIR') if k in os.environ}
         env.update(PATH='/opt/homebrew/bin:/usr/bin:/bin', PYTHONDONTWRITEBYTECODE='1', PYTHONNOUSERSITE='1',
+                   PYTHONPATH=str(archive / 'src'),
                    npm_config_cache=str(private / 'npm-cache'), JASMINE_CORE_WORKSPACE_ROOT=str(workspace),
                    JASMINE_CORE_FINGERPRINT_EXTRA_PATHS='["declared-input.txt"]')
         for label, cmd in [('npm-ci', ['npm', 'ci', '--no-audit', '--no-fund']), ('build', ['npm', 'run', 'build'])]:
@@ -524,6 +527,7 @@ def run(args):
         report['toolchain'] = {'python': sys.version, 'node': subprocess.check_output(['node', '--version'], env=env, text=True).strip(),
                               'npm': subprocess.check_output(['npm', '--version'], env=env, text=True).strip(),
                               'lockfile_sha256': digest((archive / 'web/package-lock.json').read_bytes())}
+        report['python_import_root'] = str(archive / 'src')
         report['built_assets'] = {p.relative_to(archive / 'web/dist').as_posix(): digest(p.read_bytes())
                                   for p in (archive / 'web/dist').rglob('*') if p.is_file()}
         runtime = private / 'base'
@@ -766,6 +770,13 @@ def run(args):
         report['error'] = type(exc).__name__ + ': ' + str(exc)
     finally:
         report['cleanup'] = owned.close()
+        for c in clients:
+            write(out / (c.runtime.name + '-http-calls.json'), c.calls)
+            if (c.runtime / 'observer.jsonl').exists():
+                write(out / (c.runtime.name + '-observer.json'), lines(c.runtime / 'observer.jsonl'))
+            if c.database.exists():
+                backup(c.database, out / (c.runtime.name + '-final.db'))
+                write(out / (c.runtime.name + '-final-state.json'), snapshot(c.database))
         profile_removed = False
         if all(r.get('group_gone') for r in report['cleanup']):
             if profile and profile.exists():
@@ -774,9 +785,6 @@ def run(args):
             shutil.rmtree(private)
         report['profile_removed'] = profile_removed
         report['private_runtime_removed'] = not private.exists()
-        for c in clients:
-            # Calls never contain tokens. Persist even early preparation failures.
-            write(out / (c.runtime.name + '-http-calls.json'), c.calls)
         write(out / 'raw-result.json', report)
         matrix_path = out / 'matrix.json'
         if matrix_path.exists():
