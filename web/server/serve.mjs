@@ -14,6 +14,7 @@
  */
 
 import http from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { createReadStream, existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -210,26 +211,41 @@ export function classifyRequestTarget(rawUrl) {
   return { kind: 'static', pathname }
 }
 
-function sendJson(res, status, body) {
+function sendJson(res, status, body, requestId) {
   res.statusCode = status
   res.setHeader('content-type', 'application/json; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
+  if (requestId) res.setHeader('x-request-id', requestId)
   res.end(JSON.stringify(body))
 }
 
+/**
+ * The correlation id a proxy-generated response must carry.
+ *
+ * Mirrors `core-proxy.ts` `requestIdFor`: a refusal Core never saw has no Core `request_id`, so
+ * this hop echoes the incoming `X-Request-Id` when the client sent one and otherwise mints one.
+ * Both hosts must answer with an id, or a browser cannot name a proxy refusal in production.
+ */
+export function proxyRequestId(req) {
+  const incoming = req?.headers?.['x-request-id']
+  if (typeof incoming === 'string' && incoming.trim().length > 0) return incoming
+  return `proxy-${randomUUID()}`
+}
+
 export function proxy(req, res, origin, allowlist) {
+  const requestId = proxyRequestId(req)
   const classified = classifyRequestTarget(req.url)
   if (classified.kind === 'bad') {
     sendJson(res, 400, {
       error: { code: 'proxy_bad_target', message: `refused request target: ${classified.reason}` },
-    })
+    }, requestId)
     return
   }
   let target
   try {
     target = new URL(req.url, 'http://ui.invalid')
   } catch {
-    sendJson(res, 400, { error: { code: 'proxy_bad_target', message: 'unparsable request target' } })
+    sendJson(res, 400, { error: { code: 'proxy_bad_target', message: 'unparsable request target' } }, requestId)
     return
   }
   if (!isAllowed(allowlist, req.method, target.pathname)) {
@@ -238,7 +254,7 @@ export function proxy(req, res, origin, allowlist) {
         code: 'proxy_path_not_allowed',
         message: `the dashboard proxy does not forward ${req.method} ${target.pathname}`,
       },
-    })
+    }, requestId)
     return
   }
   const headers = { host: origin.host }
@@ -275,7 +291,7 @@ export function proxy(req, res, origin, allowlist) {
         code: 'proxy_core_unreachable',
         message: `${origin.origin}: ${error.code ?? error.message}`,
       },
-    })
+    }, requestId)
   })
   req.pipe(upstream)
 }
@@ -330,7 +346,7 @@ export function createDashboardServer({ root, origin, allowlist = loadAllowlist(
     if (target.kind === 'bad') {
       sendJson(res, 400, {
         error: { code: 'proxy_bad_target', message: `refused request target: ${target.reason}` },
-      })
+      }, proxyRequestId(req))
       return
     }
     if (target.kind === 'api') proxy(req, res, origin, allowlist)

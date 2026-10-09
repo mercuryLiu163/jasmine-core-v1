@@ -81,7 +81,9 @@ describe('P4 memory writes are opt-in, separately from the reads', () => {
       expect(alwaysOn).not.toContain(pattern)
       expect(reads).not.toContain(pattern)
     }
-    expect(allowlist.baseline_write_paths).toHaveLength(4)
+    // The always-on list is now milestone B's four families plus the seven P6-02b Task/Step
+    // state routes. The P4 writes must still be absent from it and from the read list.
+    expect(allowlist.baseline_write_paths).toHaveLength(11)
     expect(allowlist.paths).toHaveLength(25 + 7)
   })
 

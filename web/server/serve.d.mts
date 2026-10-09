@@ -67,6 +67,8 @@ export function loadAllowlist(
 export function resolveCoreOrigin(raw?: string): URL
 export function isAllowed(allowlist: Allowlist, method: string | undefined, pathname: string): boolean
 export function classifyRequestTarget(rawUrl: string | undefined): ClassifiedTarget
+/** The correlation id a refusal this hop generates carries (mirrors `core-proxy.ts`). */
+export function proxyRequestId(req: IncomingMessage | undefined): string
 export function proxy(
   req: IncomingMessage,
   res: ServerResponse,

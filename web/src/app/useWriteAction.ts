@@ -37,7 +37,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { CoreApiError, isAbortError } from '../api/errors'
+import { CoreApiError, isAbortedRequest, isAbortError } from '../api/errors'
 import type { WriteResult } from '../api/endpoints'
 import { newEventId } from '../lib/ids'
 
@@ -201,15 +201,23 @@ export function useWriteAction<T = WriteResult>(
       // operator can read it back; inventing a banner on this object would be worse
       // than silence.
       if (targetRef.current !== issuedFor) return
-      if (isAbortError(caught)) {
+      // Both an abort surfaced by the caller's signal and the `CoreApiError` the client now
+      // wraps one in (`ui_request_aborted`, spec §5 change 1) are the same unresolved state.
+      // The request id is set here as well as in the `CoreApiError` branch below, because a
+      // timeout is exactly the case where the operator cannot correlate the outcome and the
+      // id is the only handle they have (spec §5 change 2).
+      if (isAbortError(caught) || isAbortedRequest(caught)) {
         setState('unknown')
+        setRequestId(caught instanceof CoreApiError ? caught.requestId : null)
         setError(
-          new CoreApiError({
-            kind: 'unreachable',
-            status: null,
-            code: 'ui_write_aborted',
-            message: '请求被中断,结果未知;请读回对象或 command Event 再决定',
-          }),
+          caught instanceof CoreApiError
+            ? caught
+            : new CoreApiError({
+                kind: 'unreachable',
+                status: null,
+                code: 'ui_write_aborted',
+                message: '请求被中断,结果未知;请读回对象或 command Event 再决定',
+              }),
         )
       } else if (caught instanceof CoreApiError) {
         setError(caught)
@@ -224,6 +232,10 @@ export function useWriteAction<T = WriteResult>(
             message: caught instanceof Error ? caught.message : String(caught),
           }),
         )
+        // No id is available for a failure that never came from the HTTP client. Clearing it
+        // (rather than leaving a previous attempt's id) keeps the panel from naming the wrong
+        // request; `WritePanel` renders the missing id as unknown.
+        setRequestId(null)
         setState('unknown')
       }
     } finally {

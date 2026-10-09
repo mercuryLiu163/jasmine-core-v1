@@ -152,6 +152,16 @@ class DashboardProxyContract(unittest.TestCase):
                 f"^/v1/reviews/{ID_RE}/(approve|reject)$",
                 "^/v1/rules/proposals$",
                 f"^/v1/rules/{ID_RE}/(approve|supersede|retire)$",
+                # P6-02b Task/Step state writes: always-on, because this baseline Core serves
+                # all seven (`handlers.py:115-124`) and `tests/test_state.py` drives them over
+                # the real HTTP surface. A new pattern here is a deliberate contract change.
+                "^/v1/tasks$",
+                f"^/v1/tasks/{ID_RE}/steps$",
+                f"^/v1/tasks/{ID_RE}/transition$",
+                f"^/v1/tasks/{ID_RE}/criteria$",
+                f"^/v1/tasks/{ID_RE}/accept$",
+                f"^/v1/steps/{ID_RE}/transition$",
+                f"^/v1/steps/{ID_RE}/criteria$",
             ],
         )
 
@@ -204,28 +214,67 @@ class DashboardProxyContract(unittest.TestCase):
                 )
 
     def test_write_surface_is_narrow_and_real(self) -> None:
-        """Milestone B opens four POST shapes and nothing else.
+        """The always-on POST surface is exactly the frozen routes and nothing else.
 
         The write section is separate from the read section on purpose: adding a
         write path must not widen what GET may reach, and every write pattern must
-        be backed by a real Core route.
+        be backed by a real Core route. The seven P6-02b Task/Step patterns are
+        included because this baseline Core serves them; the out-of-scope writes
+        stay closed.
         """
         self.assertEqual({"POST"}, self.write_methods)
         samples = self.core_samples()
         for pattern in self.write_paths:
             backed = [sample for sample in samples if pattern.fullmatch(sample)]
             self.assertTrue(backed, f"write pattern {pattern.pattern!r} matches no Core route")
-        # The endpoints deliberately NOT opened in this slice.
+        # The seven Task/Step routes must each be covered, not merely "no pattern is junk":
+        # a missing pattern would show up as a browser 404 that looks like a Core refusal.
+        post_samples = [p for method, p in self.core_samples_by_method() if method == "POST"]
+        for route in (
+            "/v1/tasks",
+            f"/v1/tasks/{SAMPLE}/steps",
+            f"/v1/tasks/{SAMPLE}/transition",
+            f"/v1/tasks/{SAMPLE}/criteria",
+            f"/v1/tasks/{SAMPLE}/accept",
+            f"/v1/steps/{SAMPLE}/transition",
+            f"/v1/steps/{SAMPLE}/criteria",
+        ):
+            self.assertIn(route, post_samples, f"{route} is not a real Core POST route")
+            self.assertTrue(
+                any(pattern.fullmatch(route) for pattern in self.write_paths),
+                f"{route} is served by Core but not forwarded by the dashboard proxy",
+            )
+        # The endpoints deliberately NOT opened in this slice. The *plural*
+        # `/v1/workspaces/fingerprint` is the path Core actually serves
+        # (`handlers.py:113`); the singular spelling was a vacuous assertion and is kept
+        # only as a typo guard.
         for path in (
             "/v1/evidence/confirm",
             "/v1/resolutions/res_01M4B6VGC29ESRDRQR62DX8AK8/manual-reapply",
             "/v1/resolve/int_01M4B6VGC29ESRDRQR62DX8AK8",
             "/v1/tool-results",
+            "/v1/workspaces/fingerprint",
             "/v1/workspace/fingerprint",
         ):
             self.assertFalse(
                 any(pattern.fullmatch(path) for pattern in self.write_paths),
                 f"{path} must not be open to the browser in this slice",
+            )
+        # Every one of the five out-of-scope POSTs is a *real* Core route, so the proxy
+        # refusal is a deliberate boundary rather than "Core has no such path". The
+        # browser-level counterpart (spec §11 negative 9) drives a real browser and is a
+        # Gate obligation; this test pins the allowlist side of it.
+        for route in (
+            "/v1/evidence/confirm",
+            f"/v1/resolutions/{SAMPLE}/manual-reapply",
+            f"/v1/resolve/{SAMPLE}",
+            "/v1/tool-results",
+            "/v1/workspaces/fingerprint",
+        ):
+            self.assertIn(
+                route,
+                post_samples,
+                f"{route} must be a real Core route, or the absence check proves nothing",
             )
         # Reads stay GET-only even though writes exist.
         self.assertEqual({"GET"}, self.methods)

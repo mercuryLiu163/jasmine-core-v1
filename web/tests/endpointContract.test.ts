@@ -64,6 +64,16 @@ describe('every dashboard endpoint call is forwarded by the proxy', () => {
       [`/v1/memory/items/mem_${ID_BODY}/pin`, endpoints.memoryLifecycle(`mem_${ID_BODY}`, 'pin', body, signal)],
       [`/v1/memory/items/mem_${ID_BODY}/unpin`, endpoints.memoryLifecycle(`mem_${ID_BODY}`, 'unpin', body, signal)],
       ['/v1/memory/reflect', endpoints.reflectMemory(body, signal)],
+      // P6-02b: the seven Task/Step state writes. All seven are in the always-on
+      // `write_paths` list because this baseline Core serves them (`handlers.py:115-124`),
+      // unlike the gated P4 writes above.
+      ['/v1/tasks', endpoints.createTask(body, signal)],
+      [`/v1/tasks/tsk_${ID_BODY}/steps`, endpoints.createStep(`tsk_${ID_BODY}`, body, signal)],
+      [`/v1/steps/stp_${ID_BODY}/transition`, endpoints.transitionStep(`stp_${ID_BODY}`, body, signal)],
+      [`/v1/tasks/tsk_${ID_BODY}/transition`, endpoints.transitionTask(`tsk_${ID_BODY}`, body, signal)],
+      [`/v1/tasks/tsk_${ID_BODY}/criteria`, endpoints.setTaskCriteria(`tsk_${ID_BODY}`, body, signal)],
+      [`/v1/tasks/tsk_${ID_BODY}/accept`, endpoints.acceptTask(`tsk_${ID_BODY}`, body, signal)],
+      [`/v1/steps/stp_${ID_BODY}/criteria`, endpoints.setStepCriteria(`stp_${ID_BODY}`, body, signal)],
     ]
     await Promise.allSettled(writes.map(([, promise]) => promise))
     const posts = fake!.requests.filter((request) => request.method === 'POST')

@@ -96,6 +96,19 @@ export function isAbortError(error: unknown): boolean {
   )
 }
 
+/**
+ * The client's own code for "the caller aborted the request before an answer arrived".
+ *
+ * `CoreClient` wraps an abort in a `CoreApiError` so the id it generated travels with the
+ * failure (spec §5 change 1); that means `isAbortError` no longer recognises the wrapped
+ * form by name, and callers that want to treat an abort as its own state use this instead.
+ */
+export const ABORTED_REQUEST_CODE = 'ui_request_aborted'
+
+export function isAbortedRequest(error: unknown): boolean {
+  return error instanceof CoreApiError && error.code === ABORTED_REQUEST_CODE
+}
+
 /** A short, human label for a failure, used by every view. */
 export function describeError(error: CoreApiError): string {
   switch (error.kind) {

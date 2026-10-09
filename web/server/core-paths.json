@@ -38,9 +38,16 @@
     "^/v1/interpretations/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(correct|reject|rerun)$",
     "^/v1/reviews/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(approve|reject)$",
     "^/v1/rules/proposals$",
-    "^/v1/rules/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(approve|supersede|retire)$"
+    "^/v1/rules/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(approve|supersede|retire)$",
+    "^/v1/tasks$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/steps$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/transition$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/criteria$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/accept$",
+    "^/v1/steps/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/transition$",
+    "^/v1/steps/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/criteria$"
   ],
-  "write_note": "Milestone B writes, frozen per method+path. `manual-reapply`, `resolve/{int}` and `evidence/confirm` are deliberately absent: the first two need an explicit operator decision outside this slice, and a web button cannot produce ADR 0007 human-prompt provenance. Core still enforces scope, actor kind, idempotency and revision per request.",
+  "write_note": "Milestone B writes plus the always-on P6-02 Task/Step state writes, frozen per method+path. The seven Task/Step patterns are not behind a switch: this baseline Core serves all seven (`handlers.py:115-124`) and `tests/test_state.py` drives them over real HTTP, so forwarding them cannot send the browser to a Core that cannot answer. Core still enforces the scope, the human/system actor kind, the revision, the state machine, the Evidence threshold and the `event_id` idempotency on every request; the proxy decision is only 'may the browser ask'. `evidence/confirm`, `workspaces/fingerprint`, `tool-results`, `resolve/{int}` and `resolutions/{id}/manual-reapply` are deliberately absent: the first and last need an explicit operator decision outside this slice, a web button cannot produce ADR 0007 human-prompt provenance, and fingerprint scanning can move a VERIFIED Step to STALE. `/v1/audit` and `/v1/auth/*` stay absent for the same reason as the read list.",
   "p3_pending_paths": [
     "^/v1/context/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
     "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/checkpoints/latest$",

@@ -15,6 +15,7 @@
  *    memory is what Core sees, and Core remains the only authority on scopes.
  */
 
+import { randomUUID } from 'node:crypto'
 import http from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
@@ -140,11 +141,34 @@ export function isAllowedCoreRequest(method: string, pathname: string): boolean 
   return false
 }
 
-function refuse(res: ServerResponse, status: number, code: string, message: string): void {
+/**
+ * The correlation id a proxy-generated response must carry.
+ *
+ * A refusal that Core never saw has no Core `request_id`, so a reader cannot correlate it with
+ * anything unless this hop supplies one. The incoming `X-Request-Id` is echoed when the client
+ * sent it (so a browser-raised failure and its proxy refusal share one id); otherwise this hop
+ * mints one rather than answering with no id at all.
+ */
+export function requestIdFor(req: IncomingMessage | undefined): string {
+  const incoming = req?.headers['x-request-id']
+  if (typeof incoming === 'string' && incoming.trim().length > 0) return incoming
+  return `proxy-${randomUUID()}`
+}
+
+function refuse(
+  res: ServerResponse,
+  req: IncomingMessage | undefined,
+  status: number,
+  code: string,
+  message: string,
+): void {
   const body = JSON.stringify({ error: { code, message } })
   res.statusCode = status
   res.setHeader('content-type', 'application/json; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
+  // §5 change 3: the browser cannot name a proxy refusal unless this hop answers with an id,
+  // because a proxy refusal has no Core envelope to read one from.
+  res.setHeader('x-request-id', requestIdFor(req))
   res.end(body)
 }
 
@@ -159,12 +183,13 @@ export function proxyCoreRequest(
   try {
     target = new URL(req.url ?? '/', 'http://ui.invalid')
   } catch {
-    refuse(res, 400, 'proxy_bad_target', 'unparsable request target')
+    refuse(res, req, 400, 'proxy_bad_target', 'unparsable request target')
     return
   }
   if (!isAllowedCoreRequest(method, target.pathname)) {
     refuse(
       res,
+      req,
       404,
       'proxy_path_not_allowed',
       `the dashboard proxy does not forward ${method} ${target.pathname}`,
@@ -207,6 +232,7 @@ export function proxyCoreRequest(
     }
     refuse(
       res,
+      req,
       502,
       'proxy_core_unreachable',
       `Core at ${origin.origin} did not answer: ${error.code ?? error.message}`,
@@ -220,7 +246,7 @@ export function coreProxyPlugin(origin: URL): Plugin {
   const middleware = (req: IncomingMessage, res: ServerResponse, next: () => void): void => {
     const target = classifyRequestTarget(req.url)
     if (target.kind === 'bad') {
-      refuse(res, 400, 'proxy_bad_target', `refused request target: ${target.reason ?? 'malformed'}`)
+      refuse(res, req, 400, 'proxy_bad_target', `refused request target: ${target.reason ?? 'malformed'}`)
       return
     }
     if (target.kind === 'static') {

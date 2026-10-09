@@ -342,6 +342,30 @@ export function makeEndpoints(client: CoreClient) {
     listHosts: (signal?: AbortSignal) => client.get<{ hosts: Host[] }>('/hosts', { signal }),
     listActors: (signal?: AbortSignal) => client.get<{ actors: Actor[] }>('/actors', { signal }),
 
+    // --- P6-02 Task/Step write slice (always-on) ------------------------
+    // The seven state writes Core already serves in this baseline (`handlers.py:115-124`).
+    // They are not behind a switch (§10): Core enforces scope, actor kind, revision, the
+    // state machine, the Evidence threshold and `event_id` replay itself, so the proxy's
+    // only decision is whether the browser may ask. Bodies are built by `api/taskWrites.ts`;
+    // `useWriteAction` adds the `event_id` replay key so a retry replays rather than doubles.
+    // Deliberately placed after the P4 sections: the P4 contract tests bound their
+    // memory-write section at `listHosts:`, and a Task/Step write inside it would make their
+    // "six memory writes" count describe this slice instead of P4.
+    createTask: (body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>('/tasks', body, { signal }),
+    createStep: (taskId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/tasks/${id(taskId)}/steps`, body, { signal }),
+    transitionStep: (stepId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/steps/${id(stepId)}/transition`, body, { signal }),
+    transitionTask: (taskId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/tasks/${id(taskId)}/transition`, body, { signal }),
+    setTaskCriteria: (taskId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/tasks/${id(taskId)}/criteria`, body, { signal }),
+    acceptTask: (taskId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/tasks/${id(taskId)}/accept`, body, { signal }),
+    setStepCriteria: (stepId: string, body: WriteBody, signal?: AbortSignal) =>
+      client.post<WriteResult>(`/steps/${id(stepId)}/criteria`, body, { signal }),
+
     // P6-03c: the P7-01 Validation reads. Five GETs, all `validation:read` (plus
     // `validation:unattributed` on Core's side for a run with no project attribution), all
     // DEPENDENCY PENDING — the baseline Core has no /v1/validation/* route, so the proxy

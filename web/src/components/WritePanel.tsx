@@ -25,11 +25,12 @@ import type { ReactNode } from 'react'
 
 import type { WriteAction, WriteKeyKind } from '../app/useWriteAction'
 import type { WriteResult } from '../api/endpoints'
+import type { CoreApiError } from '../api/errors'
 import { isDependencyPending } from '../api/errors'
 import { useSession } from '../app/session'
 import { useResource } from '../app/useResource'
 import { JsonBlock } from './JsonBlock'
-import { SourceLink } from './Trace'
+import { KeyValue, SourceLink } from './Trace'
 import { ErrorPanel, Loading } from './States'
 
 export interface WritePanelProps<T = WriteResult> {
@@ -220,8 +221,16 @@ export function WritePanel<T = WriteResult>({
               Core 认为对象已经变化,草稿没有被提交。下面是 Core 返回的当前值与判定依据;
               请重新审阅后再决定,界面不会用新 revision 自动重试原意。
             </p>
+            <RefusalFields error={action.error} />
+            <RequestIdLine requestId={action.requestId} />
             {action.error.details ? (
               <JsonBlock value={action.error.details} label="Core 当前值/详情" startsOpen />
+            ) : null}
+            {/* A conflict is resolved by re-reading, so the readback action is offered here too. */}
+            {onSucceeded ? (
+              <button type="button" onClick={onSucceeded}>
+                从 Core 重新读取
+              </button>
             ) : null}
           </div>
         ) : null}
@@ -236,7 +245,30 @@ export function WritePanel<T = WriteResult>({
           </div>
         ) : null}
 
+        {/* An Evidence-gated edge whose validation did not pass is neither a failure nor a
+            success: Core refused before any write, and the projection is unchanged (§7, §11).
+            It is recorded as BLOCKED with Core's own reason rather than shown as a generic
+            error, and it is deliberately not routed through the conflict block (re-reading
+            will not make an unsatisfied criterion pass). */}
+        {action.state === 'refused' && action.error?.code === 'missing_evidence' ? (
+          <div className="state state--pending" role="status" data-testid="write-evidence-blocked">
+            <p className="state__headline">
+              Evidence 门槛未通过 — <strong>BLOCKED</strong> · <code>{action.error.code}</code>
+              {action.error.status !== null ? ` (HTTP ${action.error.status})` : ''}
+            </p>
+            <p>{action.error.message}</p>
+            <p className="state__meta">
+              没有发生写入:对象的状态与 revision 不变,也没有追加 command Event。这不是失败,也不是成功;
+              Core 的判定依据原样显示在下面。
+            </p>
+            <RefusalFields error={action.error} />
+            {action.error.details ? <JsonBlock value={action.error.details} label="details" /> : null}
+            <RequestIdLine requestId={action.requestId} />
+          </div>
+        ) : null}
+
         {action.state === 'refused' && action.error &&
+        action.error.code !== 'missing_evidence' &&
         !(isDependencyPending(action.error) && dependencyNote) ? (
           <div className="state state--error" role="alert">
             <p className="state__headline">
@@ -244,24 +276,29 @@ export function WritePanel<T = WriteResult>({
               {action.error.status !== null ? ` (HTTP ${action.error.status})` : ''}
             </p>
             <p>{action.error.message}</p>
+            <RefusalFields error={action.error} />
             <p className="state__meta">
               本页不会换更高权限的凭据重试;缺 scope 或角色不符需要操作者自己解决。
             </p>
             {action.error.details ? <JsonBlock value={action.error.details} label="details" /> : null}
+            <RequestIdLine requestId={action.requestId} />
           </div>
         ) : null}
 
         {action.state === 'unknown' ? (
-          <div className="state state--pending" role="alert">
+          <div className="state state--pending" role="alert" data-testid="write-unknown">
             <p className="state__headline">结果未知{action.error ? ` — ${action.error.code}` : ''}</p>
             <p>
               请求可能已经到达 Core,也可能没有。请<strong>读回</strong>对象或 command Event 后再决定;
-              不要用新幂等键重做({action.error?.message ?? ''})。
+              不要用新 {action.keyKind === 'event_id' ? 'event_id' : '幂等键'} 重做
+              ({action.error?.message ?? ''})。
             </p>
-            {action.requestId ? (
-              <p className="state__meta">
-                request_id <code>{action.requestId}</code>
-              </p>
+            <RequestIdLine requestId={action.requestId} />
+            {/* The recovery §5 names second: read the truth back rather than guess. */}
+            {onSucceeded ? (
+              <button type="button" onClick={onSucceeded}>
+                从 Core 重新读取
+              </button>
             ) : null}
           </div>
         ) : null}
@@ -291,6 +328,69 @@ export function WritePanel<T = WriteResult>({
         ) : null}
       </div>
     </section>
+  )
+}
+
+/**
+ * The correlation id for a failure, rendered on every failure path (§5).
+ *
+ * A response with no id is shown as **unknown**, never silently omitted: "no id" and "no
+ * request happened" are different statements, and the operator needs the first one to know the
+ * outcome cannot be correlated. That is a gap to record, not a verdict.
+ */
+function RequestIdLine({ requestId }: { requestId: string | null }): JSX.Element {
+  if (requestId) {
+    return (
+      <p className="state__meta" data-testid="write-request-id">
+        request_id <code>{requestId}</code>
+      </p>
+    )
+  }
+  return (
+    <p className="state__meta" data-testid="write-request-id">
+      request_id <strong>未知</strong> —— 这次失败没有带回可关联的 id(例如代理 502 没有
+      <code>X-Request-Id</code>);这是一个关联缺口,不是判决,请读回对象/history 再决定。
+    </p>
+  )
+}
+
+/**
+ * Core's own fields for a refusal, named so a reader sees which revisions, which edge or which
+ * scope was refused without decoding the JSON. The raw `details` block is still rendered beside
+ * it — this is a reading aid, not a substitute.
+ */
+export function RefusalFields({ error }: { error: CoreApiError }): JSX.Element | null {
+  const details = (error.details ?? null) as Record<string, unknown> | null
+  if (details === null || typeof details !== 'object') return null
+  const keys = [
+    'expected_revision',
+    'current_revision',
+    'from_status',
+    'to_status',
+    'current_status',
+    'task_status',
+    'required',
+    'granted',
+    'field',
+    'fields',
+    'source_system',
+    'source_event_id',
+    'existing_event_id',
+    // The `422 missing_evidence` details (spec §7) name the requirement/rule that failed.
+    'requirement_key',
+    'rule_id',
+    'rule_version',
+    'step_id',
+    'task_id',
+  ]
+  const rows = keys
+    .filter((key) => key in details)
+    .map((key) => ({ label: key, value: <code>{JSON.stringify(details[key])}</code> }))
+  if (rows.length === 0) return null
+  return (
+    <div data-testid="write-refusal-fields">
+      <KeyValue rows={rows} />
+    </div>
   )
 }
 

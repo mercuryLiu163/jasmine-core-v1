@@ -17,6 +17,8 @@ import { vi } from 'vitest'
 export interface FakeReply {
   status?: number
   body?: unknown
+  /** Extra response headers, e.g. a proxy-generated `x-request-id` with no Core envelope. */
+  headers?: Record<string, string>
   /** Simulate a proxy/Core that is not answering. */
   networkError?: string
   /** Delay before answering, for cancellation tests. */
@@ -94,7 +96,7 @@ export function installFakeCore(
     if (reply.networkError) throw new TypeError(reply.networkError)
     return new Response(JSON.stringify(reply.body ?? {}), {
       status: reply.status ?? 200,
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...(reply.headers ?? {}) },
     })
   })
 
