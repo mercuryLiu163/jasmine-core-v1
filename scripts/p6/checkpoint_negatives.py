@@ -468,7 +468,7 @@ def start_dashboard(owned, archive, core, env, label, enabled=True):
 
 def run(args):
     sys.path.insert(0, str(ROOT / 'scripts/p6'))
-    from checkpoint_negative_gate import evaluate_bundle
+    from checkpoint_negative_gate import evaluate_bundle, adversarial_bundle_checks
     os.umask(0o077)
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=False)
@@ -480,10 +480,12 @@ def run(args):
     owned = Owned(out)
     private = Path(tempfile.mkdtemp(prefix='p6-checkpoint-private-'))
     clients, browser_cfg, profile = [], [], None
+    archive_sha = None
     try:
         archive = private / 'archive'
         archive.mkdir()
         tar = subprocess.check_output(['git', '-C', str(ROOT), 'archive', '--format=tar', candidate])
+        archive_sha = digest(tar)
         with tarfile.open(fileobj=io.BytesIO(tar)) as t:
             t.extractall(archive, filter='data')
         report.update(source_archive_sha256=digest(tar), source_tree=subprocess.check_output(
@@ -709,6 +711,11 @@ def run(args):
                     row['pages'] = [{'kind': 'error', 'hash': '#/checkpoints?checkpoint_id=' + good_cp['checkpoint_id'] if kind == 'checkpoint' else '#/resume/' + good_resume['resume_id'],
                                      'path': path, 'expected': op['http']['body'], 'entity_id': value[kind + '_id'], 'expected_status': 403}]
                     row['absence']['authorized_result'] = {'reason': 'Read scope refusal; target exists only in authorized fixture readback', 'expected': None}
+                    if variant['missing_scope'] == 'objects:read':
+                        signin = client.request('GET', '/v1/projects?limit=1&offset=0', key=key, phase='signin-refusal-precondition')
+                        row['pages'][0].update(kind='signin-error', path=signin['path'], expected=signin['body'], expected_status=403)
+                        row['absence']['target_browser_request'] = {'expected_count': 0, 'target_path': path,
+                            'reason': 'Real authenticated sign-in GET refuses objects:read before a session exists; direct target GET refusal is separately observed'}
                 else:
                     if variant['id'] == 'p3_off_get':
                         row['pages'] = [{'kind': 'pending', 'hash': '#/checkpoints?checkpoint_id=' + good_cp['checkpoint_id'],
@@ -788,7 +795,13 @@ def run(args):
         write(out / 'raw-result.json', report)
         matrix_path = out / 'matrix.json'
         if matrix_path.exists():
-            verdict = evaluate_bundle(report, json.loads(matrix_path.read_text()))
+            matrix = json.loads(matrix_path.read_text())
+            verdict = evaluate_bundle(report, matrix, expected_candidate=candidate, expected_archive=archive_sha)
+            checks = adversarial_bundle_checks(report, matrix, candidate, archive_sha)
+            write(out / 'harness-selfchecks.json', checks)
+            verdict['harness_selfchecks'] = checks['status']
+            if verdict['status'] == 'PASS' and checks['status'] != 'PASS':
+                verdict['status'] = 'FAIL'
         else:
             verdict = {'status': 'BLOCKED', 'reason': 'matrix unavailable', 'records': []}
         write(out / 'result.json', verdict)

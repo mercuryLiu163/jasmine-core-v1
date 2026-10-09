@@ -86,5 +86,29 @@ class OwnedCleanup(unittest.TestCase):
             self.assertIn('owned-child', log.read_text())
             self.assertNotIn(child, runner.Owned.members(p.pid))
 
+class PublicAuditAbsence(unittest.TestCase):
+    def setUp(self):
+        self.ui = {'key_metadata': {'actor_id': 'component-actor'},
+            'network': [{'request_id': 'component-public', 'method': 'GET', 'path': '/v1/health', 'status': 200, 'body': {'schema_version': 12}}],
+            'audit_read': {'status': 200, 'matching': []},
+            'observer_window': [{'kind': 'request_start', 'request_id': 'component-public'},
+                                {'kind': 'request_end', 'request_id': 'component-public', 'status': 200}]}
+
+    def test_public_route_requires_actual_window_and_absent_audit(self):
+        self.assertTrue(gate.browser_audit_proof(self.ui))
+        self.ui['observer_window'].pop()
+        self.assertFalse(gate.browser_audit_proof(self.ui))
+
+    def test_public_route_cannot_hide_scan_or_spurious_audit(self):
+        self.ui['observer_window'].append({'kind': 'scanner_call_enter', 'request_id': 'component-public'})
+        self.assertFalse(gate.browser_audit_proof(self.ui))
+        self.ui['observer_window'].pop()
+        self.ui['audit_read']['matching'].append({'request_id': 'component-public'})
+        self.assertFalse(gate.browser_audit_proof(self.ui))
+
+    def test_nonpublic_route_does_not_inherit_public_exception(self):
+        self.ui['network'][0]['path'] = '/v1/projects'
+        self.assertFalse(gate.browser_audit_proof(self.ui))
+
 if __name__ == '__main__':
     unittest.main()

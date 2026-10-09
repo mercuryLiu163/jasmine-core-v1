@@ -45,9 +45,15 @@ async function login(c) {
       await click('button', '退出')
       await waitFor(cdp, '!!document.querySelector("input[type=password]")')
     }
+    await evaluate(cdp, 'document.querySelector("input[type=password]").select()')
     await typeInto(cdp, 'input[type=password]', c.token)
     report.clicks.push({ id: current.id, action: 'actual token input', value: '[PRIVATE TOKEN NOT RECORDED]', at_unix: Date.now() / 1000 })
     await click('button', '使用此 token')
+    if (c.pages[0]?.kind === 'signin-error') {
+      await waitFor(cdp, '!!document.querySelector("input[type=password]")&&!!document.querySelector("[role=alert]")')
+      activeToken = null
+      return
+    }
     await waitFor(cdp, '!document.querySelector("input[type=password]")')
     activeToken = c.token
   }
@@ -79,16 +85,22 @@ async function capture(name) {
   return { dom, dom_file: file, screenshot, screenshot_clip: clip, at_unix: Date.now() / 1000 }
 }
 async function expand() {
+  if (await evaluate(cdp, '[...document.querySelectorAll("details:not([open]) summary")].some(x=>x.textContent.includes("错误 details"))')) await click('summary', '错误 details')
   const labels = await evaluate(cdp, '[...document.querySelectorAll(".jsonblock__toggle[aria-expanded=false]")].map(x=>x.textContent.trim())')
   for (const label of labels) await click('.jsonblock__toggle', label)
 }
 async function page(c, p, index) {
   const start = report.network.length
+  if (p.kind !== 'signin-error' && await evaluate(cdp, 'location.hash===' + JSON.stringify(p.hash))) {
+    await evaluate(cdp, 'location.hash="#/"')
+    await waitFor(cdp, 'location.hash==="#/"&&!document.querySelector("[data-testid=checkpoint-read-boundary]")&&!document.querySelector("[data-testid=resume-comparison-status]")')
+    report.clicks.push({ id: current.id, action: 'actual browser hash navigation to unmount previous object', hash: '#/', at_unix: Date.now() / 1000 })
+  }
   await evaluate(cdp, 'location.hash=' + JSON.stringify(p.hash))
   report.clicks.push({ id: current.id, action: 'actual browser hash navigation', hash: p.hash, at_unix: Date.now() / 1000 })
   const state = p.kind === 'invalid' ? '!!document.querySelector("[data-testid=invalid-id]")'
     : p.kind === 'pending' ? '!!document.querySelector("[data-testid=dependency-pending]")'
-      : p.kind === 'error' ? '!!document.querySelector("[role=alert]")'
+      : p.kind === 'error' || p.kind === 'signin-error' ? '!!document.querySelector("[role=alert]")'
         : p.kind === 'empty' ? 'document.body.textContent.includes("空:Checkpoint")'
           : p.kind === 'checkpoint' ? '!!document.querySelector("[data-testid=checkpoint-read-boundary]")&&document.body.textContent.includes(' + JSON.stringify(p.entity_id) + ')'
             : '!!document.querySelector("[data-testid=resume-comparison-status]")&&document.body.textContent.includes(' + JSON.stringify(p.entity_id) + ')'
@@ -110,7 +122,7 @@ async function page(c, p, index) {
     observations.push(await capture(c.id + '-' + index + '-refresh'))
   }
   await Promise.allSettled(pendingBodies)
-  return { definition: p, observations, network: report.network.slice(start) }
+  return { definition: p, observations, network: p.kind === 'signin-error' ? current.login_network : report.network.slice(start) }
 }
 async function lateSwitch(c, kind, a, b) {
   const pa = c.pages.find(p => p.kind === kind && p.entity_id === a)
@@ -200,10 +212,11 @@ try {
     current = { id: c.id, status: 'FAIL', pages: [], switches: [], key_metadata: c.key_metadata }
     report.records.push(current)
     const networkStart = report.network.length
+    const start = observer(c).length
     try {
       current.before = snapshot(c)
-      const start = observer(c).length
       await login(c)
+      current.login_network = report.network.slice(networkStart)
       for (let i = 0; i < c.pages.length; i++) current.pages.push(await page(c, c.pages[i], i))
       for (const [kind, a, b] of c.switches ?? []) current.switches.push(await lateSwitch(c, kind, a, b))
       if (c.proxy_probe) {
@@ -222,6 +235,12 @@ try {
     } catch (e) {
       current.error = String(e.stack ?? e)
       if (cdp) current.failure_dom = await capture(c.id + '-failure').catch(() => null)
+    } finally {
+      await Promise.allSettled(pendingBodies)
+      current.network = report.network.slice(networkStart)
+      current.audit_read = await audit(c, current.network)
+      current.observer_window = observer(c).slice(start)
+      current.after = snapshot(c)
     }
     console.log(JSON.stringify({ variant: c.id, collection: current.status, error: current.error }))
     persist()

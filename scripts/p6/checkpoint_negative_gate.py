@@ -5,8 +5,12 @@ accepted as evidence. Absence has an explicit reason and a measured zero/null.
 """
 from __future__ import annotations
 import argparse
+import copy
 import hashlib
+import io
 import json
+import subprocess
+import tarfile
 from pathlib import Path
 
 SPEC_COMMIT = '5079948808d4c8aa9cb5763c747def422c12c055'
@@ -149,6 +153,7 @@ def display_proof(page):
         exact = dom['hash'] == definition['hash'] and bool(observation['dom_file']) and bool(observation['screenshot'])
         if kind in ('checkpoint', 'resume'):
             data = definition['expected'][kind]
+            exact = exact and definition['entity_id'] == data[kind + '_id']
             exact = exact and data[kind + '_id'] in text and jsonblock(dom, 'projection') == data['projection'] and jsonblock(dom, 'workspace') == data['workspace']
             for field in ('actor_id', 'host_id', 'project_id', 'task_id', 'source_event_id', 'command_event_id'):
                 exact = exact and data[field] in text
@@ -170,9 +175,10 @@ def display_proof(page):
                     exact = exact and data['note']['value']['text'] in dom['note'] and 'authority = false' in dom['note']
                 if data['next_actions']:
                     exact = exact and '建议而非已执行' in dom['next_actions'] and all(a['kind'] in dom['next_actions'] for a in data['next_actions'])
-        elif kind == 'error':
+        elif kind in ('error', 'signin-error'):
             exact = exact and bool(dom['alerts']) and definition['expected']['error']['code'] in text and not dom['pending']
             exact = exact and dom['checkpoint_boundary'] is None and dom['comparison_status'] is None
+            exact = exact and jsonblock(dom, 'error.details') == definition['expected']['error']['details']
         elif kind == 'invalid':
             exact = exact and dom['invalid'] and bool(dom['alerts']) and dom['checkpoint_boundary'] is None and dom['comparison_status'] is None
         elif kind == 'pending':
@@ -187,7 +193,7 @@ def display_proof(page):
             exact = exact and not target_network
         elif kind == 'pending':
             exact = exact and any(n.get('status') == 404 and n.get('body', {}).get('error', {}).get('code') == 'proxy_path_not_allowed' for n in target_network)
-        elif kind == 'error':
+        elif kind in ('error', 'signin-error'):
             exact = exact and any(n.get('status') == definition['expected_status'] and n.get('body', {}).get('error', {}).get('code') == definition['expected']['error']['code'] for n in target_network)
         else:
             exact = exact and any(n.get('status') == 200 and n.get('body') == definition['expected'] for n in target_network)
@@ -209,6 +215,19 @@ def browser_audit_proof(ui):
             if any(e.get('request_id') == n.get('request_id') for e in ui['observer_window']):
                 return False
             continue
+        if n['method'] == 'GET' and n['path'] in ('/v1/health', '/v1/meta/schema'):
+            # These exact candidate routes are public=True and create no audit.
+            # Keep their genuine ingress/egress and zero scan windows as absence proof.
+            window = [e for e in ui['observer_window'] if e.get('request_id') == n.get('request_id')]
+            starts = [e for e in window if e['kind'] == 'request_start']
+            ends = [e for e in window if e['kind'] == 'request_end']
+            if len(starts) != 1 or len(ends) != 1 or ends[0]['status'] != n['status'] or n['status'] != 200:
+                return False
+            if any(e['kind'] in ('scanner_call_enter', 'scanner_popen_attempt') for e in window):
+                return False
+            if any(a['request_id'] == n['request_id'] for a in audit['matching']):
+                return False
+            continue
         matches = [a for a in audit['matching'] if a['request_id'] == n['request_id']]
         if len(matches) != 1:
             return False
@@ -216,6 +235,8 @@ def browser_audit_proof(ui):
         if (a['method'], a['path'], a['status_code']) != (n['method'], n['path'], n['status']):
             return False
         if a['error_code'] != n.get('body', {}).get('error', {}).get('code'):
+            return False
+        if a['actor_id'] != ui['key_metadata']['actor_id']:
             return False
     return True
 
@@ -332,8 +353,11 @@ def scenario_checks(row, ui, common):
         h = ops[0]['http']
         required = ['objects:read', 'state:read', 'authority:read', 'evidence:read', 'events:read', 'checkpoint:read'] + (['resume:read'] if row['variant_id'].startswith('resume') else [])
         scopes = ui['key_metadata']['scopes']
+        signin_absence = row['missing_scope'] != 'objects:read' or (row['absence']['target_browser_request']['expected_count'] == 0 and
+            not any(n['path'] == row['absence']['target_browser_request']['target_path'] for n in ui['network']) and
+            not any(e.get('path') == row['absence']['target_browser_request']['target_path'] for e in ui['observer_window']))
         return [set(required) - set(scopes) == {row['missing_scope']} and h['key_id'] == ui['key_metadata']['key_id'],
-                h['status'] == 403 and h['body']['error']['code'] == 'forbidden_scope' and h['body']['error']['details']['required'] == row['missing_scope'] and common['G6']['passed'], pages_ok and append_ok]
+                h['status'] == 403 and h['body']['error']['code'] == 'forbidden_scope' and h['body']['error']['details']['required'] == row['missing_scope'] and common['G6']['passed'], pages_ok and append_ok and signin_absence]
     if case == 'CP26':
         probe = ui.get('proxy_probe')
         if probe:
@@ -388,7 +412,7 @@ def evaluate_record(row, ui, case):
             'predicates': predicates, 'invariants': common}
 
 
-def evaluate_bundle(raw, matrix):
+def evaluate_bundle(raw, matrix, *, expected_candidate=None, expected_archive=None):
     required = [(case, variant, case['id'] + '.' + variant['id']) for case in matrix['cases'] for variant in case['variants']]
     output = {'status': 'BLOCKED', 'role': raw.get('role'), 'scope_acceptance_signed': False, 'records': [],
               'candidate_commit': raw.get('candidate_commit'), 'source_archive_sha256': raw.get('source_archive_sha256'),
@@ -406,6 +430,7 @@ def evaluate_bundle(raw, matrix):
                 'predicates': [{'id': p['id'], 'passed': False, 'reason': 'Required raw receipt unavailable or malformed'} for p in case['required_predicates']]})
     binding = raw.get('spec_commit') == SPEC_COMMIT and raw.get('matrix_sha256') == MATRIX_SHA256 == hashlib.sha256((json.dumps(matrix, ensure_ascii=False, indent=2) + '\n').encode()).hexdigest()
     binding = binding and isinstance(raw.get('candidate_commit'), str) and len(raw['candidate_commit']) == 40 and isinstance(raw.get('source_archive_sha256'), str) and len(raw['source_archive_sha256']) == 64
+    binding = binding and bool(expected_candidate) and bool(expected_archive) and raw.get('candidate_commit') == expected_candidate and raw.get('source_archive_sha256') == expected_archive
     cleanup = bool(raw.get('cleanup')) and all(p.get('group_gone') is True for p in raw['cleanup']) and raw.get('profile_removed') is True and raw.get('private_runtime_removed') is True
     browser = raw.get('browser', {})
     browser_ok = browser.get('console_errors') == [] and browser.get('credential_storage') == {'local': 0, 'session': 0, 'indexed': 0} and bool(browser.get('browser_version'))
@@ -435,7 +460,38 @@ def evaluate_bundle(raw, matrix):
     return output
 
 
-def verify_directory(directory, expected_candidate):
+def adversarial_bundle_checks(raw, matrix, expected_candidate, expected_archive):
+    """Mutated in-memory copies of this real run; never rewrite its raw evidence."""
+    baseline = evaluate_bundle(raw, matrix, expected_candidate=expected_candidate, expected_archive=expected_archive)
+    if baseline['status'] != 'PASS':
+        return {'status': 'BLOCKED', 'reason': 'Real baseline must pass before full-bundle adversaries are evaluable'}
+    checks = []
+    for name in ('missing_variant', 'unknown_to_same', 'missing_refusal_after', 'wrong_object_id', 'missing_fault_label', 'missing_dom', 'wrong_candidate', 'wrong_archive'):
+        changed = copy.deepcopy(raw)
+        record = lambda ident: next(r for r in changed['records'] if r['id'] == ident)
+        browser = lambda ident: next(r for r in changed['browser']['records'] if r['id'] == ident)
+        if name == 'missing_variant':
+            changed['records'].pop()
+        elif name == 'unknown_to_same':
+            record('CP06.default')['operations'][0]['http']['body']['resume']['comparison']['workspace'] = 'SAME'
+        elif name == 'missing_refusal_after':
+            del record('CP13.default')['operations'][0]['after']
+        elif name == 'wrong_object_id':
+            browser('CP01.default')['pages'][0]['definition']['entity_id'] = 'ckp_WRONG_OBJECT_COMPONENT_ADVERSARY'
+        elif name == 'missing_fault_label':
+            del record('CP13.default')['injection']['mode']
+        elif name == 'missing_dom':
+            del browser('CP01.default')['pages'][0]['observations'][0]['dom']
+        elif name == 'wrong_candidate':
+            changed['candidate_commit'] = '0' * 40
+        else:
+            changed['source_archive_sha256'] = '0' * 64
+        result = evaluate_bundle(changed, matrix, expected_candidate=expected_candidate, expected_archive=expected_archive)
+        checks.append({'mutation': name, 'observed_verdict': result['status'], 'rejected': result['status'] != 'PASS', 'counts': result['counts']})
+    return {'status': 'PASS' if all(c['rejected'] for c in checks) else 'FAIL', 'kind': 'COMPONENT_FULL_BUNDLE_ADVERSARIES_NOT_MATRIX_VARIANTS', 'checks': checks}
+
+
+def verify_directory(directory, expected_candidate, repository):
     manifest = json.loads((directory / 'manifest.json').read_text())
     if manifest['candidate_commit'] != expected_candidate:
         raise ValueError('wrong expected candidate')
@@ -452,14 +508,40 @@ def verify_directory(directory, expected_candidate):
     raw = json.loads((directory / 'raw-result.json').read_text())
     if raw['candidate_commit'] != expected_candidate or raw['source_archive_sha256'] != manifest['source_archive_sha256']:
         raise ValueError('raw candidate/archive mismatch')
+    archive = subprocess.check_output(['git', '-C', str(repository), 'archive', '--format=tar', expected_candidate])
+    expected_archive = hashlib.sha256(archive).hexdigest()
+    if raw['source_archive_sha256'] != expected_archive:
+        raise ValueError('archive differs from independently reconstructed candidate')
+    expected_tree = subprocess.check_output(['git', '-C', str(repository), 'rev-parse', expected_candidate + '^{tree}'], text=True).strip()
+    if raw['source_tree'] != expected_tree:
+        raise ValueError('wrong source tree')
+    with tarfile.open(fileobj=io.BytesIO(archive)) as source:
+        for field in ('core_source_hashes', 'launcher_source_hashes'):
+            for path, value in raw[field].items():
+                if hashlib.sha256(source.extractfile(path).read()).hexdigest() != value:
+                    raise ValueError('source bytes differ from candidate: ' + path)
+        if hashlib.sha256(source.extractfile('web/package-lock.json').read()).hexdigest() != raw['toolchain']['lockfile_sha256']:
+            raise ValueError('wrong lockfile')
+    if raw['browser'] != json.loads((directory / 'browser.json').read_text()):
+        raise ValueError('embedded browser differs from artifact')
     for r in raw.get('browser', {}).get('records', []):
-        for p in r.get('pages', []):
-            for o in p.get('observations', []):
-                if o['dom_file'] not in paths or o['screenshot'] not in paths:
-                    raise ValueError('missing DOM/screenshot artifact')
-                if json.loads((directory / o['dom_file']).read_text()) != o['dom']:
-                    raise ValueError('embedded DOM differs from artifact')
-    value = evaluate_bundle(raw, json.loads((directory / 'matrix.json').read_text()))
+        observations = [o for p in r.get('pages', []) for o in p.get('observations', [])]
+        observations += [s[k] for s in r.get('switches', []) for k in ('before', 'after')]
+        if r.get('failure_dom'):
+            observations.append(r['failure_dom'])
+        for o in observations:
+            if o['dom_file'] not in paths or o['screenshot'] not in paths:
+                raise ValueError('missing DOM/screenshot artifact')
+            if json.loads((directory / o['dom_file']).read_text()) != o['dom']:
+                raise ValueError('embedded DOM differs from artifact')
+    matrix = json.loads((directory / 'matrix.json').read_text())
+    value = evaluate_bundle(raw, matrix, expected_candidate=expected_candidate, expected_archive=expected_archive)
+    checks = adversarial_bundle_checks(raw, matrix, expected_candidate, expected_archive)
+    if checks != json.loads((directory / 'harness-selfchecks.json').read_text()):
+        raise ValueError('recomputed harness selfchecks differ')
+    value['harness_selfchecks'] = checks['status']
+    if value['status'] == 'PASS' and checks['status'] != 'PASS':
+        value['status'] = 'FAIL'
     if value != json.loads((directory / 'result.json').read_text()):
         raise ValueError('recomputed verdict differs')
     return value
@@ -469,7 +551,8 @@ if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('--bundle', type=Path, required=True)
     p.add_argument('--expected-candidate', required=True)
+    p.add_argument('--repository', type=Path, default=Path(__file__).resolve().parents[2])
     a = p.parse_args()
-    result = verify_directory(a.bundle, a.expected_candidate)
+    result = verify_directory(a.bundle, a.expected_candidate, a.repository)
     print(json.dumps({'status': result['status'], 'counts': result['counts']}))
     raise SystemExit(0 if result['status'] == 'PASS' else 1)
