@@ -1,6 +1,6 @@
 # P6-02 item 5 — VERIFIED/ACCEPTED forms, the criteria↔Evidence matrix, and the Evidence-insufficient refusal
 
-**Status: FROZEN at revision 2.** Revision 1 was independently reviewed by an adversarial
+**Status: FROZEN at revision 3 (independently reviewed scopes-only erratum).** Revision 1 was independently reviewed by an adversarial
 specification reviewer — verdict **APPROVE WITH MANDATORY CHANGES** (no BLOCKING; 4 MAJOR, 12 MINOR,
 4 NOTE), all 20 findings folded into rev 2. Rev 2 was then delta re-reviewed by the same reviewer:
 verdict **APPROVE WITH NAMED MANDATORY CHANGES**, no BLOCKING and no MAJOR, with all 20 rev-1 findings
@@ -10,6 +10,13 @@ report, which is what the reviewer required for the freeze; it stated explicitly
 delta round is required**. Reports:
 `validation-runs/p6/REVIEW-p6-02-item5-verified-accepted/findings.md` (rev 1) and
 `DELTA-findings.md` (rev 2).
+
+Revision 3 corrects only the read-scope summaries in §3.1, §6 and §10. The first independent
+errata review requested the same scope-count correction in §10; the corrected draft then received
+**APPROVE**. The approved draft SHA-256 is
+`adb7c54cac6d8eb150006d6d6ea34db80eb5fea8bbc2f14175207c6b11f5fb5b`; its normative text is preserved
+verbatim here. Reports: `validation-runs/p6/REVIEW-p6-02-item5-scope-errata/findings.md` and
+`DELTA-findings.md`. This erratum does not establish implementation approval or an end-to-end Gate.
 
 **Not implemented.** This is a specification document, not an implementation and not a Gate. Nothing
 below is evidence that any screen exists or that any write works from a browser. Implementation, its
@@ -37,6 +44,7 @@ is **not** used as a general "code wins" rule (rev 2, m10 — see the revision h
 | --- | --- | --- |
 | 1 | untracked draft (746 lines, SHA-256 `f519aa1dc0bd413f45c6b05c8fca3a924d2469ae54b53a1cc27ff2d9c12c20a7`) | The proposal as first written. Independently reviewed by an adversarial specification reviewer (`validation-runs/p6/REVIEW-p6-02-item5-verified-accepted/findings.md`): verdict **APPROVE WITH MANDATORY CHANGES**, no BLOCKING; 25/25 provenance anchors verified; the central API claim, the Evidence-insufficient contract, the `ACCEPTED`/environment boundary, the permissions table and the item-4 reuse all verified sound. 4 MAJOR + 12 MINOR + 4 NOTE, all completeness/correctness defects in required contract lines and negatives. |
 | 2 | this document | Folds in **all 20 findings**. MAJOR: **M1** — §3.2 replaces the five-item "readable subset" with a complete table of `_fresh` (F1–F9, F9 split into F9a–F9e) and corrects "two unreadable inputs" to five (F1, F2, F8, F9d, F9e); the readable parts of `_source_valid` (F9a–F9c) are folded into the candidate predicate and the rest is assigned to CR-1/CR-4. **M2** — §3.3 no longer claims both Rule-half refusals are reachable; the activation-Event branch is marked defensive/unreachable-through-the-API in §5.1 with the `authority.py:405-412`/`_change` argument. **M3** — §8 negative 3's PASS condition no longer requires precondition `details`; `state.py:437` raises with no kwargs, so `details == {}`. **M4** — §8 negative 4 drops the unimplementable "the UI never offers the action to an agent-key session" and asserts only what is checkable; actor-kind/scope visibility becomes **CR-7**. MINOR: **m1** "only write" qualified for `api_keys.last_used_at` (`dispatch.py:51`); **m2** the activation Event is readable via `status_event_id` and the claim corrected; **m3** the payload-write ordering restated (the pending spec mutates before `_commit`; only `_commit` persists); **m4** §5.1's title scoped and the out-of-slice `evidence.py:687` branch added; **m5** §5.2 names the raw `details` block as the guarantee for branch 5's `version` key; **m6** §0 "clean" → "no tracked modifications"; **m7** `core-api-v1.md:231`→`:230`; **m8** the item-4 boundary citation re-derived at the current tip to `P6-02-TASKSTEP-WRITE-COMPLIANCE.md:76-81` (the reviewer's `:62-67` was correct at `658072f`; the record's own line numbers moved in `1a79016` and again in `a270d5c`); **m9** CR-6 listed; **m10** the "code wins" attribution to taskbook:16 removed; **m11** §3.6 restated as the flat set; **m12** §8 negative 4(a) recorded as a Core-side, non-browser check. NOTE: **n1** the unsatisfiable `USER_CONFIRMATION`+`PASS` requirement recorded (§3.2, §5.1, §12 D7); **n2** the `cycle_cutoff` parenthetical corrected; **n3** CR-1 must satisfy `validate`'s in-transaction assert and needs a proxy pattern; **n4** §0 re-pinned to the current tip `a270d5c` with the citation argument re-derived. Nothing was disagreed with; no finding was silently kept. |
+| 3 | scopes-only erratum, independently reviewed APPROVE | Corrects §3.1 to five read scopes and adds `events:read` (R-EV) to its summary and the §6 matrix-read row; corrects the §10 scope count to five. The existing §3.1 per-route table and `handlers.py:99` already require this scope. No API, implementation, permission enforcement, evidence predicate, error branch or Gate result is changed. |
 
 ---
 
@@ -186,9 +194,9 @@ assertion `tests/p6/test_dashboard_proxy_contract.py:128-141`) and served by thi
 | R-RA | `GET /v1/rules/active?project_id=&task_id=` | `authority:read` (`handlers.py:100`) | each ACTIVE rule's `version`, `revision`, `status`, `kind`, `enforcement`, `verification_requirements`, `status_event_id` (`authority.py:216-235`, `174-214`) |
 | R-R | `GET /v1/rules/{rul}` | `authority:read` (`handlers.py:101`) | one rule version, same fields |
 
-**Scope consequence the form must render honestly.** The matrix spans four scopes —
-`objects:read` (R-T), `state:read` (R-S/R-TH/R-SH), `evidence:read` (R-TE/R-E), `authority:read`
-(R-RA) — while the ACCEPTED submissions need `state:accept` (route 6 and route 3→ACCEPTED) and the
+**Scope consequence the form must render honestly.** The matrix spans five scopes —
+`objects:read` (R-T), `state:read` (R-S/R-TH/R-SH), `evidence:read` (R-TE/R-E),
+`events:read` (R-EV), `authority:read` (R-RA) — while the ACCEPTED submissions need `state:accept` (route 6 and route 3→ACCEPTED) and the
 VERIFIED submission needs `state:write`. A key that can submit may therefore be **unable to read** part
 of the matrix; the form renders the per-panel `403 forbidden_scope` (`dispatch.py:47-48`;
 `auth.py:34-39`) and must not fall back to a different credential or to an empty/zero panel
@@ -571,7 +579,7 @@ success path (`:55`), so `target_id` is `null`. The form may not imply it can re
 | Step → `VERIFIED` | `state:write` (`handlers.py:123`) | **none**: `state.py:333` gates only `SKIPPED`/`ACCEPTED` targets and a `SKIPPED` source | any key holding `state:write` — including an `agent` (§12 divergence D1) |
 | Step → `ACCEPTED` | `state:write` | `can_accept` → `403 forbidden_scope` if the key lacks `state:accept` (`state.py:334-335`); then `_role` → `403 forbidden_actor_kind` (`:163-166`) | human/system |
 | Task → `ACCEPTED` | `state:accept` (`handlers.py:120`) | handler passes `can_accept=True` (`:552`); `_role` is the remaining guard (`state.py:429-431`) | human/system |
-| Read the matrix | `objects:read` + `state:read` + `evidence:read` + `authority:read` (§3.1) | none | any key holding them |
+| Read the matrix | `objects:read` + `state:read` + `evidence:read` + `events:read` + `authority:read` (§3.1) | none | any key holding them |
 
 * Scopes are checked at dispatch, before the handler and before any table is touched
   (`dispatch.py:43-51`), with `403 forbidden_scope` carrying `{required, granted}`
@@ -768,7 +776,7 @@ document's.
 ## 10. Frozen once reviewed, and left to implementation
 
 **This proposal asks a reviewer to freeze (on a delta re-review of rev 2):** the read routes that feed
-the matrix and the four scopes they need (§3.1); the complete `_fresh` classification F1–F9 and the
+the matrix and the five scopes they need (§3.1); the complete `_fresh` classification F1–F9 and the
 per-requirement display states built on it (§3.2); the Rule half, its one reachable and one defensive
 refusal, and the readable activation Event (§3.3); the "unknowable here" list and coordination requests
 CR-1…CR-7 (§3.4); the never-claim list (§3.5); the route/scope/body/revision reuse for the three
