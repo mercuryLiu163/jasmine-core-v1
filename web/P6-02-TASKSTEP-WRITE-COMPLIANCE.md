@@ -28,7 +28,7 @@ Event types or the edge tables.
 
 | # | Requirement (frozen) | Implementation | Independently observed |
 | --- | --- | --- | --- |
-| 1 | The seven route/method/scope pairs; `201` for the two creates, `200` for the rest; a replay has the same key set as a fresh write | `web/src/api/taskWrites.ts:25-84` (`ALLOWED`, `only`), the seven body builders `:87-170`; panels `web/src/views/TaskWrites.tsx` | Validation claim 1: real human key, real browser → `201/201/200×5`, `replayed:false`, response keys as frozen |
+| 1 | The seven route/method/scope pairs; `201` for the two creates, `200` for the rest; a replay has the same key set as a fresh write | `web/src/api/taskWrites.ts:25-81` (`ALLOWED`, `only`), the seven body builders `:87-170`; panels `web/src/views/TaskWrites.tsx` | Validation claim 1: real human key, real browser → `201/201/200×5`, `replayed:false`, response keys as frozen |
 | 2 | Allowed/required body fields per route; unknown fields refused, and Core's own refusals surfaced verbatim | `only()` allowlist (throws on an unknown key); `TaskWrites.tsx:77-94` (`parseCriteriaField`) requires a JSON **object** and so cannot silently fall back to Core's `requirements: []` default | Validation claim 4 (`400 invalid_request` with `details.fields`/`details.field`); implementation-review M2 regression tests |
 | 3 | `expected_revision` read from the readback; stale ⇒ `409 revision_conflict` with `expected`+`current`, draft kept, **no** automatic retry | `web/src/api/client.ts`, `web/src/components/WritePanel.tsx` (revision field + conflict block), `TaskWrites.tsx` readback hooks | Validation claim 2: `409`, both revisions, `STALE-DRAFT-MARKER` retained, exactly one POST, object unchanged |
 | 4 | Idempotency: `event_id` is the replay key, `replayed` the discriminator; the same key with a changed body is a conflict, not a second write | `useWriteAction.ts:140,164,195,248` (the key is minted once per draft **there** — `taskWrites.ts:12-16` says explicitly it is *not* built in the body builders), `useWriteAction.ts` (`replayed` never fabricated) | Validation claim 5: forced post-commit response failure → retry with the same `event_id` → `200 replayed:true`, one event row, revision unchanged; changed body → `409 event_id_conflict` |
@@ -81,11 +81,16 @@ its own keys, drives real Chrome over CDP and checks Core's own SQLite. Reproduc
    directories; the validator flagged the discrepancy. What was actually done, stated precisely: the
    **two review report directories** were renamed to the `taskstep` namespace by their own authors,
    who each proved the change was path-strings-only (substituting the token in a byte-exact backup
-   reproduces the new file exactly); the **validation bundle was re-created** at the compliant path
-   by a fresh run at `acd260b`, so the old reserved-token bundle no longer exists. Because those
-   directories are gitignored and untracked, the rename cannot be recomputed from git history — the
-   evidence is each author's recorded diff plus the fresh run, and that limit is recorded rather than
-   glossed. The Gate-class namespace for this slice is `<stamp>-p6-02-taskstep-write/`.
+   reproduces the new file exactly); the **validation bundle** was renamed to the compliant path
+   **and its evidence regenerated in place there** by a fresh `--ref acd260b` run — the bundle holds a
+   single `manifest.json`, and that manifest is the `acd260b` run, so the old `607f511` material is
+   gone. (The validator's `findings.md` §10.9 still carries its earlier sentence about the brief's
+   path; that sentence describes the episode, while the binding, the manifest and the re-run are the
+   bundle's current provenance. The validator has been asked to reconcile the wording in its own
+   report.) Because those directories are gitignored and untracked, the rename cannot be recomputed
+   from git history — the evidence is each author's recorded diff plus the fresh run, and that limit
+   is recorded rather than glossed. The Gate-class namespace for this slice is
+   `<stamp>-p6-02-taskstep-write/`.
 6. **Two review findings on the record commit were folded after review.** A delta review of the
    record (`validation-runs/p6/REVIEW-p6-02-taskstep-write-record/findings.md`) found a stale
    "still gated on an independent permission Gate" row still in `README.md`, and this document's row 6
@@ -100,7 +105,9 @@ its own keys, drives real Chrome over CDP and checks Core's own SQLite. Reproduc
    `gpt-6.1-sol`; that override was unreachable in this environment — it returned no result while the
    session default did, and the `opencode-go` provider has no API key — so every pass ran on the
    session's default model (`deepseek-flash`). Independence here is between separate agent contexts,
-   not between model families.
+   not between model families. This paragraph is a process record from the session that produced the
+   slice; unlike the contract claims above it is **not** verifiable from the artifacts, and it is
+   labelled as such rather than presented as evidence.
 
 ## 4. What this does not do
 

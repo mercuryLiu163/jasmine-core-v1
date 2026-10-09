@@ -181,6 +181,11 @@ the `reason`/`idempotency_key` fields the interpretation/review writes require.
 
 ## Deliberately not implemented here
 
+The Task/Step **writes** are no longer on this list: they are delivered and independently validated
+(PASS 9/9 for the seven routes on a real Core and a real browser, with the seven proxy patterns
+**always-on, not behind a switch** — [spec](P6-02B-TASK-STEP-WRITE-SPEC.md),
+[record](P6-02-TASKSTEP-WRITE-COMPLIANCE.md)). Everything below is genuinely still not implemented.
+
 | Screen | Owner | Waiting on |
 | --- | --- | --- |
 | Manual reapply (`/v1/resolutions/{id}/manual-reapply`) | P6-02 later | Needs its own frozen payload/permission table and an explicit operator decision; a web button cannot produce the ADR 0007 human-prompt provenance this one records |
@@ -190,8 +195,7 @@ the `reason`/`idempotency_key` fields the interpretation/review writes require.
 | Memory lifecycle / retry / reflect (P6-03b2 writes) | P4 | **Implemented behind a default-off switch; not verified against real P4.** Six writes (`memory:manage` + `memory:reflect`), gated by `P6_ENABLE_P4_WRITES` — separate from the reads' switch — and absent from the live allowlist. Exercised only against a labelled simulated fixture; P4 phase acceptance has **not** passed. Specification: [`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md); per-criterion state: [`P6-03B2-COMPLIANCE.md`](P6-03B2-COMPLIANCE.md). The plan for verifying this slice — and b1 — against a real, isolated P4 Core: [`REAL-CORE-ACCEPTANCE-PLAN.md`](REAL-CORE-ACCEPTANCE-PLAN.md) (**plan only; nothing executed**) |
 | Validation inspector (run list, artifacts) | P7-01 | minimal validation read API + safe artifact contract |
 | online / backup / storage | P5 / P7 | health read contracts |
-| Task / Step **writes** (create / transition / criteria / accept) | P6-02 | **Delivered and independently validated** — PASS 9/9 for the seven routes on a real Core and a real browser; the seven proxy patterns are **always-on, not behind a switch** ([spec](P6-02B-TASK-STEP-WRITE-SPEC.md), [record](P6-02-TASKSTEP-WRITE-COMPLIANCE.md)). Moved out of this table because it is no longer "not implemented" |
-| VERIFIED / ACCEPTED **forms** (criteria↔Evidence matrix) | P6-02 item 5 | Proposal drafted ([`P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md`](P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md)) but **not yet reviewed, frozen or implemented** |
+| VERIFIED / ACCEPTED **forms** (criteria↔Evidence matrix) | P6-02 item 5 | Proposal drafted in the working tree (`web/P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md`, **untracked — not yet in the repo**) but **not yet reviewed, frozen or implemented** |
 | Evidence-confirmation (`POST /v1/evidence/confirm`) | P6-02 item 6 | Deliberately not provided: needs a real human prompt the browser cannot mint (ADR 0007). The proxy refuses the path by name and the browser test asserts the control is **absent** |
 
 ## Status
