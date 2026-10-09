@@ -1,0 +1,25 @@
+{
+  "package": "P6-02-item6-core-adr-api-proposal",
+  "contract_version": "web_confirmation_v1",
+  "date": "2026-10-08",
+  "timezone": "America/Los_Angeles",
+  "design_review": "APPROVE",
+  "user_confirmation": "PENDING",
+  "implementation_started": false,
+  "runtime_validation": "NOT_RUN",
+  "published": false,
+  "reviewer_context": "/root/item6_independent_review",
+  "baselines": [
+    {"path": "jasmine-core-v1", "head": "7016dabb8926d6bd6599f1f56b8f39cbda253ebf", "schema": 10},
+    {"path": "_worktrees/p6-01", "head": "41a0dd6ae29dc559c9d3817fb6ea34229c68b66b", "schema": 8},
+    {"path": "_worktrees/p6-03-integration", "head": "039f5a3e7800704e5f0478d01992f00eeb2ca3f1", "schema": 11}
+  ],
+  "files": [
+    {"path": "adr.md", "sha256": "540568b257c9419dd6c4f749f7ef40a8b94994f6750892fcbb609397e4e91cef", "role": "reviewed_contract"},
+    {"path": "api.md", "sha256": "aefccb63087ad3d4c7fc5ff2dc87cbbca29e10df260988384ab5d2178f426da5", "role": "reviewed_contract"},
+    {"path": "validation-plan.md", "sha256": "125c2e2ee8f34bef72da301332d31b192412e19534e9a7a246614b26b40f59e2", "role": "reviewed_contract"},
+    {"path": "review/round-1.md", "sha256": "3d42dedee9927d7bffd1868fdd3deb008ec3cd8df3f6f35a27308873dec79bcd", "role": "independent_review_request_changes"},
+    {"path": "review/round-2.md", "sha256": "79e32d98d14c0e845894410ba2d208a06b3bf08a3e0de413cdafb85e1cea08da", "role": "independent_review_approve"}
+  ],
+  "manifest_scope": "Binds normative documents and independent reports; README is a non-normative navigation and user-decision summary. This manifest is a local delivery receipt, not a signed runtime validation bundle."
+}
