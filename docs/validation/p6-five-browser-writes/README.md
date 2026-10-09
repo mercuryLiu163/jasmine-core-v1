@@ -69,3 +69,11 @@ Chrome 是自动化操作；登记 human bearer 证明凭据控制权，不证�
 * 日常使用 **未放行**；11 项历史 skip 不变，本轮未运行原全套 suite 或宣称 skip 通过。
 
 交接要求“该项还需独立 review/validation 及自己绑定的干净候选”。当前执行者记录不足以代替这两项结论。独立子 agent 的授权问题已提出，尚无回复；依当前委派规则不能自行启动。候选与运行证据现已可供独立审查，最终验收状态为 **PENDING_INDEPENDENT_REVIEW_VALIDATION**。
+
+
+## 后续修复候选（不改写上述历史运行）
+
+独立评审的两项 P2 已由 root 修复在 `25cfc38`，修复者新版运行20/20场景、139/139断言。
+其生命周期负例和来源门反证见 [repair-results.md](repair-results.md)。
+当前仍 **PENDING_NEW_INDEPENDENT_REVIEW_VALIDATION / 未签署**；原候选、报告和原正式
+bundle保持原样，新版 PASS 不替代新独立结论。
