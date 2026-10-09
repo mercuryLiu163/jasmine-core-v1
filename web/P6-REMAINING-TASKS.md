@@ -2,8 +2,9 @@
 
 Source of the item list: `docs/Jasmine-Core-V1-P6-阶段任务书.md` (in `main`), §3–§8. This document
 records, for every taskbook item, what is **delivered**, what is **not implemented**, what is
-**dependency-blocked**, and **which artefact binds the claim**. It adds no acceptance round: the
-integration candidate stays frozen at the SHAs recorded in `P6-02B-INDEX.md`.
+**dependency-blocked**, and **which artefact binds the claim**. Historical integration verdicts
+stay frozen at the SHAs in `P6-02B-INDEX.md`; later bounded slices have their own source and
+evidence bindings, indexed below.
 
 Status marks: **D** delivered · **P** partially delivered (gap named) · **N** not implemented ·
 **B** dependency-blocked. Evidence binding is a bundle directory under `validation-runs/p6/` plus
@@ -11,15 +12,16 @@ the compliance record that maps requirements to code.
 
 ## Current handoff — 2026-10-09 (America/Los_Angeles)
 
-Later bounded slice, on the separate `p6-five-browser-writes` branch: all five missing browser
-write paths now have implementer-run evidence at clean archived candidate
-`5d30e819320ee278f080a6301e74ffefe136ffa3` (20 required records / 137 assertions).
-Independent review and isolated validation are now complete: code review is
-**REVISE_REQUIRED** (two P2 harness findings), while the actual isolated run is scoped PASS.
-Limited acceptance remains **HELD_REVIEW_FINDINGS_NOT_SIGNED**, so items 2/3 are not upgraded
-to delivered here. See [the independent results](../docs/validation/p6-five-browser-writes/independent-results.md).
-See [the new report](../docs/validation/p6-five-browser-writes/README.md).
-This supplements the historical four-of-nine coverage below without rebinding its verdicts.
+The five missing browser-write paths are now **scope-accepted** at clean archived repair
+candidate `25cfc38a6fc8ce40729ccb9d6551e38331c6fd89`: non-author code review **APPROVE** and
+new independent isolated **PASS_FIVE_BROWSER_WRITES_SCOPED**, 20 records / 139 assertions.
+Root signed the bounded browser-coverage slice after both conclusions; one nonblocking P3
+failure-log limitation remains documented. See [the scoped acceptance](../docs/validation/p6-five-browser-writes/scoped-acceptance-25cfc38.md).
+Items 2/3 retain their broader historical boundaries and no native T03 or whole P6 acceptance
+is inferred. The previous `5d30e81` REVISE_REQUIRED and scoped runtime PASS remain bound to
+[their original independent round](../docs/validation/p6-five-browser-writes/independent-results.md).
+The author-only repair and original implementer reports retain their historical state.
+This supplements the historical four-of-nine coverage below without rebinding those verdicts.
 The original item-6 handoff/deployment worktree is unchanged.
 
 Item 6 is **D for its reviewed scope**: implementation review APPROVE and isolated acceptance
@@ -77,8 +79,8 @@ they are re-asserted in every bundle by the credential check.
 | Item | Status | Gap / note | Evidence binding |
 | --- | --- | --- | --- |
 | 1 Conversation↔Interpretation read (model/extractor/version/confidence, Resolver reason, derived ids; pending count from the API) | **D** | milestone A, independently reviewed and validated | `P6-02-COMPLIANCE.md`; HTTP `20261007T135254Z-p6-02b-t03-gate/` (76/76); browser `20261007T135314Z-p6-02b-clickthrough/` (53/53); candidate `959e8df`, asset `index-CZ4ocGOP.js` |
-| 2 Correct / Reject / Re-run (old vs new, affected Truth, reason, frozen version; reject keeps the raw Event; re-run does not auto-change Truth) | **P** | all three delivered behind the default-off switch with per-action audit readback; **browser end-to-end submissions exist for 4 of the 9 writes** (interpretation.reject, review.reject, rule.propose, rule.approve) — the rest are HTTP + audit readback, which the INDEX says explicitly | as above; nine write endpoints in `server/core-paths.json` |
-| 3 Rule proposal vs approve/supersede/retire (scope, version/revision, immutable history; 409 keeps the draft) | **P** | same browser-coverage note | as above |
+| 2 Correct / Reject / Re-run (old vs new, affected Truth, reason, frozen version; reject keeps the raw Event; re-run does not auto-change Truth) | **P overall; browser gap closed** | original milestone-B evidence covers 4/9 browser writes (interpretation.reject, review.reject, rule.propose, rule.approve); the five follow-up paths are now scope-accepted at `25cfc38`, including Correct/Re-run. Synthetic sources/provider do not close the native real-chain Gate below | original evidence as above; `../docs/validation/p6-five-browser-writes/scoped-acceptance-25cfc38.md` |
+| 3 Rule proposal vs approve/supersede/retire (scope, version/revision, immutable history; 409 keeps the draft) | **P overall; browser gap closed** | same historical binding plus newly scope-accepted Rule supersede/retire; immutable history/conflict/replay verified in the five-path slice, broader real-chain boundaries retained | as above + five-path scoped acceptance |
 | 4 Task/Step create/transition/criteria (real state machine, `expected_revision` from readback, idempotent `event_id`, timeout = 结果未知) | **D** | contract frozen (`P6-02B-TASK-STEP-WRITE-SPEC.md` rev 3, delta re-review APPROVE freeze-as-is), implemented at `607f511` + review-fix `acd260b`, then executed by an **independent** validator on a real Core + real browser: PASS 9/9 claims, no counterexample, all seven routes + the §11 negatives. Its Evidence-gated route 6 and the two gated Step edges need a fingerprint/confirmation environment the browser alone cannot mint (fingerprint/TEST provisioning remains outside the browser; item 6 now supplies a separate Web confirmation source), so a fresh environment must record them BLOCKED/PARTIAL — the spec's own permitted outcome | `P6-02-TASKSTEP-WRITE-COMPLIANCE.md`; validation `validation-runs/p6/VALIDATE-p6-02-taskstep-write/`; reviews `REVIEW-p6-02-taskstep-write-spec/`, `REVIEW-p6-02-taskstep-write-impl/` |
 | 5 VERIFIED/ACCEPTED forms (criteria→Evidence matrix, rule version, fingerprint, `422 missing_evidence` keeps state, agent credential refused) | **P** | historical item-5 review/Gate remains bound to `551c95a` (81 browser /65 Core /27 same-run crosschecks /28 edges). Item 6 now supplies Web confirmation and deployed D05 verifies independent Step VERIFIED/ACCEPTED and Task ACCEPTED in the new instance; this does not replace all item-5 negatives or provide browser-native TEST/fingerprint provisioning. Remaining freshness/readability decisions and broader coverage stay open | `P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`; `P6-STAGE-HANDOFF-20261009.md`; stage2 `browser-loop.json`, `audit.json` |
 | 6 Web human confirmation | **D (scoped)** | dedicated prepare/submit/status and auth/me implemented under ADR 0015; USER_CONFIRMATION/INFO only, separate State requests. Legacy `/evidence/confirm` remains proxy-refused; no fabricated human prompt. Isolated acceptance PASS_I6_SCOPED and persistent deployment PASS_I6_DEPLOYED_ENTRY; final flag 0 and daily use not released | `docs/validation/p6-item6/README.md`; `docs/validation/p6-item6/independent-validation.md`; `P6-STAGE-HANDOFF-20261009.md` |
@@ -158,8 +160,8 @@ described as P6 PASS.
 item 6's implementation plus scoped local deployment acceptance. Their results retain their
 own original evidence bindings; current documentation does not create a new Gate.
 
-**Recommended next: close the five missing milestone-B browser write paths in isolation.**
-Items 2/3 still bind browser submissions for only four of the nine writes. The missing paths are
+**Completed bounded follow-up: the five missing milestone-B browser write paths.**
+The historical items 2/3 below originally bound only four of the nine browser writes. The five follow-up paths are
 interpretation.correct, interpretation.rerun, review.approve, rule.supersede and rule.retire.
 First verify that gap against the original bundles and freeze a criterion-to-route table; run the
 real browser through a proxy and real Core on isolated new objects, independently read back the
@@ -167,9 +169,11 @@ changed object, immutable command and authorized audit entry, and record conflic
 automatic retries. If later evidence already covers a path, cite it rather than repeating it.
 This closes a browser-coverage slice, not the native P2 conversation chain or the whole T03 Gate.
 The original `0d5c90d` documentation update started no run of that slice. The later isolated
-implementer run and independent round are now recorded above. The next decision is whether to
-repair the two harness findings on a new candidate, followed by applicable independent
-review/revalidation. No repair was performed during the independent round.
+implementer run and initial independent round retain their original bindings above. The two P2
+harness repairs at `25cfc38` have now passed a new non-author review/isolated validation and
+bounded signature. Do not schedule this coverage slice again or treat it as the native T03 Gate.
+The remaining P3 diagnostic limitation and separate dependencies below remain open; this
+signature does not choose or start the next dependency task.
 
 **Dependencies / decisions still separate:**
 
