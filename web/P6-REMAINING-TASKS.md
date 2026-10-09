@@ -14,7 +14,10 @@ the compliance record that maps requirements to code.
 Later bounded slice, on the separate `p6-five-browser-writes` branch: all five missing browser
 write paths now have implementer-run evidence at clean archived candidate
 `5d30e819320ee278f080a6301e74ffefe136ffa3` (20 required records / 137 assertions).
-Independent review/validation is **PENDING**, so items 2/3 are not upgraded to delivered here.
+Independent review and isolated validation are now complete: code review is
+**REVISE_REQUIRED** (two P2 harness findings), while the actual isolated run is scoped PASS.
+Limited acceptance remains **HELD_REVIEW_FINDINGS_NOT_SIGNED**, so items 2/3 are not upgraded
+to delivered here. See [the independent results](../docs/validation/p6-five-browser-writes/independent-results.md).
 See [the new report](../docs/validation/p6-five-browser-writes/README.md).
 This supplements the historical four-of-nine coverage below without rebinding its verdicts.
 The original item-6 handoff/deployment worktree is unchanged.
@@ -164,7 +167,9 @@ changed object, immutable command and authorized audit entry, and record conflic
 automatic retries. If later evidence already covers a path, cite it rather than repeating it.
 This closes a browser-coverage slice, not the native P2 conversation chain or the whole T03 Gate.
 The original `0d5c90d` documentation update started no run of that slice. The later isolated
-implementer run is now recorded above; independent review/validation remains the next step.
+implementer run and independent round are now recorded above. The next decision is whether to
+repair the two harness findings on a new candidate, followed by applicable independent
+review/revalidation. No repair was performed during the independent round.
 
 **Dependencies / decisions still separate:**
 
