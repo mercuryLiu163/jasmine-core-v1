@@ -9,6 +9,19 @@ Status marks: **D** delivered · **P** partially delivered (gap named) · **N** 
 **B** dependency-blocked. Evidence binding is a bundle directory under `validation-runs/p6/` plus
 the compliance record that maps requirements to code.
 
+## Current handoff — 2026-10-09 (America/Los_Angeles)
+
+Item 6 is **D for its reviewed scope**: implementation review APPROVE and isolated acceptance
+`PASS_I6_SCOPED` at `75eea9601bf5f788a11ecedb5077460ef43006bf`; persistent local deployment
+`PASS_I6_DEPLOYED_ENTRY` at frozen release `79448dff91dd7a702f91157766e0ff8ad9fb7352`.
+The final Dashboard confirmation flag is **0**, daily use is **not released**, and primary/main
+have not been merged. Eleven suite skips remain skips; P6/V1 is **not accepted**.
+
+See [the stage handoff](P6-STAGE-HANDOFF-20261009.md) for source hashes, deployment evidence,
+closed items and the next bounded work item. This is a documentation update; prior Gate results
+remain bound to their original code and environments. The approved deployment plan and its
+review remain separate local files under `docs/deployment/`; this update does not commit them.
+
 ## Historical limitations that must not be merged away
 
 Two facts about earlier P6 work stay on this list even though later slices moved past them. They
@@ -55,9 +68,9 @@ they are re-asserted in every bundle by the credential check.
 | 1 Conversation↔Interpretation read (model/extractor/version/confidence, Resolver reason, derived ids; pending count from the API) | **D** | milestone A, independently reviewed and validated | `P6-02-COMPLIANCE.md`; HTTP `20261007T135254Z-p6-02b-t03-gate/` (76/76); browser `20261007T135314Z-p6-02b-clickthrough/` (53/53); candidate `959e8df`, asset `index-CZ4ocGOP.js` |
 | 2 Correct / Reject / Re-run (old vs new, affected Truth, reason, frozen version; reject keeps the raw Event; re-run does not auto-change Truth) | **P** | all three delivered behind the default-off switch with per-action audit readback; **browser end-to-end submissions exist for 4 of the 9 writes** (interpretation.reject, review.reject, rule.propose, rule.approve) — the rest are HTTP + audit readback, which the INDEX says explicitly | as above; nine write endpoints in `server/core-paths.json` |
 | 3 Rule proposal vs approve/supersede/retire (scope, version/revision, immutable history; 409 keeps the draft) | **P** | same browser-coverage note | as above |
-| 4 Task/Step create/transition/criteria (real state machine, `expected_revision` from readback, idempotent `event_id`, timeout = 结果未知) | **D** | contract frozen (`P6-02B-TASK-STEP-WRITE-SPEC.md` rev 3, delta re-review APPROVE freeze-as-is), implemented at `607f511` + review-fix `acd260b`, then executed by an **independent** validator on a real Core + real browser: PASS 9/9 claims, no counterexample, all seven routes + the §11 negatives. Its Evidence-gated route 6 and the two gated Step edges need a fingerprint/confirmation environment the browser alone cannot mint (both minting routes are proxy-refused by design), so a fresh environment must record them BLOCKED/PARTIAL — the spec's own permitted outcome | `P6-02-TASKSTEP-WRITE-COMPLIANCE.md`; validation `validation-runs/p6/VALIDATE-p6-02-taskstep-write/`; reviews `REVIEW-p6-02-taskstep-write-spec/`, `REVIEW-p6-02-taskstep-write-impl/` |
-| 5 VERIFIED/ACCEPTED forms (criteria→Evidence matrix, rule version, fingerprint, `422 missing_evidence` keeps state, agent credential refused) | **P** | implemented (`f636584` + independently reviewed repair `613a022`); frozen contract rev 3 includes the independently reviewed read-scope erratum. Final implementation review APPROVE and real isolated Core/Chrome Gate PASS at `551c95a`: 81 browser /65 Core /27 same-run crosschecks /28 edges; 17 refusal equality observations. Browser-only positive environment remains BLOCKED/PARTIAL: fingerprint/Evidence/confirmation preparation is out-of-band; `evidence/confirm` and the unreadable freshness/API decisions remain open | `P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`; `REVIEW-p6-02-item5-implementation/`; `VALIDATE-p6-02-item5-verified-accepted/` |
-| 6 `evidence/confirm` | **N** | deliberately absent: needs a real human prompt (ADR 0007) that a browser cannot mint; the browser test asserts the control is **absent**. New decision belongs to the Core owner as its own ADR/API Gate | same |
+| 4 Task/Step create/transition/criteria (real state machine, `expected_revision` from readback, idempotent `event_id`, timeout = 结果未知) | **D** | contract frozen (`P6-02B-TASK-STEP-WRITE-SPEC.md` rev 3, delta re-review APPROVE freeze-as-is), implemented at `607f511` + review-fix `acd260b`, then executed by an **independent** validator on a real Core + real browser: PASS 9/9 claims, no counterexample, all seven routes + the §11 negatives. Its Evidence-gated route 6 and the two gated Step edges need a fingerprint/confirmation environment the browser alone cannot mint (fingerprint/TEST provisioning remains outside the browser; item 6 now supplies a separate Web confirmation source), so a fresh environment must record them BLOCKED/PARTIAL — the spec's own permitted outcome | `P6-02-TASKSTEP-WRITE-COMPLIANCE.md`; validation `validation-runs/p6/VALIDATE-p6-02-taskstep-write/`; reviews `REVIEW-p6-02-taskstep-write-spec/`, `REVIEW-p6-02-taskstep-write-impl/` |
+| 5 VERIFIED/ACCEPTED forms (criteria→Evidence matrix, rule version, fingerprint, `422 missing_evidence` keeps state, agent credential refused) | **P** | historical item-5 review/Gate remains bound to `551c95a` (81 browser /65 Core /27 same-run crosschecks /28 edges). Item 6 now supplies Web confirmation and deployed D05 verifies independent Step VERIFIED/ACCEPTED and Task ACCEPTED in the new instance; this does not replace all item-5 negatives or provide browser-native TEST/fingerprint provisioning. Remaining freshness/readability decisions and broader coverage stay open | `P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`; `P6-STAGE-HANDOFF-20261009.md`; stage2 `browser-loop.json`, `audit.json` |
+| 6 Web human confirmation | **D (scoped)** | dedicated prepare/submit/status and auth/me implemented under ADR 0015; USER_CONFIRMATION/INFO only, separate State requests. Legacy `/evidence/confirm` remains proxy-refused; no fabricated human prompt. Isolated acceptance PASS_I6_SCOPED and persistent deployment PASS_I6_DEPLOYED_ENTRY; final flag 0 and daily use not released | `docs/validation/p6-item6/README.md`; `docs/validation/p6-item6/independent-validation.md`; `P6-STAGE-HANDOFF-20261009.md` |
 | 7 Every manual change has an immutable command Event + revision/provenance + audit metadata; audit readback uses an authorised validator | **D** | for the nine delivered writes: per-action audit readback was added for all nine after the validator found 6 missing (`c7c5480`); the delta re-validation returned PASS | milestone-B bundle `20261008T053936Z-p6-03b2-clickthrough/` + INDEX |
 | — `POST /v1/resolutions/{id}/manual-reapply` | **N** | needs its own frozen payload/permission table **and an explicit operator decision**; a web button cannot mint the ADR 0007 human-prompt provenance it records | `P6-02-COMPLIANCE.md` “Not delivered” |
 | — real P2 message → Review → write chain (P6-T03 Gate) | **B** | the writes are gated against fixtures and the real P4 Core; a **real captured conversation** with the Resolver policy Gate has not been run (operator's capture path) | `P6-02B-INDEX.md` P6-02 sections; `P6-T03` in §7 |
@@ -66,9 +79,11 @@ they are re-asserted in every bundle by the credential check.
 `milestone B: independently validated, PASS-WITH-CAVEATS` (four findings fixed in `c7c5480`);
 `P6-02 TaskStep write (item 4): PASS` for the seven write routes only — contract frozen, implemented
 and independently validated, with route 6/gated Step edges `BLOCKED`/`PARTIAL` in any environment
-that lacks the out-of-band fingerprint and confirmation. Item 5 is implemented and independently
-reviewed/validated at `551c95a`, with its browser-only positive environment still **BLOCKED/PARTIAL**
-(`P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`). `P6-02` as a whole stays **PARTIAL**.
+that lacks the required fingerprint/TEST provisioning or authorized confirmation. Item 5's
+historical verdict remains bound to `551c95a`; item 6 adds the separately bound deployed
+confirmation/State chains, without upgrading the whole item-5 matrix. Item 6 is **delivered and
+scope-accepted**, with the final Web switch **0** and daily use **not released**.
+`P6-02` as a whole stays **PARTIAL**.
 
 ## 3. §6 P6-03 — domain-by-domain inspectors
 
@@ -76,7 +91,7 @@ reviewed/validated at `551c95a`, with its browser-only positive environment stil
 | --- | --- | --- | --- |
 | Checkpoint Compare (P6-03a) | **P** | views delivered and verified against a real P3 Core; the negatives “old checkpoint is only history, revision-ahead/partial fingerprint must not show match” are **not all exercised** — the real run compares equal revisions (`STATE_EQUAL`) and a second checkpoint exists only for the switch check | real `20261008T075256Z-p6-03a-realcore/` (26/26 at `f323c779`); simulated `20261008T075317Z-p6-03a-gate-regression/` (15/15) |
 | Context Inspector (P6-03a) | **P** | persisted pack, exact rendered content, section/token metrics, rule versions, memory ids, state revision all verified. **Injection attempt/receipt is not available**, so “built ≠ injected” is stated and the receipt half cannot PASS | same |
-| Memory Jobs/Recall (P6-03b1) | **P** | jobs/detail/retry, bank mapping, source Event/Evidence, query/result trace verified against real P4 code; **engine-dependent behaviour and the “engine unavailable ⇒ degraded, P1 views unaffected” negative are not covered** | real `20261008T075258Z-p6-03-realcore/` (35/35) + `...-ui/` (10/10); simulated `20261008T075355Z-p6-03b1-clickthrough/` (11/11) |
+| Memory Jobs/Recall (P6-03b1) | **P** | jobs/detail/retry, bank mapping, source Event/Evidence, query/result trace verified against real P4 code; engine-dependent extraction/reflect content remains unproven; the labelled wire-double outage and recovery slice is covered separately by T05 (19/19), without proving real Hindsight behaviour | real `20261008T075258Z-p6-03-realcore/` (35/35) + `...-ui/` (10/10); simulated `20261008T075355Z-p6-03b1-clickthrough/` (11/11) |
 | Memory Inspector 管理 (P6-03b2) | **P** | the five commands + `reflect` delivered behind a default-off switch, exercised through the real P4 Core and through the browser; soft-delete/provenance/idempotency verified; **“historical Memory conflicting with current Authority is conspicuous” is not exercised**, and engine-dependent `reflect` content is unproven | real Core 35/35 + UI 10/10; fixture `20261008T075346Z-p6-03b2-clickthrough/` (16/16 twice + 4/4 off); `P6-03B2-COMPLIANCE.md` criterion 9b |
 | Validation Inspector (P6-03c) | **P + B** | **delivered** behind `P6_ENABLE_P7_READS`: the proxy allowlist (`p7_pending_paths`, five routes), the Inspector (run list with Core's filters, detail with the eight T06 chain links and their verbatim `missing_reason`, seven-section `present_kind`, manifest with the unauthenticated warning, artifact metadata and text-only content with separate masked/original digests) and the real-browser drill-down harness. **What is not PASS**: P7-01 acceptance criterion 1 — no real FAIL run exists on disk, so the FAIL display path is exercised only by a clearly-labelled synthetic fixture; and the drill-down's artifact half necessarily runs on a labelled fixture root, because the nine real records carry no manifest and no artifacts. `web/P6-03C-COMPLIANCE.md` | real records + labelled fixture: browser `20261008T181740Z-p6-03c-exit-code-positive/` (24 PASS / 0 FAIL, 5 PASS / 0 FAIL / 1 BLOCKED python), earlier `20261008T174844Z-p6-03c-validation-drilldown/`; independent review `REVIEW-p6-03c-*` and validation `VALIDATE-p6-03c-*` |
 | online / backup / storage | **N + B** | needs the P5/P7 readable contracts and real health stamps; today the UI does not fake health | same |
@@ -98,7 +113,7 @@ Negative cases (§7), which ones are actually covered:
 | Negative case | Status |
 | --- | --- |
 | stale `expected_revision`, double click, timeout retry, `event_id` payload change | **covered** — `W4.replay`, `W4.revision_conflict`, real `event_id_conflict` |
-| criteria/Evidence missing, old fingerprint, BROKEN_REFERENCE, INFO result, no real human confirmation | **partial** — item-5 forms implemented and independently validated: missing criteria/Evidence/human confirmation, INFO and 17 browser/SQLite refusal equalities observed; no exhaustive environment coverage of old fingerprints/BROKEN_REFERENCE is claimed. Confirmation control remains absent; positive environment setup is out-of-band. See `P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md` |
+| criteria/Evidence missing, old fingerprint, BROKEN_REFERENCE, INFO result, missing confirmation | **partial** — item-5 forms implemented and independently validated: missing criteria/Evidence/human confirmation, INFO and 17 browser/SQLite refusal equalities observed; no exhaustive environment coverage of old fingerprints/BROKEN_REFERENCE is claimed. Item 6 adds scoped Web confirmation and deployed source/State chains; TEST/fingerprint setup remains out-of-band and historical item-5 limits remain. See `P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md` |
 | agent-proposed Rule, tentative “先研究”, cross-scope supersede | **covered** — milestone-B tests + real P4 issuance refusal |
 | project A slow response arriving after switching to B; same id, different revision | **covered** — T07 (the rapid-switch phase was falsified and fixed) + `revision_conflict` |
 | API 404/401/403/422/503, disconnection, unknown enum, truncated paging | **covered** across the P1/P6-01/P6-02/P6-03 Gates |
@@ -108,8 +123,11 @@ Negative cases (§7), which ones are actually covered:
 
 ## 5. §8 bundle format and merge gate
 
-Every current bundle is frozen and verifiable (`BUNDLE-FROZEN.json`), but the **file set differs
-from §8's required list**. §8 asks each bundle for `manifest.json`, `scenario.md`,
+The original P6-03 integration bundles are frozen with `BUNDLE-FROZEN.json`; their historical
+**file set differs from §8's required list**. The delivered conformance generator writes separate
+source-bound derivations and does not modify or upgrade those bundles. Later item-6/deployment
+manifests use their own hash inventories; do not require or claim that they share this old layout.
+§8 asks each bundle for `manifest.json`, `scenario.md`,
 `click-trace.jsonl`, masked `api-requests.jsonl`/`api-responses.jsonl`, `truth-before-after.json`,
 the relevant source mappings, `screenshots/`, raw test output and `result.md`. What exists today:
 `click-trace.jsonl`, `browser-requests.jsonl` (the request log, with `fixtureLabel`),
@@ -122,45 +140,38 @@ own Gate; P6-03a on P3, 03b on P4, 03c on P7-01. None of the dependency **phases
 so merging the integration candidate is an operator decision, not a P6 result, and must not be
 described as P6 PASS.
 
-## 6. 下一个最小交付 (decision)
+## 6. 下一个最小交付 (current decision)
 
-**Recommended: the §8 evidence-format conformance generator.** It is the only remaining item that is
-certainly unblocked, needs no dependency or operator decision, and directly serves the taskbook:
+**Already delivered; do not schedule again:** the §8 evidence-format conformance generator
+(new-directory-only, 23 tests), T05's labelled wire-double outage/recovery slice (19/19), and
+item 6's implementation plus scoped local deployment acceptance. Their results retain their
+own original evidence bindings; current documentation does not create a new Gate.
 
-* scope: one harness script that, for a frozen bundle, emits the §8-named files from the bundle's own
-  records — `manifest.json` (commit/deps/mode/time), `scenario.md` (the records the run performed),
-  `api-requests.jsonl`/`api-responses.jsonl` (masked; derived from `browser-requests.jsonl` +
-  `evidence.json` calls), `truth-before-after.json` (the mutations the run read back, empty for
-  read-only runs, explicitly `not-recorded` where the bundle has none) and `result.md` (the
-  PASS/FAIL/BLOCKED/PARTIAL table generated from the records);
-* it must **not** invent data: fields the bundle does not contain are written as `not-recorded`, and
-  the generator refuses to run on a bundle without `BUNDLE-FROZEN.json`;
-* done when: re-running it over the nine current bundles produces §8-shaped files, a reviewer can
-  trace every line to an existing record, and a second run is byte-identical (idempotent) — proven by
-  a test, not by inspection;
-* what it does **not** claim: it changes neither any Gate result nor any code, and it does not make
-  P6 PASS.
+**Recommended next: close the five missing milestone-B browser write paths in isolation.**
+Items 2/3 still bind browser submissions for only four of the nine writes. The missing paths are
+interpretation.correct, interpretation.rerun, review.approve, rule.supersede and rule.retire.
+First verify that gap against the original bundles and freeze a criterion-to-route table; run the
+real browser through a proxy and real Core on isolated new objects, independently read back the
+changed object, immutable command and authorized audit entry, and record conflicts/replay without
+automatic retries. If later evidence already covers a path, cite it rather than repeating it.
+This closes a browser-coverage slice, not the native P2 conversation chain or the whole T03 Gate.
+No run of that next slice has been started by this documentation update.
 
-**Runner-up (behavioural, needs one probe first): the “Memory engine unavailable ⇒ degraded” slice of
-P6-T05.** It closes a named §7 negative case using the existing isolated P4 Core and its labelled
-wire double — no real deployment, no operator service. First step is a 10-minute probe of whether
-P4's isolated environment can express “engine unavailable” without a real Hindsight; if it cannot,
-the row stays dependency-blocked and this drops off the list.
+**Dependencies / decisions still separate:**
 
-**Dependency actions to open now (no P6 work can substitute):** the P7-01 request is **delivered** —
-the contract is frozen in the P7-01 worktree and copied here, the read slice is implemented and
-independently validated, and the dashboard proxy is open behind `P6_ENABLE_P7_READS`. What remains
-is a **data** action, not a dependency: to close P7-01 criterion 1, the P7 owner records one
-genuinely failing scenario with `recorder.py` into the configured run root, after which the T06
-drill-down is re-run and the criterion re-validated. Record the P6-03a **injection-receipt**
-question with the Agent/Context owner (unblocks T04's second half). Ask the P4 owner for the
-interpreter-symlink fix task (`TASK-p4-interpreter-symlink.md`, registered separately). File the
-**coordination request to the Core interface owner** with the same scope and phrase as the frozen
-spec's §13 bullet: no route in schema 8 exposes `STEP_EDGES`/`TASK_EDGES`, so the Task/Step
-transition UI can only offer Core's status **vocabulary** — a superset of the legal-target set — and
-Core stays the only verdict on legality (`409 invalid_state_transition` with `from_status`/
-`to_status`); the ask is a route that publishes the two edge sets. It is a presentation limit that
-the implementation review ruled acceptable under §12, it blocks no item, and it changes no P6 status.
+* P7-01 criterion 1 / T06 needs a genuinely failing recorded scenario with failure classification
+  and original output, using `recorder.py`; do not turn a deliberately falsified fixture or
+  negative bundle into a real acceptance run.
+* T04 still needs a genuine Context injection receipt. A built pack is not an injected pack.
+* T05 still lacks stale Memory vs Authority, old/atypical Checkpoint and over-budget Context
+  negatives; real engine extraction/reflect claims remain outside the wire-double evidence.
+* `manual-reapply` needs its own provenance/permission design and explicit operator decision.
+* `TASK-p4-interpreter-symlink.md` remains a separately owned environment/installer task. The
+  newer item-6 suite records 0 failures/errors and 11 skips; do not describe the older nine
+  symlink-environment failures as failures observed in that newer run or silently close their
+  task without the required negative identity test.
+* The Core legal-transition edge-set read API is a presentation request, not a current blocker;
+  Core remains the verdict on legal State transitions.
 
 **Harness gates closed before that re-run** (all found by the independent review/validation rounds
 and fixed, so the harness is now fit for the tenth record):
@@ -200,7 +211,11 @@ demonstrate it; derived strings render "1 FAIL cases"; and each trace run leaves
 * **Do not touch the live entry point, global hooks, credentials, existing services or the
   operator's Core.**
 
-## 8. Post-acceptance additions (docs and tooling only)
+## 8. Historical post-acceptance additions (docs and tooling only)
+
+The following describes the earlier P6-03 documentation/harness interval. It is not the current
+item-6 branch diff: Task/Step, item 5 and item 6 subsequently changed product paths and schema.
+Their independent records and the current handoff bind those later changes separately.
 
 After the acceptance battery at `f323c779bc91893b5908218d8c5c148619159180`, the tree gained only
 documentation and harness tooling:
@@ -239,7 +254,7 @@ documentation and harness tooling:
   no backup path and no deletion other than the tool's own staging directory. 23 hermetic tests. No
   verdict and no Gate result changes.
 
-The exact diff list against the acceptance commit is
+For that historical interval only, the exact diff list against the acceptance commit was
 `git diff --name-only f323c779… HEAD`: documentation and harness paths only, with **no `src/`, schema
 or `web/` product path** — so the acceptance bundles still bind the same product code and the
 dashboard results (tsc, 328/328) still apply unchanged. The

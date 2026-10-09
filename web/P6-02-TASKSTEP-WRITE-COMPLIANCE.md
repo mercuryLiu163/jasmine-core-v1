@@ -6,9 +6,10 @@ them. This record maps each frozen requirement to the code that implements it an
 evidence that observed it. It is not a Gate bundle and it adds no acceptance round.
 
 **Status: DELIVERED for this slice, independently validated PASS (9/9 claims, no counterexample).**
-That sentence is deliberately narrow: `P6-02` as a whole stays **PARTIAL** (item 5's
-VERIFIED/ACCEPTED forms and item 6's `evidence/confirm` are undelivered), `P6` is not complete, and
-nothing here releases V1.
+That sentence is deliberately narrow: `P6-02` as a whole stays **PARTIAL**, `P6` is not complete,
+and nothing here releases V1. At this slice's original acceptance, items 5 and 6 were undelivered;
+they were subsequently implemented, with separately bound evidence. See
+[P6 stage handoff](P6-STAGE-HANDOFF-20261009.md); those later results do not relabel this Gate.
 
 | | |
 | --- | --- |
@@ -129,8 +130,8 @@ its own keys, drives real Chrome over CDP and checks Core's own SQLite. Reproduc
 
 ## 4. What this does not do
 
-* It does not accept `P6-02`, `P6` or V1: item 5 (VERIFIED/ACCEPTED forms and the criteria↔Evidence
-  matrix) and item 6 (`evidence/confirm` from the browser) remain undelivered.
+* It does not accept `P6-02`, `P6` or V1. The original slice did not deliver item 5 or item 6;
+  subsequent delivery and deployment have their own evidence in the stage handoff.
 * It does not inherit any milestone-B verdict: milestone B's PASS binds milestone B's commits
   (`P6-REMAINING-TASKS.md`, "Historical limitations") and this slice carries its own evidence.
 * It does not run a Gate against the operator's own Core or a real captured conversation, and it says

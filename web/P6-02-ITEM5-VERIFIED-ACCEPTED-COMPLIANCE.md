@@ -6,6 +6,15 @@ fingerprint, Evidence and human confirmations were prepared through Core's publi
 browser. **Item 5 is PARTIAL**: this is observed browser submission/readback evidence, not a
 browser-only lifecycle. `P6-02` remains **PARTIAL**; P6/P7 and V1 are not accepted by this record.
 
+## Subsequent item 6 delivery — 2026-10-09
+
+The historical item-5 evidence below remains bound to `551c95a`. Item 6 subsequently supplied a
+reviewed Web confirmation source, and deployed D05 at release `79448df` observed separate Step
+VERIFIED/ACCEPTED and Task ACCEPTED requests with readback/audit. Confirmation remains INFO and
+does not replace TEST or fingerprint provisioning. This resolves the absence of a Web confirmation
+source for that scoped chain, not every freshness/negative case in the item-5 matrix. No older
+item-5 verdict is upgraded. See [the current stage handoff](P6-STAGE-HANDOFF-20261009.md).
+
 ## Implementation and evidence binding
 
 | Artifact | Binding |
