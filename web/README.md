@@ -197,7 +197,7 @@ not.
 | Memory lifecycle / retry / reflect (P6-03b2 writes) | P4 | **Implemented behind a default-off switch; not verified against real P4.** Six writes (`memory:manage` + `memory:reflect`), gated by `P6_ENABLE_P4_WRITES` — separate from the reads' switch — and absent from the live allowlist. Exercised only against a labelled simulated fixture; P4 phase acceptance has **not** passed. Specification: [`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md); per-criterion state: [`P6-03B2-COMPLIANCE.md`](P6-03B2-COMPLIANCE.md). The plan for verifying this slice — and b1 — against a real, isolated P4 Core: [`REAL-CORE-ACCEPTANCE-PLAN.md`](REAL-CORE-ACCEPTANCE-PLAN.md) (**plan only; nothing executed**) |
 | Validation inspector (run list, artifacts) | P7-01 | minimal validation read API + safe artifact contract |
 | online / backup / storage | P5 / P7 | health read contracts |
-| VERIFIED / ACCEPTED **forms** (criteria↔Evidence matrix) | P6-02 item 5 | Proposal drafted in the working tree (`web/P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md`, **untracked — not yet in the repo**) but **not yet reviewed, frozen or implemented** |
+| VERIFIED / ACCEPTED **forms** (criteria↔Evidence matrix) | P6-02 item 5 | **Contract frozen** ([`P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md`](P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md) rev 2 — independently reviewed, delta re-reviewed, D1–D3 applied); **implementation not started**, so the item stays undelivered |
 | Evidence-confirmation (`POST /v1/evidence/confirm`) | P6-02 item 6 | Deliberately not provided: needs a real human prompt the browser cannot mint (ADR 0007). The proxy refuses the path by name and the browser test asserts the control is **absent** |
 
 ## Status
