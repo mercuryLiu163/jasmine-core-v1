@@ -389,6 +389,9 @@ describe('the criteria↔Evidence matrix is a read aid, never a verdict', () => 
     const state = await within(matrix).findByTestId('matrix-state-confirm')
     // `USER_CONFIRMATION` + `PASS` can never be satisfied (`record_confirmation` writes INFO).
     expect(state.textContent).toContain('缺项')
+    expect(state.textContent).toContain('始终写入 INFO')
+    expect(state.textContent).toContain('永久无法满足')
+    expect(state.textContent).toContain('不表示操作人员漏做确认')
     // The only place the INFO row appears is the wrong-kind set, carrying its own badge.
     const wrongKind = within(matrix).getByTestId('matrix-wrong-kind-confirm')
     expect(within(wrongKind).getByText('INFO')).toBeTruthy()
@@ -432,9 +435,141 @@ describe('the criteria↔Evidence matrix is a read aid, never a verdict', () => 
     expect(noMapping.textContent).toContain(RULE_ID)
     expect(noMapping.textContent).toContain('version')
     // The mapped Rule's requirement is shown as a candidate row.
-    expect(within(matrix).getByTestId('matrix-state-lint')).toBeTruthy()
+    expect(within(matrix).getAllByTestId('matrix-state-lint')).toHaveLength(2)
     // The inapplicable Rule is filtered out by the copied predicate.
     expect(within(matrix).queryByTestId(`matrix-rule-rul_${'C'.repeat(26)}`)).toBeNull()
+  })
+
+  it('keeps another Step’s Rule Evidence out of this Step’s submission context', async () => {
+    const otherStepId = `stp_${'B'.repeat(26)}`
+    const user = userEvent.setup()
+    await enter(user, EVIDENCE_HASH, matrixRoutes({
+      'GET /v1/rules/active': { body: { rules: [rule({
+        verification_requirements: { requirements: [{ key: 'rule-test', kind: 'TEST', required_result: 'PASS' }] },
+      })], count: 1 } },
+      [`GET /v1/tasks/${TASK_ID}/steps`]: { body: { steps: [step(), step({ step_id: otherStepId, revision: 7 })] } },
+      [`GET /v1/tasks/${TASK_ID}/evidence`]: { body: { evidence: [evidence({ step_id: otherStepId, step_revision: 7 })], count: 1 } },
+    }))
+    const matrix = await panel(/criteria → Evidence 参考矩阵/)
+    const rulePanel = await within(matrix).findByTestId(`matrix-rule-${RULE_ID}`)
+    expect(within(rulePanel).getAllByTestId('matrix-state-rule-test')).toHaveLength(3)
+    const taskContext = within(rulePanel).getByTestId('matrix-rule-context-task')
+    const thisStep = within(rulePanel).getByTestId(`matrix-rule-context-${STEP_ID}`)
+    const otherStep = within(rulePanel).getByTestId(`matrix-rule-context-${otherStepId}`)
+    expect(within(taskContext).getByTestId('matrix-state-rule-test').textContent).toContain('候选匹配')
+    expect(within(thisStep).getByTestId('matrix-state-rule-test').textContent).toContain('缺项')
+    expect(within(thisStep).queryByTestId('matrix-candidates-rule-test')).toBeNull()
+    expect(within(thisStep).queryByText(`evd_${ID}`)).toBeNull()
+    expect(within(otherStep).getByTestId('matrix-state-rule-test').textContent).toContain('候选匹配')
+    expect(otherStep.textContent).toContain('@ r7')
+    for (const context of [taskContext, otherStep]) {
+      const state = within(context).getByTestId('matrix-state-rule-test')
+      for (const residual of ['F1', 'F2', 'F8', 'F9d', 'F9e']) expect(state.textContent).toContain(residual)
+      expect(state.textContent).not.toContain('已通过')
+      expect(state.textContent).not.toContain('可提交')
+    }
+  })
+
+  it.each([
+    { taskRevision: 12, stepRevision: 3, taskState: '候选匹配', stepState: '候选匹配' },
+    { taskRevision: 11, stepRevision: 3, taskState: '不可用', stepState: '候选匹配' },
+    { taskRevision: 12, stepRevision: 2, taskState: '候选匹配', stepState: '不可用' },
+    { taskRevision: 12, stepRevision: 4, taskState: '候选匹配', stepState: '不可用' },
+  ])('binds Rule confirmation to each context’s exact revision: $taskRevision / $stepRevision', async ({
+    taskRevision, stepRevision, taskState, stepState,
+  }) => {
+    const user = userEvent.setup()
+    await enter(user, EVIDENCE_HASH, matrixRoutes({
+      'GET /v1/rules/active': { body: { rules: [rule({
+        verification_requirements: { requirements: [{ key: 'rule-confirm', kind: 'USER_CONFIRMATION', required_result: 'INFO' }] },
+      })], count: 1 } },
+      [`GET /v1/tasks/${TASK_ID}/evidence`]: { body: { evidence: [evidence({
+        kind: 'USER_CONFIRMATION', status: 'INFO', confirmed_rule_id: RULE_ID, confirmed_rule_version: 2,
+        task_revision: taskRevision, step_revision: stepRevision,
+      })], count: 1 } },
+      'GET /v1/events/evt_source': { body: { event: rawEvent({
+        event_id: 'evt_source', event_type: 'user.prompt', actor_kind: 'human',
+      }) } },
+    }))
+    const matrix = await panel(/criteria → Evidence 参考矩阵/)
+    const rulePanel = await within(matrix).findByTestId(`matrix-rule-${RULE_ID}`)
+    const taskContext = within(rulePanel).getByTestId('matrix-rule-context-task')
+    const stepContext = within(rulePanel).getByTestId(`matrix-rule-context-${STEP_ID}`)
+    expect(within(taskContext).getByTestId('matrix-state-rule-confirm').textContent).toContain(taskState)
+    expect(within(stepContext).getByTestId('matrix-state-rule-confirm').textContent).toContain(stepState)
+    if (taskState === '不可用') expect(within(taskContext).getByTestId('matrix-stale-rule-confirm').textContent).toContain('F6')
+    if (stepState === '不可用') expect(within(stepContext).getByTestId('matrix-stale-rule-confirm').textContent).toContain('F6')
+  })
+
+  it('keeps Rule version binding in each Step confirmation context', async () => {
+    const user = userEvent.setup()
+    await enter(user, EVIDENCE_HASH, matrixRoutes({
+      'GET /v1/rules/active': { body: { rules: [rule({
+        verification_requirements: { requirements: [{ key: 'rule-confirm-version', kind: 'USER_CONFIRMATION', required_result: 'INFO' }] },
+      })], count: 1 } },
+      [`GET /v1/tasks/${TASK_ID}/evidence`]: { body: { evidence: [evidence({
+        kind: 'USER_CONFIRMATION', status: 'INFO', confirmed_rule_id: RULE_ID, confirmed_rule_version: 1,
+      })], count: 1 } },
+      'GET /v1/events/evt_source': { body: { event: rawEvent({
+        event_id: 'evt_source', event_type: 'user.prompt', actor_kind: 'human',
+      }) } },
+    }))
+    const matrix = await panel(/criteria → Evidence 参考矩阵/)
+    const rulePanel = await within(matrix).findByTestId(`matrix-rule-${RULE_ID}`)
+    for (const context of within(rulePanel).getAllByTestId(/^matrix-rule-context-/)) {
+      expect(within(context).getByTestId('matrix-state-rule-confirm-version').textContent).toContain('字段不符')
+      expect(within(context).queryByTestId('matrix-candidates-rule-confirm-version')).toBeNull()
+    }
+  })
+
+  it.each([
+    { cycle: 20, activation: 15, otherCycle: 25, state: '不可用', failure: 'cycle cutoff 20' },
+    { cycle: 5, activation: 20, otherCycle: 25, state: '不可用', failure: '规则激活 seq 20' },
+    { cycle: 5, activation: 21, otherCycle: 25, state: '不可用', failure: '规则激活 seq 21' },
+    { cycle: 19, activation: 19, otherCycle: 25, state: '候选匹配', failure: null },
+  ])('preserves Step cycle and Rule activation boundaries: cycle $cycle / activation $activation', async ({
+    cycle, activation, otherCycle, state, failure,
+  }) => {
+    const user = userEvent.setup()
+    await enter(user, EVIDENCE_HASH, matrixRoutes({
+      'GET /v1/rules/active': { body: { rules: [rule({
+        verification_requirements: { requirements: [{ key: 'rule-cycle', kind: 'TEST', required_result: 'PASS' }] },
+      })], count: 1 } },
+      [`GET /v1/tasks/${TASK_ID}/history`]: { body: { events: [
+        rawEvent({ event_id: 'evt_cycle', seq: cycle, event_type: 'step.criteria_updated', payload: { step_id: STEP_ID } }),
+        rawEvent({ event_id: 'evt_other_cycle', seq: otherCycle, event_type: 'step.transitioned', payload: { step_id: 'stp_other', to: 'IN_PROGRESS' } }),
+      ] } },
+      'GET /v1/events/evt_activation': { body: { event: rawEvent({
+        event_id: 'evt_activation', seq: activation, event_type: 'rule.approved', actor_kind: 'human',
+      }) } },
+    }))
+    const matrix = await panel(/criteria → Evidence 参考矩阵/)
+    const rulePanel = await within(matrix).findByTestId(`matrix-rule-${RULE_ID}`)
+    for (const context of within(rulePanel).getAllByTestId(/^matrix-rule-context-/)) {
+      expect(within(context).getByTestId('matrix-state-rule-cycle').textContent).toContain(state)
+      if (failure) expect(within(context).getByTestId('matrix-stale-rule-cycle').textContent).toContain(failure)
+      else expect(within(context).getByTestId('matrix-residual').textContent).toContain('F9e')
+    }
+  })
+
+  it('names USER_CONFIRMATION/PASS authoring hazard for Rule requirements in every context', async () => {
+    const user = userEvent.setup()
+    await enter(user, EVIDENCE_HASH, matrixRoutes({
+      'GET /v1/rules/active': { body: { rules: [rule({
+        verification_requirements: { requirements: [{ key: 'rule-pass-confirm', kind: 'USER_CONFIRMATION', required_result: 'PASS' }] },
+      })], count: 1 } },
+      [`GET /v1/tasks/${TASK_ID}/evidence`]: { body: { evidence: [], count: 0 } },
+    }))
+    const matrix = await panel(/criteria → Evidence 参考矩阵/)
+    const rulePanel = await within(matrix).findByTestId(`matrix-rule-${RULE_ID}`)
+    for (const state of within(rulePanel).getAllByTestId('matrix-state-rule-pass-confirm')) {
+      expect(state.textContent).toContain('缺项')
+      expect(state.textContent).toContain('始终写入 INFO')
+      expect(state.textContent).toContain('永久无法满足')
+      expect(state.textContent).toContain('不表示操作人员漏做确认')
+    }
+    expect(screen.queryByRole('button', { name: /confirm|确认/i })).toBeNull()
+    expect(fake!.callsTo('POST', '/v1/evidence/confirm')).toHaveLength(0)
   })
 
   it('never claims the current fingerprint is current/一致 (§3.5 item 2)', async () => {

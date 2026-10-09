@@ -150,6 +150,13 @@ function RequirementRow({
             <code>422 missing_evidence</code> 或成功)。
           </div>
         ) : null}
+        {requirement.kind === 'USER_CONFIRMATION' && requirement.required_result === 'PASS' ? (
+          <div className="muted" data-testid="matrix-confirmation-authoring-hazard">
+            Criteria authoring hazard:Core 的现有确认生成路由始终写入 INFO,与此 PASS
+            requirement 精确匹配失败,因此通过该路由永久无法满足。这是 criteria 的定义限制,
+            不表示操作人员漏做确认;本页不生成确认或改写 criteria。
+          </div>
+        ) : null}
         {state === 'missing' ? (
           <div className="muted">
             这<strong>不</strong>表示 Core 一定会回答 requirement_key:Core 对匹配但 stale 的行回答同一个
@@ -443,7 +450,8 @@ function ApplicableRules({ data, taskId }: { data: MatrixData; taskId: string })
         这是对 Core <code>_rules</code> WHERE 子句的<strong>复制</strong>,不是 Core 的回答:R-RA
         返回所有 ACTIVE Rule。Rule 的 requirements 是否可满足(以及规则的激活 Event 之后是否有新
         Evidence)只有在提交时由 Core 判定;缺 mapping 的 Rule 是可达的
-        <code>422 {'{rule_id, version}'}</code> 拒绝分支。规则 requirements 在此按 Task 范围评估。
+        <code>422 {'{rule_id, version}'}</code> 拒绝分支。每条 Rule 的 requirements 分别按 Task 与各 Step 的提交范围评估,
+        使用各自的 Evidence 范围与 revision;候选仍然不是 Core 判定。
       </p>
       {applicable.length === 0 ? <Empty what="适用 Rule" /> : null}
       {applicable.map((rule) => {
@@ -512,23 +520,40 @@ function ApplicableRules({ data, taskId }: { data: MatrixData; taskId: string })
                 该 Rule 的 mapping 是空 requirements(<code>{'{"requirements": []}'}</code>)。
               </p>
             ) : (
-              <RequirementTable
-                scope={`Rule ${rule.rule_id}@${rule.version}`}
-                requirements={rule.verification_requirements.requirements}
-                rows={data.evidence}
-                context={{
-                  projectId: data.task.project_id,
-                  taskRevision: data.task.revision,
-                  expectedRevision: data.task.revision,
-                  stepId: null,
-                  commandEvents: data.commandEvents,
-                  eventsById: data.eventsById,
-                  ruleId: rule.rule_id,
-                  ruleVersion: rule.version,
-                  afterSeq: activation?.seq ?? null,
-                }}
-                taskId={taskId}
-              />
+              [
+                { stepId: null, revision: data.task.revision, scope: `Task ${data.task.task_id}` },
+                ...data.steps.map((step) => ({
+                  stepId: step.step_id,
+                  revision: step.revision,
+                  scope: `Step ${step.step_id}`,
+                })),
+              ].map((submission) => (
+                <div
+                  key={submission.stepId ?? 'task'}
+                  data-testid={`matrix-rule-context-${submission.stepId ?? 'task'}`}
+                >
+                  <h4>{submission.scope} @ r{submission.revision} 的 Rule requirements</h4>
+                  <RequirementTable
+                    scope={`${submission.scope} · Rule ${rule.rule_id}@${rule.version}`}
+                    requirements={rule.verification_requirements!.requirements}
+                    rows={submission.stepId === null
+                      ? data.evidence
+                      : data.evidence.filter((row) => row.step_id === submission.stepId)}
+                    context={{
+                      projectId: data.task.project_id,
+                      taskRevision: data.task.revision,
+                      expectedRevision: submission.revision,
+                      stepId: submission.stepId,
+                      commandEvents: data.commandEvents,
+                      eventsById: data.eventsById,
+                      ruleId: rule.rule_id,
+                      ruleVersion: rule.version,
+                      afterSeq: activation?.seq ?? null,
+                    }}
+                    taskId={taskId}
+                  />
+                </div>
+              ))
             )}
           </div>
         )
