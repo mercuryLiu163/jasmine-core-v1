@@ -287,8 +287,11 @@ decision; `evidence/confirm` needs a human prompt the browser cannot mint
 asserts that absence. The **Task/Step writes are no longer on this list**: the
 slice's own frozen contract is `P6-02B-TASK-STEP-WRITE-SPEC.md` (rev 3) and its
 record is `P6-02-TASKSTEP-WRITE-COMPLIANCE.md` (independent validation PASS, 9/9
-claims, seven routes). What remains open from the original list is the
-VERIFIED/ACCEPTED *form* design (item 5), which depends on that validated slice.
+claims, seven routes). The VERIFIED/ACCEPTED forms and criteria-to-Evidence matrix (item 5) are
+also implemented and independently reviewed/validated at `551c95a`, with their own record
+`P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`. Item 5 remains PARTIAL: the observed positive
+submissions depend on API-prepared fingerprint/Evidence/confirmation outside the browser, and the
+Core ADR/API decisions remain open. Milestone-B verdicts below do not transfer to item 5.
 
 ## A packaging defect found after the first milestone-B evidence run
 
@@ -372,8 +375,10 @@ So milestone B has been code-reviewed, and the review's findings — including t
 that invalidated my own Gate — are recorded here rather than summarised away.
 
 `P6-02: PARTIAL` as a whole — manual reapply and `evidence/confirm` are not
-delivered, the VERIFIED/ACCEPTED forms are still open, and no Gate has run against the
-operator's own Core or a real captured conversation. The Task/Step **writes** are now
+delivered. The VERIFIED/ACCEPTED forms have their own independent implementation review and
+isolated real Core/Chrome Gate at `551c95a`, while browser-only positive environment preparation
+remains BLOCKED/PARTIAL (`P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`). No Gate has run against
+the operator's own Core or a real captured conversation. The Task/Step **writes** are now
 delivered and independently validated (`P6-02-TASKSTEP-WRITE-COMPLIANCE.md`); that
 verdict is theirs, not this document's. `P6` as a stage is not complete and nothing
 here releases V1.

@@ -197,7 +197,7 @@ not.
 | Memory lifecycle / retry / reflect (P6-03b2 writes) | P4 | **Implemented behind a default-off switch; not verified against real P4.** Six writes (`memory:manage` + `memory:reflect`), gated by `P6_ENABLE_P4_WRITES` — separate from the reads' switch — and absent from the live allowlist. Exercised only against a labelled simulated fixture; P4 phase acceptance has **not** passed. Specification: [`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md); per-criterion state: [`P6-03B2-COMPLIANCE.md`](P6-03B2-COMPLIANCE.md). The plan for verifying this slice — and b1 — against a real, isolated P4 Core: [`REAL-CORE-ACCEPTANCE-PLAN.md`](REAL-CORE-ACCEPTANCE-PLAN.md) (**plan only; nothing executed**) |
 | Validation inspector (run list, artifacts) | P7-01 | minimal validation read API + safe artifact contract |
 | online / backup / storage | P5 / P7 | health read contracts |
-| VERIFIED / ACCEPTED **forms** (criteria↔Evidence matrix) | P6-02 item 5 | **Contract frozen** ([`P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md`](P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md) rev 2 — independently reviewed, delta re-reviewed, D1–D3 applied); **implementation not started**, so the item stays undelivered |
+| VERIFIED / ACCEPTED **forms** (criteria↔Evidence matrix) | P6-02 item 5 | **Implemented and independently reviewed; PARTIAL.** [Contract](P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md) rev 3; [record](P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md). Real isolated Core/Chrome implementation Gate PASS at `551c95a`; browser-only positive environment remains BLOCKED/PARTIAL because fingerprint/Evidence/confirmation preparation is out-of-band. `evidence/confirm` awaits the Core ADR/API decision |
 | Evidence-confirmation (`POST /v1/evidence/confirm`) | P6-02 item 6 | Deliberately not provided: needs a real human prompt the browser cannot mint (ADR 0007). The proxy refuses the path by name and the browser test asserts the control is **absent** |
 
 ## Status
@@ -215,9 +215,9 @@ in `c7c5480`. Two earlier "frozen commits" were incomplete (the dashboard's
 tested from a clean checkout. That milestone-B panel review is **still outstanding** (it is a
 different review from the Task/Step write slice's, which is delivered below). `P6-02: PARTIAL`
 overall — manual
-reapply and `evidence/confirm` are not delivered, the VERIFIED/ACCEPTED forms are still
-open, and no Gate has run
-against the operator's own Core. `P6` as a stage is not complete. Details, evidence
+reapply and `evidence/confirm` are not delivered. The VERIFIED/ACCEPTED forms are implemented and
+independently reviewed/validated on an isolated real Core/Chrome at `551c95a`; their browser-only
+positive environment remains BLOCKED/PARTIAL. No Gate has run against the operator's own Core. `P6` as a stage is not complete. Details, evidence
 and the side-effect finding: `P6-02-COMPLIANCE.md`; the Task/Step write slice:
 `P6-02B-TASK-STEP-WRITE-SPEC.md` and `P6-02-TASKSTEP-WRITE-COMPLIANCE.md`.
 
@@ -240,7 +240,9 @@ the two caveats the validator recorded). It is **not** `P6` done: P6-02's
 audited human writes are implemented and independently validated, its Task/Step writes
 are delivered and independently validated too (PASS 9/9 claims for their seven routes,
 `P6-02-TASKSTEP-WRITE-COMPLIANCE.md`), while P6-02's
-manual reapply, `evidence/confirm` and the VERIFIED/ACCEPTED forms are not delivered, and
+manual reapply and `evidence/confirm` are not delivered; the VERIFIED/ACCEPTED forms are implemented
+and independently reviewed/validated with their browser-only positive environment still BLOCKED/PARTIAL
+(`P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`), and
 P6-03a is delivered only as PARTIAL/DEPENDENCY_PENDING (P3 is not merged, so its views were
 exercised against a simulated fixture), P6-03b1 (the P4 read slice) is likewise delivered only as
 PARTIAL/DEPENDENCY_PENDING against an unmerged P4; P6-03b2's six writes are implemented but also
