@@ -11,6 +11,14 @@ the compliance record that maps requirements to code.
 
 ## Current handoff — 2026-10-09 (America/Los_Angeles)
 
+Later bounded slice, on the separate `p6-five-browser-writes` branch: all five missing browser
+write paths now have implementer-run evidence at clean archived candidate
+`5d30e819320ee278f080a6301e74ffefe136ffa3` (20 required records / 137 assertions).
+Independent review/validation is **PENDING**, so items 2/3 are not upgraded to delivered here.
+See [the new report](../docs/validation/p6-five-browser-writes/README.md).
+This supplements the historical four-of-nine coverage below without rebinding its verdicts.
+The original item-6 handoff/deployment worktree is unchanged.
+
 Item 6 is **D for its reviewed scope**: implementation review APPROVE and isolated acceptance
 `PASS_I6_SCOPED` at `75eea9601bf5f788a11ecedb5077460ef43006bf`; persistent local deployment
 `PASS_I6_DEPLOYED_ENTRY` at frozen release `79448dff91dd7a702f91157766e0ff8ad9fb7352`.
@@ -155,7 +163,8 @@ real browser through a proxy and real Core on isolated new objects, independentl
 changed object, immutable command and authorized audit entry, and record conflicts/replay without
 automatic retries. If later evidence already covers a path, cite it rather than repeating it.
 This closes a browser-coverage slice, not the native P2 conversation chain or the whole T03 Gate.
-No run of that next slice has been started by this documentation update.
+The original `0d5c90d` documentation update started no run of that slice. The later isolated
+implementer run is now recorded above; independent review/validation remains the next step.
 
 **Dependencies / decisions still separate:**
 
