@@ -165,7 +165,13 @@ describe('Authority write bodies', () => {
 
     const panel = await screen.findByRole('region', { name: 'Propose(提出新的 Rule)' })
     expect(within(panel).queryByLabelText(/reason/)).toBeNull()
-    expect(within(panel).getByTestId('no-reason-field').textContent).toContain('不接受 reason 字段')
+    const note = within(panel).getByTestId('no-reason-field').textContent ?? ''
+    expect(note).toContain('不接受 reason 字段')
+    // The note is shared by every `reasonMode="none"` panel, including the Task/Step ones whose
+    // command Events differ and whose create routes REFUSE expected_revision. It must therefore
+    // not name P2's `rule.proposed`/`rule.*` events as the audit trail (review M1).
+    expect(note).not.toContain('rule.proposed')
+    expect(note).not.toContain('expected_revision')
     // The reason input is genuinely elsewhere on a write that does take one.
     expect(within(panel).getByLabelText(/host_id/)).toBeTruthy()
   })

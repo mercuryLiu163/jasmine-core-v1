@@ -60,6 +60,9 @@ export interface WritePanelProps<T = WriteResult> {
    * as an unknown field — the panel must not offer a field that cannot be sent.
    */
   reasonMode?: 'required' | 'optional' | 'none'
+  /** Extra, panel-specific sentence for the `reasonMode="none"` note. Never a claim about which
+   *  fields some *other* endpoint records. */
+  noReasonNote?: string
   /**
    * Rendered instead of the generic refusal when Core was never reached because the
    * dashboard's own proxy does not forward this path. The P6-03b2 Memory writes are
@@ -95,6 +98,7 @@ export function WritePanel<T = WriteResult>({
   targetKey,
   reasonMode = 'required',
   dependencyNote,
+  noReasonNote,
   onSucceeded,
 }: WritePanelProps<T>): JSX.Element {
   const { endpoints } = useSession()
@@ -170,9 +174,10 @@ export function WritePanel<T = WriteResult>({
             </label>
           ) : (
             <p className="state state--meta" data-testid="no-reason-field">
-              Core 的这个端点在 <code>rule.proposed</code>/<code>rule.*</code> 事件里记录 actor、
-              host 与 <code>expected_revision</code>,但<strong>不接受 reason 字段</strong>
-              (多传会被判 unknown fields)。因此本面板不提供 reason 输入,也不发送它。
+              Core 的这个端点<strong>不接受 reason 字段</strong>(多传会被判 unknown fields),
+              所以本面板不提供 reason 输入,也不发送它。它记了什么、以哪个字段名记,
+              由该端点自己的 command Event 决定:请以 Core 的响应与读回为准,
+              不要从这里推断。{noReasonNote ? ` ${noReasonNote}` : ''}
             </p>
           )}
         </div>

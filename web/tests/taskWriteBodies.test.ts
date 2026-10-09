@@ -13,6 +13,8 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { parseCriteriaField } from '../src/views/TaskWrites'
+
 import {
   ALLOWED,
   acceptBody,
@@ -146,5 +148,28 @@ describe('the builders can only emit fields the route lists', () => {
     for (const allowed of Object.values(ALLOWED)) {
       expect(allowed).not.toContain('idempotency_key')
     }
+  })
+})
+
+describe('the criteria textarea guard is what makes "state it explicitly" true', () => {
+  // `only()` drops null/undefined values, so a `null` parsed from the textarea would have left
+  // Core seeing an ABSENT field and silently defaulting `requirements` to [] — the exact silent
+  // clearing the panel's own note promises not to do (review M2).
+  it.each(['null', '0', '"text"', '[]', 'true'])('refuses %j with its own message', (text) => {
+    const parsed = parseCriteriaField(text)
+    expect(parsed.value).toBeUndefined()
+    expect(parsed.error).toContain('JSON 对象')
+  })
+
+  it('accepts an object, including the explicit empty one', () => {
+    expect(parseCriteriaField('{"requirements": []}')).toEqual({ value: { requirements: [] } })
+    expect(parseCriteriaField('{"requirements": ["evd_1"]}')).toEqual({
+      value: { requirements: ['evd_1'] },
+    })
+  })
+
+  it('still refuses empty text and invalid JSON, with the original messages', () => {
+    expect(parseCriteriaField('   ').error).toContain('不能为空')
+    expect(parseCriteriaField('{oops').error).toContain('不是合法 JSON')
   })
 })

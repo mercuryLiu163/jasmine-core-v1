@@ -82,7 +82,17 @@ export function parseCriteriaField(text: string): { value?: unknown; error?: str
     }
   }
   try {
-    return { value: JSON.parse(text) }
+    const parsed: unknown = JSON.parse(text)
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      // `null`/a scalar/an array would be dropped by the body builder and Core would then see an
+      // ABSENT field, silently defaulting `requirements` to []. Requiring an object here is what
+      // makes the "state it explicitly" rule true.
+      return {
+        error:
+          'acceptance_criteria 必须是 JSON 对象(例如 {"requirements": []});null、数字、字符串或数组会被当成未填写,Core 会静默使用默认值。',
+      }
+    }
+    return { value: parsed }
   } catch (error) {
     return {
       error: `acceptance_criteria 不是合法 JSON: ${error instanceof Error ? error.message : String(error)}`,
