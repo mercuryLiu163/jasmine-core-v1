@@ -199,6 +199,58 @@ describe('a refused P3 read is shown as a missing dependency', () => {
 })
 
 describe('a real P3 read renders the record it was given', () => {
+  it.each(['UNKNOWN', 'MISMATCH'])('shows STATE_EQUAL with workspace %s as a historical comparison requiring reconciliation', async (workspace) => {
+    const user = userEvent.setup()
+    await enter(user, '#/resume/' + RESUME, {
+      ...SIGNED_IN,
+      ['GET /v1/resumes/' + RESUME]: { body: { resume: resume({ comparison: {
+        checkpoint_freshness: 'STATE_EQUAL', workspace, reconciliation_required: true,
+      } }) } },
+    })
+    const status = await screen.findByTestId('resume-comparison-status')
+    expect(status.textContent).toContain('STATE_EQUAL')
+    expect(status.textContent).toContain(workspace)
+    expect(status.textContent).toContain('true')
+    expect(status.textContent).toContain('重新读取不会重新比较')
+    await user.click(screen.getByRole('button', { name: '从 Core 重新读取' }))
+    await waitFor(() => expect(fake!.callsTo('GET', '/v1/resumes/' + RESUME)).toHaveLength(2))
+    expect(fake!.requests.every(r => r.method === 'GET')).toBe(true)
+  })
+
+  it('keeps a structurally abnormal checkpoint as an unvalidated historical record', async () => {
+    const user = userEvent.setup()
+    await enter(user, '#/checkpoints?checkpoint_id=' + CHECKPOINT, {
+      ...SIGNED_IN,
+      ['GET /v1/checkpoints/' + CHECKPOINT]: { body: { checkpoint: checkpoint({ projection: [] }) } },
+    })
+    expect((await screen.findByTestId('checkpoint-read-boundary')).textContent).toContain('不执行完整性比较')
+    await user.click(screen.getByRole('button', { name: /projection\(task_revision/ }))
+    expect(screen.getByText('[]', { selector: 'pre' })).toBeTruthy()
+    expect(fake!.requests.every(r => r.method === 'GET')).toBe(true)
+  })
+
+  it.each(['checkpoint', 'resume'])('resets the %s draft and record when an external route changes', async (kind) => {
+    const user = userEvent.setup()
+    const oldId = kind === 'checkpoint' ? CHECKPOINT : RESUME
+    const newId = (kind === 'checkpoint' ? 'ckp_' : 'rms_') + '01M4B6VGC29ESRDRQR62DX8AK9'
+    const path = '/v1/' + (kind === 'checkpoint' ? 'checkpoints/' : 'resumes/')
+    const hash = (id: string): string => kind === 'checkpoint' ? '#/checkpoints?checkpoint_id=' + id : '#/resume/' + id
+    const old = kind === 'checkpoint' ? checkpoint({ note: { text: 'old unique note' } }) : resume({ note: { value: { text: 'old unique note' }, authority: false, historical: true } })
+    const next = kind === 'checkpoint' ? checkpoint({ checkpoint_id: newId, note: { text: 'new unique note' } }) : resume({ resume_id: newId, note: { value: { text: 'new unique note' }, authority: false, historical: true } })
+    await enter(user, hash(oldId), {
+      ...SIGNED_IN,
+      ['GET ' + path + oldId]: { body: { [kind]: old } },
+      ['GET ' + path + newId]: { body: { [kind]: next } },
+    })
+    await screen.findByText('old unique note')
+    window.location.hash = hash(newId)
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    await screen.findByText('new unique note')
+    expect(screen.getByLabelText(kind === 'checkpoint' ? 'checkpoint_id' : 'resume_id')).toHaveProperty('value', newId)
+    expect(screen.queryByText('old unique note')).toBeNull()
+    expect(fake!.requests.every(r => r.method === 'GET')).toBe(true)
+  })
+
   it('shows a checkpoint as an immutable snapshot with its three digests', async () => {
     const user = userEvent.setup()
     await enter(user, `#/checkpoints?checkpoint_id=${CHECKPOINT}`, {

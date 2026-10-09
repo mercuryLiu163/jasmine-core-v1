@@ -174,6 +174,7 @@ function renderRoute(route: Route): JSX.Element {
     case 'checkpoints':
       return (
         <CheckpointsView
+          key={JSON.stringify([route.taskId, route.checkpointId, route.sessionId])}
           taskId={route.taskId}
           checkpointId={route.checkpointId}
           sessionId={route.sessionId}
@@ -182,7 +183,7 @@ function renderRoute(route: Route): JSX.Element {
     case 'context':
       return <ContextPackView contextPackId={route.contextPackId} />
     case 'resume':
-      return <ResumeView resumeId={route.resumeId} />
+      return <ResumeView key={route.resumeId} resumeId={route.resumeId} />
     // P6-03b1 reads, plus P6-03b2's reflect route. The read views issue only GETs; the write
     // controls live on the item and job details, and reflect has its own route because it is
     // an explicit user request rather than an action on a row. Everything Memory is a deep

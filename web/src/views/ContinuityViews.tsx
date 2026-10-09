@@ -133,12 +133,10 @@ function DependencyPending({
         依赖未满足:{what} 属于 P3(Context / Checkpoint / Resume),仪表盘当前不转发这条路径
       </p>
       <p>
-        本页读取的 <code>{method}</code> <code>{path}</code> 只存在于 P3 分支。仪表盘的
-        live 白名单<strong>不会转发它</strong> —— 代理以 <code>proxy_path_not_allowed</code>
-        拒绝,而不是把请求送给一个必然 404 的 Core。有两种情况会这样:P3 尚未合并进本基线
-        (<code>850fbec</code>,schema 8),或者 Core 已是 P3、但代理启动时没有打开
-        <code> P6_ENABLE_P3_READS</code>。代理的拒绝理由无法区分这两者,所以这里也不替你
-        断定是哪一个。
+        仪表盘当前没有转发 <code>{method}</code> <code>{path}</code>，代理返回
+        <code> proxy_path_not_allowed</code>。读取这组路径需要启动配置
+        <code> P6_ENABLE_P3_READS=1</code> 以及支持这些路由的 Core。
+        这个拒绝本身不能证明 Core 缺少该记录，也不能证明 Core 的版本或服务状态。
       </p>
       <ul className="plain">
         <li>
@@ -259,6 +257,9 @@ function CheckpointBody({
         label="不可变快照:"
         value={`这是 task_revision ${checkpoint.task_revision} 时的快照(projection_version ${checkpoint.projection_version}),是记录,不是当前 Truth。`}
       />
+      <p className="muted" data-testid="checkpoint-read-boundary">
+        读取历史记录不执行完整性比较，也不证明它与当前 Truth 或工作区匹配。
+      </p>
       <KeyValue
         rows={[
           { label: 'checkpoint_id', value: <code>{checkpoint.checkpoint_id}</code> },
@@ -682,6 +683,16 @@ function ResumeBody({ resume, onReadback }: { resume: Resume; onReadback: () => 
         label="这是比较,不是恢复:"
         value="comparison / next_actions 描述 checkpoint 与当前投影的差异;本页不会应用任何东西,Truth 未被改动。"
       />
+      <div className="state state--meta" data-testid="resume-comparison-status">
+        <p>这是收据生成时的比较结果；重新读取不会重新比较。</p>
+        <p>
+          checkpoint_freshness: <code>{String(resume.comparison?.checkpoint_freshness ?? '未知')}</code>
+          {' · '}workspace: <code>{String(resume.comparison?.workspace ?? '未知')}</code>
+          {' · '}reconciliation_required: <code>{String(resume.comparison?.reconciliation_required ?? '未知')}</code>
+        </p>
+        {resume.comparison?.workspace === 'UNKNOWN' ? <p>工作区未确认；相同的 Truth 投影不能证明工作区匹配。</p> : null}
+        {resume.comparison?.workspace === 'MISMATCH' ? <p>工作区存在差异；请按本条历史收据中的建议对账。</p> : null}
+      </div>
       <KeyValue
         rows={[
           { label: 'resume_id', value: <code>{resume.resume_id}</code> },
