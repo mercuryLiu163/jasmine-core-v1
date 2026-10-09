@@ -53,14 +53,18 @@ command and by the delta reviewer, the Python suite by the parent (`Ran 574 test
 reproduction aids, not the acceptance evidence — that is the bundle below.
 
 **Tracked-source closure, checked so nobody has to take it on faith.** A clean checkout of the
-record commit (`658072f`) in a detached worktree, with only a symlink to the installed
-`web/node_modules`, passes all three: **30 files / 454 web tests, `tsc --noEmit` clean, and
-`Ran 574 tests … OK (skipped=3)`**. One caveat worth stating because it looks alarming and is not a
-defect: the same commit extracted with `git archive` (which by design contains **no `.git`**) fails
-seven Python tests, every one of them in `git show <ref>:<path>`-dependent checks
-(`tests/p6/test_dashboard_proxy_contract.py:35` and the P1 Gate/validation tests that bind a commit).
-Closure means the *tracked sources* are self-contained; those tests additionally need the object
-database, and a bare archive has none.
+implementation tip this record documents (`658072f`; every later record commit is documentation-only)
+in a detached worktree, with only a symlink to the installed `web/node_modules`, passes all three:
+**30 files / 454 web tests, `tsc --noEmit` clean, and `Ran 574 tests … OK (skipped=3)`**. One caveat
+worth stating because it looks alarming and is not a defect: the same commit extracted with
+`git archive` (which by design contains **no `.git`**) fails seven Python tests, every one needing the
+repository's object database that an archive lacks — one `git show <ref>:<path>` check
+(`tests/p6/test_dashboard_proxy_contract.py:35`, asking for the baseline `models.py`) and six
+commit-binding P1 Gate/validation tests that call `git -C ROOT rev-parse HEAD`. Closure means the
+*tracked sources* are self-contained; those tests additionally need the object database, and a bare
+archive has none. The **skip count is environment-dependent and is not the claim** (the detached
+worktree above reports 3; a bare archive reports 11; an in-place worktree with a built `web/dist` and
+the evidence index reports none) — 574 tests with 0 failures is the load-bearing part.
 
 The independent acceptance gate is the validator's, not one of these: it archives the commit, mints
 its own keys, drives real Chrome over CDP and checks Core's own SQLite. Reproduce it with
