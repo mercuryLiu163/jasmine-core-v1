@@ -1,11 +1,11 @@
 """Admission falsifications for the browser record exit gate; no UI PASS claim."""
 import copy
 import unittest
-from scripts.p6.five_browser_writes import REQUIRED, verdict
+from scripts.p6.five_browser_writes import REQUIRED, CHECKS, verdict
 
 class RequiredRecordGate(unittest.TestCase):
     def setUp(self):
-        self.rows=[{'id':name,'passed':True,'checks':[{'name':'actual chain assertion','passed':True}]} for name in REQUIRED]
+        self.rows=[{'id':name,'passed':True,'checks':[{'name':check,'passed':True} for check in CHECKS[name]]} for name in REQUIRED]
     def test_complete(self):self.assertTrue(verdict(self.rows))
     def test_missing_each_required_row(self):
         for name in REQUIRED:
@@ -29,5 +29,14 @@ class RequiredRecordGate(unittest.TestCase):
     def test_empty_bundle(self):self.assertFalse(verdict([]))
     def test_extra_record(self):self.assertFalse(verdict(self.rows+[self.rows[0]]))
     def test_unknown_bundle(self):self.assertFalse(verdict(None))
+    def test_missing_each_required_assertion(self):
+        for rowindex,row in enumerate(self.rows):
+            for checkindex,check in enumerate(row['checks']):
+                value=copy.deepcopy(self.rows);value[rowindex]['checks'].pop(checkindex)
+                with self.subTest(row=row['id'],check=check['name']):self.assertFalse(verdict(value))
+    def test_duplicate_assertion(self):
+        self.rows[0]['checks'].append(self.rows[0]['checks'][0]);self.assertFalse(verdict(self.rows))
+    def test_nonobject_record(self):
+        self.rows[0]=None;self.assertFalse(verdict(self.rows))
 
 if __name__=='__main__':unittest.main()
