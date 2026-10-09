@@ -25,3 +25,22 @@ Deliver `scenario.md`, `click-trace.jsonl`, masked `api-requests.jsonl` and `api
 Implementation scope is harness/tests/documentation only. If a product defect appears, preserve the failing evidence and describe the required change; any fix needs its own final source binding and applicable revalidation. No main merge, deployment change, item-6 enablement or daily-use release is authorized by this slice.
 
 Audit contract clarification from frozen `api/dispatch.py:76-82,131-145`: an authenticated/authorized business-conflict 409 has `decision=allow` plus its exact error_code, not `error`. Audit target_id is nullable for Interpretation/Review receipts and the command event ID for Rule receipts. Correlate the nullable families through exact request ID + target-bearing path + actual command payload; never invent a non-null audit target. The earlier harness assumption was false and its failed attempt remains preserved.
+
+
+## Repair addendum after independent review (2026-10-09)
+
+R1: top-level Python owns a new Node/Chrome session/process group and creates the private
+profile before launching Node. It collects partial stdout/stderr, trace progress and a lifecycle
+receipt even when the browser trace times out. Only the recorded numeric group is signalled;
+no global pkill. PASS requires owned-group cleanup and profile removal; cleanup failure fails.
+Darwin empty-group signal races are checked against actual numeric membership and recorded;
+a present group that cannot be signalled is not declared clean.
+
+R2: Review success additionally requires exactly one original-source application pointing at the
+same receipt/readback Resolution, plus new Rule origin -> exact review.approved command ->
+payload original-source/review binding and project/task scope. The command's top-level
+source_event_id is null in the frozen Core contract; its payload is the source reference.
+Both named checks are required by the exit gate. Missing/duplicate/wrong applications and
+wrong Rule origin/command/source/review/scope must be refused by the actual predicates.
+Twenty scenarios stay fixed; these two additional positive assertions strengthen the gate.
+The former candidate remains REVISE_REQUIRED; a new run and independent conclusions are required.

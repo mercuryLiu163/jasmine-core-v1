@@ -34,6 +34,13 @@ class RequiredRecordGate(unittest.TestCase):
             for checkindex,check in enumerate(row['checks']):
                 value=copy.deepcopy(self.rows);value[rowindex]['checks'].pop(checkindex)
                 with self.subTest(row=row['id'],check=check['name']):self.assertFalse(verdict(value))
+    def test_review_requires_application_and_origin_assertions(self):
+        for name in ('source_application_canonical_resolution','applied_rule_origin_review_command_source'):
+            rows=copy.deepcopy(self.rows)
+            row=next(r for r in rows if r['id']=='review_approve.success')
+            row['checks']=[c for c in row['checks'] if c['name']!=name]
+            with self.subTest(name=name):self.assertFalse(verdict(rows))
+
     def test_duplicate_assertion(self):
         self.rows[0]['checks'].append(self.rows[0]['checks'][0]);self.assertFalse(verdict(self.rows))
     def test_nonobject_record(self):

@@ -5,7 +5,7 @@ All runtime DB/keys/profiles are private and temporary. No operator service,
 credential, database, hook or deployment setting is read or changed.
 """
 from __future__ import annotations
-import argparse, hashlib, io, json, os, socket, sqlite3, subprocess, sys, tarfile, tempfile, time
+import argparse, hashlib, io, json, os, shutil, signal, socket, sqlite3, subprocess, sys, tarfile, tempfile, time
 from pathlib import Path
 
 NAMES=('correct','rerun','review_approve','supersede','retire')
@@ -14,7 +14,7 @@ COMMON=('prewrite_exact_object_get200','fresh_success_POST','browser_body_uses_a
 EXTRA={
  'correct':('new_child_current_head_provenance','no_automatic_business_truth_apply','exact_corrected_result'),
  'rerun':('new_child_current_head_provenance','no_automatic_business_truth_apply','rerun_config_and_completion'),
- 'review_approve':('review_approved_once_with_original_preview','real_applied_CREATE_RULE','applied_rule_scoped_active','resolution_source_and_application_link'),
+ 'review_approve':('review_approved_once_with_original_preview','real_applied_CREATE_RULE','applied_rule_scoped_active','resolution_source_and_application_link','source_application_canonical_resolution','applied_rule_origin_review_command_source'),
  'supersede':('rule_expected_version_revision_status_scope','immutable_old_rule_versions','actual_rule_history_command','supersede_original_scope_origin_content'),
  'retire':('rule_expected_version_revision_status_scope','immutable_old_rule_versions','actual_rule_history_command'),
 }
@@ -41,6 +41,79 @@ def snapshot(database):
         tables=[r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name") if r[0] not in ('audit_log','api_keys')]
         return {t:[dict(r) for r in con.execute('SELECT * FROM '+t+' ORDER BY 1')] for t in tables}
     finally:con.close()
+
+def run_owned_browser(command, descriptor, out, env, cwd, *, timeout=240):
+    """Own the Node/Chrome session and profile independently of Node's finally.
+
+    The child has a new session/process group, and Chrome inherits it. Only this
+    recorded group is signalled; no process-name search or global pkill is used.
+    The private profile is created here before launch, never taken from a receipt.
+    """
+    profile=Path(tempfile.mkdtemp(prefix='browser-profile-',dir=Path(descriptor['database']).parent))
+    cfg={**descriptor,'browser_profile':str(profile)}
+    receipt={'owner':'top-level-python','status':'starting','timed_out':False,
+             'profile_path':str(profile),'profile_removed':False,'group_gone':False}
+    proc=None;stdout='';stderr='';result=None
+    try:
+        proc=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE,text=True,cwd=cwd,env=env,
+                              start_new_session=True)
+        receipt.update(node_pid=proc.pid,owned_pgid=proc.pid,status='running')
+        write(out/'browser-lifecycle.json',receipt)
+        try:
+            stdout,stderr=proc.communicate(json.dumps(cfg),timeout=timeout)
+            result=subprocess.CompletedProcess(command,proc.returncode,stdout,stderr)
+            receipt.update(status='trace_returned',trace_exit=proc.returncode)
+        except subprocess.TimeoutExpired:
+            receipt.update(status='trace_timeout',timed_out=True)
+            raise
+    finally:
+        cleanup_error=None
+        def group_members():
+            # Darwin can return EPERM for an already-empty group. Check actual numeric
+            # membership, never process names, before signalling or declaring cleanup.
+            rows=subprocess.check_output(['ps','-axo','pid=,pgid='],text=True).splitlines()
+            return [int(parts[0]) for row in rows if len(parts:=row.split())==2
+                    and int(parts[1])==proc.pid]
+        def signal_owned(sig):
+            if not group_members():return
+            try:os.killpg(proc.pid,sig)
+            except OSError:
+                if group_members():raise
+                receipt['empty_group_signal_race']=True
+        try:
+            if proc is not None:
+                signal_owned(signal.SIGTERM)
+                try:stdout,stderr=proc.communicate(timeout=3)
+                except subprocess.TimeoutExpired:pass
+                signal_owned(signal.SIGKILL)
+                stdout,stderr=proc.communicate(timeout=5)
+                deadline=time.monotonic()+3
+                while True:
+                    remaining=group_members()
+                    if not remaining:
+                        receipt['group_gone']=True;break
+                    if time.monotonic()>=deadline:
+                        receipt['remaining_owned_pids']=remaining;break
+                    time.sleep(.05)
+                receipt['trace_exit']=proc.returncode
+            else:
+                receipt['group_gone']=True
+            if receipt['group_gone']:
+                shutil.rmtree(profile)
+                receipt['profile_removed']=not profile.exists()
+        except Exception as exc:
+            cleanup_error=exc
+            receipt['cleanup_error']=type(exc).__name__+': '+str(exc)
+        finally:
+            (out/'browser.stdout.log').write_text(stdout)
+            (out/'browser.stderr.log').write_text(stderr)
+            receipt['cleanup_passed']=receipt['group_gone'] and receipt['profile_removed']
+            write(out/'browser-lifecycle.json',receipt)
+        if cleanup_error is not None or not receipt['cleanup_passed']:
+            raise RuntimeError('owned browser cleanup failed; see browser-lifecycle.json') from cleanup_error
+
+    return result
 
 def serve_private(args):
     sys.path.insert(0,str(args.archive/'src'))
@@ -142,7 +215,7 @@ def run(args):
                     if ui.poll() is not None or time.monotonic()>deadline:raise RuntimeError('isolated Dashboard startup failed')
                     time.sleep(.1)
             start_snapshot=snapshot(descriptor['database']);write(out/'setup-state.json',start_snapshot)
-            browser=subprocess.run(['node',str(archive/'scripts/p6/five_browser_writes.mjs')],input=json.dumps(descriptor),text=True,capture_output=True,env=env,cwd=archive,timeout=240)
+            browser=run_owned_browser(['node',str(archive/'scripts/p6/five_browser_writes.mjs')],descriptor,out,env,archive)
             (out/'browser.stdout.log').write_text(browser.stdout);(out/'browser.stderr.log').write_text(browser.stderr)
             trace=json.loads((out/'browser.json').read_text());report.update(records=trace['records'],browser_status=trace['status'],browser_error=trace.get('error'))
             write(out/'final-state.json',snapshot(descriptor['database']))
