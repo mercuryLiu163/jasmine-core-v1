@@ -184,7 +184,9 @@ the `reason`/`idempotency_key` fields the interpretation/review writes require.
 The Task/Step **writes** are no longer on this list: they are delivered and independently validated
 (PASS 9/9 for the seven routes on a real Core and a real browser, with the seven proxy patterns
 **always-on, not behind a switch** — [spec](P6-02B-TASK-STEP-WRITE-SPEC.md),
-[record](P6-02-TASKSTEP-WRITE-COMPLIANCE.md)). Everything below is genuinely still not implemented.
+[record](P6-02-TASKSTEP-WRITE-COMPLIANCE.md)). Everything below still has work outstanding in this
+baseline; where a row is partly delivered, the row itself says which part is delivered and which is
+not.
 
 | Screen | Owner | Waiting on |
 | --- | --- | --- |

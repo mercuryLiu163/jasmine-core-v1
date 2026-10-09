@@ -52,6 +52,16 @@ documentation) when this record was written: the web suite by the reader who can
 command and by the delta reviewer, the Python suite by the parent (`Ran 574 tests … OK`). They are
 reproduction aids, not the acceptance evidence — that is the bundle below.
 
+**Tracked-source closure, checked so nobody has to take it on faith.** A clean checkout of the
+record commit (`658072f`) in a detached worktree, with only a symlink to the installed
+`web/node_modules`, passes all three: **30 files / 454 web tests, `tsc --noEmit` clean, and
+`Ran 574 tests … OK (skipped=3)`**. One caveat worth stating because it looks alarming and is not a
+defect: the same commit extracted with `git archive` (which by design contains **no `.git`**) fails
+seven Python tests, every one of them in `git show <ref>:<path>`-dependent checks
+(`tests/p6/test_dashboard_proxy_contract.py:35` and the P1 Gate/validation tests that bind a commit).
+Closure means the *tracked sources* are self-contained; those tests additionally need the object
+database, and a bare archive has none.
+
 The independent acceptance gate is the validator's, not one of these: it archives the commit, mints
 its own keys, drives real Chrome over CDP and checks Core's own SQLite. Reproduce it with
 `python3 evidence/harness/run_gate.py --src … --runtime … --evidence … --ref acd260b` as recorded in
@@ -81,15 +91,19 @@ its own keys, drives real Chrome over CDP and checks Core's own SQLite. Reproduc
    directories; the validator flagged the discrepancy. What was actually done, stated precisely: the
    **two review report directories** were renamed to the `taskstep` namespace by their own authors,
    who each proved the change was path-strings-only (substituting the token in a byte-exact backup
-   reproduces the new file exactly); the **validation bundle** was renamed to the compliant path
-   **and its evidence regenerated in place there** by a fresh `--ref acd260b` run — the bundle holds a
-   single `manifest.json`, and that manifest is the `acd260b` run, so the old `607f511` material is
-   gone. (The validator's `findings.md` §10.9 still carries its earlier sentence about the brief's
-   path; that sentence describes the episode, while the binding, the manifest and the re-run are the
-   bundle's current provenance. The validator has been asked to reconcile the wording in its own
-   report.) Because those directories are gitignored and untracked, the rename cannot be recomputed
-   from git history — the evidence is each author's recorded diff plus the fresh run, and that limit
-   is recorded rather than glossed. The Gate-class namespace for this slice is
+   reproduces the new file exactly); the **validation bundle** was renamed to the compliant path and
+   its evidence regenerated in place by a fresh `--ref acd260b` run (the bundle holds one
+   `manifest.json`, and that manifest is that run). The delta review then found the exception that
+   shows why this had to be checked rather than assumed: `evidence/report-crosschecks.json` had *not*
+   been regenerated — it still carried the earlier run's route-1 task id — and an empty
+   `evidence/screenshots/` directory survived. Both were fixed **at the artifact, not in prose**: the
+   validator regenerated the cross-checks from the bound run (9/9; its route-1 check now names
+   `tsk_01M4FAZWH01PWJESRPQ9MSBZFM`, the same id `gate-report.json` records for route 1) and removed
+   the empty directory, and `findings.md` now says the cross-checks were regenerated from this run.
+   The validator also reconciled the earlier sentence about the brief's path. Because these
+   directories are gitignored and untracked, none of it can be recomputed from git history — the
+   evidence is each author's recorded diff, the fresh run and the regenerated file, and that limit is
+   recorded rather than glossed. The Gate-class namespace for this slice is
    `<stamp>-p6-02-taskstep-write/`.
 6. **Two review findings on the record commit were folded after review.** A delta review of the
    record (`validation-runs/p6/REVIEW-p6-02-taskstep-write-record/findings.md`) found a stale
