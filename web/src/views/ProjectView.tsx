@@ -21,6 +21,7 @@ import { StatusBadge } from '../components/StatusBadge'
 import { Empty, ErrorPanel, Loading, Panel, StaleBanner } from '../components/States'
 import { KeyValue, SourceLink } from '../components/Trace'
 import { formatTimestamp } from '../lib/text'
+import { TaskCreatePanel } from './TaskWrites'
 
 const LIMIT = DEFAULT_OBJECT_LIMIT
 const TASK_FILTERS = ['ALL', 'ACTIVE', 'BLOCKED', 'ACCEPTED', 'CANCELLED'] as const
@@ -149,6 +150,14 @@ export function ProjectView({ projectId }: { projectId: string }): JSX.Element {
           </ul>
         ) : null}
         <Pager paged={tasks} noun="Task" limit={LIMIT} />
+      </Panel>
+
+      <Panel title="Task 创建(P6-02 TaskStep 写入)">
+        <p className="state state--meta">
+          创建成功后重新读取本项目的 Task 列表;本页不做乐观插入。Core 创建 Task 时不读 revision,
+          并显式拒绝 <code>expected_revision</code>。
+        </p>
+        <TaskCreatePanel projectId={projectId} onWritten={tasks.reload} />
       </Panel>
 
       <Panel title="Event 窗口(升序读取的前 100 条)">

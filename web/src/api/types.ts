@@ -827,3 +827,293 @@ export interface MemoryReflectResult {
   trace_id: string | null
 }
 
+/* -------------------------------------------------------------------------- *
+ * P6-03c: P7-01 Validation reads — runs / manifest / artifacts
+ *
+ * **DEPENDENCY PENDING.** The five routes exist on the P7-01 branch (contract
+ * `web/contracts/p7-validation-read.v1.json`, pinned to its implementation
+ * commit) and **not** in this baseline's Core. They are opt-in behind the
+ * proxy's `P6_ENABLE_P7_READS`; until an operator starts such a proxy the views
+ * say so rather than reading a refusal as an empty list.
+ *
+ * The five responses are **flat**, not wrapped: `get_run` returns the recorded
+ * run fields at the top level (its contract `response_key` is a label for a
+ * reader, not a field name), and the content route's whole body is the JSON
+ * envelope whose `content` is text. That was verified against the reader's
+ * `Response(200, {...})` literals; the derived contract records the union of
+ * their top-level keys.
+ *
+ * The same two habits as the P3/P4 sections, for the same reasons: scalar
+ * identity/status/digest fields are typed as the reader returns them, and
+ * nested documents (`environment`, `sources`, a section `value`) stay
+ * `JsonObject`/`unknown` because their inner shape is P7's to define.
+ * `manifest_authentication` is `"unauthenticated"` in the API itself: nothing
+ * here may present the manifest as signed or verified.
+ * -------------------------------------------------------------------------- */
+
+/** `_case_counts`: one key per verdict plus `total`. */
+export interface ValidationCaseCounts {
+  pass: number
+  fail: number
+  blocked: number
+  total: number
+}
+
+/**
+ * `_attribution`: `status ∈ {attributed, unattributed}` and the effective
+ * manifest's `projects[]`. A corrupt/absent manifest is `unattributed`.
+ */
+export interface ValidationAttribution {
+  status: string
+  reason?: string
+  projects: string[]
+}
+
+/** One list row (`_row`). A corrupt row's mode/grade fields are `null`, never invented. */
+export interface ValidationRunRow {
+  run_id: string
+  stage: string | null
+  created_at: string | null
+  commit: string | null
+  schema_version: number | null
+  core_version: string | null
+  /** As recorded by the recorder; never re-derived or upgraded. */
+  verdict: string | null
+  case_counts: ValidationCaseCounts
+  mode: string | null
+  mode_basis: string | null
+  attribution: ValidationAttribution | null
+  evidence_grade: string | null
+  grade_downgraded_by: string[]
+  synthetic: boolean
+  synthetic_note?: string
+  manifest_status: string | null
+  /** `ok` | `corrupt` | `duplicate`; unknown values render verbatim. */
+  record_status: string
+  corrupt_reason?: string
+  duplicate_reason?: string
+  record_sha256: string
+  verdict_consistent: boolean | null
+}
+
+/** `discovery` — raw root diagnostics, not per-project information. */
+export interface ValidationDiscovery {
+  root_present: boolean
+  max_depth: number
+  scanned_dirs: number
+  scanned_files: number
+  run_shaped_files: number
+  unreadable_entries: number
+  capped: boolean
+}
+
+export interface ValidationIgnoredSample {
+  relative_path: string
+  reason: string
+}
+
+/** `list_runs` body. `count` is this page, `total` the filtered visible set. */
+export interface ValidationRunPage {
+  runs: ValidationRunRow[]
+  count: number
+  total: number
+  limit: number
+  offset: number
+  has_more: boolean
+  corrupt_count: number
+  duplicate_count: number
+  ignored_entries: number
+  ignored_samples: ValidationIgnoredSample[]
+  discovery: ValidationDiscovery
+  complete: boolean
+  /** `all` | `grant_filtered`. */
+  visibility: string
+  /** `no_run_shaped_files` | `all_filtered_out`, present only when the page is empty. */
+  empty_reason?: string
+}
+
+/** The recorder's seven `SECTIONS`, in order. */
+export type ValidationSectionName =
+  | 'user_raw'
+  | 'agent_response'
+  | 'tools'
+  | 'state_before'
+  | 'state_after'
+  | 'interpretation'
+  | 'context'
+
+/**
+ * `_presence` for one section. `present_kind` describes whether the section was
+ * *recorded*; it is not the chain link. `context_pack_present` is present on the
+ * `context` section only, and a recorded-but-packless context is `present: true`
+ * with `context_pack_present: false`.
+ */
+export interface ValidationSection {
+  present: boolean
+  /** `value` | `reason_only` | `sentinel` | `absent`. */
+  present_kind: string
+  value?: unknown
+  recorded_reason?: string | null
+  missing_reason?: string
+  evidence_grade: string
+  context_pack_present?: boolean
+}
+
+export type ValidationSections = Record<ValidationSectionName, ValidationSection>
+
+export type ValidationChainLinkName =
+  | 'raw'
+  | 'extraction'
+  | 'resolution'
+  | 'context'
+  | 'agent'
+  | 'tool'
+  | 'evidence'
+  | 'state'
+
+/** One of the eight taskbook chain links. A missing link is named, never filled in. */
+export interface ValidationChainLink {
+  present: boolean
+  /** The recorded source, or `null` when the recorder has no such field at all. */
+  source: string | null
+  missing_reason?: string
+}
+
+export type ValidationChain = Record<ValidationChainLinkName, ValidationChainLink>
+
+/**
+ * `case.evidence[]` after the reader's rewrite: every recorded entry is
+ * `unaddressable`. The recorded value is free-form and is only ever displayed.
+ */
+export interface ValidationRecordedEvidence {
+  recorded: unknown
+  /** Always `unaddressable`. */
+  status: string
+  reason: string
+}
+
+/** One case (`_detail_case`): the recorded case fields plus `sections`/`chain`/grade. */
+export interface ValidationCase {
+  case_id: string | null
+  name: string | null
+  /** As recorded. */
+  verdict: string | null
+  failure_class: string | null
+  failure_output: string | null
+  reproduction: string[]
+  not_applied_reason: string | null
+  evidence: ValidationRecordedEvidence[]
+  sections: ValidationSections
+  chain: ValidationChain
+  evidence_grade: string
+  grade_basis: string
+  /** The recorded case fields are spread verbatim and stay untyped here. */
+  [key: string]: unknown
+}
+
+/** `get_run` body (flat). */
+export interface ValidationRunDetail {
+  run_id: string | null
+  stage: string | null
+  created_at: string | null
+  commit: string | null
+  schema_version: number | null
+  core_version: string | null
+  environment: JsonObject | null
+  executor: string | null
+  reviewer: string | null
+  verifier: string | null
+  verdict: string | null
+  verdict_consistent: boolean
+  notes: string[] | null
+  not_implemented: string[] | null
+  cases: ValidationCase[]
+  synthetic: boolean
+  synthetic_note?: string
+  redactions?: unknown
+  redaction_warning?: string
+  /** Top-level record keys this reader does not interpret; never dropped silently. */
+  unknown_record_keys: string[]
+  evidence_grade: string
+  grade_downgraded_by: string[]
+  warnings: string[]
+}
+
+/** One manifest `files[]` entry with the reader's live integrity result. */
+export interface ValidationManifestFile {
+  artifact_id: string
+  path: string
+  bytes: number
+  sha256: string
+  media_type?: string | null
+  credential_shaped?: boolean | null
+  /** `match` | `mismatch` | `missing` | `symlink_refused` | `unreadable`. */
+  integrity: string
+  bytes_agree: boolean
+}
+
+/** `get_manifest` body (flat). `manifest_sha256` is `null` when the file was never read. */
+export interface ValidationManifest {
+  /** `frozen` | `absent` | `corrupt`. */
+  status: string
+  reason?: string
+  rule?: string
+  run_id: string
+  frozen_at?: string | null
+  declared_mode?: string | null
+  /** Derived, not trusted: `real` needs provenance and attribution. */
+  mode: string
+  mode_basis: string
+  projects: string[]
+  sources: unknown
+  files: ValidationManifestFile[]
+  manifest_sha256: string | null
+  /** Always `"unauthenticated"`; the manifest is self-declared and unsigned. */
+  manifest_authentication: string
+}
+
+/** `_content_scan`: the reader's own scan of the actual bytes. */
+export interface ValidationContentScan {
+  performed: boolean
+  mask_is_noop: boolean
+  credential_shaped: boolean
+}
+
+/** `get_artifact` metadata body (flat). The two digests are separate named fields. */
+export interface ValidationArtifact {
+  artifact_id: string
+  path: string
+  bytes: number
+  declared_sha256: string
+  declared_bytes: number
+  /** `match` | `mismatch` | `missing` | `symlink_refused` | `unreadable`. */
+  integrity: string
+  media_type: string | null
+  /** `["masked"]`, or `["masked", "original"]` when the original is available. */
+  forms: string[]
+  digests: { original: string | null; masked: string | null }
+  credential_shaped: boolean | null
+  content_scan: ValidationContentScan
+}
+
+/**
+ * `get_artifact_content` body. The whole body is this envelope and its `content`
+ * field is text: it is rendered as a text node, never as HTML.
+ */
+export interface ValidationArtifactContent {
+  artifact_id: string
+  /** `masked` | `original`. */
+  form: string
+  media_type: string | null
+  bytes: number
+  /** The digest of the bytes actually served; there is no bare `sha256`. */
+  served_sha256: string
+  original_sha256: string
+  masked_sha256: string | null
+  mask_algorithm?: string
+  mask_version?: string
+  content: string
+  /** `true` only when `form == "original"`; always `false` for a masked response. */
+  content_is_original: boolean
+}
+

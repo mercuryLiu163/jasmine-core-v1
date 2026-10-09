@@ -15,6 +15,7 @@
  *    memory is what Core sees, and Core remains the only authority on scopes.
  */
 
+import { randomUUID } from 'node:crypto'
 import http from 'node:http'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
@@ -25,7 +26,7 @@ const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', '::1', 'localhost'])
 const ALLOWED_METHODS = new Set(allowlist.methods.map((method) => method.toUpperCase()))
 
 /**
- * Must match `serve.mjs`: the P3 and P4 reads are opt-in for a Core that has them, never
+ * Must match `serve.mjs`: the P3, P4 and P7 reads are opt-in for a Core that has them, never
  * implicit, and both hosts spell "the operator says yes" the same way. The environment is
  * read once at module load, which is why the tests reset the module registry rather than
  * passing an option. The P4 *writes* have their own switch, so an operator who has the reads
@@ -38,14 +39,17 @@ function flagEnabled(name: string): boolean {
 const p3ReadsEnabled = flagEnabled('P6_ENABLE_P3_READS')
 const p4ReadsEnabled = flagEnabled('P6_ENABLE_P4_READS')
 const p4WritesEnabled = flagEnabled('P6_ENABLE_P4_WRITES')
+const p7ReadsEnabled = flagEnabled('P6_ENABLE_P7_READS')
 const pendingPaths = allowlist as {
   p3_pending_paths?: string[]
   p4_pending_paths?: string[]
+  p7_pending_paths?: string[]
 }
 const ALLOWED_PATHS = [
   ...allowlist.paths,
   ...(p3ReadsEnabled ? pendingPaths.p3_pending_paths ?? [] : []),
   ...(p4ReadsEnabled ? pendingPaths.p4_pending_paths ?? [] : []),
+  ...(p7ReadsEnabled ? pendingPaths.p7_pending_paths ?? [] : []),
 ].map((pattern) => new RegExp(pattern))
 const WRITE_METHODS = new Set(
   (allowlist.write_methods ?? []).map((method) => method.toUpperCase()),
@@ -137,11 +141,34 @@ export function isAllowedCoreRequest(method: string, pathname: string): boolean 
   return false
 }
 
-function refuse(res: ServerResponse, status: number, code: string, message: string): void {
+/**
+ * The correlation id a proxy-generated response must carry.
+ *
+ * A refusal that Core never saw has no Core `request_id`, so a reader cannot correlate it with
+ * anything unless this hop supplies one. The incoming `X-Request-Id` is echoed when the client
+ * sent it (so a browser-raised failure and its proxy refusal share one id); otherwise this hop
+ * mints one rather than answering with no id at all.
+ */
+export function requestIdFor(req: IncomingMessage | undefined): string {
+  const incoming = req?.headers['x-request-id']
+  if (typeof incoming === 'string' && incoming.trim().length > 0) return incoming
+  return `proxy-${randomUUID()}`
+}
+
+function refuse(
+  res: ServerResponse,
+  req: IncomingMessage | undefined,
+  status: number,
+  code: string,
+  message: string,
+): void {
   const body = JSON.stringify({ error: { code, message } })
   res.statusCode = status
   res.setHeader('content-type', 'application/json; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
+  // §5 change 3: the browser cannot name a proxy refusal unless this hop answers with an id,
+  // because a proxy refusal has no Core envelope to read one from.
+  res.setHeader('x-request-id', requestIdFor(req))
   res.end(body)
 }
 
@@ -156,12 +183,13 @@ export function proxyCoreRequest(
   try {
     target = new URL(req.url ?? '/', 'http://ui.invalid')
   } catch {
-    refuse(res, 400, 'proxy_bad_target', 'unparsable request target')
+    refuse(res, req, 400, 'proxy_bad_target', 'unparsable request target')
     return
   }
   if (!isAllowedCoreRequest(method, target.pathname)) {
     refuse(
       res,
+      req,
       404,
       'proxy_path_not_allowed',
       `the dashboard proxy does not forward ${method} ${target.pathname}`,
@@ -204,6 +232,7 @@ export function proxyCoreRequest(
     }
     refuse(
       res,
+      req,
       502,
       'proxy_core_unreachable',
       `Core at ${origin.origin} did not answer: ${error.code ?? error.message}`,
@@ -217,7 +246,7 @@ export function coreProxyPlugin(origin: URL): Plugin {
   const middleware = (req: IncomingMessage, res: ServerResponse, next: () => void): void => {
     const target = classifyRequestTarget(req.url)
     if (target.kind === 'bad') {
-      refuse(res, 400, 'proxy_bad_target', `refused request target: ${target.reason ?? 'malformed'}`)
+      refuse(res, req, 400, 'proxy_bad_target', `refused request target: ${target.reason ?? 'malformed'}`)
       return
     }
     if (target.kind === 'static') {

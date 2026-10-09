@@ -17,6 +17,13 @@ describe('parseHash', () => {
       taskId: 'tsk_1',
       tab: 'evidence',
     })
+    // P6-02b: the Task write tab is a real deep link, like the read tabs.
+    expect(parseHash('#/task/tsk_1/write')).toEqual({
+      name: 'task',
+      taskId: 'tsk_1',
+      tab: 'write',
+    })
+    expect(hrefFor({ name: 'task', taskId: 'tsk_1', tab: 'write' })).toBe('#/task/tsk_1/write')
     expect(parseHash('#/event/evt_1')).toEqual({ name: 'event', eventId: 'evt_1' })
   })
 

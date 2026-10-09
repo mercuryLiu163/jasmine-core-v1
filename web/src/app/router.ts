@@ -12,7 +12,7 @@
  * fine" must not look the same.
  */
 
-export type TaskTab = 'board' | 'history' | 'evidence'
+export type TaskTab = 'board' | 'history' | 'evidence' | 'write'
 
 export type Route =
   | { name: 'overview' }
@@ -55,11 +55,25 @@ export type Route =
   // `memory:reflect` rather than `memory:manage`, and because it is an explicit user request
   // rather than an action on a row. Deep link only, like the rest of Memory.
   | { name: 'memoryReflect' }
+  // P6-03c: P7-01 Validation reads. Same arrangement again — the deep link is stable and the
+  // views say DEPENDENCY PENDING until a proxy with P6_ENABLE_P7_READS is running. The list
+  // route carries Core's five filters so a filtered view survives a refresh.
+  | {
+      name: 'validationRuns'
+      verdict: string | null
+      stage: string | null
+      mode: string | null
+      attribution: string | null
+      project: string | null
+    }
+  | { name: 'validationRun'; runId: string }
+  | { name: 'validationManifest'; runId: string }
+  | { name: 'validationArtifact'; runId: string; artifactId: string }
   | { name: 'event'; eventId: string }
   | { name: 'pending'; key: string }
   | { name: 'unknown'; raw: string }
 
-const TABS: readonly TaskTab[] = ['board', 'history', 'evidence']
+const TABS: readonly TaskTab[] = ['board', 'history', 'evidence', 'write']
 
 function queryOf(search: string): URLSearchParams {
   return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)
@@ -159,6 +173,32 @@ export function parseHash(hash: string): Route {
     if (section === 'reflect') return ident === null ? { name: 'memoryReflect' } : { name: 'unknown', raw }
     return { name: 'unknown', raw }
   }
+  if (head === 'validation') {
+    // `#/validation/runs` is the list (with Core's filters in the query);
+    // `#/validation/runs/{run}` is the detail; `/manifest` and
+    // `/artifacts/{art}` are separate reads against the same run. The run and
+    // artifact ids are the recorder's and the bundle's grammars — neither is a
+    // Core `xxx_` id — so they are matched by the views, not here.
+    if (parts[1] !== 'runs') return { name: 'unknown', raw }
+    const runId = segment(parts[2])
+    if (runId === null) {
+      return {
+        name: 'validationRuns',
+        verdict: query.get('verdict'),
+        stage: query.get('stage'),
+        mode: query.get('mode'),
+        attribution: query.get('attribution'),
+        project: query.get('project'),
+      }
+    }
+    const tail = parts[3]
+    if (tail === 'manifest') return { name: 'validationManifest', runId }
+    if (tail === 'artifacts') {
+      const artifactId = segment(parts[4])
+      if (artifactId !== null) return { name: 'validationArtifact', runId, artifactId }
+    }
+    return { name: 'validationRun', runId }
+  }
   if (head === 'resume') {
     const resumeId = segment(parts[1])
     return resumeId ? { name: 'resume', resumeId } : { name: 'unknown', raw }
@@ -232,6 +272,20 @@ export function hrefFor(route: Route): string {
       return `#/memory/traces/${encodeURIComponent(route.traceId)}`
     case 'memoryReflect':
       return '#/memory/reflect'
+    case 'validationRuns':
+      return `#/validation/runs${queryString({
+        verdict: route.verdict,
+        stage: route.stage,
+        mode: route.mode,
+        attribution: route.attribution,
+        project: route.project,
+      })}`
+    case 'validationRun':
+      return `#/validation/runs/${encodeURIComponent(route.runId)}`
+    case 'validationManifest':
+      return `#/validation/runs/${encodeURIComponent(route.runId)}/manifest`
+    case 'validationArtifact':
+      return `#/validation/runs/${encodeURIComponent(route.runId)}/artifacts/${encodeURIComponent(route.artifactId)}`
     case 'evidence':
       return `#/evidence${queryString({ evidence_id: route.evidenceId, task_id: route.taskId })}`
     case 'interpretations':
@@ -298,6 +352,28 @@ export const sourceHref = {
   memoryTraces: (): string => hrefFor({ name: 'memoryTraces', traceId: null }),
   memoryTrace: (traceId: string): string => hrefFor({ name: 'memoryTrace', traceId }),
   memoryReflect: (): string => hrefFor({ name: 'memoryReflect' }),
+  /** P6-03c Validation (P7-01). Deep links into one recorded run and its bundle reads. */
+  validationRuns: (
+    filters: {
+      verdict?: string | null
+      stage?: string | null
+      mode?: string | null
+      attribution?: string | null
+      project?: string | null
+    } = {},
+  ): string =>
+    hrefFor({
+      name: 'validationRuns',
+      verdict: filters.verdict ?? null,
+      stage: filters.stage ?? null,
+      mode: filters.mode ?? null,
+      attribution: filters.attribution ?? null,
+      project: filters.project ?? null,
+    }),
+  validationRun: (runId: string): string => hrefFor({ name: 'validationRun', runId }),
+  validationManifest: (runId: string): string => hrefFor({ name: 'validationManifest', runId }),
+  validationArtifact: (runId: string, artifactId: string): string =>
+    hrefFor({ name: 'validationArtifact', runId, artifactId }),
   review: (reviewId: string): string => hrefFor({ name: 'review', reviewId }),
   reviews: (projectId: string | null, taskId: string | null = null): string =>
     hrefFor({ name: 'reviews', projectId, taskId }),

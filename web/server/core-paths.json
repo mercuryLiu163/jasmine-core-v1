@@ -38,9 +38,16 @@
     "^/v1/interpretations/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(correct|reject|rerun)$",
     "^/v1/reviews/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(approve|reject)$",
     "^/v1/rules/proposals$",
-    "^/v1/rules/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(approve|supersede|retire)$"
+    "^/v1/rules/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(approve|supersede|retire)$",
+    "^/v1/tasks$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/steps$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/transition$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/criteria$",
+    "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/accept$",
+    "^/v1/steps/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/transition$",
+    "^/v1/steps/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/criteria$"
   ],
-  "write_note": "Milestone B writes, frozen per method+path. `manual-reapply`, `resolve/{int}` and `evidence/confirm` are deliberately absent: the first two need an explicit operator decision outside this slice, and a web button cannot produce ADR 0007 human-prompt provenance. Core still enforces scope, actor kind, idempotency and revision per request.",
+  "write_note": "Milestone B writes plus the always-on P6-02 Task/Step state writes, frozen per method+path. The seven Task/Step patterns are not behind a switch: this baseline Core serves all seven (`handlers.py:115-124`) and `tests/test_state.py` drives them over real HTTP, so forwarding them cannot send the browser to a Core that cannot answer. Core still enforces the scope, the human/system actor kind, the revision, the state machine, the Evidence threshold and the `event_id` idempotency on every request; the proxy decision is only 'may the browser ask'. `evidence/confirm`, `workspaces/fingerprint`, `tool-results`, `resolve/{int}` and `resolutions/{id}/manual-reapply` are deliberately absent: the first and last need an explicit operator decision outside this slice, a web button cannot produce ADR 0007 human-prompt provenance, and fingerprint scanning can move a VERIFIED Step to STALE. `/v1/audit` and `/v1/auth/*` stay absent for the same reason as the read list.",
   "p3_pending_paths": [
     "^/v1/context/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$",
     "^/v1/tasks/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/checkpoints/latest$",
@@ -63,5 +70,13 @@
     "^/v1/memory/items/[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}/(obsolete|delete|pin|unpin)$",
     "^/v1/memory/reflect$"
   ],
-  "p4_write_note": "P6-03b2 memory writes: retry, the four lifecycle commands and reflect. The five `memory:manage` writes and `reflect` are real on the same unmerged P4 commit as the reads and are absent from this baseline, so they are NOT in `write_paths`: that list is the always-on P6-02 milestone B surface, and putting an unmerged dependency there would forward the browser to a Core that cannot answer. They become live only when the operator states the Core behind the proxy has P4 writes with P6_ENABLE_P4_WRITES=1, which is a *separate* switch from the reads: reading Memory and changing it are different decisions with different scopes. Even then Core enforces `memory:manage` / `memory:reflect`, the human-or-system actor kind, idempotency on `event_id` and `expected_revision` itself; the proxy only decides what the browser may reach. The payload and response contract is frozen in web/contracts/p4-memory-write.v1.json, derived by scripts/p6/p4_write_spec.py."
+  "p4_write_note": "P6-03b2 memory writes: retry, the four lifecycle commands and reflect. The five `memory:manage` writes and `reflect` are real on the same unmerged P4 commit as the reads and are absent from this baseline, so they are NOT in `write_paths`: that list is the always-on P6-02 milestone B surface, and putting an unmerged dependency there would forward the browser to a Core that cannot answer. They become live only when the operator states the Core behind the proxy has P4 writes with P6_ENABLE_P4_WRITES=1, which is a *separate* switch from the reads: reading Memory and changing it are different decisions with different scopes. Even then Core enforces `memory:manage` / `memory:reflect`, the human-or-system actor kind, idempotency on `event_id` and `expected_revision` itself; the proxy only decides what the browser may reach. The payload and response contract is frozen in web/contracts/p4-memory-write.v1.json, derived by scripts/p6/p4_write_spec.py.",
+  "p7_pending_paths": [
+    "^/v1/validation/runs$",
+    "^/v1/validation/runs/run-[0-9]{8}T[0-9]{6}Z$",
+    "^/v1/validation/runs/run-[0-9]{8}T[0-9]{6}Z/manifest$",
+    "^/v1/validation/runs/run-[0-9]{8}T[0-9]{6}Z/artifacts/art_[a-z0-9][a-z0-9_.-]{0,63}$",
+    "^/v1/validation/runs/run-[0-9]{8}T[0-9]{6}Z/artifacts/art_[a-z0-9][a-z0-9_.-]{0,63}/content$"
+  ],
+  "p7_pending_note": "P6-03c Validation reads. These five paths are real on the P7-01 branch (contract web/contracts/p7-validation-read.v1.json, pinned to its implementation commit) and are NOT served by this baseline's Core, so they are deliberately absent from `paths`: forwarding them would send the browser to a Core that cannot answer. They become live only when the operator starts a proxy for a Core that carries the P7-01 read slice with P6_ENABLE_P7_READS=1, and even then Core enforces validation:read itself (plus validation:unattributed for a run with no project attribution) and refuses anything the caller may not read with the same 404 whether it is absent or ungranted. There are no P7 writes: the slice is read-only, so nothing is added to write_paths. These two id segments are a deliberate exception to the `[a-z]{3}_` + 26 Crockford characters rule above: the run id is the recorder's (`run-YYYYmmddTHHMMSSZ`) and the artifact id is bundle-scoped (`art_[a-z0-9][a-z0-9_.-]{0,63}`), neither of which is a Core public id. The `([^/]+)` captures in the contract's route table are the Core-side patterns; the allowlist names the id shapes so a loose segment cannot reach a route."
 }

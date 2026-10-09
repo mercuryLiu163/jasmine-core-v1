@@ -73,6 +73,23 @@ describe('TaskEvidence', () => {
     const user = userEvent.setup()
     await openTaskEvidence(user, {
       'GET /v1/projects': { body: { projects: [], count: 0 } },
+      'GET /v1/tasks/tsk_1': {
+        body: {
+          task: {
+            task_id: 'tsk_1',
+            project_id: 'prj_1',
+            title: 't',
+            description: '',
+            status: 'ACCEPTED',
+            revision: 9,
+            source_event_id: 'evt_1',
+            created_at: '2026-09-30T05:00:00Z',
+            updated_at: '2026-09-30T05:00:00Z',
+            acceptance_criteria: { requirements: [] },
+          },
+        },
+      },
+      'GET /v1/rules/active': { body: { rules: [], count: 0 } },
       'GET /v1/tasks/tsk_1/evidence': {
         body: {
           evidence: [
@@ -143,8 +160,25 @@ describe('TaskEvidence', () => {
     const user = userEvent.setup()
     await openTaskEvidence(user, {
       'GET /v1/projects': { body: { projects: [], count: 0 } },
+      'GET /v1/tasks/tsk_1': {
+        body: {
+          task: {
+            task_id: 'tsk_1',
+            project_id: 'prj_1',
+            title: 't',
+            description: '',
+            status: 'ACTIVE',
+            revision: 1,
+            source_event_id: 'evt_1',
+            created_at: '2026-09-30T05:00:00Z',
+            updated_at: '2026-09-30T05:00:00Z',
+            acceptance_criteria: { requirements: [] },
+          },
+        },
+      },
       'GET /v1/tasks/tsk_1/evidence': { body: { evidence: [], count: 0 } },
       'GET /v1/tasks/tsk_1/history': { body: { events: [] } },
+      'GET /v1/rules/active': { body: { rules: [], count: 0 } },
       'GET /v1/tasks/tsk_1/steps': coreError(403, 'forbidden_scope', 'state:read is required'),
     })
 

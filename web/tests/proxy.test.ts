@@ -95,7 +95,7 @@ describe('isAllowedCoreRequest', () => {
     expect(isAllowedCoreRequest('POST', '/v1/auth/keys/key_1/revoke')).toBe(false)
   })
 
-  it('milestone B opens exactly the four frozen POST shapes', () => {
+  it('opens exactly the frozen write shapes: milestone B plus the seven Task/Step state routes', () => {
     for (const path of [
       `/v1/interpretations/${id('int')}/correct`,
       `/v1/interpretations/${id('int')}/reject`,
@@ -106,18 +106,29 @@ describe('isAllowedCoreRequest', () => {
       `/v1/rules/${id('rul')}/approve`,
       `/v1/rules/${id('rul')}/supersede`,
       `/v1/rules/${id('rul')}/retire`,
+      // P6-02b: the seven always-on Task/Step writes. This baseline Core serves all seven
+      // (`handlers.py:115-124`), so they are not a `*_pending_*` dependency.
+      '/v1/tasks',
+      `/v1/tasks/${id('tsk')}/steps`,
+      `/v1/tasks/${id('tsk')}/transition`,
+      `/v1/tasks/${id('tsk')}/criteria`,
+      `/v1/tasks/${id('tsk')}/accept`,
+      `/v1/steps/${id('stp')}/transition`,
+      `/v1/steps/${id('stp')}/criteria`,
     ]) {
       expect(isAllowedCoreRequest('POST', path), path).toBe(true)
     }
-    // Deliberately not opened in this slice.
+    // Deliberately not opened in this slice. The plural fingerprint path is the one Core
+    // actually serves (`handlers.py:113`); the singular spelling is kept in the list too
+    // because a typo here is exactly what made the Python contract check vacuous once.
     for (const path of [
       '/v1/evidence/confirm',
       `/v1/resolutions/${id('res')}/manual-reapply`,
       `/v1/resolve/${id('int')}`,
       '/v1/tool-results',
+      '/v1/workspaces/fingerprint',
       '/v1/workspace/fingerprint',
       '/v1/events',
-      '/v1/tasks',
       '/v1/auth/keys',
       '/v1/audit',
     ]) {
@@ -129,12 +140,15 @@ describe('isAllowedCoreRequest', () => {
     expect(isAllowedCoreRequest('GET', `/v1/interpretations/${id('int')}/correct`)).toBe(false)
     expect(isAllowedCoreRequest('POST', '/v1/interpretations')).toBe(false)
     expect(isAllowedCoreRequest('POST', '/v1/reviews/pending')).toBe(false)
+    // The GET list keeps its own shapes: a Task detail read is not a write route.
+    expect(isAllowedCoreRequest('GET', '/v1/tasks')).toBe(true)
+    expect(isAllowedCoreRequest('GET', `/v1/tasks/${id('tsk')}/accept`)).toBe(false)
   })
 
   it('keeps the read surface GET-only even though writes exist', () => {
-    expect(isAllowedCoreRequest('POST', '/v1/tasks')).toBe(false)
     expect(isAllowedCoreRequest('POST', '/v1/events')).toBe(false)
-    // `rules/proposals` is open for milestone B; the state machine is not.
+    // `tasks` and `rules/proposals` are open for writes; the read list is still GET only.
+    expect(isAllowedCoreRequest('POST', '/v1/tasks')).toBe(true)
     expect(isAllowedCoreRequest('POST', '/v1/rules/proposals')).toBe(true)
     expect(isAllowedCoreRequest('POST', '/v1/tasks/tsk_1/transition')).toBe(false)
     expect(isAllowedCoreRequest('DELETE', '/v1/projects/prj_1')).toBe(false)

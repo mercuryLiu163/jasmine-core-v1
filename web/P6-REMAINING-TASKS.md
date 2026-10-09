@@ -55,16 +55,20 @@ they are re-asserted in every bundle by the credential check.
 | 1 Conversation↔Interpretation read (model/extractor/version/confidence, Resolver reason, derived ids; pending count from the API) | **D** | milestone A, independently reviewed and validated | `P6-02-COMPLIANCE.md`; HTTP `20261007T135254Z-p6-02b-t03-gate/` (76/76); browser `20261007T135314Z-p6-02b-clickthrough/` (53/53); candidate `959e8df`, asset `index-CZ4ocGOP.js` |
 | 2 Correct / Reject / Re-run (old vs new, affected Truth, reason, frozen version; reject keeps the raw Event; re-run does not auto-change Truth) | **P** | all three delivered behind the default-off switch with per-action audit readback; **browser end-to-end submissions exist for 4 of the 9 writes** (interpretation.reject, review.reject, rule.propose, rule.approve) — the rest are HTTP + audit readback, which the INDEX says explicitly | as above; nine write endpoints in `server/core-paths.json` |
 | 3 Rule proposal vs approve/supersede/retire (scope, version/revision, immutable history; 409 keeps the draft) | **P** | same browser-coverage note | as above |
-| 4 Task/Step create/transition/criteria (real state machine, `expected_revision` from readback, idempotent `event_id`, timeout = 结果未知) | **N** | needs its own frozen permission/audit Gate; the read side exists | `P6-02-COMPLIANCE.md` → “Not delivered” |
-| 5 VERIFIED/ACCEPTED forms (criteria→Evidence matrix, rule version, fingerprint, `422 missing_evidence` keeps state, agent credential refused) | **N** | depends on item 4; the *read* side of Evidence/criteria is delivered (P6-01/A04, A06) | same |
+| 4 Task/Step create/transition/criteria (real state machine, `expected_revision` from readback, idempotent `event_id`, timeout = 结果未知) | **D** | contract frozen (`P6-02B-TASK-STEP-WRITE-SPEC.md` rev 3, delta re-review APPROVE freeze-as-is), implemented at `607f511` + review-fix `acd260b`, then executed by an **independent** validator on a real Core + real browser: PASS 9/9 claims, no counterexample, all seven routes + the §11 negatives. Its Evidence-gated route 6 and the two gated Step edges need a fingerprint/confirmation environment the browser alone cannot mint (both minting routes are proxy-refused by design), so a fresh environment must record them BLOCKED/PARTIAL — the spec's own permitted outcome | `P6-02-TASKSTEP-WRITE-COMPLIANCE.md`; validation `validation-runs/p6/VALIDATE-p6-02-taskstep-write/`; reviews `REVIEW-p6-02-taskstep-write-spec/`, `REVIEW-p6-02-taskstep-write-impl/` |
+| 5 VERIFIED/ACCEPTED forms (criteria→Evidence matrix, rule version, fingerprint, `422 missing_evidence` keeps state, agent credential refused) | **P** | implemented (`f636584` + independently reviewed repair `613a022`); frozen contract rev 3 includes the independently reviewed read-scope erratum. Final implementation review APPROVE and real isolated Core/Chrome Gate PASS at `551c95a`: 81 browser /65 Core /27 same-run crosschecks /28 edges; 17 refusal equality observations. Browser-only positive environment remains BLOCKED/PARTIAL: fingerprint/Evidence/confirmation preparation is out-of-band; `evidence/confirm` and the unreadable freshness/API decisions remain open | `P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`; `REVIEW-p6-02-item5-implementation/`; `VALIDATE-p6-02-item5-verified-accepted/` |
 | 6 `evidence/confirm` | **N** | deliberately absent: needs a real human prompt (ADR 0007) that a browser cannot mint; the browser test asserts the control is **absent**. New decision belongs to the Core owner as its own ADR/API Gate | same |
 | 7 Every manual change has an immutable command Event + revision/provenance + audit metadata; audit readback uses an authorised validator | **D** | for the nine delivered writes: per-action audit readback was added for all nine after the validator found 6 missing (`c7c5480`); the delta re-validation returned PASS | milestone-B bundle `20261008T053936Z-p6-03b2-clickthrough/` + INDEX |
 | — `POST /v1/resolutions/{id}/manual-reapply` | **N** | needs its own frozen payload/permission table **and an explicit operator decision**; a web button cannot mint the ADR 0007 human-prompt provenance it records | `P6-02-COMPLIANCE.md` “Not delivered” |
 | — real P2 message → Review → write chain (P6-T03 Gate) | **B** | the writes are gated against fixtures and the real P4 Core; a **real captured conversation** with the Resolver policy Gate has not been run (operator's capture path) | `P6-02B-INDEX.md` P6-02 sections; `P6-T03` in §7 |
 
 **Status text:** `P6-02 milestone A: delivered, independently reviewed and validated`;
-`milestone B: independently validated, PASS-WITH-CAVEATS` (four findings fixed in `c7c5480`).
-`P6-02` as a whole stays **PARTIAL**.
+`milestone B: independently validated, PASS-WITH-CAVEATS` (four findings fixed in `c7c5480`);
+`P6-02 TaskStep write (item 4): PASS` for the seven write routes only — contract frozen, implemented
+and independently validated, with route 6/gated Step edges `BLOCKED`/`PARTIAL` in any environment
+that lacks the out-of-band fingerprint and confirmation. Item 5 is implemented and independently
+reviewed/validated at `551c95a`, with its browser-only positive environment still **BLOCKED/PARTIAL**
+(`P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`). `P6-02` as a whole stays **PARTIAL**.
 
 ## 3. §6 P6-03 — domain-by-domain inspectors
 
@@ -74,7 +78,7 @@ they are re-asserted in every bundle by the credential check.
 | Context Inspector (P6-03a) | **P** | persisted pack, exact rendered content, section/token metrics, rule versions, memory ids, state revision all verified. **Injection attempt/receipt is not available**, so “built ≠ injected” is stated and the receipt half cannot PASS | same |
 | Memory Jobs/Recall (P6-03b1) | **P** | jobs/detail/retry, bank mapping, source Event/Evidence, query/result trace verified against real P4 code; **engine-dependent behaviour and the “engine unavailable ⇒ degraded, P1 views unaffected” negative are not covered** | real `20261008T075258Z-p6-03-realcore/` (35/35) + `...-ui/` (10/10); simulated `20261008T075355Z-p6-03b1-clickthrough/` (11/11) |
 | Memory Inspector 管理 (P6-03b2) | **P** | the five commands + `reflect` delivered behind a default-off switch, exercised through the real P4 Core and through the browser; soft-delete/provenance/idempotency verified; **“historical Memory conflicting with current Authority is conspicuous” is not exercised**, and engine-dependent `reflect` content is unproven | real Core 35/35 + UI 10/10; fixture `20261008T075346Z-p6-03b2-clickthrough/` (16/16 twice + 4/4 off); `P6-03B2-COMPLIANCE.md` criterion 9b |
-| Validation Inspector (P6-03c) | **N + B** | the screen is an explicit `未接入` panel; a fixture shell is *permitted* by §6, but acceptance needs the **P7-01 minimal run list/detail + safe artifact read contract**, which is not frozen. Building a fixture against inventing shapes would repeat the mistake the P3/P4 slices avoided | `web/README.md` status; §6 dependency note |
+| Validation Inspector (P6-03c) | **P + B** | **delivered** behind `P6_ENABLE_P7_READS`: the proxy allowlist (`p7_pending_paths`, five routes), the Inspector (run list with Core's filters, detail with the eight T06 chain links and their verbatim `missing_reason`, seven-section `present_kind`, manifest with the unauthenticated warning, artifact metadata and text-only content with separate masked/original digests) and the real-browser drill-down harness. **What is not PASS**: P7-01 acceptance criterion 1 — no real FAIL run exists on disk, so the FAIL display path is exercised only by a clearly-labelled synthetic fixture; and the drill-down's artifact half necessarily runs on a labelled fixture root, because the nine real records carry no manifest and no artifacts. `web/P6-03C-COMPLIANCE.md` | real records + labelled fixture: browser `20261008T181740Z-p6-03c-exit-code-positive/` (24 PASS / 0 FAIL, 5 PASS / 0 FAIL / 1 BLOCKED python), earlier `20261008T174844Z-p6-03c-validation-drilldown/`; independent review `REVIEW-p6-03c-*` and validation `VALIDATE-p6-03c-*` |
 | online / backup / storage | **N + B** | needs the P5/P7 readable contracts and real health stamps; today the UI does not fake health | same |
 
 ## 4. §7 Gates and negative cases
@@ -86,7 +90,7 @@ they are re-asserted in every bundle by the credential check.
 | P6-T03 audited manual maintenance | **B** (real chain) | nine writes + audit readback gated against fixtures and real P4; real P2 conversation chain not run |
 | P6-T04 actual Context (incl. injection receipt) | **B** (receipt) | real P3 pack/rendered content verified; no receipt exists to match |
 | P6-T05 Memory degradation | **P** | three quarters now have evidence: real P4 jobs/retry/withholding in the real-Core matrix; the outage (`Hindsight unavailable ⇒ degraded, P1 unaffected`) **and the same-environment recovery** in `20261008T130315Z-p6-t05-degraded/` (**19/19** — 9 Core checks + 10 browser records across two phases — frozen at `31d738f…`). Still **P**, not PASS: the engine is a labelled wire double stopped and restarted on the same pinned port, so no real Hindsight outage is claimed |
-| P6-T06 Validation drill-down | **B** | blocked on P7-01 |
+| P6-T06 Validation drill-down | **P** (criterion 1 BLOCKED) | run against the real P7-01 Core over the nine real P0 records through the dashboard's own proxy in a real browser: list/paging, recorded verdicts unchanged, the eight chain links with verbatim missing reasons (Context absent in all nine across its three recorded forms; Agent absent in the six BLOCKED runs), `manifest_status: absent` for a manifestless record, `acl` grant-filtering and the one-code `404`, in-browser `403 forbidden_scope`, and `503 validation_not_configured` on an unset root. **Not PASS**, and the reason is data, not code: criterion 1 needs a real FAIL run, and the artifact/masking negatives can only run on a labelled fixture root because the real records have no manifest. Unblock: the P7 owner records one genuinely failing scenario with `recorder.py` into the configured run root | browser `20261008T181740Z-p6-03c-exit-code-positive/` + `20261008T174844Z-p6-03c-validation-drilldown/`; `NEGATIVE-*` bundles are the exit-code failure negatives and are **not** acceptance runs |
 | P6-T07 maintainability | **D** (PASS) | P6-01 r3 |
 
 Negative cases (§7), which ones are actually covered:
@@ -94,13 +98,13 @@ Negative cases (§7), which ones are actually covered:
 | Negative case | Status |
 | --- | --- |
 | stale `expected_revision`, double click, timeout retry, `event_id` payload change | **covered** — `W4.replay`, `W4.revision_conflict`, real `event_id_conflict` |
-| criteria/Evidence missing, old fingerprint, BROKEN_REFERENCE, INFO result, no real human confirmation | **partial** — read-side rendering covered (A04/A06); the VERIFIED/ACCEPTED submission forms are not delivered; the confirm control is asserted absent |
+| criteria/Evidence missing, old fingerprint, BROKEN_REFERENCE, INFO result, no real human confirmation | **partial** — item-5 forms implemented and independently validated: missing criteria/Evidence/human confirmation, INFO and 17 browser/SQLite refusal equalities observed; no exhaustive environment coverage of old fingerprints/BROKEN_REFERENCE is claimed. Confirmation control remains absent; positive environment setup is out-of-band. See `P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md` |
 | agent-proposed Rule, tentative “先研究”, cross-scope supersede | **covered** — milestone-B tests + real P4 issuance refusal |
 | project A slow response arriving after switching to B; same id, different revision | **covered** — T07 (the rapid-switch phase was falsified and fixed) + `revision_conflict` |
 | API 404/401/403/422/503, disconnection, unknown enum, truncated paging | **covered** across the P1/P6-01/P6-02/P6-03 Gates |
-| secret-looking raw text, HTML/script, artifact path traversal, external links | **covered for text/protocol** (T02, proxy allowlist); artifact traversal is N/A until P6-03c |
+| secret-looking raw text, HTML/script, artifact path traversal, external links | **covered for text/protocol** (T02, proxy allowlist), and now for artifacts: the Inspector refuses `../`, absolute, `C:`, UNC, URL and symlinked declared paths, renders artifact content as text only (a browser probe confirms nothing from an HTML artifact is parsed and the global it sets stays undefined), masks by default and withholds the original with Core's own reason. Exercised on a **labelled fixture root**, since the real records have no manifest | `20261008T174844Z-p6-03c-validation-drilldown/`; `web/P6-03C-COMPLIANCE.md` |
 | **Memory unavailable / stale Memory vs Authority conflict / old Checkpoint / Context over budget** | **partly covered now**: the outage *and the same-environment recovery* are covered by `20261008T130315Z-p6-t05-degraded/` — the engine is stopped (P4's own probe records `unreachable`, Core stays `ok`, the P1 reads and views are unaffected, and a 200-with-`degraded`-payload `reflect` is recorded as a degradation, not a success), then restarted on the **same address** without restarting the Core, after which health reports `degraded: false` / `core_impact: none` and a real `reflect` reaches the engine. **Still not covered**: stale Memory vs current Authority, an old/atypical Checkpoint, and an over-budget Context |
-| Validation missing Context or Agent transcript / mocked response | N/A until P6-03c |
+| Validation missing Context or Agent transcript / mocked response | **covered for the real data**: every one of the 63 real cases shows the Context link missing with its own `missing_reason` (27 reason-only, 30 recorded-but-no-pack, 6 sentinel, 0 packs), `agent_response` is missing in all 42 cases of the six BLOCKED runs, the recorded verdict is served unchanged, and a record marked `synthetic: true` is graded `simulated` and never `real`. An **unmarked** mock under a `mode: real` manifest remains undetectable by a read-only contract, and the API says so rather than claiming otherwise | `20261008T174844Z-p6-03c-validation-drilldown/`; ADR 0015 §4.2 in the P7-01 worktree |
 
 ## 5. §8 bundle format and merge gate
 
@@ -143,11 +147,47 @@ wire double — no real deployment, no operator service. First step is a 10-minu
 P4's isolated environment can express “engine unavailable” without a real Hindsight; if it cannot,
 the row stays dependency-blocked and this drops off the list.
 
-**Dependency actions to open now (no P6 work can substitute):** ask the P7 owner to freeze and
-deliver the **P7-01 minimal Validation read + safe artifact contract** (unblocks P6-03c and T06, and
-is explicitly allowed to be delivered in parallel), and record the P6-03a **injection-receipt**
+**Dependency actions to open now (no P6 work can substitute):** the P7-01 request is **delivered** —
+the contract is frozen in the P7-01 worktree and copied here, the read slice is implemented and
+independently validated, and the dashboard proxy is open behind `P6_ENABLE_P7_READS`. What remains
+is a **data** action, not a dependency: to close P7-01 criterion 1, the P7 owner records one
+genuinely failing scenario with `recorder.py` into the configured run root, after which the T06
+drill-down is re-run and the criterion re-validated. Record the P6-03a **injection-receipt**
 question with the Agent/Context owner (unblocks T04's second half). Ask the P4 owner for the
-interpreter-symlink fix task (`TASK-p4-interpreter-symlink.md`, registered separately).
+interpreter-symlink fix task (`TASK-p4-interpreter-symlink.md`, registered separately). File the
+**coordination request to the Core interface owner** with the same scope and phrase as the frozen
+spec's §13 bullet: no route in schema 8 exposes `STEP_EDGES`/`TASK_EDGES`, so the Task/Step
+transition UI can only offer Core's status **vocabulary** — a superset of the legal-target set — and
+Core stays the only verdict on legality (`409 invalid_state_transition` with `from_status`/
+`to_status`); the ask is a route that publishes the two edge sets. It is a presentation limit that
+the implementation review ruled acceptable under §12, it blocks no item, and it changes no P6 status.
+
+**Harness gates closed before that re-run** (all found by the independent review/validation rounds
+and fixed, so the harness is now fit for the tenth record):
+1. the exit code is a gate — `check_exit_code` decides it from the browser records and the python
+   checks, with `False` failing the run and `None` failing it unless the check declares
+   `blocked_is_expected` (criterion 1 is that declared block). Failure negatives:
+   `tests/p6/test_p7_realcore_ui_exit_code.py` and the end-to-end
+   `scripts/p6/p7_realcore_ui_exit_negative.py`, whose falsified bundle is written under
+   `NEGATIVE-*/` with a `NOT-AN-ACCEPTANCE-RUN.md` banner.
+2. the DOM verdict extraction reads the run row's `data-testid="run-verdict"` hook instead of the
+   last `verdict(按记录)` label, which every case card also renders;
+3. the criterion-1 heading, intro, unverified-scope bullet, `scenario.md`, `manifest.json`'s
+   `phase_acceptance`/`validation_root`/`dirty_note`, the census check's name and its `ok`, and the
+   env banner/`descriptor.json` note are all **derived** from the census, so a tree that carries a
+   FAIL case produces a coherent bundle that says so;
+4. the record count is derived: the env builder accepts any usable tree, the driver hands the trace
+   a `p7-trace-expectations.json` read from disk, and the list/paging/ACL/agent assertions compare
+   exact id sets, so the harness produces a bundle for the tenth record too.
+
+**Open advisories on the harness** (recorded, none blocking): the run-verdict hook's fallback can
+still pick a case's verdict if the hook is present but `run.verdict` is null (unreachable through
+the P7-01 detail route, which requires a verdict); a falsified expectations file whose id does not
+exist makes the trace navigate to it and throw rather than record a FAIL for that step (cannot
+happen when the expectations come from the records); nothing unit-tests `render_result`; the
+criterion-1 section body says "finds a FAIL case" where `failure_class`/`failure_output` alone also
+demonstrate it; derived strings render "1 FAIL cases"; and each trace run leaves a small
+`$TMPDIR/p6-03c-chrome-*` profile directory behind.
 
 ## 7. 明确不做
 

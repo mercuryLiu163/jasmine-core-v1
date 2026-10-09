@@ -181,6 +181,13 @@ the `reason`/`idempotency_key` fields the interpretation/review writes require.
 
 ## Deliberately not implemented here
 
+The Task/Step **writes** are no longer on this list: they are delivered and independently validated
+(PASS 9/9 for the seven routes on a real Core and a real browser, with the seven proxy patterns
+**always-on, not behind a switch** — [spec](P6-02B-TASK-STEP-WRITE-SPEC.md),
+[record](P6-02-TASKSTEP-WRITE-COMPLIANCE.md)). Everything below still has work outstanding in this
+baseline; where a row is partly delivered, the row itself says which part is delivered and which is
+not.
+
 | Screen | Owner | Waiting on |
 | --- | --- | --- |
 | Manual reapply (`/v1/resolutions/{id}/manual-reapply`) | P6-02 later | Needs its own frozen payload/permission table and an explicit operator decision; a web button cannot produce the ADR 0007 human-prompt provenance this one records |
@@ -190,7 +197,8 @@ the `reason`/`idempotency_key` fields the interpretation/review writes require.
 | Memory lifecycle / retry / reflect (P6-03b2 writes) | P4 | **Implemented behind a default-off switch; not verified against real P4.** Six writes (`memory:manage` + `memory:reflect`), gated by `P6_ENABLE_P4_WRITES` — separate from the reads' switch — and absent from the live allowlist. Exercised only against a labelled simulated fixture; P4 phase acceptance has **not** passed. Specification: [`P6-03B2-WRITE-SPEC.md`](P6-03B2-WRITE-SPEC.md); per-criterion state: [`P6-03B2-COMPLIANCE.md`](P6-03B2-COMPLIANCE.md). The plan for verifying this slice — and b1 — against a real, isolated P4 Core: [`REAL-CORE-ACCEPTANCE-PLAN.md`](REAL-CORE-ACCEPTANCE-PLAN.md) (**plan only; nothing executed**) |
 | Validation inspector (run list, artifacts) | P7-01 | minimal validation read API + safe artifact contract |
 | online / backup / storage | P5 / P7 | health read contracts |
-| Task / Step / Evidence-confirmation writes | P6-02 later | Still gated on an independent permission Gate; `evidence/confirm` additionally needs a human prompt the browser cannot mint |
+| VERIFIED / ACCEPTED **forms** (criteria↔Evidence matrix) | P6-02 item 5 | **Implemented and independently reviewed; PARTIAL.** [Contract](P6-02-ITEM5-VERIFIED-ACCEPTED-SPEC.md) rev 3; [record](P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md). Real isolated Core/Chrome implementation Gate PASS at `551c95a`; browser-only positive environment remains BLOCKED/PARTIAL because fingerprint/Evidence/confirmation preparation is out-of-band. `evidence/confirm` awaits the Core ADR/API decision |
+| Evidence-confirmation (`POST /v1/evidence/confirm`) | P6-02 item 6 | Deliberately not provided: needs a real human prompt the browser cannot mint (ADR 0007). The proxy refuses the path by name and the browser test asserts the control is **absent** |
 
 ## Status
 
@@ -204,11 +212,14 @@ fixture, the checkout and the servers and reproduced it, then re-validated the f
 and returned **PASS** on the delta with nothing regressed. Its four findings are fixed
 in `c7c5480`. Two earlier "frozen commits" were incomplete (the dashboard's
 `web/src/lib/` was gitignored and untracked); that is fixed and the tip is built and
-tested from a clean checkout. A separate code review of the write panels is still
-outstanding. `P6-02: PARTIAL` overall — manual
-reapply and the Task/Step/Evidence writes are not delivered, and no Gate has run
-against the operator's own Core. `P6` as a stage is not complete. Details, evidence
-and the side-effect finding: `P6-02-COMPLIANCE.md`.
+tested from a clean checkout. That milestone-B panel review is **still outstanding** (it is a
+different review from the Task/Step write slice's, which is delivered below). `P6-02: PARTIAL`
+overall — manual
+reapply and `evidence/confirm` are not delivered. The VERIFIED/ACCEPTED forms are implemented and
+independently reviewed/validated on an isolated real Core/Chrome at `551c95a`; their browser-only
+positive environment remains BLOCKED/PARTIAL. No Gate has run against the operator's own Core. `P6` as a stage is not complete. Details, evidence
+and the side-effect finding: `P6-02-COMPLIANCE.md`; the Task/Step write slice:
+`P6-02B-TASK-STEP-WRITE-SPEC.md` and `P6-02-TASKSTEP-WRITE-COMPLIANCE.md`.
 
 `P6-03a (Checkpoint / Context Pack / Resume reads): PARTIAL / DEPENDENCY_PENDING`.
 The four read-only views are implemented and exercised in a real browser — a 15/15
@@ -226,8 +237,12 @@ built bundle are byte-identical to the current tip after the branch was rebased
 onto `main` (now including P2, schema v8; see `P6-01-COMPLIANCE.md` for the
 pre/post-rebase hash mapping, the post-rebase re-verification on a v8 Core and
 the two caveats the validator recorded). It is **not** `P6` done: P6-02's
-audited human writes are implemented but not yet independently reviewed, P6-02's
-manual reapply and the Task/Step/Evidence writes are not delivered, and
+audited human writes are implemented and independently validated, its Task/Step writes
+are delivered and independently validated too (PASS 9/9 claims for their seven routes,
+`P6-02-TASKSTEP-WRITE-COMPLIANCE.md`), while P6-02's
+manual reapply and `evidence/confirm` are not delivered; the VERIFIED/ACCEPTED forms are implemented
+and independently reviewed/validated with their browser-only positive environment still BLOCKED/PARTIAL
+(`P6-02-ITEM5-VERIFIED-ACCEPTED-COMPLIANCE.md`), and
 P6-03a is delivered only as PARTIAL/DEPENDENCY_PENDING (P3 is not merged, so its views were
 exercised against a simulated fixture), P6-03b1 (the P4 read slice) is likewise delivered only as
 PARTIAL/DEPENDENCY_PENDING against an unmerged P4; P6-03b2's six writes are implemented but also

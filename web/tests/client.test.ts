@@ -117,13 +117,69 @@ describe('CoreClient', () => {
     })
   })
 
-  it('propagates an abort instead of turning it into an error state', async () => {
+  it('turns an abort into an unknown-result CoreApiError that still names the request', async () => {
+    // Spec §5 change 1: the id the browser generated must survive the abort, because a
+    // cancelled write is exactly the case the operator cannot otherwise correlate.
     fake = installFakeCore({ 'GET /v1/projects': { body: { projects: [], count: 0 }, delayMs: 50 } })
     const client = new CoreClient({ getToken: () => 'tok' })
     const controller = new AbortController()
     const pending = client.get('/projects', { signal: controller.signal })
     controller.abort()
-    await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+    const error = await pending.catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(CoreApiError)
+    expect((error as CoreApiError).code).toBe('ui_request_aborted')
+    expect((error as CoreApiError).kind).toBe('unreachable')
+    // The id is the one that was actually sent on the wire, not a fresh one.
+    const sent = fake.requests[0]?.requestId
+    expect(sent).toMatch(/^ui-/)
+    expect((error as CoreApiError).requestId).toBe(sent)
+  })
+
+  it('names a transport failure with the id it generated', async () => {
+    fake = installFakeCore({}, () => ({ networkError: 'connect ECONNREFUSED' }))
+    const client = new CoreClient({ getToken: () => 'tok' })
+    const error = await client.get('/projects').catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(CoreApiError)
+    expect((error as CoreApiError).code).toBe('ui_core_unreachable')
+    expect((error as CoreApiError).requestId).toBe(fake.requests[0]?.requestId)
+    expect((error as CoreApiError).requestId).toMatch(/^ui-/)
+  })
+
+  it('reads a proxy-generated response X-Request-Id with no Core envelope', async () => {
+    // Spec §5 change 4: a proxy refusal has no `request_id` envelope, so without reading the
+    // header the panel could never name the request. `parseErrorBody` must actually receive it.
+    const withHeader = parseErrorBody(
+      502,
+      JSON.stringify({ error: { code: 'proxy_core_unreachable', message: 'refused' } }),
+      'proxy-abc-123',
+    )
+    expect(withHeader.requestId).toBe('proxy-abc-123')
+    // Core's envelope wins when both are present, because that is the id Core recorded.
+    const envelopeWins = parseErrorBody(
+      409,
+      JSON.stringify({ error: { code: 'revision_conflict', message: 'x', request_id: 'aud_core' } }),
+      'proxy-abc-123',
+    )
+    expect(envelopeWins.requestId).toBe('aud_core')
+    // And a headerless proxy refusal still parses, with an explicitly absent id.
+    expect(parseErrorBody(404, '{}', null).requestId).toBeNull()
+  })
+
+  it('reads the response header through the client, not only through parseErrorBody', async () => {
+    const client = new CoreClient({
+      getToken: () => 'tok',
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({ error: { code: 'proxy_path_not_allowed', message: 'not forwarded' } }),
+          {
+            status: 404,
+            headers: { 'content-type': 'application/json', 'x-request-id': 'proxy-from-response' },
+          },
+        ),
+    })
+    const error = await client.get('/evidence/confirm').catch((caught: unknown) => caught)
+    expect((error as CoreApiError).requestId).toBe('proxy-from-response')
+    expect((error as CoreApiError).code).toBe('proxy_path_not_allowed')
   })
 
   it('treats a 2xx non-JSON body as an explicit failure', async () => {

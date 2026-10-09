@@ -15,6 +15,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { CoreApiError } from '../src/api/errors'
+import { ABORTED_REQUEST_CODE } from '../src/api/errors'
 import type { WriteResult } from '../src/api/endpoints'
 import { classifyWriteError, useWriteAction } from '../src/app/useWriteAction'
 import { isEventId, newEventId } from '../src/lib/ids'
@@ -225,6 +226,71 @@ describe('Authority writes key on event_id, not idempotency_key', () => {
     act(() => result.current.resetDraft())
     expect(result.current.writeKey).not.toBe(first)
     expect(isEventId(result.current.writeKey)).toBe(true)
+  })
+})
+
+describe('the request id reaches the panel on every failure branch', () => {
+  it('keeps the id the client attached to a wrapped abort', async () => {
+    // Spec §5 change 2: CoreClient now wraps an abort in a CoreApiError carrying the id it
+    // generated, and the abort branch must put that id on the action rather than drop it.
+    const { result } = renderHook(() =>
+      useWriteAction(async () => {
+        throw new CoreApiError({
+          kind: 'unreachable',
+          status: null,
+          code: ABORTED_REQUEST_CODE,
+          message: 'the request was aborted before an answer arrived; the result is unknown',
+          requestId: 'ui-abort-9',
+        })
+      }),
+    )
+    await act(async () => {
+      await result.current.submit({ reason: 'r', host_id: 'hst_1', expected_revision: 1 })
+    })
+    expect(result.current.state).toBe('unknown')
+    expect(result.current.requestId).toBe('ui-abort-9')
+    expect(result.current.result).toBeNull()
+  })
+
+  it('keeps unknown for a raw abort and leaves the id explicitly absent', async () => {
+    const { result } = renderHook(() =>
+      useWriteAction(async () => {
+        throw new DOMException('aborted', 'AbortError')
+      }),
+    )
+    await act(async () => {
+      await result.current.submit({ reason: 'r', host_id: 'hst_1', expected_revision: 1 })
+    })
+    expect(result.current.state).toBe('unknown')
+    expect(result.current.requestId).toBeNull()
+  })
+
+  it('clears a stale id on a non-HTTP generic failure instead of naming the wrong request', async () => {
+    let calls = 0
+    const { result } = renderHook(() =>
+      useWriteAction(async () => {
+        calls += 1
+        if (calls === 1) {
+          throw new CoreApiError({
+            kind: 'unreachable',
+            status: null,
+            code: 'ui_core_unreachable',
+            message: 'refused',
+            requestId: 'ui-first',
+          })
+        }
+        throw new Error('a programming error, not an HTTP response')
+      }),
+    )
+    await act(async () => {
+      await result.current.submit({ reason: 'r', host_id: 'hst_1', expected_revision: 1 })
+    })
+    expect(result.current.requestId).toBe('ui-first')
+    await act(async () => {
+      await result.current.submit({ reason: 'r', host_id: 'hst_1', expected_revision: 1 })
+    })
+    expect(result.current.state).toBe('unknown')
+    expect(result.current.requestId).toBeNull()
   })
 })
 

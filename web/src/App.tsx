@@ -33,6 +33,12 @@ import { ResolutionView, ReviewView } from './views/ReviewView'
 import { ReviewsView } from './views/ReviewsView'
 import { RulesView } from './views/RulesView'
 import { TaskView } from './views/TaskView'
+import {
+  ValidationArtifactView,
+  ValidationManifestView,
+  ValidationRunsView,
+  ValidationRunView,
+} from './views/ValidationViews'
 
 const NAV = [
   { label: 'Overview', href: hrefFor({ name: 'overview' }) },
@@ -89,12 +95,13 @@ export function App(): JSX.Element {
         <>
           <p className="readonly-banner" role="note">
             受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、
-            Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire),不提供
-            Task/State/Evidence 的写按钮,不调用 fingerprint 扫描,不代表 P6 已验收。浏览器还会
-            发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理
-            rerun),详见 P6-02-COMPLIANCE.md。<a href={hrefFor({ name: 'pending', key: 'validation' })}>Validation</a>、
+            Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02
+            TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task
+            验收),不提供 Evidence confirmation 的按钮,也不调用 fingerprint 扫描,不代表 P6
+            已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入
+            INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。<a href={hrefFor({ name: 'pending', key: 'validation' })}>Validation</a>、
             <a href={hrefFor({ name: 'pending', key: 'context' })}>Context</a>、
-            <a href={hrefFor({ name: 'pending', key: 'memory' })}>Memory</a> 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并,因此仍列在此处而不在导航里。
+            <a href={hrefFor({ name: 'pending', key: 'memory' })}>Memory</a> 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 <code>P6_ENABLE_P4_READS</code>/<code>P6_ENABLE_P7_READS</code> 显式开关才转发。
           </p>
           <main id="main">{renderRoute(route)}</main>
         </>
@@ -195,6 +202,25 @@ function renderRoute(route: Route): JSX.Element {
       return <MemoryTracesView traceId={route.traceId} />
     case 'memoryReflect':
       return <MemoryReflectView />
+    // P6-03c: P7-01 Validation reads, deep links only (nothing here is in the navigation,
+    // exactly like the P3/P4 reads). The views say DEPENDENCY PENDING until a proxy with
+    // P6_ENABLE_P7_READS is running.
+    case 'validationRuns':
+      return (
+        <ValidationRunsView
+          verdict={route.verdict}
+          stage={route.stage}
+          mode={route.mode}
+          attribution={route.attribution}
+          project={route.project}
+        />
+      )
+    case 'validationRun':
+      return <ValidationRunView runId={route.runId} />
+    case 'validationManifest':
+      return <ValidationManifestView runId={route.runId} />
+    case 'validationArtifact':
+      return <ValidationArtifactView runId={route.runId} artifactId={route.artifactId} />
     case 'pending':
       return <PendingView pendingKey={route.key} />
     case 'unknown':

@@ -20,6 +20,7 @@ export type BadgeKind =
   | 'disposition'
   | 'review'
   | 'action'
+  | 'validation'
 
 type Tone = 'neutral' | 'progress' | 'good' | 'warn' | 'bad' | 'unknown'
 
@@ -105,11 +106,43 @@ const ACTION: Record<string, ToneSpec> = {
   NO_ACTION: { glyph: '○', tone: 'neutral' },
 }
 
+// P6-03c/P7-01. One vocabulary for the four status axes the Validation Inspector
+// shows, because they share a token set: a recorded verdict, a record status, a
+// manifest status and a file integrity. The literal token is always rendered, so a
+// tone can never be mistaken for the value; an unrecognised value still renders as
+// `? VALUE` in the unknown tone.
+const VALIDATION: Record<string, ToneSpec> = {
+  PASS: { glyph: '✔', tone: 'good' },
+  FAIL: { glyph: '✖', tone: 'bad' },
+  BLOCKED: { glyph: '⛔', tone: 'warn', label: '未运行,不等于通过' },
+  ok: { glyph: '✔', tone: 'good' },
+  corrupt: { glyph: '✖', tone: 'bad', label: '未通过校验:内容不可用' },
+  duplicate: { glyph: '⚠', tone: 'bad', label: '同一 stem 有多份可解析记录:拒绝解析' },
+  frozen: { glyph: '❄', tone: 'good', label: 'manifest 存在且通过语法校验(未签名)' },
+  absent: { glyph: '○', tone: 'neutral', label: '该 run 没有 bundle manifest' },
+  match: { glyph: '✔', tone: 'good' },
+  mismatch: { glyph: '✖', tone: 'bad', label: '字节与声明的 sha256/bytes 不一致' },
+  missing: { glyph: '○', tone: 'neutral', label: '清单声明的文件不存在' },
+  symlink_refused: { glyph: '⛔', tone: 'bad', label: '符号链接在打开时被拒绝' },
+  unreadable: { glyph: '⚠', tone: 'bad', label: '文件存在但读不到' },
+  attributed: { glyph: '▣', tone: 'neutral' },
+  unattributed: { glyph: '○', tone: 'warn', label: '没有项目归属:需要 manifest 的 projects' },
+  // Evidence grades (`real > component > simulated > unknown`) and the record's own
+  // `synthetic` marker. A synthetic record is graded `simulated` by the reader and can never
+  // be reported as real, so its badge must not read as a success.
+  real: { glyph: '★', tone: 'good' },
+  component: { glyph: '◐', tone: 'progress', label: '组件级证据' },
+  simulated: { glyph: '⚠', tone: 'warn', label: '模拟:不是真实证据' },
+  unknown: { glyph: '?', tone: 'unknown', label: '无法判定等级:不因缺少标记就当作 real' },
+  synthetic: { glyph: '⚠', tone: 'warn', label: '记录自述 synthetic:不是证据' },
+}
+
 const VOCABULARY: Record<BadgeKind, Record<string, ToneSpec>> = {
   interpretation: INTERPRETATION,
   disposition: DISPOSITION,
   review: REVIEW,
   action: ACTION,
+  validation: VALIDATION,
   step: STEP,
   task: TASK,
   evidence: EVIDENCE,

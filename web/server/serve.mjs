@@ -14,6 +14,7 @@
  */
 
 import http from 'node:http'
+import { randomUUID } from 'node:crypto'
 import { createReadStream, existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { extname, join, normalize, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -82,6 +83,8 @@ export const P4_READS_ENV = 'P6_ENABLE_P4_READS'
  * get the writes.
  */
 export const P4_WRITES_ENV = 'P6_ENABLE_P4_WRITES'
+/** Env var that says the Core behind this proxy carries the P7-01 Validation read slice. */
+export const P7_READS_ENV = 'P6_ENABLE_P7_READS'
 
 /** One spelling of "the operator says yes" for every opt-in, so the hosts cannot diverge. */
 function flagEnabled(env, name) {
@@ -101,10 +104,15 @@ export function p4WritesEnabled(env = process.env) {
   return flagEnabled(env, P4_WRITES_ENV)
 }
 
+export function p7ReadsEnabled(env = process.env) {
+  return flagEnabled(env, P7_READS_ENV)
+}
+
 export function loadAllowlist(directory = HERE, {
   enableP3Reads = p3ReadsEnabled(),
   enableP4Reads = p4ReadsEnabled(),
   enableP4Writes = p4WritesEnabled(),
+  enableP7Reads = p7ReadsEnabled(),
 } = {}) {
   const raw = JSON.parse(readFileSync(join(directory, 'core-paths.json'), 'utf8'))
   const baseline = raw.paths.map((pattern) => new RegExp(pattern))
@@ -120,18 +128,24 @@ export function loadAllowlist(directory = HERE, {
   // gated by their own switch. They are appendable to `write_paths` only, never to the read
   // list: `isAllowed` picks one list by method, so a P4 write can never be reached with GET.
   const pendingP4Writes = (raw.p4_write_paths ?? []).map((pattern) => new RegExp(pattern))
+  // The P7-01 Validation reads are the same arrangement again: real on a Core that carries
+  // the read slice, absent from this baseline, and appended only on the operator's say-so.
+  const pendingP7 = (raw.p7_pending_paths ?? []).map((pattern) => new RegExp(pattern))
   return {
     methods: new Set(raw.methods.map((method) => method.toUpperCase())),
     paths: [
       ...baseline,
       ...(enableP3Reads ? pending : []),
       ...(enableP4Reads ? pendingP4 : []),
+      ...(enableP7Reads ? pendingP7 : []),
     ],
     baseline_paths: baseline,
     p3_pending_paths: pending,
     p3_reads_enabled: enableP3Reads,
     p4_pending_paths: pendingP4,
     p4_reads_enabled: enableP4Reads,
+    p7_pending_paths: pendingP7,
+    p7_reads_enabled: enableP7Reads,
     write_methods: raw.write_methods ?? [],
     write_paths: [
       ...(raw.write_paths ?? []),
@@ -197,26 +211,41 @@ export function classifyRequestTarget(rawUrl) {
   return { kind: 'static', pathname }
 }
 
-function sendJson(res, status, body) {
+function sendJson(res, status, body, requestId) {
   res.statusCode = status
   res.setHeader('content-type', 'application/json; charset=utf-8')
   res.setHeader('cache-control', 'no-store')
+  if (requestId) res.setHeader('x-request-id', requestId)
   res.end(JSON.stringify(body))
 }
 
+/**
+ * The correlation id a proxy-generated response must carry.
+ *
+ * Mirrors `core-proxy.ts` `requestIdFor`: a refusal Core never saw has no Core `request_id`, so
+ * this hop echoes the incoming `X-Request-Id` when the client sent one and otherwise mints one.
+ * Both hosts must answer with an id, or a browser cannot name a proxy refusal in production.
+ */
+export function proxyRequestId(req) {
+  const incoming = req?.headers?.['x-request-id']
+  if (typeof incoming === 'string' && incoming.trim().length > 0) return incoming
+  return `proxy-${randomUUID()}`
+}
+
 export function proxy(req, res, origin, allowlist) {
+  const requestId = proxyRequestId(req)
   const classified = classifyRequestTarget(req.url)
   if (classified.kind === 'bad') {
     sendJson(res, 400, {
       error: { code: 'proxy_bad_target', message: `refused request target: ${classified.reason}` },
-    })
+    }, requestId)
     return
   }
   let target
   try {
     target = new URL(req.url, 'http://ui.invalid')
   } catch {
-    sendJson(res, 400, { error: { code: 'proxy_bad_target', message: 'unparsable request target' } })
+    sendJson(res, 400, { error: { code: 'proxy_bad_target', message: 'unparsable request target' } }, requestId)
     return
   }
   if (!isAllowed(allowlist, req.method, target.pathname)) {
@@ -225,7 +254,7 @@ export function proxy(req, res, origin, allowlist) {
         code: 'proxy_path_not_allowed',
         message: `the dashboard proxy does not forward ${req.method} ${target.pathname}`,
       },
-    })
+    }, requestId)
     return
   }
   const headers = { host: origin.host }
@@ -262,7 +291,7 @@ export function proxy(req, res, origin, allowlist) {
         code: 'proxy_core_unreachable',
         message: `${origin.origin}: ${error.code ?? error.message}`,
       },
-    })
+    }, requestId)
   })
   req.pipe(upstream)
 }
@@ -317,7 +346,7 @@ export function createDashboardServer({ root, origin, allowlist = loadAllowlist(
     if (target.kind === 'bad') {
       sendJson(res, 400, {
         error: { code: 'proxy_bad_target', message: `refused request target: ${target.reason}` },
-      })
+      }, proxyRequestId(req))
       return
     }
     if (target.kind === 'api') proxy(req, res, origin, allowlist)

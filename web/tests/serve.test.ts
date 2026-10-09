@@ -24,7 +24,19 @@ import { classifyRequestTarget, createDashboardServer, loadAllowlist } from '../
 interface RawReply {
   status: number
   contentType: string
+  /** Response headers, lowercased name -> value (first occurrence). */
+  headers: Record<string, string>
   body: string
+}
+
+function headerMap(lines: string[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const line of lines.slice(1)) {
+    const at = line.indexOf(':')
+    if (at <= 0) continue
+    out[line.slice(0, at).trim().toLowerCase()] = line.slice(at + 1).trim()
+  }
+  return out
 }
 
 function rawRequestWithBody(
@@ -32,12 +44,14 @@ function rawRequestWithBody(
   target: string,
   method: string,
   body: string,
+  requestId?: string,
 ): Promise<RawReply> {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1', () => {
       socket.write(
         `${method} ${target} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n` +
           'Content-Type: application/json\r\n' +
+          (requestId ? `X-Request-Id: ${requestId}\r\n` : '') +
           `Content-Length: ${Buffer.byteLength(body)}\r\n` +
           'Connection: close\r\n\r\n' +
           body,
@@ -53,17 +67,24 @@ function rawRequestWithBody(
       resolve({
         status: Number.parseInt((lines[0] ?? '').split(' ')[1] ?? '0', 10),
         contentType: lines.find((line) => line.toLowerCase().startsWith('content-type')) ?? '',
+        headers: headerMap(lines),
         body: rest.join('\r\n\r\n'),
       })
     })
   })
 }
 
-function rawRequest(port: number, target: string, method = 'GET'): Promise<RawReply> {
+function rawRequest(
+  port: number,
+  target: string,
+  method = 'GET',
+  requestId?: string,
+): Promise<RawReply> {
   return new Promise((resolve, reject) => {
     const socket = connect(port, '127.0.0.1', () => {
       socket.write(
         `${method} ${target} HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\n` +
+          (requestId ? `X-Request-Id: ${requestId}\r\n` : '') +
           (method === 'POST' ? 'Content-Type: application/json\r\nContent-Length: 2\r\n' : '') +
           'Connection: close\r\n\r\n' +
           (method === 'POST' ? '{}' : ''),
@@ -79,7 +100,7 @@ function rawRequest(port: number, target: string, method = 'GET'): Promise<RawRe
       const status = Number.parseInt((lines[0] ?? '').split(' ')[1] ?? '0', 10)
       const contentType =
         lines.find((line) => line.toLowerCase().startsWith('content-type')) ?? ''
-      resolve({ status, contentType, body: rest.join('\r\n\r\n') })
+      resolve({ status, contentType, headers: headerMap(lines), body: rest.join('\r\n\r\n') })
     })
   })
 }
@@ -153,6 +174,26 @@ describe('dashboard host request targets', () => {
     const reply = await rawRequest(port, '/v1/auth/keys')
     expect(reply.status).toBe(404)
     expect(reply.body).toContain('proxy_path_not_allowed')
+  })
+
+  it('answers a proxy refusal with an X-Request-Id, echoing the incoming one', async () => {
+    // The static host mirrors `core-proxy.ts`: a refusal this hop generates names a request, so
+    // a browser can correlate a proxy-generated 404/502 that has no Core envelope (§5 change 3).
+    const echoed = await rawRequest(port, '/v1/evidence/confirm', 'POST', 'ui-serve-1')
+    expect(echoed.status).toBe(404)
+    expect(echoed.body).toContain('proxy_path_not_allowed')
+    expect(echoed.headers['x-request-id']).toBe('ui-serve-1')
+    // No incoming id: this hop still answers with one rather than with none.
+    const minted = await rawRequest(port, '/v1/evidence/confirm', 'POST')
+    expect(minted.status).toBe(404)
+    expect(minted.headers['x-request-id']).toMatch(/^proxy-/)
+  })
+
+  it('also names the 502 when the allowed write reaches no Core', async () => {
+    const reply = await rawRequest(port, `/v1/tasks/tsk_01M4B6VGC29ESRDRQR62DX8AK8/steps`, 'POST', 'ui-serve-2')
+    expect(reply.status).toBe(502)
+    expect(reply.body).toContain('proxy_core_unreachable')
+    expect(reply.headers['x-request-id']).toBe('ui-serve-2')
   })
 
   it('forwards an allowlisted write but refuses an unlisted one', async () => {
