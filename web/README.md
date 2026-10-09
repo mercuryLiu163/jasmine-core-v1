@@ -1,5 +1,12 @@
 # Jasmine Core Dashboard (P6-02)
 
+Item 6 adds an opt-in Core Web confirmation consumer at Task → 人工确认. Start either
+host with `P6_ENABLE_WEB_CONFIRMATIONS=1` and use a Core with `web_confirmation_v1`.
+The default proxy refuses its routes. Confirmation records INFO; State acceptance is a
+separate action. See [item 6 consumer contract](P6-02-ITEM6-WEB-CONFIRMATIONS.md), including
+raw review and UNKNOWN recovery. The older phase descriptions below describe their original
+delivery scope and do not supply item 6 acceptance evidence.
+
 A browser UI for inspecting the Jasmine Core V1 Truth store. It is a **window on
 Core**, never a source of truth: it reads only the frozen `GET` endpoints of
 `docs/api/core-api-v1.md` and issues only the audited writes of P6-02 milestone B, and it never decides whether a Step is verified.

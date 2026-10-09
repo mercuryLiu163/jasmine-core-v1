@@ -279,8 +279,8 @@ function RequirementTable({
 /**
  * The USER_CONFIRMATION rows and their revision binding (§4.3).
  *
- * The browser cannot mint one (`POST /v1/evidence/confirm` and `POST /v1/events` are
- * proxy-refused), so this only shows what exists — never a synthesized confirmation.
+ * This read matrix only shows existing rows. The separate opt-in Web confirmation
+ * tab uses Core prepare/submit; old confirm and Raw event writes remain proxy-refused.
  */
 function ConfirmationBinding({
   rows,

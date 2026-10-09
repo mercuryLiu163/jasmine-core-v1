@@ -36,6 +36,7 @@ EVENT_TYPES = frozenset({
     "context.built",
     "checkpoint.created",
     "resume.built",
+    "human.confirmation_prepared", "human.confirmation_submitted",
     "user.prompt",
     "assistant.message",
     "session.started",
@@ -74,6 +75,9 @@ EVENT_TYPES = frozenset({
     "memory.unpinned",
     "memory.job.retried",
 })
+
+WEB_EVENT_TYPES = frozenset({"human.confirmation_prepared", "human.confirmation_submitted"})
+WEB_SOURCE_SYSTEM = "core-web-confirmation-v1"
 
 MAX_TEXT_BYTES = 256 * 1024
 
@@ -165,6 +169,10 @@ class NewEvent:
         source_system = require(body, "source_system")
         if event_type.startswith("adapter.") or source_system=="core-native-adapter":
             raise errors.InvalidRequest("adapter command namespace is reserved for internal capability endpoints")
+        if (event_type in WEB_EVENT_TYPES or source_system == WEB_SOURCE_SYSTEM or
+                isinstance(body.get("payload"), dict) and
+                body["payload"].get("confirmation_source_kind") == "WEB_STRUCTURED_V1"):
+            raise errors.InvalidRequest("Web confirmation namespace is reserved")
         if not source_system.strip():
             raise errors.InvalidRequest("source_system must not be empty", field="source_system")
 

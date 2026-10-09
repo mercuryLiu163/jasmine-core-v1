@@ -12,7 +12,7 @@
  * fine" must not look the same.
  */
 
-export type TaskTab = 'board' | 'history' | 'evidence' | 'write'
+export type TaskTab = 'board' | 'history' | 'evidence' | 'write' | 'confirmation'
 
 export type Route =
   | { name: 'overview' }
@@ -73,7 +73,7 @@ export type Route =
   | { name: 'pending'; key: string }
   | { name: 'unknown'; raw: string }
 
-const TABS: readonly TaskTab[] = ['board', 'history', 'evidence', 'write']
+const TABS: readonly TaskTab[] = ['board', 'history', 'evidence', 'write', 'confirmation']
 
 function queryOf(search: string): URLSearchParams {
   return new URLSearchParams(search.startsWith('?') ? search.slice(1) : search)

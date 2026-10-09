@@ -1,6 +1,6 @@
 # Keep the dashboard's build artifacts and dependency tree out of the repository
 # without editing the shared root .gitignore. `web/` is a P6-owned directory.
-node_modules/
+/node_modules
 dist/
 .vite/
 coverage/

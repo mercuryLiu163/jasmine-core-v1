@@ -77,7 +77,12 @@ class _Handler(BaseHTTPRequestHandler):
         self._handle("TRACE")
 
     def _handle(self, method: str) -> None:
+        started_monotonic = time.monotonic()
         path, query = split_target(self.path)
+        web_confirmation = path == "/v1/auth/me" or path.startswith("/v1/evidence/confirmations/")
+        if web_confirmation:
+            # The full request budget begins at transport processing entry.
+            self.connection.settimeout(30)
         request_id = self.headers.get("X-Request-Id") or ""
         if not request_id or len(request_id) > 128 or looks_like_credential(request_id):
             # A caller-supplied correlation id is stored in the audit log, so one
@@ -104,7 +109,7 @@ class _Handler(BaseHTTPRequestHandler):
         headers = {key.lower(): value for key, value in self.headers.items()}
         request = Request(
             method=method, path=path, query=query, headers=headers, body=body,
-            request_id=request_id,
+            request_id=request_id, started_monotonic=started_monotonic,
         )
         response = self._app.handle(request)
         self._respond(response.status, response.body, response.headers)

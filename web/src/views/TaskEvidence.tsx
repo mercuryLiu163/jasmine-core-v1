@@ -224,8 +224,8 @@ export function TaskEvidence({ taskId }: { taskId: string }): JSX.Element {
         <Unavailable
           feature="人工 Evidence confirmation"
           owner="Core 接口负责人(P6-02)"
-          pending="ADR 0007 要求的真实同任务 human prompt 来源"
-          note="网页点击不能冒充 human source;在来源与权限链被后端认可前,该动作保持禁用。"
+          pending="旧 ADR 0007 human prompt 路径仍不向浏览器开放"
+          note="专用 Core Web 两阶段确认在人工确认页；需显式启用代理及 web_confirmation_v1 能力。确认只是 INFO，不能替代验收。"
         />
       </Panel>
     </div>

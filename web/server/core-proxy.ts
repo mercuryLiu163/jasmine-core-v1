@@ -40,6 +40,7 @@ const p3ReadsEnabled = flagEnabled('P6_ENABLE_P3_READS')
 const p4ReadsEnabled = flagEnabled('P6_ENABLE_P4_READS')
 const p4WritesEnabled = flagEnabled('P6_ENABLE_P4_WRITES')
 const p7ReadsEnabled = flagEnabled('P6_ENABLE_P7_READS')
+const webConfirmationsEnabled = flagEnabled('P6_ENABLE_WEB_CONFIRMATIONS')
 const pendingPaths = allowlist as {
   p3_pending_paths?: string[]
   p4_pending_paths?: string[]
@@ -47,6 +48,7 @@ const pendingPaths = allowlist as {
 }
 const ALLOWED_PATHS = [
   ...allowlist.paths,
+  ...(webConfirmationsEnabled ? allowlist.web_confirmation_read_paths : []),
   ...(p3ReadsEnabled ? pendingPaths.p3_pending_paths ?? [] : []),
   ...(p4ReadsEnabled ? pendingPaths.p4_pending_paths ?? [] : []),
   ...(p7ReadsEnabled ? pendingPaths.p7_pending_paths ?? [] : []),
@@ -56,6 +58,7 @@ const WRITE_METHODS = new Set(
 )
 const WRITE_PATHS = [
   ...(allowlist.write_paths ?? []),
+  ...(webConfirmationsEnabled ? allowlist.web_confirmation_write_paths : []),
   // Only ever appended to the POST list: `isAllowedCoreRequest` selects a list by method, so
   // a b2 write cannot be reached with GET even when the switch is on.
   ...(p4WritesEnabled ? (allowlist as { p4_write_paths?: string[] }).p4_write_paths ?? [] : []),
@@ -195,6 +198,14 @@ export function proxyCoreRequest(
       `the dashboard proxy does not forward ${method} ${target.pathname}`,
     )
     return
+  }
+
+  if (method.toUpperCase() === 'POST' && target.pathname.startsWith('/v1/evidence/confirmations/')) {
+    const browserOrigin = req.headers.origin
+    if (browserOrigin !== undefined && browserOrigin !== `http://${req.headers.host}`) {
+      refuse(res, req, 403, 'proxy_origin_not_allowed', 'confirmation writes require a same-origin browser request')
+      return
+    }
   }
 
   const headers: Record<string, string> = { host: origin.host }

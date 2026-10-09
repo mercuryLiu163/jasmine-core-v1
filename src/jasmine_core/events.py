@@ -23,7 +23,10 @@ from typing import Any
 
 from . import clock, db, errors, ids
 from .canonical import canonical_json, sha256_hex
-from .models import EVENT_TYPES, NewEvent
+from .models import EVENT_TYPES, WEB_EVENT_TYPES, WEB_SOURCE_SYSTEM, NewEvent
+
+# An internal capability, never deserialized from an external body.
+_WEB_CONFIRMATION_CAPABILITY = object()
 
 #: table -> primary key column, used to resolve the caller's stated references
 #: before the database does it for us with an untyped error.
@@ -123,13 +126,19 @@ class EventStore:
 
     # -- writing -----------------------------------------------------------
 
-    def append(self, spec: NewEvent, *, event_id: str | None = None) -> tuple[dict[str, Any], bool]:
+    def append(self, spec: NewEvent, *, event_id: str | None = None,
+               _web_capability=None) -> tuple[dict[str, Any], bool]:
         """Append one Raw Event, or raise the frozen replay/conflict errors.
 
         Returns ``(event, replayed)``. ``replayed`` is True when the returned
         event was already stored by an earlier identical request, in which case
         this call wrote nothing. Must be called inside `db.transaction()`.
         """
+        reserved = (spec.event_type in WEB_EVENT_TYPES or spec.source_system == WEB_SOURCE_SYSTEM or
+                    isinstance(spec.payload, dict) and
+                    spec.payload.get("confirmation_source_kind") == "WEB_STRUCTURED_V1")
+        if reserved and _web_capability is not _WEB_CONFIRMATION_CAPABILITY:
+            raise errors.InvalidRequest("Web confirmation namespace is reserved")
         with db.translate_lock_errors():
             return self._append(spec, event_id)
 

@@ -28,6 +28,8 @@ import { formatTimestamp } from '../lib/text'
 
 const EVENT_TYPES = [
   'user.prompt',
+  'human.confirmation_prepared',
+  'human.confirmation_submitted',
   'assistant.message',
   'session.started',
   'session.ended',

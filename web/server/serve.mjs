@@ -85,6 +85,10 @@ export const P4_READS_ENV = 'P6_ENABLE_P4_READS'
 export const P4_WRITES_ENV = 'P6_ENABLE_P4_WRITES'
 /** Env var that says the Core behind this proxy carries the P7-01 Validation read slice. */
 export const P7_READS_ENV = 'P6_ENABLE_P7_READS'
+export const WEB_CONFIRMATIONS_ENV = 'P6_ENABLE_WEB_CONFIRMATIONS'
+export function webConfirmationsEnabled(env = process.env) {
+  return flagEnabled(env, WEB_CONFIRMATIONS_ENV)
+}
 
 /** One spelling of "the operator says yes" for every opt-in, so the hosts cannot diverge. */
 function flagEnabled(env, name) {
@@ -113,6 +117,7 @@ export function loadAllowlist(directory = HERE, {
   enableP4Reads = p4ReadsEnabled(),
   enableP4Writes = p4WritesEnabled(),
   enableP7Reads = p7ReadsEnabled(),
+  enableWebConfirmations = webConfirmationsEnabled(),
 } = {}) {
   const raw = JSON.parse(readFileSync(join(directory, 'core-paths.json'), 'utf8'))
   const baseline = raw.paths.map((pattern) => new RegExp(pattern))
@@ -135,6 +140,7 @@ export function loadAllowlist(directory = HERE, {
     methods: new Set(raw.methods.map((method) => method.toUpperCase())),
     paths: [
       ...baseline,
+      ...(enableWebConfirmations ? (raw.web_confirmation_read_paths ?? []).map((pattern) => new RegExp(pattern)) : []),
       ...(enableP3Reads ? pending : []),
       ...(enableP4Reads ? pendingP4 : []),
       ...(enableP7Reads ? pendingP7 : []),
@@ -149,6 +155,7 @@ export function loadAllowlist(directory = HERE, {
     write_methods: raw.write_methods ?? [],
     write_paths: [
       ...(raw.write_paths ?? []),
+      ...(enableWebConfirmations ? raw.web_confirmation_write_paths ?? [] : []),
       ...(enableP4Writes ? raw.p4_write_paths ?? [] : []),
     ],
     baseline_write_paths: raw.write_paths ?? [],
@@ -256,6 +263,13 @@ export function proxy(req, res, origin, allowlist) {
       },
     }, requestId)
     return
+  }
+  if ((req.method ?? '').toUpperCase() === 'POST' && target.pathname.startsWith('/v1/evidence/confirmations/')) {
+    const browserOrigin = req.headers.origin
+    if (browserOrigin !== undefined && browserOrigin !== `http://${req.headers.host}`) {
+      sendJson(res, 403, { error: { code: 'proxy_origin_not_allowed', message: 'confirmation writes require a same-origin browser request' } }, requestId)
+      return
+    }
   }
   const headers = { host: origin.host }
   for (const name of FORWARDED_HEADERS) {

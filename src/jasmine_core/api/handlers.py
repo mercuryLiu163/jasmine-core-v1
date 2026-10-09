@@ -43,6 +43,8 @@ class Core:
         self.schema_version = current_version(conn)
         self.objects = objects.ObjectStore(conn, schema_version=self.schema_version)
         self.evidence = evidence.EvidenceStore(conn, schema_version=self.schema_version)
+        from ..web_confirmations import WebConfirmationStore
+        self.web_confirmations = WebConfirmationStore(conn, schema_version=self.schema_version)
         self.state = state.StateStore(conn, schema_version=self.schema_version,
                                       evidence_validator=evidence.CurrentEvidenceValidator(conn))
         self.interpretations = interpretations.InterpretationStore(conn, schema_version=self.schema_version)
@@ -69,6 +71,7 @@ class Route:
     scope: str | None
     #: Whether an anonymous caller is allowed. Only liveness and schema reporting.
     public: bool = False
+    required_scopes: tuple[str, ...] = ()
 
 
 def _collection_routes() -> list[Route]:
@@ -133,6 +136,10 @@ def _base_routes() -> list[Route]:
         Route("POST", re.compile(r"^/v1/guard/check$"), guard_check, "guard:check"),
         Route("POST", re.compile(r"^/v1/tool-results$"), record_tool_result, "evidence:write"),
         Route("POST", re.compile(r"^/v1/codex-exec-observations$"), record_codex_exec_observation, "evidence:attest"),
+        Route("GET", re.compile(r"^/v1/auth/me$"), auth_me, None),
+        Route("POST", re.compile(r"^/v1/evidence/confirmations/prepare$"), web_confirmation_prepare, "evidence:confirm", required_scopes=("objects:read", "state:read", "authority:read")),
+        Route("POST", re.compile(r"^/v1/evidence/confirmations/submit$"), web_confirmation_submit, "evidence:confirm"),
+        Route("GET", re.compile(r"^/v1/evidence/confirmations/(evt_[0-9A-HJKMNP-TV-Z]{26})$"), web_confirmation_status, "evidence:confirm", required_scopes=("evidence:read", "objects:read", "state:read", "authority:read")),
         Route("POST", re.compile(r"^/v1/evidence/confirm$"), confirm_evidence, "evidence:confirm"),
         Route("GET", re.compile(r"^/v1/evidence/([^/]+)$"), get_evidence, "evidence:read"),
         Route("GET", re.compile(r"^/v1/tasks/([^/]+)/evidence$"), list_task_evidence, "evidence:read"),
@@ -170,6 +177,36 @@ def resolve(method: str, path: str) -> tuple[Route, re.Match[str]]:
             f"{method} is not supported for {path}", allowed=sorted(allowed)
         )
     raise errors.NotFound("route", path)
+
+
+def auth_me(request, core, principal, match):
+    if request.query or request.body:
+        raise errors.InvalidRequest("auth/me accepts no query or body")
+    return Response(200, core.web_confirmations.me(principal))
+
+
+def web_confirmation_prepare(request, core, principal, match):
+    from ..web_confirmations import PREPARE_SCOPES, REQUEST_SECONDS, request_body
+    core.web_confirmations.identity(principal, PREPARE_SCOPES)
+    result = core.web_confirmations.prepare(request_body(request), principal, request.request_id,
+        deadline=request.started_monotonic + REQUEST_SECONDS)
+    return Response(200 if result["replayed"] else 201, result)
+
+
+def web_confirmation_submit(request, core, principal, match):
+    from ..web_confirmations import REQUEST_SECONDS, request_body
+    core.web_confirmations.identity(principal, ("evidence:confirm",))
+    result = core.web_confirmations.submit(request_body(request), principal, request.request_id,
+        deadline=request.started_monotonic + REQUEST_SECONDS)
+    return Response(200 if result["replayed"] else 201, result)
+
+
+def web_confirmation_status(request, core, principal, match):
+    from ..web_confirmations import STATUS_SCOPES
+    core.web_confirmations.identity(principal, STATUS_SCOPES)
+    if request.query or request.body:
+        raise errors.InvalidRequest("confirmation status accepts no query or body")
+    return Response(200, core.web_confirmations.status(match.group(1), principal))
 
 
 # -- handlers ---------------------------------------------------------------

@@ -1,3 +1,4 @@
+import { confirmationEndpoints } from './webConfirmations'
 /**
  * The frozen P6-01 endpoint surface.
  *
@@ -107,6 +108,7 @@ function id(value: string): string {
 
 export function makeEndpoints(client: CoreClient) {
   return {
+    ...confirmationEndpoints(client),
     health: (signal?: AbortSignal) => client.get<Health>('/health', { signal }),
     metaSchema: (signal?: AbortSignal) => client.get<MetaSchema>('/meta/schema', { signal }),
 

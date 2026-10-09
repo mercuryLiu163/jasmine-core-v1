@@ -13,6 +13,7 @@ import json
 import os
 import stat
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -43,10 +44,10 @@ def _relevant(relative: str) -> bool:
              not name.endswith((".sqlite", ".db", "-wal", "-shm"))))
 
 
-def _git(root: Path, *args: str) -> bytes | None:
+def _git(root: Path, *args: str, deadline: float | None = None) -> bytes | None:
     try:
         proc = subprocess.run(["git", "-C", str(root), *args], stdout=subprocess.PIPE,
-                              stderr=subprocess.DEVNULL, timeout=15, check=False)
+                              stderr=subprocess.DEVNULL, timeout=_remaining(deadline), check=False)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return None
     return proc.stdout if proc.returncode == 0 else None
@@ -66,7 +67,8 @@ def configured_root() -> Path:
     return resolved
 
 
-def hash_workspace_file(root: Path, relative: str, remaining_bytes: int = MAX_BYTES) -> tuple[str, int]:
+def hash_workspace_file(root: Path, relative: str, remaining_bytes: int = MAX_BYTES,
+                        *, deadline: float | None = None) -> tuple[str, int]:
     """Open each path component with O_NOFOLLOW; never hash a symlink target.
 
     Descriptor-relative opens also prevent a parent-directory symlink swap
@@ -93,7 +95,11 @@ def hash_workspace_file(root: Path, relative: str, remaining_bytes: int = MAX_BY
                 raise ValueError("byte limit")
             digest = hashlib.sha256()
             total = 0
-            while chunk := os.read(file_descriptor, min(1024 * 1024, remaining_bytes - total + 1)):
+            while True:
+                _remaining(deadline)
+                chunk = os.read(file_descriptor, min(1024 * 1024, remaining_bytes - total + 1))
+                if not chunk:
+                    break
                 if total + len(chunk) > remaining_bytes:
                     raise ValueError("byte limit")
                 digest.update(chunk)
@@ -105,12 +111,25 @@ def hash_workspace_file(root: Path, relative: str, remaining_bytes: int = MAX_BY
         os.close(directory)
 
 
-def capture(root: Path | None = None) -> dict[str, Any]:
+def _remaining(deadline: float | None) -> float:
+    if deadline is None:
+        return 15
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise TimeoutError("fingerprint deadline")
+    return min(15, remaining)
+
+
+def capture(root: Path | None = None, *, deadline: float | None = None,
+            max_files: int | None = None, max_bytes: int | None = None) -> dict[str, Any]:
+    max_files = MAX_FILES if max_files is None else max_files
+    max_bytes = MAX_BYTES if max_bytes is None else max_bytes
+    _remaining(deadline)
     root = configured_root() if root is None else root.resolve(strict=True)
     if not root.is_dir():
         raise errors.FingerprintUnavailable("workspace root is not a directory")
     git_marker = (root / ".git").exists() or (root / ".git").is_file()
-    top = _git(root, "rev-parse", "--show-toplevel")
+    top = _git(root, "rev-parse", "--show-toplevel", deadline=deadline)
     is_git = top is not None and Path(os.fsdecode(top.strip())).resolve() == root
     if git_marker and not is_git:
         # A broken or unavailable Git command cannot turn ignored credentials
@@ -122,11 +141,11 @@ def capture(root: Path | None = None) -> dict[str, Any]:
                 "manifest_sha256": body_hash({}), "complete": False,
                 "partial_reasons": ["git metadata unavailable"], "file_count": 0,
                 "captured_at": clock.now_rfc3339()}
-    git_head = os.fsdecode((_git(root, "rev-parse", "HEAD") or b"").strip()) if is_git else None
+    git_head = os.fsdecode((_git(root, "rev-parse", "HEAD", deadline=deadline) or b"").strip()) if is_git else None
     candidates: list[str] = []
     partial_reasons: list[str] = []
     if is_git:
-        listed = _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+        listed = _git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", deadline=deadline)
         if listed is None:
             partial_reasons.append("git listing failed")
         else:
@@ -157,17 +176,17 @@ def capture(root: Path | None = None) -> dict[str, Any]:
     except (ValueError, TypeError):
         extra = []
         partial_reasons.append("invalid extra path configuration")
-    if len(candidates) > MAX_FILES:
+    if len(candidates) > max_files:
         partial_reasons.append("file count limit")
-        candidates = candidates[:MAX_FILES]
+        candidates = candidates[:max_files]
     hashes: dict[str, str] = {}
     total_bytes = 0
     for relative in candidates:
         candidate = root / relative
         try:
-            digest, length = hash_workspace_file(root, relative, MAX_BYTES - total_bytes)
+            digest, length = hash_workspace_file(root, relative, max_bytes - total_bytes, deadline=deadline)
             total_bytes += length
-            if total_bytes > MAX_BYTES:
+            if total_bytes > max_bytes:
                 partial_reasons.append("byte limit")
                 break
             hashes[relative] = digest
@@ -177,7 +196,7 @@ def capture(root: Path | None = None) -> dict[str, Any]:
         except OSError:
             partial_reasons.append("unreadable file")
     if is_git:
-        changed = _git(root, "status", "--porcelain", "-z", "--untracked-files=all")
+        changed = _git(root, "status", "--porcelain", "-z", "--untracked-files=all", deadline=deadline)
         if changed is None:
             partial_reasons.append("git status failed")
             changed_paths: list[str] = []

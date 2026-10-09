@@ -50,7 +50,7 @@ const NAV = [
 
 export function App(): JSX.Element {
   const route = useHashRoute()
-  const { signedIn, signOut } = useSession()
+  const { signedIn, signOut, pendingConfirmations } = useSession()
 
   return (
     <div className="app">
@@ -72,6 +72,7 @@ export function App(): JSX.Element {
                 {item.label}
               </a>
             ))}
+            {pendingConfirmations.map((pending) => <a key={pending.id} href={`#/task/${pending.taskId}/confirmation`}>恢复未知确认 {pending.id}</a>)}
             <details className="navmenu">
               <summary>领域(未接入)</summary>
               <ul>
@@ -97,7 +98,7 @@ export function App(): JSX.Element {
             受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、
             Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02
             TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task
-            验收),不提供 Evidence confirmation 的按钮,也不调用 fingerprint 扫描,不代表 P6
+            验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6
             已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入
             INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。<a href={hrefFor({ name: 'pending', key: 'validation' })}>Validation</a>、
             <a href={hrefFor({ name: 'pending', key: 'context' })}>Context</a>、

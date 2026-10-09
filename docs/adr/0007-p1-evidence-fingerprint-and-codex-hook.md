@@ -33,3 +33,16 @@ Only the exact Bash action and path exercised by the real Gate may be called ENF
 Core verifies both raw UTF-8 JSONL digests, one completed native thread/turn with exactly one command start/completion pair, and a complete three-record prompt/Pre/Post safe trace. The native command must parse as exactly `/bin/bash`, `-c` or `-lc`, and the exact recorded inner command. Unknown events, unexpected tools, duplicate commands, partial turns, noninteger exits, and additional Hook attempts are refused. The Gate therefore runs denial and allowed execution in separate turns. Prompt, linked call, original Post INFO Evidence, actor, host, task, step, session, turn, use ID, and canonical input hash must agree. Current complete fingerprint and Task/Step revisions must still match the original Post capture.
 
 A successful observation appends immutable `codex-exec-jsonl` `tool.result` and `COMMAND_RESULT` Evidence (`PASS` for zero, `FAIL` otherwise), storing the complete source text and digests in the Event. The original Post INFO is preserved. Validation reparses and checks these sources and links. Each Post can have one observation: identical requests by the same actor return the original snapshot with HTTP 200 and `replayed=true`; changed observations conflict. A new observation returns HTTP 201 with `evidence`, `result_event`, `related_posttool_event_id`, and `replayed=false`. JSONL and trace caps are 192 KiB and 32 KiB, with an additional 256 KiB encoded Event payload cap. No transcript file reference is required: the immutable Event owns the source bytes.
+
+
+## Web structured human confirmation (ADR 0015)
+
+Schema 12 adds [Web confirmation v1](../api/web-confirmations-v1.md): authenticated
+`GET /v1/auth/me`, two-phase `POST /v1/evidence/confirmations/prepare` and `submit`,
+and same-key owner `GET /v1/evidence/confirmations/{preparation_id}`. The dedicated
+Core source is `human.confirmation_submitted` / `core-web-confirmation-v1`; it is
+validated against its immutable preparation, original note bytes, command, Evidence
+and receipt. The resulting Evidence is `USER_CONFIRMATION/INFO` and does not
+change State. The legacy `/v1/evidence/confirm` human prompt contract is unchanged.
+See [ADR 0015](../adr/0015-web-human-confirmation.md) for the trust boundary and
+transaction/scanning rules.

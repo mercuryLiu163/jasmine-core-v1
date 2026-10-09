@@ -57,6 +57,8 @@ EXPECTED_TABLES = {
     "memory_query_trace_items",
     "memory_engine_status",
     "memory_project_actors",
+    "web_confirmation_preparations",
+    "web_confirmation_submissions",
 }
 
 
@@ -88,7 +90,7 @@ class MigrationFromEmptyDatabase(DbTestCase):
          "m0004_task_step_state", "m0005_evidence_fingerprint",
          "m0006_codex_exec_observations", "m0007_interpretations",
          "m0008_resolutions", "m0009_continuity", "m0010_context",
-         "m0011_memory"])
+         "m0011_memory", "m0012_web_confirmations"])
         self.assertEqual(_tables(self.conn), EXPECTED_TABLES)
         self.assertEqual(current_version(self.conn), expected_version())
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)

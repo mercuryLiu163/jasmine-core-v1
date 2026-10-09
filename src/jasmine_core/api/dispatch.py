@@ -15,6 +15,7 @@ A failure at step 2, 3 or 4 writes no Truth, but step 5 still runs.
 from __future__ import annotations
 
 from typing import Any
+from dataclasses import replace
 
 from .. import audit as audit_module
 from .. import errors, ids
@@ -33,6 +34,7 @@ def safe_log_method(method: str | None) -> str:
 
 def dispatch(core: Core, request: Request) -> Response:
     request_id = request.request_id or ids.new_id("aud")
+    request = replace(request, request_id=request_id)
     principal = None
     scope: str | None = None
     target: str | None = None
@@ -46,6 +48,8 @@ def dispatch(core: Core, request: Request) -> Response:
             principal = core.auth.authenticate(request.header("authorization"))
             if route.scope:
                 principal.require(route.scope)
+            for required_scope in route.required_scopes:
+                principal.require(required_scope)
             # Only now, after the scope has been satisfied, does a request touch
             # any table. A refused caller writes nothing at all.
             core.auth.touch(principal.key_id)
@@ -119,6 +123,8 @@ def dispatch(core: Core, request: Request) -> Response:
 
     headers = dict(response.headers)
     headers["X-Request-Id"] = request_id
+    if request.path == "/v1/auth/me" or request.path.startswith("/v1/evidence/confirmations/"):
+        headers["Cache-Control"] = "no-store"
     return Response(response.status, response.body, headers)
 
 

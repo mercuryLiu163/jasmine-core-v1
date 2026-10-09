@@ -296,9 +296,11 @@ describe('Conversation event filter', () => {
     })
     const select = await screen.findByLabelText('event_type')
     const options = within(select as HTMLElement).getAllByRole('option').map((o) => o.getAttribute('value'))
-    // 30 Core event types plus the "(全部)" placeholder.
-    expect(options).toHaveLength(31)
+    // The baseline enum plus two dedicated Web confirmation source types and placeholder.
+    expect(options).toHaveLength(33)
     for (const added of [
+      'human.confirmation_prepared',
+      'human.confirmation_submitted',
       'interpretation.bound',
       'interpretation.corrected',
       'interpretation.rejected',

@@ -1,3 +1,4 @@
+import type { PendingConfirmation } from '../api/webConfirmations'
 /**
  * In-memory session state (P6-A01).
  *
@@ -31,6 +32,9 @@ export const REQUIRED_READ_SCOPES = [
 ] as const
 
 interface SessionValue {
+  pendingConfirmations: PendingConfirmation[]
+  trackConfirmation: (pending: PendingConfirmation) => void
+  clearConfirmation: (id: string) => void
   token: string | null
   signedIn: boolean
   signIn: (token: string) => void
@@ -41,6 +45,9 @@ interface SessionValue {
 const SessionContext = createContext<SessionValue | null>(null)
 
 export function SessionProvider({ children }: { children: ReactNode }): JSX.Element {
+  const [pendingConfirmations, setPendingConfirmations] = useState<PendingConfirmation[]>([])
+  const trackConfirmation = useCallback((pending: PendingConfirmation) => setPendingConfirmations((rows) => [...rows.filter((row) => row.id !== pending.id), pending]), [])
+  const clearConfirmation = useCallback((id: string) => setPendingConfirmations((rows) => rows.filter((row) => row.id !== id)), [])
   const [token, setToken] = useState<string | null>(null)
   // A ref keeps `getToken` stable so the client is not rebuilt on every render,
   // which would restart every in-flight request.
@@ -64,8 +71,8 @@ export function SessionProvider({ children }: { children: ReactNode }): JSX.Elem
   }, [])
 
   const value = useMemo<SessionValue>(
-    () => ({ token, signedIn: token !== null, signIn, signOut, endpoints }),
-    [token, signIn, signOut, endpoints],
+    () => ({ token, signedIn: token !== null, signIn, signOut, endpoints, pendingConfirmations, trackConfirmation, clearConfirmation }),
+    [token, signIn, signOut, endpoints, pendingConfirmations, trackConfirmation, clearConfirmation],
   )
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>

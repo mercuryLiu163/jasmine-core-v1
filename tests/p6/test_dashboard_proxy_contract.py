@@ -59,15 +59,16 @@ ID_RE = r"[a-z]{3}_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}"
 def sample_path(pattern: re.Pattern[str]) -> str | None:
     """Turn a Core route regex into one concrete path it matches.
 
-    Core's patterns use exactly two constructs: ``([^/]+)`` captures and
-    ``(a|b|c)`` alternations, so picking the first alternative and a literal
-    sample segment yields a path that pattern matches.
+    Core uses generic ``([^/]+)`` captures, literal alternations and the item 6
+    strict evt capture. Recognize only those known forms and verify the final
+    sample against the original regex; an unknown form still fails closed.
     """
     source = pattern.pattern
     if not source.startswith("^/") or not source.endswith("$"):
         return None
     body = source[1:-1]
     body = body.replace("([^/]+)", SAMPLE)
+    body = body.replace(r"(evt_[0-9A-HJKMNP-TV-Z]{26})", "evt_01M4B6VGC29ESRDRQR62DX8AK8")
     # Pick the first alternative of every remaining group.
     while True:
         replaced = re.sub(r"\(([^()|]+)\|[^()]*\)", r"\1", body, count=1)
@@ -76,7 +77,17 @@ def sample_path(pattern: re.Pattern[str]) -> str | None:
         body = replaced
     if "(" in body or ")" in body or "[" in body:
         return None
-    return body
+    return body if pattern.fullmatch(body) else None
+
+
+class RouteSamplerContract(unittest.TestCase):
+    def test_strict_evt_capture_is_sampled_without_weakening_core(self) -> None:
+        pattern = re.compile(r"^/v1/evidence/confirmations/(evt_[0-9A-HJKMNP-TV-Z]{26})$")
+        sample = sample_path(pattern)
+        self.assertEqual(sample, "/v1/evidence/confirmations/evt_01M4B6VGC29ESRDRQR62DX8AK8")
+        self.assertIsNotNone(pattern.fullmatch(sample))
+        self.assertIsNone(pattern.fullmatch(sample.replace("evt_", "tsk_")))
+        self.assertIsNone(sample_path(re.compile(r"^/v1/unknown/([a-z]+)$")))
 
 
 class DashboardProxyContract(unittest.TestCase):

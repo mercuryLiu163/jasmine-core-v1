@@ -62,6 +62,7 @@ export function loadAllowlist(
     enableP4Reads?: boolean
     enableP4Writes?: boolean
     enableP7Reads?: boolean
+    enableWebConfirmations?: boolean
   },
 ): Allowlist
 export function resolveCoreOrigin(raw?: string): URL
@@ -81,3 +82,6 @@ export function createDashboardServer(options: {
   origin: URL
   allowlist?: Allowlist
 }): Server
+
+export const WEB_CONFIRMATIONS_ENV: string
+export function webConfirmationsEnabled(env?: Record<string, string | undefined>): boolean

@@ -78,5 +78,13 @@
     "^/v1/validation/runs/run-[0-9]{8}T[0-9]{6}Z/artifacts/art_[a-z0-9][a-z0-9_.-]{0,63}$",
     "^/v1/validation/runs/run-[0-9]{8}T[0-9]{6}Z/artifacts/art_[a-z0-9][a-z0-9_.-]{0,63}/content$"
   ],
-  "p7_pending_note": "P6-03c Validation reads. These five paths are real on the P7-01 branch (contract web/contracts/p7-validation-read.v1.json, pinned to its implementation commit) and are NOT served by this baseline's Core, so they are deliberately absent from `paths`: forwarding them would send the browser to a Core that cannot answer. They become live only when the operator starts a proxy for a Core that carries the P7-01 read slice with P6_ENABLE_P7_READS=1, and even then Core enforces validation:read itself (plus validation:unattributed for a run with no project attribution) and refuses anything the caller may not read with the same 404 whether it is absent or ungranted. There are no P7 writes: the slice is read-only, so nothing is added to write_paths. These two id segments are a deliberate exception to the `[a-z]{3}_` + 26 Crockford characters rule above: the run id is the recorder's (`run-YYYYmmddTHHMMSSZ`) and the artifact id is bundle-scoped (`art_[a-z0-9][a-z0-9_.-]{0,63}`), neither of which is a Core public id. The `([^/]+)` captures in the contract's route table are the Core-side patterns; the allowlist names the id shapes so a loose segment cannot reach a route."
+  "p7_pending_note": "P6-03c Validation reads. These five paths are real on the P7-01 branch (contract web/contracts/p7-validation-read.v1.json, pinned to its implementation commit) and are NOT served by this baseline's Core, so they are deliberately absent from `paths`: forwarding them would send the browser to a Core that cannot answer. They become live only when the operator starts a proxy for a Core that carries the P7-01 read slice with P6_ENABLE_P7_READS=1, and even then Core enforces validation:read itself (plus validation:unattributed for a run with no project attribution) and refuses anything the caller may not read with the same 404 whether it is absent or ungranted. There are no P7 writes: the slice is read-only, so nothing is added to write_paths. These two id segments are a deliberate exception to the `[a-z]{3}_` + 26 Crockford characters rule above: the run id is the recorder's (`run-YYYYmmddTHHMMSSZ`) and the artifact id is bundle-scoped (`art_[a-z0-9][a-z0-9_.-]{0,63}`), neither of which is a Core public id. The `([^/]+)` captures in the contract's route table are the Core-side patterns; the allowlist names the id shapes so a loose segment cannot reach a route.",
+  "web_confirmation_read_paths": [
+    "^/v1/auth/me$",
+    "^/v1/evidence/confirmations/evt_[0-9ABCDEFGHJKMNPQRSTVWXYZ]{26}$"
+  ],
+  "web_confirmation_write_paths": [
+    "^/v1/evidence/confirmations/prepare$",
+    "^/v1/evidence/confirmations/submit$"
+  ]
 }

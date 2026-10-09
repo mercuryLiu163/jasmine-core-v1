@@ -9,6 +9,7 @@ server be substituted later without touching the contract.
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
@@ -26,6 +27,7 @@ class Request:
     headers: dict[str, str] = field(default_factory=dict)
     body: bytes = b""
     request_id: str = ""
+    started_monotonic: float = field(default_factory=time.monotonic)
 
     def header(self, name: str) -> str | None:
         return self.headers.get(name.lower())

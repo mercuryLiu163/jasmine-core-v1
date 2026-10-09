@@ -191,12 +191,13 @@ export function readableFreshnessFailures(
     if (row.kind === 'USER_CONFIRMATION') {
       if (
         !(
-          source.event_type === 'user.prompt' &&
+          (source.event_type === 'user.prompt' ||
+            (source.event_type === 'human.confirmation_submitted' && source.source_system === 'core-web-confirmation-v1')) &&
           source.actor_kind === 'human' &&
           source.actor_id === row.actor_id
         )
       ) {
-        failures.push({ condition: 'F9b', detail: 'source 不是该 actor 的 human user.prompt' })
+        failures.push({ condition: 'F9b', detail: 'source 不是该 actor 的 human prompt 或专用 Web source（完整链仅 Core 重验）' })
       }
     } else if (
       !(

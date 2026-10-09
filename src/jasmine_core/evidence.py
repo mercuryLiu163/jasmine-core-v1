@@ -877,6 +877,10 @@ class CurrentEvidenceValidator:
         if event is None or event["task_id"] != row["task_id"] or event["project_id"] != project_id:
             return False
         if row["kind"] == "USER_CONFIRMATION":
+            if event["event_type"] == "human.confirmation_submitted" or event["source_system"] == "core-web-confirmation-v1":
+                from .web_confirmations import WebConfirmationStore
+                from .migrations import current_version
+                return WebConfirmationStore(self.conn, schema_version=current_version(self.conn)).source_valid(row, event, project_id)
             return (event["event_type"] == "user.prompt" and event["actor_kind"] == "human" and
                     event["actor_id"] == row["actor_id"])
         if (event["event_type"] != "tool.result" or event["actor_kind"] != "system" or

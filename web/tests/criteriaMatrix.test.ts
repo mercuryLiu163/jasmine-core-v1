@@ -358,3 +358,17 @@ describe('readable helpers copy Core exactly', () => {
     ).toBe(false)
   })
 })
+
+describe('item 6 Web source display remains a candidate, never a Core verdict', () => {
+  it('recognizes the dedicated human Web source while retaining unreadable provenance/fingerprint residuals', () => {
+    const source = rawEvent({event_type:'human.confirmation_submitted',source_system:'core-web-confirmation-v1',actor_kind:'human'})
+    const ctx = context({eventsById:new Map([['evt_source',source],['evt_change',rawEvent({event_id:'evt_change'})]])})
+    const confirmation = row({kind:'USER_CONFIRMATION',status:'INFO'})
+    const result = evaluateRequirement({key:'confirm',kind:'USER_CONFIRMATION',required_result:'INFO'},[confirmation],ctx)
+    expect(result.state).toBe('candidate')
+    expect(result.residualUnknown).toEqual(UNREADABLE_FRESHNESS)
+    expect(evaluateRequirement({key:'confirm',kind:'USER_CONFIRMATION',required_result:'PASS'},[confirmation],ctx).state).toBe('missing')
+    const forged = {...source,source_system:'other'}
+    expect(readableFreshnessFailures(confirmation,{...ctx,eventsById:new Map([['evt_source',forged],['evt_change',rawEvent({event_id:'evt_change'})]])}).some(failure => failure.condition==='F9b')).toBe(true)
+  })
+})

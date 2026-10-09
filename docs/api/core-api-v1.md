@@ -542,3 +542,16 @@ the retained content at a host the operator did not name.
 
 New errors: `503 memory_deployment_not_ready`, plus the `404 memory_job_not_found`
 and `404 memory_trace_not_found` the `NotFound` shape already produces.
+
+
+## Web structured human confirmation (ADR 0015)
+
+Schema 12 adds [Web confirmation v1](../api/web-confirmations-v1.md): authenticated
+`GET /v1/auth/me`, two-phase `POST /v1/evidence/confirmations/prepare` and `submit`,
+and same-key owner `GET /v1/evidence/confirmations/{preparation_id}`. The dedicated
+Core source is `human.confirmation_submitted` / `core-web-confirmation-v1`; it is
+validated against its immutable preparation, original note bytes, command, Evidence
+and receipt. The resulting Evidence is `USER_CONFIRMATION/INFO` and does not
+change State. The legacy `/v1/evidence/confirm` human prompt contract is unchanged.
+See [ADR 0015](../adr/0015-web-human-confirmation.md) for the trust boundary and
+transaction/scanning rules.

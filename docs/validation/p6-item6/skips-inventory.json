@@ -1,0 +1,51 @@
+{
+  "selected_tests": 13,
+  "skipped": [
+    {
+      "id": "p6.test_freeze_bundle.TheFrozenP6BundlesStillMatch.test_the_current_p6_03b1_bundle_matches_its_manifest",
+      "reason": "the evidence index is not present in this checkout"
+    },
+    {
+      "id": "test_context.Context.test_current_configuration_change_rejects_fresh_not_historical",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    },
+    {
+      "id": "test_context.Context.test_event_first_failure_rolls_back_and_exactkey_conflict",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    },
+    {
+      "id": "test_context.Context.test_exact_pack_original_replay_and_current_admission",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    },
+    {
+      "id": "test_context.Context.test_full_hard_and_normal_rules_mandatory_overflow",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    },
+    {
+      "id": "test_context.Emission.test_component_exact_emission_no_old_snapshot_and_stale_block",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    },
+    {
+      "id": "test_context.Tokens.test_evidence_table_no_missing_to_null_or_type_coercion",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    },
+    {
+      "id": "test_context.Tokens.test_lossless_evidence_table_all_values_order_and_duplicates",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    },
+    {
+      "id": "test_context.Tokens.test_missing_offline_asset_never_downloads",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    },
+    {
+      "id": "test_context.Tokens.test_real_unicode_special_strings_and_identity",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    },
+    {
+      "id": "test_memory_gate_runner.G01IsAControlledExperiment.test_two_real_p3_packs_for_different_tasks_differ_only_in_their_task_ids",
+      "reason": "pinned tokenizer or encoding asset is unavailable"
+    }
+  ],
+  "errors": 0,
+  "failures": 0
+}
