@@ -1,0 +1,84 @@
+{
+  "status": "IMPLEMENTED_AUTHOR_GATE_PASS_PENDING_INDEPENDENT_CONCLUSIONS",
+  "created_at_utc": "2026-10-09T16:44:56.724072+00:00",
+  "spec_commit": "5079948808d4c8aa9cb5763c747def422c12c055",
+  "candidate_commit": "6a90c92c07e4c2fe7e85dcbdba4921759b78f32b",
+  "candidate_tree": "090e2211716ec5386ef08a5ec0572033eafbc963",
+  "source_archive_sha256": "1f00f2bb9edf0f1ed21a82980d614782a04e44e332ef3c4686ddd9e920092d89",
+  "matrix_sha256": "5e3fcdd9808437dbad7908b52255c52a73b94ee4bf4496b6da9f29b83c954514",
+  "counts": {
+    "scenario_definitions": 26,
+    "mandatory_variants": 43,
+    "predicate_definitions": 101,
+    "scenario_predicate_evaluations": 155,
+    "global_invariant_evaluations": 301
+  },
+  "author_run": {
+    "directory": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-run-03",
+    "status": "PASS",
+    "manifest_files": 536,
+    "manifest_sha256": "2138d0d57d9c0d739cfc0ee2e4ac8a8e0a10ed1d19fe1a18835cec763f242ea2",
+    "actual_browser_dom_and_screenshot_pairs": 109,
+    "cleanup_owned_groups": 27,
+    "cleanup_all_groups_gone": true,
+    "private_runtime_removed": true,
+    "profile_removed": true
+  },
+  "supplementary_author_receipt_audit": {
+    "directory": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-receipt-audit-03",
+    "status": "PASS",
+    "manifest_sha256": "537f75e8f3b4dffe532a7571b982220bf600b4f3293614c957f1ad975cd96484",
+    "unique_operations": 53,
+    "actual_sqlite_to_logical_comparisons": 153
+  },
+  "checks": {
+    "frontend_tests": {
+      "passed": 520,
+      "files": 34,
+      "exit_code": 0
+    },
+    "python_gate_tests": {
+      "passed": 11,
+      "exit_code": 0
+    },
+    "core_continuity_tests": {
+      "passed": 8,
+      "exit_code": 0
+    },
+    "clean_archive_build": "PASS",
+    "full_bundle_adversaries_rejected": 8,
+    "frozen_spec_files_unchanged": 4
+  },
+  "cp25_browser_boundary": {
+    "target_page_forbidden_variants": 11,
+    "signin_forbidden_objects_read_variants": 2,
+    "direct_core_target_forbidden_variants": 13,
+    "target_browser_read_claim_for_signin_refusals": false
+  },
+  "failed_runs_preserved": [
+    "p6-checkpoint-author-run-01",
+    "p6-checkpoint-author-run-02"
+  ],
+  "diagnostic_not_matrix_acceptance": "p6-checkpoint-worker-import-diagnostic-01",
+  "independent_code_review": "NOT_RUN",
+  "independent_isolated_validation": "NOT_RUN",
+  "scope_acceptance_signed": false,
+  "p6_v1_complete": false,
+  "daily_use_released": false,
+  "existing_deployment_changed": false,
+  "existing_service_restarted": false,
+  "main_or_primary_checkout_changed": false,
+  "item6_flag": 0,
+  "operational_config_observation": {
+    "observed_at_utc": "2026-10-09T16:44:56.723073+00:00",
+    "runtime_config_sha256": "ffac90bfe948e5aa9262130b613094415d7fe95e2f5b150150737dc9735f1905",
+    "deployment_commit": "79448dff91dd7a702f91157766e0ff8ad9fb7352",
+    "web_confirmation_flag": 0,
+    "configuration_read_only": true,
+    "existing_deployment_entry_invoked": false,
+    "existing_service_restarted": false,
+    "source": "actual existing runtime.json, whitelisted metadata only; no credential read"
+  },
+  "report_sha256": "7359992e1a668f30508486bb1264511ea460bc9127fa92ea4ee81b863c14e67a",
+  "coverage_limit": "Frozen 26 scenarios / 43 variants only. No incompatible algorithm/coverage/extra_paths or arbitrary malformed-structure coverage."
+}
