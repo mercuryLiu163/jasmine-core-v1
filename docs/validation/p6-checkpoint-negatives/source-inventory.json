@@ -1,0 +1,151 @@
+{
+  "baseline_commit": "f8de226ad51e9b7608b4b87dc9bcd60a86db407f",
+  "baseline_tree": "7897d56992d443c5172d44984350d079aa430a28",
+  "baseline_archive": {
+    "format": "git archive --format=tar",
+    "bytes": 7239680,
+    "sha256": "7638388c44e3255ec485a833eb57f676c4d266918e5807ecc7c553fc488795db"
+  },
+  "sources": [
+    {
+      "path": "docs/adr/0011-checkpoint-resume-snapshot.md",
+      "bytes": 5791,
+      "sha256": "4b615bdad77287bf29428929726dbc14f5436b402318b70fffeb810ed63e1d13"
+    },
+    {
+      "path": "src/jasmine_core/__init__.py",
+      "bytes": 879,
+      "sha256": "f7430de0e7323329af05df26654ea0aa25cb6833a0ec4e354bf82641dd3fb9ce"
+    },
+    {
+      "path": "src/jasmine_core/continuity.py",
+      "bytes": 14574,
+      "sha256": "2ae6fa2cb2685a6c968f2516b4642bdf48dd588d66692725a08ffd07976ce8a3"
+    },
+    {
+      "path": "src/jasmine_core/continuity_scan.py",
+      "bytes": 4600,
+      "sha256": "feeeb7595b332ec7f6ba96640b9a53a47a49693573234773b15b2666070e2ef5"
+    },
+    {
+      "path": "src/jasmine_core/task_snapshot.py",
+      "bytes": 5043,
+      "sha256": "ac1729b24469acde403739fcd93e34f84895389061c7b8b3fc8d09c0843abd88"
+    },
+    {
+      "path": "src/jasmine_core/fingerprint.py",
+      "bytes": 10660,
+      "sha256": "28dd8f545d248b53acc06cea906e44f8cf36a3fd5b4faf3a41264bf73ecd8e2a"
+    },
+    {
+      "path": "src/jasmine_core/errors.py",
+      "bytes": 3848,
+      "sha256": "f13b555744e3a4a96694f3432f8cb843e3c9bf4deeddcd5bcdde1f39f14bcfcc"
+    },
+    {
+      "path": "src/jasmine_core/api/handlers.py",
+      "bytes": 41429,
+      "sha256": "88930221ce4773f2426bd3242b3cb29c7acc3238d001992125475bb593c42068"
+    },
+    {
+      "path": "src/jasmine_core/authority.py",
+      "bytes": 27772,
+      "sha256": "a2a4794e69b36fafb0317286a53c56528a9b577fc68912917da8f991737f6b7f"
+    },
+    {
+      "path": "src/jasmine_core/evidence.py",
+      "bytes": 68351,
+      "sha256": "54e27cb6d0cb4ab0a139b32b61421e4777000ba4ed1b5db69221b53d81cebb2b"
+    },
+    {
+      "path": "src/jasmine_core/objects.py",
+      "bytes": 12584,
+      "sha256": "2b254ed686ad3d7b73931e57c6985e71ffd14e23b6761c529773219601bb40c4"
+    },
+    {
+      "path": "src/jasmine_core/migrations/m0009_continuity.py",
+      "bytes": 4410,
+      "sha256": "113b5398445c78db26523c702a45d98d5cffb462a4eca33a2ab590e7baf18265"
+    },
+    {
+      "path": "web/src/views/ContinuityViews.tsx",
+      "bytes": 30948,
+      "sha256": "d3f97a7350c4df43dc875e062f68920f22f1f66f8cb9ff5b0be895b7ab6bedb0"
+    },
+    {
+      "path": "web/server/core-paths.json",
+      "bytes": 9241,
+      "sha256": "5404925a2e1ebbcbfd5faf6fafcc9d2d62378b0faa6b26d47e8850705ff5b68c"
+    },
+    {
+      "path": "web/server/serve.mjs",
+      "bytes": 16087,
+      "sha256": "f10637c49cbe6df4f2865426fa6f3bc69c712a7338eaf361706bf77c9b250832"
+    },
+    {
+      "path": "web/contracts/p3-continuity-read.v1.json",
+      "bytes": 5852,
+      "sha256": "d710417525f0b8bfc7f383361ff740ad97eef1813167dfba526d7e6edf4c2424"
+    },
+    {
+      "path": "tests/test_continuity.py",
+      "bytes": 9638,
+      "sha256": "5e93a4dc3d6678f50daf70b4c555d11bfa3f5c30649d376b6e85c3a64c0f7a5e"
+    },
+    {
+      "path": "web/tests/p3Views.test.tsx",
+      "bytes": 25162,
+      "sha256": "ca4c7df410e3f56946fdfc8c2b53f9147323290ffa3cadbbd0f786a9a6d422b1"
+    },
+    {
+      "path": "scripts/p6/p3_realcore_env.py",
+      "bytes": 26362,
+      "sha256": "df2ea57ec56851d781fa24dbed1eb7bba1c56d301de3189645d8f0b8170b9dd9"
+    },
+    {
+      "path": "scripts/p6/run_p3_realcore.py",
+      "bytes": 25999,
+      "sha256": "8f1830a3db1da1873e0aed0c9bdd3e41ecd92bc7e1ccb40dcfe1df3c9a1dc617"
+    },
+    {
+      "path": "scripts/p6/browser_trace.mjs",
+      "bytes": 168212,
+      "sha256": "1e38e15d1d5603b86df7dcb06479be710c5f7e1e9bb1c4d8453f51ba1f3618f3"
+    },
+    {
+      "path": "web/P6-REMAINING-TASKS.md",
+      "bytes": 31072,
+      "sha256": "f2a7b36048e77cf7d0503bd2cdb50f168aef7bd9522b05367c2045ec020245cd"
+    }
+  ],
+  "historical_bundles": [
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T075256Z-p6-03a-realcore",
+      "manifest_sha256": "d430194a94ae1352aef24824d0691767ae76cb5db194570f24e450c83ef3933c",
+      "commit": "f323c779bc91893b5908218d8c5c148619159180",
+      "kind": "real-core acceptance (isolated real P3 Core)",
+      "bound_file_count": 16,
+      "manifest_verification": "PASS_READ_ONLY",
+      "claimed_result_from_original_readme": "26/26",
+      "scope": "historical only; not evidence of current negative-case coverage",
+      "checkpoint_revisions": [
+        1,
+        1
+      ],
+      "workspace_scan": "real (isolated git workspace)",
+      "comparison_coverage_note": "equal revisions; second checkpoint for switch; no stale/ahead/partial proof"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p6-03-integration/validation-runs/p6/20261008T075317Z-p6-03a-gate-regression",
+      "manifest_sha256": "c817e0cbf9dd6c09c80c26132aec4bc41f6d9cf8670a6fa4ddea0c812b74f4bd",
+      "commit": "f323c779bc91893b5908218d8c5c148619159180",
+      "kind": "browser click-through gate (P6-03a continuity reads, SIMULATED fixture)",
+      "bound_file_count": 15,
+      "manifest_verification": "PASS_READ_ONLY",
+      "claimed_result_from_original_readme": "15/15",
+      "scope": "historical only; not evidence of current negative-case coverage"
+    }
+  ],
+  "checked_at_utc": "2026-10-09T15:24:14.610663+00:00",
+  "method": "Read-only git show and byte hashing; no services, fixtures, product tests or acceptance execution."
+}

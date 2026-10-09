@@ -280,3 +280,22 @@ battery was deliberately **not** re-run for this: a tool that only reads frozen 
 that only builds temp trees cannot change a Gate result, and re-running one to make a new tip look
 "verified" would be the wrong reason to run a Gate. The Python suite's count does move (the 13 new
 tests), so no count recorded at the acceptance commit is reused for a post-acceptance tip.
+
+## 2026-10-09 — 旧／异常 Checkpoint 切片：仅冻结规格
+
+用户选择补齐旧／异常 Checkpoint 显示与比较负例，并要求先冻结验收规格。
+基线固定为 `f8de226ad51e9b7608b4b87dc9bcd60a86db407f`（schema 12），
+隔离分支 `p6-checkpoint-negatives`。当前状态为 **FROZEN_SPEC_ONLY / PENDING_REVIEW**，
+实现和正式验收均 **NOT_RUN**。
+
+规格：[ACCEPTANCE-SPEC-v1.md](../docs/validation/p6-checkpoint-negatives/ACCEPTANCE-SPEC-v1.md)；
+机器矩阵：[acceptance-matrix.v1.json](../docs/validation/p6-checkpoint-negatives/acceptance-matrix.v1.json)；
+来源清单与冻结收据在同目录。固定26场景、43必需变体、101判据定义／155次求值，
+另逐变体核对 G1–G7。正常历史与真实 partial 扫描、标记私有损坏库的完整性拒绝、浏览器入口回归分开归因。
+旧 Resume GET／重放保留创建时收据；仅新幂等键重新比较。`STATE_EQUAL + UNKNOWN` 仍须对账，不能显示全部匹配。
+
+旧 real-P3 26/26 与模拟15/15的两份 manifest共31个绑定文件已只读核对一致，
+它们仍只支持原来的历史范围，不是新43变体证据。当前 Checkpoint Compare 保持 **P**，
+其余 T05 缺口、整个 P6/V1 未完成、原11项跳过及日常使用未放行均保留。
+本轮未修改产品代码、main、既有服务、实际部署、item 6 开关或旧冻结证据。
+下一步先审查确认此规格；尚未启动本切片实现、独立评审或隔离复验。

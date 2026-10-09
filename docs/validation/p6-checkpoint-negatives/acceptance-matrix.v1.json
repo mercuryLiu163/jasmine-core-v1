@@ -1,0 +1,1224 @@
+{
+  "spec_id": "P6-CHECKPOINT-NEGATIVES-v1",
+  "status": "FROZEN_SPEC_ONLY",
+  "baseline_commit": "f8de226ad51e9b7608b4b87dc9bcd60a86db407f",
+  "baseline_tree": "7897d56992d443c5172d44984350d079aa430a28",
+  "schema_version": 12,
+  "specification": "ACCEPTANCE-SPEC-v1.md",
+  "counts": {
+    "scenario_count": 26,
+    "mandatory_variant_count": 43,
+    "predicate_definition_count": 101,
+    "predicate_evaluation_count": 155,
+    "global_invariant_groups_per_variant": 7
+  },
+  "threshold": {
+    "required_successful_variants": 43,
+    "allowed_failures": 0,
+    "allowed_blocked": 0,
+    "allowed_missing": 0,
+    "simulation_substitution_allowed": false
+  },
+  "global_invariants": {
+    "G1": "business Truth/state/revision/history unchanged outside labelled precondition commands",
+    "G2": "exactly one normal command/receipt/key append per fresh create",
+    "G3": "zero command/receipt/key append on rejection/replay; no replay scan",
+    "G4": "UI GET only; operator proxy POST probes separately labelled",
+    "G5": "same-object complete source/command/Checkpoint/Resume chain; historical non-authoritative notes",
+    "G6": "authorized same-run audit or proxy/local rejection with zero corresponding Core requests",
+    "G7": "response/database/expanded DOM exact dynamic agreement; no stale-object content"
+  },
+  "required_evidence": [
+    "spec/candidate/archive binding",
+    "clean build and schema receipts",
+    "complete Truth and append-only table before/after census",
+    "masked HTTP/audit/source mappings",
+    "actual scanner and no-replay-scan evidence",
+    "browser click/request/expanded DOM/screenshot",
+    "fault fork inventory when applicable",
+    "owned process/profile cleanup",
+    "per-variant/per-predicate result and full SHA manifest"
+  ],
+  "cases": [
+    {
+      "id": "CP01",
+      "title": "完整相同控制",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "STATE_EQUAL",
+        "workspace": "SAME",
+        "reconciliation_required": false
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP01.P01",
+          "assertion": "真实 API 创建完整 Checkpoint，workspace 不变，再新键创建 Resume"
+        },
+        {
+          "id": "CP01.P02",
+          "assertion": "完整 Truth digest 一致，两端 complete=true，算法/coverage/extra_paths 可比"
+        },
+        {
+          "id": "CP01.P03",
+          "assertion": "warnings=[]；对象与 workspace diff 全空；evidence_changed=false"
+        },
+        {
+          "id": "CP01.P04",
+          "assertion": "展开的浏览器 comparison 与本条数据库/HTTP 收据相等；建议未执行"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP02",
+      "title": "旧 Task revision 与历史显示",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "STALE",
+        "workspace": "SAME",
+        "reconciliation_required": true
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP02.P01",
+          "assertion": "合法 state/criteria 前置命令推进 Task，旧 Checkpoint/workspace 不变"
+        },
+        {
+          "id": "CP02.P02",
+          "assertion": "old revision < current revision；changed 包含精确 Task key"
+        },
+        {
+          "id": "CP02.P03",
+          "assertion": "旧页显示旧 revision/note/source；Resume projection 为比较时当前 revision"
+        },
+        {
+          "id": "CP02.P04",
+          "assertion": "原 Checkpoint 未变化；RECONCILE_CURRENT_TRUTH 未执行"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP03",
+      "title": "相同 Task revision、Rule 上下文改变",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "CONTEXT_CHANGED",
+        "workspace": "SAME",
+        "reconciliation_required": true
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP03.P01",
+          "assertion": "无 VERIFIED Step 的 Task：适用 PROPOSED Rule→Checkpoint→合法 approve ACTIVE"
+        },
+        {
+          "id": "CP03.P02",
+          "assertion": "Task revision 未变；Rule revision/status 原始命令/history/source 可核验"
+        },
+        {
+          "id": "CP03.P03",
+          "assertion": "changed 包含精确 Rule key，旧 PROPOSED 与当前 ACTIVE 分别读回"
+        },
+        {
+          "id": "CP03.P04",
+          "assertion": "浏览器显示实际 diff/reconcile；历史 note 非权威，不显示全部匹配"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP04",
+      "title": "相同 Task revision、Evidence 改变",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "CONTEXT_CHANGED",
+        "workspace": "SAME",
+        "reconciliation_required": true
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP04.P01",
+          "assertion": "Checkpoint 后 trusted-system /v1/tool-results 添加真实私有测试运行 Evidence，workspace 不变"
+        },
+        {
+          "id": "CP04.P02",
+          "assertion": "真实命令/结果/source→Evidence→change Event 可核验；Task revision 未变"
+        },
+        {
+          "id": "CP04.P03",
+          "assertion": "新旧 evidence_digest 不同；evidence_changed=true；比较未追加 Evidence"
+        },
+        {
+          "id": "CP04.P04",
+          "assertion": "浏览器 Evidence 标记和 projection 对应本条收据；建议未执行"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP05",
+      "title": "完整工作区不一致",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "STATE_EQUAL",
+        "workspace": "MISMATCH",
+        "reconciliation_required": true
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP05.P01",
+          "assertion": "只修改私有 workspace 已扫描普通文件，业务 Truth 不变"
+        },
+        {
+          "id": "CP05.P02",
+          "assertion": "两端 complete=true，实际文件 hash/manifest 不同"
+        },
+        {
+          "id": "CP05.P03",
+          "assertion": "warnings=[CHECKPOINT_WORKSPACE_MISMATCH]；workspace_paths.changed 精确匹配实际路径"
+        },
+        {
+          "id": "CP05.P04",
+          "assertion": "浏览器展示两轴和 reconcile；没有无条件匹配"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP06",
+      "title": "旧端 partial、当前 complete",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "STATE_EQUAL",
+        "workspace": "UNKNOWN",
+        "reconciliation_required": true
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP06.P01",
+          "assertion": "固定 extra path declared-input.txt：Checkpoint 时缺失，Resume 前创建"
+        },
+        {
+          "id": "CP06.P02",
+          "assertion": "原生 scanner/子进程可核验；旧 complete=false/partial_reasons 含 unreadable file，当前 complete=true"
+        },
+        {
+          "id": "CP06.P03",
+          "assertion": "Truth相等；warnings=[CHECKPOINT_WORKSPACE_UNKNOWN]，coverage/algorithm/root/extra_paths 固定"
+        },
+        {
+          "id": "CP06.P04",
+          "assertion": "浏览器显示实际 UNKNOWN、reconcile 和对账建议；不得报告 SAME"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP07",
+      "title": "旧端 complete、当前 partial",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "STATE_EQUAL",
+        "workspace": "UNKNOWN",
+        "reconciliation_required": true
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP07.P01",
+          "assertion": "固定 extra path declared-input.txt：Checkpoint 时存在，Resume 前删除"
+        },
+        {
+          "id": "CP07.P02",
+          "assertion": "原生 scanner/子进程可核验；旧 complete=true，当前 complete=false/partial_reasons 含 unreadable file"
+        },
+        {
+          "id": "CP07.P03",
+          "assertion": "Truth相等；warnings=[CHECKPOINT_WORKSPACE_UNKNOWN]，coverage/algorithm/root/extra_paths 固定"
+        },
+        {
+          "id": "CP07.P04",
+          "assertion": "浏览器显示实际 UNKNOWN、reconcile 和对账建议；不得报告 SAME"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP08",
+      "title": "两端相同 partial",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "STATE_EQUAL",
+        "workspace": "UNKNOWN",
+        "reconciliation_required": true
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP08.P01",
+          "assertion": "固定 extra path declared-input.txt：两次均缺失，其他文件不变"
+        },
+        {
+          "id": "CP08.P02",
+          "assertion": "原生 scanner/子进程可核验；两端 complete=false/partial_reasons 含 unreadable file"
+        },
+        {
+          "id": "CP08.P03",
+          "assertion": "selected_hashes/manifest 相同但 warnings=[CHECKPOINT_WORKSPACE_UNKNOWN]；不能据相同 hash 判 SAME"
+        },
+        {
+          "id": "CP08.P04",
+          "assertion": "浏览器显示实际 UNKNOWN、reconcile 和对账建议"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP09",
+      "title": "没有 Checkpoint",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "ABSENT",
+        "workspace": "UNKNOWN",
+        "reconciliation_required": true
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP09.P01",
+          "assertion": "合法无 Checkpoint Task 新键 build Resume，并读 latest"
+        },
+        {
+          "id": "CP09.P02",
+          "assertion": "latest checkpoint=null；浏览器为空态，不是 error/dependency pending"
+        },
+        {
+          "id": "CP09.P03",
+          "assertion": "Resume checkpoint_id=null、diff={}；不存在的历史 note/source 不得捏造"
+        },
+        {
+          "id": "CP09.P04",
+          "assertion": "来源真实；对账建议未执行"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP10",
+      "title": "历史 Resume 读回、幂等与新比较",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {},
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP10.P01",
+          "assertion": "先建 STATE_EQUAL/SAME Resume；合法推进 Task；GET原收据、同原请求重放，再新键 build"
+        },
+        {
+          "id": "CP10.P02",
+          "assertion": "GET全字段与原result_json解析后相等，原created_at/sample_window/projection/comparison不变"
+        },
+        {
+          "id": "CP10.P03",
+          "assertion": "同请求200/replayed=true/same ID，零新扫描/command/receipt/key；新键201/replayed=false/new ID/command/window、STALE/SAME/true"
+        },
+        {
+          "id": "CP10.P04",
+          "assertion": "浏览器分别显示旧/新原始值；重新读取没有重新比较"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP11",
+      "title": "latest command seq、session 与 by-ID",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {},
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP11.P01",
+          "assertion": "两Task、两合法Session、多Checkpoint；source Event occurred_at顺序与创建顺序不同"
+        },
+        {
+          "id": "CP11.P02",
+          "assertion": "latest精确取本Task command Event seq最大者，不按source时间；合法session过滤结果正确，合法空过滤为null"
+        },
+        {
+          "id": "CP11.P03",
+          "assertion": "显式旧checkpoint_id返回原历史；无关task/session草稿不影响by-ID"
+        },
+        {
+          "id": "CP11.P04",
+          "assertion": "浏览器ID/Task/Session/note/source与选择记录一致，无跨对象内容"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP12",
+      "title": "迟到旧响应与对象切换",
+      "evidence_mode": "REAL_CORE_BROWSER_ACTUAL_SCAN",
+      "expected": {},
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP12.P01",
+          "assertion": "实际浏览器分别Checkpoint A→B、Resume A→B；持有旧GET、放行新GET、再释放旧GET"
+        },
+        {
+          "id": "CP12.P02",
+          "assertion": "干预仅延迟真实响应不改body；请求/取消/释放时刻与ID有原始trace"
+        },
+        {
+          "id": "CP12.P03",
+          "assertion": "最终DOM/draft/路由是B，note/source/digest/comparison不混入A；loading/error无错对象成功内容"
+        },
+        {
+          "id": "CP12.P04",
+          "assertion": "两种切换都有DOM/screenshot/readback，无console crash/意外Core写请求"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP13",
+      "title": "Task revision 超前",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "expected": {
+        "http_status": 409,
+        "error_code": "checkpoint_integrity_error",
+        "new_resume_count": 0
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP13.P01",
+          "assertion": "仅提高旧Task revision、projection.task.revision及objects条目；重算两projection digest；确保命中Task-ahead"
+        },
+        {
+          "id": "CP13.P02",
+          "assertion": "合法API原件及离线故障分叉有source/hash/schema/trigger/注入diff；明确标记，不能声称合法API产生故障"
+        },
+        {
+          "id": "CP13.P03",
+          "assertion": "新键实际Core HTTP409 checkpoint_integrity_error，无无关早期guard遮蔽；零command/receipt/key追加，业务Truth不变，audit绑定请求"
+        },
+        {
+          "id": "CP13.P04",
+          "assertion": "实际浏览器GET历史原文不崩溃、不宣称匹配/恢复/新Resume；GET200不代表比较有效"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP14",
+      "title": "共有 Step revision 超前",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "expected": {
+        "http_status": 409,
+        "error_code": "checkpoint_integrity_error",
+        "new_resume_count": 0
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP14.P01",
+          "assertion": "仅提高旧共有Step revision及objects条目；Task/Rule不超前；重算两digest；确保命中object-ahead"
+        },
+        {
+          "id": "CP14.P02",
+          "assertion": "合法API原件及离线故障分叉有source/hash/schema/trigger/注入diff；明确标记，不能声称合法API产生故障"
+        },
+        {
+          "id": "CP14.P03",
+          "assertion": "新键实际Core HTTP409 checkpoint_integrity_error，无无关早期guard遮蔽；零command/receipt/key追加，业务Truth不变，audit绑定请求"
+        },
+        {
+          "id": "CP14.P04",
+          "assertion": "实际浏览器GET历史原文不崩溃、不宣称匹配/恢复/新Resume；GET200不代表比较有效"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP15",
+      "title": "共有 Rule version 超前",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "expected": {
+        "http_status": 409,
+        "error_code": "checkpoint_integrity_error",
+        "new_resume_count": 0
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP15.P01",
+          "assertion": "仅提高旧共有Rule.version；object revision不超前；重算两digest；确保命中Rule-ahead"
+        },
+        {
+          "id": "CP15.P02",
+          "assertion": "合法API原件及离线故障分叉有source/hash/schema/trigger/注入diff；明确标记，不能声称合法API产生故障"
+        },
+        {
+          "id": "CP15.P03",
+          "assertion": "新键实际Core HTTP409 checkpoint_integrity_error，无无关早期guard遮蔽；零command/receipt/key追加，业务Truth不变，audit绑定请求"
+        },
+        {
+          "id": "CP15.P04",
+          "assertion": "实际浏览器GET历史原文不崩溃、不宣称匹配/恢复/新Resume；GET200不代表比较有效"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP16",
+      "title": "projection_digest 损坏",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "expected": {
+        "http_status": 409,
+        "error_code": "checkpoint_integrity_error",
+        "new_resume_count": 0
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP16.P01",
+          "assertion": "只改变projection_digest为另一个合法64位hex，其他字段不变"
+        },
+        {
+          "id": "CP16.P02",
+          "assertion": "合法API原件及离线故障分叉有source/hash/schema/trigger/注入diff；明确标记，不能声称合法API产生故障"
+        },
+        {
+          "id": "CP16.P03",
+          "assertion": "新键实际Core HTTP409 checkpoint_integrity_error，无无关早期guard遮蔽；零command/receipt/key追加，业务Truth不变，audit绑定请求"
+        },
+        {
+          "id": "CP16.P04",
+          "assertion": "实际浏览器GET历史原文不崩溃、不宣称匹配/恢复/新Resume；GET200不代表比较有效"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP17",
+      "title": "full_context_digest 损坏",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "expected": {
+        "http_status": 409,
+        "error_code": "checkpoint_integrity_error",
+        "new_resume_count": 0
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP17.P01",
+          "assertion": "只改变full_context_digest为另一个合法64位hex，其他字段不变"
+        },
+        {
+          "id": "CP17.P02",
+          "assertion": "合法API原件及离线故障分叉有source/hash/schema/trigger/注入diff；明确标记，不能声称合法API产生故障"
+        },
+        {
+          "id": "CP17.P03",
+          "assertion": "新键实际Core HTTP409 checkpoint_integrity_error，无无关早期guard遮蔽；零command/receipt/key追加，业务Truth不变，audit绑定请求"
+        },
+        {
+          "id": "CP17.P04",
+          "assertion": "实际浏览器GET历史原文不崩溃、不宣称匹配/恢复/新Resume；GET200不代表比较有效"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP18",
+      "title": "workspace_digest 损坏",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "expected": {
+        "http_status": 409,
+        "error_code": "checkpoint_integrity_error",
+        "new_resume_count": 0
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP18.P01",
+          "assertion": "只改变workspace_digest为另一个合法64位hex，其他字段不变"
+        },
+        {
+          "id": "CP18.P02",
+          "assertion": "合法API原件及离线故障分叉有source/hash/schema/trigger/注入diff；明确标记，不能声称合法API产生故障"
+        },
+        {
+          "id": "CP18.P03",
+          "assertion": "新键实际Core HTTP409 checkpoint_integrity_error，无无关早期guard遮蔽；零command/receipt/key追加，业务Truth不变，audit绑定请求"
+        },
+        {
+          "id": "CP18.P04",
+          "assertion": "实际浏览器GET历史原文不崩溃、不宣称匹配/恢复/新Resume；GET200不代表比较有效"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP19",
+      "title": "结构异常 projection",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "expected": {
+        "http_status": 409,
+        "error_code": "checkpoint_integrity_error",
+        "new_resume_count": 0
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP19.P01",
+          "assertion": "projection改为合法JSON数组[]，重算projection_digest/full_context_digest"
+        },
+        {
+          "id": "CP19.P02",
+          "assertion": "合法API原件及离线故障分叉有source/hash/schema/trigger/注入diff；明确标记，不能声称合法API产生故障"
+        },
+        {
+          "id": "CP19.P03",
+          "assertion": "新键实际Core HTTP409 checkpoint_integrity_error，无无关早期guard遮蔽；零command/receipt/key追加，业务Truth不变，audit绑定请求"
+        },
+        {
+          "id": "CP19.P04",
+          "assertion": "实际浏览器GET历史原文不崩溃、不宣称匹配/恢复/新Resume；GET200不代表比较有效"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP20",
+      "title": "不支持的 projection 版本",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "expected": {
+        "http_status": 409,
+        "error_code": "checkpoint_integrity_error",
+        "new_resume_count": 0
+      },
+      "variants": [
+        {
+          "id": "column_version",
+          "mutation": "projection_version=jasmine.task-snapshot.v0",
+          "expected_integrity_check": "intentional Checkpoint CHECK failure recorded; ignore_check_constraints restored OFF before serving"
+        },
+        {
+          "id": "inner_schema",
+          "mutation": "projection.snapshot_schema=jasmine.task-snapshot.v0",
+          "expected_integrity_check": "ok"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP20.P01",
+          "assertion": "两独立分叉分别改列projection_version/内层snapshot_schema；内层变体重算两digest"
+        },
+        {
+          "id": "CP20.P02",
+          "assertion": "合法API原件及离线故障分叉有source/hash/schema/trigger/注入diff；明确标记，不能声称合法API产生故障"
+        },
+        {
+          "id": "CP20.P03",
+          "assertion": "新键实际Core HTTP409 checkpoint_integrity_error，无无关早期guard遮蔽；零command/receipt/key追加，业务Truth不变，audit绑定请求"
+        },
+        {
+          "id": "CP20.P04",
+          "assertion": "实际浏览器GET历史原文不崩溃、不宣称匹配/恢复/新Resume；GET200不代表比较有效"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP21",
+      "title": "projection Task 身份不一致",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "expected": {
+        "http_status": 409,
+        "error_code": "checkpoint_integrity_error",
+        "new_resume_count": 0
+      },
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP21.P01",
+          "assertion": "仅改projection.task_id为另一真实Task ID；外层Task保持原值；重算两digest"
+        },
+        {
+          "id": "CP21.P02",
+          "assertion": "合法API原件及离线故障分叉有source/hash/schema/trigger/注入diff；明确标记，不能声称合法API产生故障"
+        },
+        {
+          "id": "CP21.P03",
+          "assertion": "新键实际Core HTTP409 checkpoint_integrity_error，无无关早期guard遮蔽；零command/receipt/key追加，业务Truth不变，audit绑定请求"
+        },
+        {
+          "id": "CP21.P04",
+          "assertion": "实际浏览器GET历史原文不崩溃、不宣称匹配/恢复/新Resume；GET200不代表比较有效"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP22",
+      "title": "旧独有高 revision 成员",
+      "evidence_mode": "REAL_CORE_CORRUPT_STORE",
+      "variants": [
+        {
+          "id": "default"
+        }
+      ],
+      "expected": {
+        "http_status": 201,
+        "checkpoint_freshness": "CONTEXT_CHANGED",
+        "workspace": "SAME",
+        "reconciliation_required": true
+      },
+      "required_predicates": [
+        {
+          "id": "CP22.P01",
+          "assertion": "离线旧projection.objects加明确synthetic Step key/revision99，当前无此成员；重算两digest"
+        },
+        {
+          "id": "CP22.P02",
+          "assertion": "标记合成成员/故障分叉；Task revision相等，共有对象与Rule不超前，不宣称真实删除历史"
+        },
+        {
+          "id": "CP22.P03",
+          "assertion": "真实新比较CONTEXT_CHANGED/SAME/true，非409；removed精确含该key，changed/added不混入它"
+        },
+        {
+          "id": "CP22.P04",
+          "assertion": "浏览器实际diff与收据一致，source说明不把synthetic成员当真实历史"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP23",
+      "title": "合法不存在的历史 ID",
+      "evidence_mode": "REAL_CORE_BROWSER_READ_REGRESSION",
+      "expected": {
+        "http_status": 404
+      },
+      "variants": [
+        {
+          "id": "checkpoint",
+          "expected_error_code": "checkpoint_not_found"
+        },
+        {
+          "id": "resume",
+          "expected_error_code": "resume_not_found"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP23.P01",
+          "assertion": "格式合法但本私有DB不存在的ID；分别真实Core GET和浏览器GET"
+        },
+        {
+          "id": "CP23.P02",
+          "assertion": "实际404与变体error code完全相等，request_id/audit绑定"
+        },
+        {
+          "id": "CP23.P03",
+          "assertion": "浏览器对象错误非DEPENDENCY_PENDING，无上一对象成功内容；business/receipt/key/command不变"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP24",
+      "title": "非法 ID 本地拒绝",
+      "evidence_mode": "REAL_CORE_BROWSER_READ_REGRESSION",
+      "expected": {
+        "matching_core_request_count": 0
+      },
+      "variants": [
+        {
+          "id": "checkpoint"
+        },
+        {
+          "id": "resume"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP24.P01",
+          "assertion": "提交本次必需字段的格式错误ID，本地Invalid ID对应字段，无成功历史内容"
+        },
+        {
+          "id": "CP24.P02",
+          "assertion": "browser trace和Core入站证明零对应请求；403/404不能替代本地拒绝"
+        },
+        {
+          "id": "CP24.P03",
+          "assertion": "business/receipt/key/command不变，无console crash"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP25",
+      "title": "逐个缺少读 scope",
+      "evidence_mode": "REAL_CORE_BROWSER_READ_REGRESSION",
+      "expected": {
+        "http_status": 403,
+        "error_code": "forbidden_scope"
+      },
+      "variants": [
+        {
+          "id": "checkpoint_missing_objects_read",
+          "endpoint": "checkpoint",
+          "missing_scope": "objects:read"
+        },
+        {
+          "id": "checkpoint_missing_state_read",
+          "endpoint": "checkpoint",
+          "missing_scope": "state:read"
+        },
+        {
+          "id": "checkpoint_missing_authority_read",
+          "endpoint": "checkpoint",
+          "missing_scope": "authority:read"
+        },
+        {
+          "id": "checkpoint_missing_evidence_read",
+          "endpoint": "checkpoint",
+          "missing_scope": "evidence:read"
+        },
+        {
+          "id": "checkpoint_missing_events_read",
+          "endpoint": "checkpoint",
+          "missing_scope": "events:read"
+        },
+        {
+          "id": "checkpoint_missing_checkpoint_read",
+          "endpoint": "checkpoint",
+          "missing_scope": "checkpoint:read"
+        },
+        {
+          "id": "resume_missing_objects_read",
+          "endpoint": "resume",
+          "missing_scope": "objects:read"
+        },
+        {
+          "id": "resume_missing_state_read",
+          "endpoint": "resume",
+          "missing_scope": "state:read"
+        },
+        {
+          "id": "resume_missing_authority_read",
+          "endpoint": "resume",
+          "missing_scope": "authority:read"
+        },
+        {
+          "id": "resume_missing_evidence_read",
+          "endpoint": "resume",
+          "missing_scope": "evidence:read"
+        },
+        {
+          "id": "resume_missing_events_read",
+          "endpoint": "resume",
+          "missing_scope": "events:read"
+        },
+        {
+          "id": "resume_missing_checkpoint_read",
+          "endpoint": "resume",
+          "missing_scope": "checkpoint:read"
+        },
+        {
+          "id": "resume_missing_resume_read",
+          "endpoint": "resume",
+          "missing_scope": "resume:read"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP25.P01",
+          "assertion": "真实存在对象，同actor/host；key只去掉变体的一个scope，key_id/scopes留证"
+        },
+        {
+          "id": "CP25.P02",
+          "assertion": "Core和浏览器实际403 forbidden_scope；details指向精确missing_scope；audit绑定"
+        },
+        {
+          "id": "CP25.P03",
+          "assertion": "浏览器权限错误非dependency pending，不显示原成功内容；business/receipt/key/command不变"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    },
+    {
+      "id": "CP26",
+      "title": "关闭读 gate、禁止浏览器 build",
+      "evidence_mode": "REAL_CORE_BROWSER_READ_REGRESSION",
+      "expected": {
+        "matching_core_request_count": 0
+      },
+      "variants": [
+        {
+          "id": "p3_off_get"
+        },
+        {
+          "id": "checkpoint_post"
+        },
+        {
+          "id": "resume_post"
+        }
+      ],
+      "required_predicates": [
+        {
+          "id": "CP26.P01",
+          "assertion": "自有P3-off Dashboard GET、自有P3-on主动POST /checkpoints和/tasks/{tsk}/resume；body/ID合法"
+        },
+        {
+          "id": "CP26.P02",
+          "assertion": "代理按冻结allowlist拒绝；入站trace与Core零对应请求证明未转发"
+        },
+        {
+          "id": "CP26.P03",
+          "assertion": "off GET页面为依赖/开关未就绪，不伪称Core不存在；主动POST标为操作者拒绝探针而非UI写入"
+        },
+        {
+          "id": "CP26.P04",
+          "assertion": "business/Checkpoint/Resume/key/command不变；现有服务/config/flags未改"
+        }
+      ],
+      "required_global_invariants": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "result": "NOT_RUN"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "spec_id": "P6-CHECKPOINT-NEGATIVES-v1",
+  "frozen_at_utc": "2026-10-09T15:27:15.784927+00:00",
+  "status": "FROZEN_SPEC_ONLY",
+  "review_status": "PENDING_REVIEW",
+  "implementation_status": "NOT_STARTED",
+  "formal_acceptance_status": "NOT_RUN",
+  "baseline_commit": "f8de226ad51e9b7608b4b87dc9bcd60a86db407f",
+  "baseline_tree": "7897d56992d443c5172d44984350d079aa430a28",
+  "baseline_archive_sha256": "7638388c44e3255ec485a833eb57f676c4d266918e5807ecc7c553fc488795db",
+  "counts": {
+    "scenario_count": 26,
+    "mandatory_variant_count": 43,
+    "predicate_definition_count": 101,
+    "predicate_evaluation_count": 155,
+    "global_invariant_groups_per_variant": 7
+  },
+  "files": [
+    {
+      "path": "docs/validation/p6-checkpoint-negatives/ACCEPTANCE-SPEC-v1.md",
+      "bytes": 17776,
+      "sha256": "62d840a98d0f895adf5ce39355e853b2d54538998026591b8387a2f13170c772"
+    },
+    {
+      "path": "docs/validation/p6-checkpoint-negatives/acceptance-matrix.v1.json",
+      "bytes": 36020,
+      "sha256": "5e3fcdd9808437dbad7908b52255c52a73b94ee4bf4496b6da9f29b83c954514"
+    },
+    {
+      "path": "docs/validation/p6-checkpoint-negatives/source-inventory.json",
+      "bytes": 5616,
+      "sha256": "d8738ab9ada4b1c320e820bf511915d429333205e1c3edb0cc2e7a2ded55673e"
+    },
+    {
+      "path": "web/P6-REMAINING-TASKS.md",
+      "bytes": 32577,
+      "sha256": "b7fdaa549b44d7b752a72c19781d9d3db995c417704f27ef7c30e9e60e094657"
+    }
+  ],
+  "self_binding": "This receipt excludes its own digest; its bytes are bound by the documentation Git commit.",
+  "metadata_checks": {
+    "json_parse": "PASS",
+    "unique_ids_and_complete_matrix": "PASS",
+    "scenario_variant_predicate_counts": "PASS",
+    "all_results_not_run": "PASS",
+    "markdown_matrix_ids": "PASS",
+    "baseline_source_sha256": "PASS 22 source files",
+    "historical_manifest_read_only": "PASS 31 bound files",
+    "tracked_change_scope": "PASS documentation only"
+  },
+  "operational_actions_executed": [],
+  "product_code_changed": false,
+  "existing_services_or_deployment_changed": false,
+  "existing_flags_changed": false,
+  "frozen_evidence_changed": false,
+  "main_or_primary_checkout_changed": false,
+  "scope_acceptance_signed": false,
+  "notes": "Metadata verification only, not tests or acceptance evidence. No independent review performed in this slice yet."
+}
