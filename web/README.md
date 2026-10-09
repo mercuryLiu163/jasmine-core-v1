@@ -204,11 +204,14 @@ fixture, the checkout and the servers and reproduced it, then re-validated the f
 and returned **PASS** on the delta with nothing regressed. Its four findings are fixed
 in `c7c5480`. Two earlier "frozen commits" were incomplete (the dashboard's
 `web/src/lib/` was gitignored and untracked); that is fixed and the tip is built and
-tested from a clean checkout. A separate code review of the write panels is still
-outstanding. `P6-02: PARTIAL` overall — manual
-reapply and the Task/Step/Evidence writes are not delivered, and no Gate has run
+tested from a clean checkout. That outstanding code review has since been done for the
+Task/Step write slice, which is now delivered and independently validated.
+`P6-02: PARTIAL` overall — manual
+reapply and `evidence/confirm` are not delivered, the VERIFIED/ACCEPTED forms are still
+open, and no Gate has run
 against the operator's own Core. `P6` as a stage is not complete. Details, evidence
-and the side-effect finding: `P6-02-COMPLIANCE.md`.
+and the side-effect finding: `P6-02-COMPLIANCE.md`; the Task/Step write slice:
+`P6-02B-TASK-STEP-WRITE-SPEC.md` and `P6-02-TASKSTEP-WRITE-COMPLIANCE.md`.
 
 `P6-03a (Checkpoint / Context Pack / Resume reads): PARTIAL / DEPENDENCY_PENDING`.
 The four read-only views are implemented and exercised in a real browser — a 15/15
@@ -226,8 +229,10 @@ built bundle are byte-identical to the current tip after the branch was rebased
 onto `main` (now including P2, schema v8; see `P6-01-COMPLIANCE.md` for the
 pre/post-rebase hash mapping, the post-rebase re-verification on a v8 Core and
 the two caveats the validator recorded). It is **not** `P6` done: P6-02's
-audited human writes are implemented but not yet independently reviewed, P6-02's
-manual reapply and the Task/Step/Evidence writes are not delivered, and
+audited human writes are implemented and independently validated, its Task/Step writes
+are delivered and independently validated too (PASS 9/9 claims for their seven routes,
+`P6-02-TASKSTEP-WRITE-COMPLIANCE.md`), while P6-02's
+manual reapply, `evidence/confirm` and the VERIFIED/ACCEPTED forms are not delivered, and
 P6-03a is delivered only as PARTIAL/DEPENDENCY_PENDING (P3 is not merged, so its views were
 exercised against a simulated fixture), P6-03b1 (the P4 read slice) is likewise delivered only as
 PARTIAL/DEPENDENCY_PENDING against an unmerged P4; P6-03b2's six writes are implemented but also

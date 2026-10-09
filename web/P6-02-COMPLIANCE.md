@@ -3,8 +3,13 @@
 Scope: P6-02 as defined by `evidence/p6-rebase-handoff-20261007/NEXT-P6-02.md`.
 Milestone **A** is the read slice; milestone **B** is the audited human writes.
 Both are described below, and each says what is *not* delivered. Nothing here
-claims P6, or even P6-02, is finished: manual reapply and the Task/Step/Evidence
-writes are still open.
+claims P6, or even P6-02, is finished: manual reapply and the Evidence write
+(`evidence/confirm`) are still open. The **Task/Step writes** left this document's
+open list while this file was frozen at milestone B: that slice now has its own frozen
+contract and its own record — `P6-02B-TASK-STEP-WRITE-SPEC.md` (rev 3) and
+`P6-02-TASKSTEP-WRITE-COMPLIANCE.md` — and was independently validated PASS for its
+seven routes. The pointer here is deliberate: milestone B's verdicts bind milestone B's
+commits and do not transfer to it (see `P6-REMAINING-TASKS.md`, "Historical limitations").
 
 **P6-03a** (read-only Checkpoint / Context Pack / Resume views) is a separate
 deliverable against the unmerged P3 branch, so it has its own document:
@@ -275,11 +280,15 @@ then falsified the first version of.
 
 ## Not delivered (still open in P6-02)
 
-`POST /v1/resolutions/{res}/manual-reapply`, and the Task/Step/Evidence writes.
-The first needs its own frozen payload/permission table and an explicit operator
-decision; the second needs a Gate of its own, and `evidence/confirm` additionally
-needs a human prompt the browser cannot mint (ADR 0007). `browser_trace.mjs`
-asserts the absence of any Evidence-confirm control.
+`POST /v1/resolutions/{res}/manual-reapply` and `POST /v1/evidence/confirm`. The
+first needs its own frozen payload/permission table and an explicit operator
+decision; `evidence/confirm` needs a human prompt the browser cannot mint
+(ADR 0007), so its control stays deliberately absent and `browser_trace.mjs`
+asserts that absence. The **Task/Step writes are no longer on this list**: the
+slice's own frozen contract is `P6-02B-TASK-STEP-WRITE-SPEC.md` (rev 3) and its
+record is `P6-02-TASKSTEP-WRITE-COMPLIANCE.md` (independent validation PASS, 9/9
+claims, seven routes). What remains open from the original list is the
+VERIFIED/ACCEPTED *form* design (item 5), which depends on that validated slice.
 
 ## A packaging defect found after the first milestone-B evidence run
 
@@ -362,9 +371,12 @@ returned **PASS**. Every POST in that run is followed by a GET of the same objec
 So milestone B has been code-reviewed, and the review's findings — including the ones
 that invalidated my own Gate — are recorded here rather than summarised away.
 
-`P6-02: PARTIAL` as a whole — manual reapply and the Task/Step/Evidence writes are
-not delivered, and no Gate has run against the operator's own Core or a real captured
-conversation. `P6` as a stage is not complete and nothing here releases V1.
+`P6-02: PARTIAL` as a whole — manual reapply and `evidence/confirm` are not
+delivered, the VERIFIED/ACCEPTED forms are still open, and no Gate has run against the
+operator's own Core or a real captured conversation. The Task/Step **writes** are now
+delivered and independently validated (`P6-02-TASKSTEP-WRITE-COMPLIANCE.md`); that
+verdict is theirs, not this document's. `P6` as a stage is not complete and nothing
+here releases V1.
 
 ## Limits worth stating rather than leaving implicit
 

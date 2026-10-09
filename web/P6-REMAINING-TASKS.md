@@ -55,16 +55,18 @@ they are re-asserted in every bundle by the credential check.
 | 1 Conversation↔Interpretation read (model/extractor/version/confidence, Resolver reason, derived ids; pending count from the API) | **D** | milestone A, independently reviewed and validated | `P6-02-COMPLIANCE.md`; HTTP `20261007T135254Z-p6-02b-t03-gate/` (76/76); browser `20261007T135314Z-p6-02b-clickthrough/` (53/53); candidate `959e8df`, asset `index-CZ4ocGOP.js` |
 | 2 Correct / Reject / Re-run (old vs new, affected Truth, reason, frozen version; reject keeps the raw Event; re-run does not auto-change Truth) | **P** | all three delivered behind the default-off switch with per-action audit readback; **browser end-to-end submissions exist for 4 of the 9 writes** (interpretation.reject, review.reject, rule.propose, rule.approve) — the rest are HTTP + audit readback, which the INDEX says explicitly | as above; nine write endpoints in `server/core-paths.json` |
 | 3 Rule proposal vs approve/supersede/retire (scope, version/revision, immutable history; 409 keeps the draft) | **P** | same browser-coverage note | as above |
-| 4 Task/Step create/transition/criteria (real state machine, `expected_revision` from readback, idempotent `event_id`, timeout = 结果未知) | **N** | needs its own frozen permission/audit Gate; the read side exists | `P6-02-COMPLIANCE.md` → “Not delivered” |
-| 5 VERIFIED/ACCEPTED forms (criteria→Evidence matrix, rule version, fingerprint, `422 missing_evidence` keeps state, agent credential refused) | **N** | depends on item 4; the *read* side of Evidence/criteria is delivered (P6-01/A04, A06) | same |
+| 4 Task/Step create/transition/criteria (real state machine, `expected_revision` from readback, idempotent `event_id`, timeout = 结果未知) | **D** | contract frozen (`P6-02B-TASK-STEP-WRITE-SPEC.md` rev 3, delta re-review APPROVE freeze-as-is), implemented at `607f511` + review-fix `acd260b`, then executed by an **independent** validator on a real Core + real browser: PASS 9/9 claims, no counterexample, all seven routes + the §11 negatives. Its Evidence-gated route 6 and the two gated Step edges need a fingerprint/confirmation environment the browser alone cannot mint (both minting routes are proxy-refused by design), so a fresh environment must record them BLOCKED/PARTIAL — the spec's own permitted outcome | `P6-02-TASKSTEP-WRITE-COMPLIANCE.md`; validation `validation-runs/p6/VALIDATE-p6-02-taskstep-write/`; reviews `REVIEW-p6-02-taskstep-write-spec/`, `REVIEW-p6-02-taskstep-write-impl/` |
+| 5 VERIFIED/ACCEPTED forms (criteria→Evidence matrix, rule version, fingerprint, `422 missing_evidence` keeps state, agent credential refused) | **N** | the dependency (item 4) is now **delivered**, so this is the next slice; the *read* side of Evidence/criteria exists (P6-01/A04, A06) and the write-side “`422 missing_evidence` keeps the state unchanged, no Event” property is already independently observed for route 6 and the two gated Step edges | same |
 | 6 `evidence/confirm` | **N** | deliberately absent: needs a real human prompt (ADR 0007) that a browser cannot mint; the browser test asserts the control is **absent**. New decision belongs to the Core owner as its own ADR/API Gate | same |
 | 7 Every manual change has an immutable command Event + revision/provenance + audit metadata; audit readback uses an authorised validator | **D** | for the nine delivered writes: per-action audit readback was added for all nine after the validator found 6 missing (`c7c5480`); the delta re-validation returned PASS | milestone-B bundle `20261008T053936Z-p6-03b2-clickthrough/` + INDEX |
 | — `POST /v1/resolutions/{id}/manual-reapply` | **N** | needs its own frozen payload/permission table **and an explicit operator decision**; a web button cannot mint the ADR 0007 human-prompt provenance it records | `P6-02-COMPLIANCE.md` “Not delivered” |
 | — real P2 message → Review → write chain (P6-T03 Gate) | **B** | the writes are gated against fixtures and the real P4 Core; a **real captured conversation** with the Resolver policy Gate has not been run (operator's capture path) | `P6-02B-INDEX.md` P6-02 sections; `P6-T03` in §7 |
 
 **Status text:** `P6-02 milestone A: delivered, independently reviewed and validated`;
-`milestone B: independently validated, PASS-WITH-CAVEATS` (four findings fixed in `c7c5480`).
-`P6-02` as a whole stays **PARTIAL**.
+`milestone B: independently validated, PASS-WITH-CAVEATS` (four findings fixed in `c7c5480`);
+`P6-02 TaskStep write (item 4): PASS` for the seven write routes only — contract frozen, implemented
+and independently validated, with route 6/gated Step edges `BLOCKED`/`PARTIAL` in any environment
+that lacks the out-of-band fingerprint and confirmation. `P6-02` as a whole stays **PARTIAL**.
 
 ## 3. §6 P6-03 — domain-by-domain inspectors
 
@@ -150,7 +152,13 @@ is a **data** action, not a dependency: to close P7-01 criterion 1, the P7 owner
 genuinely failing scenario with `recorder.py` into the configured run root, after which the T06
 drill-down is re-run and the criterion re-validated. Record the P6-03a **injection-receipt**
 question with the Agent/Context owner (unblocks T04's second half). Ask the P4 owner for the
-interpreter-symlink fix task (`TASK-p4-interpreter-symlink.md`, registered separately).
+interpreter-symlink fix task (`TASK-p4-interpreter-symlink.md`, registered separately). File the
+**coordination request to the Core interface owner** with the same scope and phrase as the frozen
+spec's §13 bullet: no route in schema 8 exposes `STEP_EDGES`/`TASK_EDGES`, so the Task/Step
+transition UI can only offer Core's status **vocabulary** — a superset of the legal-target set — and
+Core stays the only verdict on legality (`409 invalid_state_transition` with `from_status`/
+`to_status`); the ask is a route that publishes the two edge sets. It is a presentation limit that
+the implementation review ruled acceptable under §12, it blocks no item, and it changes no P6 status.
 
 **Harness gates closed before that re-run** (all found by the independent review/validation rounds
 and fixed, so the harness is now fit for the tenth record):

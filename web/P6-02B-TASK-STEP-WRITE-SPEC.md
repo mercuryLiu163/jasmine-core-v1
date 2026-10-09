@@ -1,8 +1,18 @@
 # P6-02b — Task/Step write payload, permission and acceptance specification
 
-**Status: PROPOSAL. Not implemented, not frozen, not verified against a real browser. Revision 1 was
-independently reviewed (verdict APPROVE WITH NAMED MANDATORY CHANGES, M1–M6); revision 2 folds those
-changes in — see *Revision history* below.**
+**Status: FROZEN at revision 3** — revision 1 was independently reviewed (verdict APPROVE WITH NAMED
+MANDATORY CHANGES, M1–M6), revision 2 folded those in, and the delta re-review of revision 3
+returned **APPROVE (freeze as-is)**, whose eight non-blocking notes revision 3 also carries. Every
+section below is the frozen text; the only change after the freeze is a non-normative §13 note and
+an evidence-path rename, itemised in the addendum under *Revision history*.
+The slice is now **implemented** at `607f511c93fa5273df16187e6d1bce81a187e7e7`, fixed by
+`acd260b3e55aae9a16b7544103c3d86dd8773ad8`, and the §11 acceptance plan was executed by an
+**independent** validator on a real Core and a real browser — verdict **PASS, 9/9 claims, no
+counterexample** (`P6-02-TASKSTEP-WRITE-COMPLIANCE.md`). That verdict covers the seven write routes
+only: `P6-02` stays **PARTIAL** (item 5's VERIFIED/ACCEPTED forms and item 6's `evidence/confirm`
+remain undelivered), `P6` is not complete, and nothing here releases V1. This document's title keeps
+the proposal's own label; the slice's evidence namespace and status label are `taskstep` /
+`P6-02 TaskStep write` per the §11 M6 naming rule.
 This document freezes what the operator's priority item 1 asks to freeze *first*: the payloads,
 permissions, revision handling, replay and audit requirements of the Task/Step write slice — the
 routes that **already exist in this baseline Core**. It is written to be reviewed and falsified
@@ -32,9 +42,20 @@ and expensive to get wrong in a UI.
 
 | Rev | Subject | What it is |
 | --- | --- | --- |
-| 1 | `663a941b4fb503e614e0abc9cfb024e39d6d0615` | The proposal as first written (682 lines, untracked). Independently reviewed by `validation-runs/p6/REVIEW-p6-02b-write-spec/findings.md`, verdict **APPROVE WITH NAMED MANDATORY CHANGES** (M1–M6, no blocking); the reviewer reproduced its findings live against an isolated Core built from `git archive HEAD` on a temp DB. |
+| 1 | `663a941b4fb503e614e0abc9cfb024e39d6d0615` | The proposal as first written (682 lines, untracked). Independently reviewed by `validation-runs/p6/REVIEW-p6-02-taskstep-write-spec/findings.md`, verdict **APPROVE WITH NAMED MANDATORY CHANGES** (M1–M6, no blocking); the reviewer reproduced its findings live against an isolated Core built from `git archive HEAD` on a temp DB. |
 | 2 | `663a941b4fb503e614e0abc9cfb024e39d6d0615` | Folds in M1–M6 and the reviewer's minor corrections: §8/§11 `target_id` made route-specific (M1); `source_event_duplicate` documented as reachable on route 1 and added as §11 negative 8 (M2); the timeout request-id rule made an explicit implementation requirement with the client/proxy changes it needs (M3); §11's positive path reconciled with §12 so Evidence-gated route 6 and Step edges may record BLOCKED/PARTIAL (M4); the proxy-test typo folded into the test obligations and the browser-level out-of-scope refusal added as §11 negative 9 (M5); the evidence namespace disambiguated from milestone B (M6). Also: the `fingerprint_unavailable` reachability claim, the citation slips (the three the review names, plus a fourth `models.py` line found while re-verifying M2), §10's "no safety gain" softened to "the marginal gain is small", and §12's list of closed and corrected items. Nothing else changed. |
-| 3 | `663a941b4fb503e614e0abc9cfb024e39d6d0615` (this document) | Folds in the delta re-review's eight non-blocking notes (`validation-runs/p6/REVIEW-p6-02b-write-spec/RE-REVIEW-findings.md`, verdict **APPROVE (freeze as-is)**): the `objects.py:179` and `objects.py:57-66` citations, the taskbook quote's section/line, "three" citation slips, the `useWriteAction.ts:204-213` ranges; the request-id requirement gains the fourth change it needed (the browser must read the response header, or a proxy-generated refusal could never be named); §11's positive path now requires route 3's non-gated edges to PASS; and §9 records that its ordering is not a total order for route 2 and that Task/Step recovery edges are asymmetric. Nothing else changed. |
+| 3 | `663a941b4fb503e614e0abc9cfb024e39d6d0615` (this document) | Folds in the delta re-review's eight non-blocking notes (`validation-runs/p6/REVIEW-p6-02-taskstep-write-spec/RE-REVIEW-findings.md`, verdict **APPROVE (freeze as-is)**): the `objects.py:179` and `objects.py:57-66` citations, the taskbook quote's section/line, "three" citation slips, the `useWriteAction.ts:204-213` ranges; the request-id requirement gains the fourth change it needed (the browser must read the response header, or a proxy-generated refusal could never be named); §11's positive path now requires route 3's non-gated edges to PASS; and §9 records that its ordering is not a total order for route 2 and that Task/Step recovery edges are asymmetric. Nothing else changed. |
+
+**Addendum after the freeze (non-normative; no frozen section changed).** Three edits only:
+(1) a §13 bullet recording that no schema-8 route exposes `STEP_EDGES`/`TASK_EDGES`, so the
+implementation offers Core's status *vocabulary* rather than the legal-target set — the deviation the
+implementation review ruled acceptable under §12, now written down so the frozen sections no longer
+imply such an API exists, and filed as the Core-interface-owner coordination request in both this
+document and `P6-REMAINING-TASKS.md`; (2) the implementation-status header above; (3) the
+review-report path renamed from `REVIEW-p6-02b-write-spec` to `REVIEW-p6-02-taskstep-write-spec` to
+honour the §11 M6 naming rule the validator flagged (a parent-side naming error, not a finding
+against the review). A delta re-review of this addendum is the reviewer's ruling, not a change it
+makes; nothing in §1–§12 moved.
 
 ---
 
@@ -343,7 +364,7 @@ written (`events.py:128-131`; ADR 0003 §1.3.2). Verified by `tests/test_state.p
   `IntegrityError` (`m0001_baseline.py:87`) to `SourceEventDuplicate` (`events.py:154-162`). A second
   create with the same source identity and a *different* `event_id` therefore answers **`409
   source_event_duplicate`** with `{source_system, source_event_id, existing_event_id}`. The reviewer
-  reproduced this live (`REVIEW-p6-02b-write-spec/findings.md` F2); it is §11 negative 8. Do not
+  reproduced this live (`REVIEW-p6-02-taskstep-write-spec/findings.md` F2); it is §11 negative 8. Do not
   instruct the reviewer to skip it.
 
 ---
@@ -486,7 +507,7 @@ All seven types are in the frozen enum (`models.py:39`, `45-50`), and all seven 
   `_`-containing string value inside `object` wins — `task_id` (the row built at `objects.py:57-66`; on the replay path
   `objects.py:159-166`) → `tsk_…`. The other six responses carry no top-level `task_id`/`step_id` and
   no `object`, so they fall through to `event` → `evt_…`. The reviewer observed this live
-  (`REVIEW-p6-02b-write-spec/findings.md` F1): `POST /v1/tasks` 201 → `target_id = tsk_…`;
+  (`REVIEW-p6-02-taskstep-write-spec/findings.md` F1): `POST /v1/tasks` 201 → `target_id = tsk_…`;
   `POST /v1/tasks/{tsk}/steps` 201 → `target_id = evt_…`. This is a falsifiable claim worth an
   explicit Gate check; §11's audit assertion is route-specific to match.
 * **Readback requirement.** After a success the UI re-reads the object's own row and the history and
@@ -602,7 +623,7 @@ answer for baseline-served, audited routes is yes. An opt-in flag would add a fa
 remove some attack surface — so the accurate claim is that its marginal safety gain over the
 existing always-on milestone-B surface is *small*, not nil**, while the consistency cost and the
 false-status cost (`errors.ts:69-83` maps `proxy_path_not_allowed` to "dependency pending (P3 not
-merged)") are real. The reviewer reached the same weighting (`REVIEW-p6-02b-write-spec/findings.md`
+merged)") are real. The reviewer reached the same weighting (`REVIEW-p6-02-taskstep-write-spec/findings.md`
 §3.1) and made it conditional on two mandatory Gate obligations, both folded in here:
 * the `test_dashboard_proxy_contract.py:224` typo is fixed (below); and
 * **a browser-level Gate negative proves the proxy still refuses the out-of-scope POSTs** —
@@ -796,7 +817,7 @@ with `keyKind='event_id'` is the expected, but not mandated, route.
   started and no browser was opened for this document.
 
 **Two revision-1 items are closed and removed from that list** — the reviewer answered both from the
-code and reproduced one live (`REVIEW-p6-02b-write-spec/findings.md` §1, rows 12.1 and 12.4):
+code and reproduced one live (`REVIEW-p6-02-taskstep-write-spec/findings.md` §1, rows 12.1 and 12.4):
 * *A Task-create response's `object` always contains `acceptance_criteria` as a parsed object.* It
   does by construction: `ObjectStore.get` pops `acceptance_criteria_json` into `acceptance_criteria`
   (`objects.py:64-65`), the fresh create returns that row (`objects.py:222-224`), the projection
@@ -808,7 +829,7 @@ code and reproduced one live (`REVIEW-p6-02b-write-spec/findings.md` §1, rows 1
   route scope (`dispatch.py:45-52`) before the handler reads `request.json_body()`.
 
 **Three claims stated as fact in revision 1 were false and are corrected above; they are listed here
-so the next reader sees they were wrong and are now right** (`REVIEW-p6-02b-write-spec/findings.md`
+so the next reader sees they were wrong and are now right** (`REVIEW-p6-02-taskstep-write-spec/findings.md`
 F1–F3):
 1. *"The audit row's `target_id` is the command `event_id` for all seven routes"* (§8, §11) — false
    for route 1, which records the created `tsk_…` because `_target_of` prefers the nested `object`
@@ -841,5 +862,14 @@ sites, along with one further `models.py` `host_id` line found while re-verifyin
 * Any change to Core, Schema, scopes, id prefixes, Event types or `STEP_EDGES`/`TASK_EDGES`. If the
   implementation appears to need one, it is a **coordination request to the Core interface owner**
   (taskbook §3, line 59), not a change this slice may make.
+* **The legal-target set for Task/Step transitions.** No route in schema 8 exposes `STEP_EDGES` or
+  `TASK_EDGES`, so the implementation cannot learn from the API which targets are legal. It therefore
+  offers Core's whole status **vocabulary** — a superset of the legal-target set — disables nothing as
+  illegal and assumes no symmetry, and Core stays the only verdict on legality (`409
+  invalid_state_transition` with `from_status`/`to_status`, §9). Recorded as the **coordination
+  request to the Core interface owner** (taskbook §3, line 59; `P6-REMAINING-TASKS.md` §6) for a route
+  that publishes the edge sets. This is a presentation limit, not a contract deviation: the
+  implementation review ruled it acceptable under §12 and the independent validator observed exactly
+  this behaviour with no false claim (its report, §10.8).
 * The Gate's evidence-bundle format beyond naming it (§11): the §8 conformance generator is a
   separate, already-recorded work item (`P6-REMAINING-TASKS.md:121-138`).
