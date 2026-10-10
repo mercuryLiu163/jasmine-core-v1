@@ -1,0 +1,101 @@
+{
+  "kind": "AUTHOR_REPAIR_REPORT_NOT_INDEPENDENT_ACCEPTANCE",
+  "created_at_utc": "2026-10-10T02:40:07.281295+00:00",
+  "candidate_commit": "f3f560d1f28a38474397c698a3c4c39c324ea5a6",
+  "candidate_tree": "501669a0139c52d60ebffc6cf1b620d8ee2bdc01",
+  "source_archive_sha256": "fad3f76a993e434d9fbb7c47bb40bc91853e2b55270f9b327bb11bad6121f2d5",
+  "spec_commit": "5079948808d4c8aa9cb5763c747def422c12c055",
+  "spec_unchanged": true,
+  "report": {
+    "path": "REPAIR-REPORT-f3f560d-20261009.md",
+    "sha256": "5020c5151929acd3305a0276c041a1057d621b068efbd627fb73a830b05eee2d",
+    "bytes": 9674
+  },
+  "first_discovered_findings": [
+    "F01/P1",
+    "F02/P2",
+    "F03/P1"
+  ],
+  "original_review_inputs": [
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-6a90c92-20261009/REVIEW.md",
+      "sha256": "fe1254685d35d39d4e61d7966c8a970f1d45736cb79805f7d29ce1fce2e7360b",
+      "bytes": 7140
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-6a90c92-20261009/reproduce_gate_gaps.py",
+      "sha256": "a74ca76dc8be2fb789a4e815a384a90ce2a575fe34029c2793f573c627dd45f5",
+      "bytes": 6150
+    }
+  ],
+  "bundles": [
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-run-04",
+      "manifest_sha256": "a359137a9dcb1ff606693efdac2a5166249a32f2a8eeb78fe450e64626e91b56",
+      "bound_file_count": 538,
+      "all_manifest_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-run-05",
+      "manifest_sha256": "b010379aca78f755e29d4195cbab9de4254658a8ed6faa49252b64187e995791",
+      "bound_file_count": 538,
+      "all_manifest_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-run-06",
+      "manifest_sha256": "a43f0654a8fe8b946993e5291929e63e69f93e988f355b86de8c034cd2a622a5",
+      "bound_file_count": 538,
+      "all_manifest_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-gate-regressions-61cfb4a-01",
+      "manifest_sha256": "eab47e093ffd71be5d0fc4b757f907363d8dacd64e8bb9c1724bd99f2b2b029a",
+      "bound_file_count": 36,
+      "all_manifest_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-gate-regressions-f3f560d-01",
+      "manifest_sha256": "3c772ccb38c6bd05e4bffa9ef5dfa30008c6746f90cdd8bb261c1ac1e1f947f4",
+      "bound_file_count": 36,
+      "all_manifest_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-repair-receipts-f3f560d",
+      "manifest_sha256": "327e3e86d89c57b4c168efb96ff9d76c012e454e3b4002b6ce5bbff9f97d0ccd",
+      "bound_file_count": 5,
+      "all_manifest_bytes_rechecked": true
+    }
+  ],
+  "verification": {
+    "author_run_status": "PASS",
+    "counts": {
+      "PASS": 43,
+      "FAIL": 0,
+      "BLOCKED": 0
+    },
+    "physical_binding_status": "PASS",
+    "required_database_files": 154,
+    "unique_operations": 53,
+    "required_artifact_paths": 492,
+    "manifest_files": 538,
+    "focused_unittest_methods_passed": 16,
+    "negative_components_rejected": 35,
+    "legacy_review_categories_rejected": 8,
+    "negative_components_physical_pass_but_semantic_rejection": 26,
+    "missing_all_databases_official_cli_rejected": true,
+    "source_bundle_unchanged": true,
+    "scenario_predicate_evaluations_passed": 155,
+    "global_invariant_evaluations_passed": 301
+  },
+  "independent_code_review": "NOT_RUN_FOR_NEW_CANDIDATE",
+  "independent_isolated_validation": "NOT_RUN_FOR_NEW_CANDIDATE",
+  "scope_acceptance_signed": false,
+  "P6_V1_complete": false,
+  "item6_flag": 0,
+  "daily_use_released": false,
+  "product_code_changed_in_repair": false,
+  "main_or_deployment_changed": false,
+  "existing_service_restart": false,
+  "boundary_receipt": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-repair-receipts-f3f560d/boundary.json",
+  "notes": "Report commit binds this receipt; only AUTHOR verification. Existing failure and historical bundles preserved."
+}
