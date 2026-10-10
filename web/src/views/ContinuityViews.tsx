@@ -42,6 +42,7 @@ import { Empty, ErrorPanel, Loading, Panel, StaleBanner } from '../components/St
 import { KeyValue, SourceLink } from '../components/Trace'
 import { isCoreId } from '../lib/ids'
 import { formatTimestamp } from '../lib/text'
+import { ContextBudget } from './ContextBudget'
 
 /** A malformed id is refused here, with the right reason, before any request is made. */
 function InvalidId({ prefix, value, field }: { prefix: string; value: string; field: string }): JSX.Element {
@@ -519,6 +520,7 @@ function ContextPackBody({
   return (
     <>
       <SliceStatus />
+      <ContextBudget pack={pack} />
       <StatRow
         label="这是实际渲染记录:"
         value={`rendered_content 是当时真正渲染的内容(renderer ${pack.renderer_version}),token ${pack.token_count} / ${pack.rendered_utf8_bytes} 字节。`}
