@@ -270,12 +270,17 @@ def page_stage(page, ui, trace, observer, label, definition=None, observations=N
     observed=observer[begin:finish]
     if any(e not in ui['observer_window'] for e in observed): raise ValueError('page observer window is outside this scene')
     if stage['started_at_unix']>stage['finished_at_unix']: raise ValueError('reversed page phase')
+    definition=definition or page['definition']; observations=observations or page['observations']
+    used_paths={definition['path']}
+    if 'held' in page: used_paths.add(page['held']['path'])
     for n in network:
+        # Overview requests can be aborted by navigation. They remain in the
+        # actual stage slice/variant/audit, but cannot supply this page's proof.
+        if n['path']+n['query'] not in used_paths: continue
         if not stage['started_at_unix']<=n['at_unix']<=n['response_finished_at_unix']<=stage['finished_at_unix']: raise ValueError('page wire completion is outside access stage')
         if n.get('body',{}).get('error',{}).get('code')!='proxy_path_not_allowed':
             window=[e for e in observed if e.get('request_id')==n['request_id']]
             if [e['kind'] for e in window]!=['request_start','request_end'] or not stage['started_at_unix']<=window[0]['at_unix']<=window[-1]['at_unix']<=stage['finished_at_unix']: raise ValueError('page Core request is not in this actual access window')
-    definition=definition or page['definition']; observations=observations or page['observations']
     if clicks is not None:
         navigation=page['navigation']
         if navigation not in clicks or navigation['id']!=ui['id'] or navigation['hash']!=definition['hash'] or navigation['action']!='actual browser hash navigation' or not stage['started_at_unix']<=navigation['at_unix']<=observations[0]['dom_at_unix']: raise ValueError('page navigation is not this scene access phase')

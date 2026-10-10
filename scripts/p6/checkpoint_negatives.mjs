@@ -236,6 +236,10 @@ try {
         .then(r => { row.body = JSON.parse(r.base64Encoded ? Buffer.from(r.body, 'base64').toString() : r.body); row.response_finished_at_unix = Date.now()/1000 })
         .catch(e => { row.body_capture_error = String(e) }))
     }
+    if (m.method === 'Network.loadingFailed') {
+      const row = report.network.findLast(r => r.cdp_id === m.params.requestId)
+      if (row) { row.failed_at_unix = Date.now()/1000; row.loading_error = m.params.errorText; row.canceled = m.params.canceled ?? false }
+    }
   })
   for (const c of cfg.cases) {
     current = { id: c.id, status: 'FAIL', pages: [], switches: [], key_metadata: c.key_metadata }

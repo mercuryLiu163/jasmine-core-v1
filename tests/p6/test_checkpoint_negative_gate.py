@@ -278,6 +278,9 @@ class SceneRolesAndRequestWindows(unittest.TestCase):
         ui={'id':'CP02.default','network':network,'observer_window':observer}
         page={'stage':{'id':ui['id'],'label':'page-0','network_start':0,'network_end':2,'observer_start':0,'observer_end':4,'started_at_unix':1,'finished_at_unix':6},'network':network,'definition':{'kind':'resume','path':'/v1/resumes/rms_COMPONENT','refresh':True},'observations':[{'dom_at_unix':2.5,'at_unix':2.6,'request_ids':['req-0']},{'dom_at_unix':4,'at_unix':4.1,'request_ids':['req-0','req-1']}]}
         gate.page_stage(page,ui,network,observer,'page-0')
+        unrelated={'id':ui['id'],'method':'GET','path':'/v1/health','query':'','request_id':'aborted-overview','at_unix':1.5,'failed_at_unix':2,'loading_error':'net::ERR_ABORTED','canceled':True}
+        with_background=copy.deepcopy(page); with_background['network']=[unrelated]+network;with_background['stage']['network_end']=3
+        gate.page_stage(with_background,{**ui,'network':with_background['network']},with_background['network'],observer,'page-0')
         for fault in ('foreign_stage','foreign_wire','detached_capture','before_response','missing_refresh','foreign_observer','wrong_query'):
             with self.subTest(fault=fault):
                 p=copy.deepcopy(page)
