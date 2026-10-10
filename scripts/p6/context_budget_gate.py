@@ -5,13 +5,14 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sqlite3
 import sys
 import tarfile
 import tempfile
 
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import checkpoint_negatives as shared
-from checkpoint_negative_gate import capture_receipts, jsonblock, serialized_event
+from checkpoint_negative_gate import capture_receipts, jsonblock, serialized_event, normalized, format_timestamp, no_success_residue
 
 ROOT=Path(__file__).resolve().parents[2]
 load=lambda p:json.loads(Path(p).read_text())
@@ -26,12 +27,57 @@ def require(ok,reason):
     if not ok:raise ValueError(reason)
 
 
+def sealed_tables(path):
+    # These are consistent SQLite backup files, never a live WAL database.
+    con=sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro&immutable=1',uri=True)
+    con.row_factory=sqlite3.Row
+    try:
+        tables=[r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+        return {t:sorted([dict(r) for r in con.execute('SELECT * FROM "'+t.replace('"','""')+'"')],key=shared.canonical) for t in tables if t!='api_keys'}
+    finally:con.close()
+
+
+def sealed_snapshot(path):
+    return {t:r for t,r in sealed_tables(path).items() if t!='audit_log'}
+
+
+def audit_rows(path,request_id):
+    rows=[dict(r) for r in sealed_tables(path)['audit_log'] if r['request_id']==request_id]
+    for r in rows:r['detail']=json.loads(r.pop('detail_json'))
+    return rows
+
+
+def budget_proof(dom,p):
+    budget=dom['budget'];count=f"构建记录 token: {p['token_count']} / 2500。 仅表示已渲染 pack 的编码计数，不表示模型完整提示额度。"
+    boundary='这是构建时的历史记录；重新读取不证明当前可注入。本页没有 Agent 实际接收回执，构建不等于注入。'
+    require(budget['status']=='within' and normalized(budget['count'])==count and normalized(budget['boundary'])==boundary and budget['warning'] is None and budget['omissions_warning'] is None,'exact budget/current admission boundary differs')
+    omissions=[r for r in p['omissions'] if r['reason']=='optional_budget']
+    expected=[]
+    for row in omissions:
+        links=[{'text':'≡event'+s,'href':'#/event/'+s} for s in row['source_ids']]
+        expected.append({'text':f"{row['item_id']} · {row['section']} · {row['reason']} · standalone_tokens = {row['standalone_tokens']} 来源："+''.join(x['text'] for x in links),'links':links})
+    require(budget['rows']==expected,'exact visible omission rows/source links differ')
+    if omissions:
+        headline=f'可选内容预算不足，已按整项省略 {len(omissions)} 项。原因可能为分区上限或整包额度；必需内容不因可选内容预算而截断。'
+        require(normalized(budget['omissions'])==headline+''.join(r['text'] for r in expected) and budget['no_omissions'] is None,'exact visible omission count/boundary differs')
+    else:require(budget['omissions'] is None and budget['no_omissions']=='Core 记录中没有 optional_budget 省略项；其他原因见 omissions 原件。','false optional omission outcome')
+    kv={x['label']:normalized(x['text']) for x in dom['kv']}
+    for label,value in {'context_pack_id':p['context_pack_id'],'reason':p['reason'],'actor / host':p['actor_id']+' · '+p['host_id'],'created_at':format_timestamp(p['created_at']),'scope':p['project_id']+' · '+p['task_id']+(' · session '+p['session_id'] if p['session_id'] else ' · 无 session')}.items():
+        require(sum(x['label']==label for x in dom['kv'])==1 and kv[label]==value,'exact Context metadata differs '+label)
+    for label,field in [('source Event','source_event_id'),('command Event','command_event_id')]:
+        text='≡'+label+p[field]
+        require(kv[label]==text and [x for x in dom['links'] if x['text'].startswith('≡'+label)]==[{'text':text,'href':'#/event/'+p[field]}],'Context source/command link differs')
+    for field,route in [('task_id','task'),('project_id','project')]:require([x for x in dom['links'] if x['text']==p[field]]==[{'text':p[field],'href':'#/'+route+'/'+p[field]}],'Context object link differs')
+    require(dom['digests']==[{'label':k,'value':p[k]} for k in ('truth_digest','rendered_sha256','config_digest','workspace_digest')],'Context digest display differs')
+
+
 def operation(directory,op):
     name=op['operation_receipt'];require(load(directory/name)==op,'operation receipt differs')
     expected=[name.removesuffix('-operation.json')+'-'+phase+'.db' for phase in ('before','after')]
     require(op['database_receipts']==expected,'operation DB role differs')
-    for ref,phase in zip(expected,('before','after')):require(shared.snapshot(directory/ref)==op[phase],'actual DB differs from operation '+phase)
+    for ref,phase in zip(expected,('before','after')):require(sealed_snapshot(directory/ref)==op[phase],'actual DB differs from operation '+phase)
     h=op['http'];rows=op['audit'];require(len(rows)==1,'missing/duplicate operation audit')
+    require(rows==audit_rows(directory/expected[1],h['request_id']),'operation audit differs from actual DB')
     a=rows[0];require((a['request_id'],a['method'],a['path'],a['status_code'])==(h['request_id'],h['method'],h['path'],h['status']),'operation audit target differs')
     require(a['error_code']==h['body'].get('error',{}).get('code'),'operation audit error differs')
     observed=[e for e in shared.lines(directory/'observer.jsonl') if e.get('request_id')==h['request_id']]
@@ -65,13 +111,16 @@ def evaluate(directory,cache,python):
         with tempfile.TemporaryDirectory(prefix='p6-context-recompute-') as temp:
             tree=Path(temp)
             with tarfile.open(fileobj=io.BytesIO(archive)) as source:source.extractall(tree,filter='data')
+            frozen=load(tree/'docs/validation/p6-context-budget/SPEC-FROZEN.json')
+            for f in frozen['files']:
+                data=(tree/f['path']).read_bytes();require(len(data)==f['bytes'] and shared.digest(data)==f['sha256'],'Context spec freeze drift')
             require((tree/'docs/validation/p6-context-budget/acceptance-matrix.v1.json').read_bytes()==(directory/'matrix.json').read_bytes(),'frozen matrix drift')
             code='import sys,json;sys.path.insert(0,sys.argv[1]);from jasmine_core.context.tokens import Tokenizer;t=Tokenizer(cache_dir=sys.argv[2]);print(json.dumps({"identity":t.identity,"counts":[t.count(s) for s in json.load(sys.stdin)]}))'
             packs=[c['pack'] for c in raw['cases'] if c['id'] in ('CB01','CB02','CB05')]
             counted=subprocess.run([str(python),'-I','-c',code,str(tree/'src'),str(cache)],input=json.dumps([p['rendered_content'] for p in packs]),capture_output=True,text=True,timeout=30)
             require(counted.returncode==0,'real pinned tokenizer unavailable: '+counted.stderr)
             tokens=json.loads(counted.stdout)
-        require(raw['before_browser']==shared.snapshot(directory/'before-browser.db')==raw['after_browser']==shared.snapshot(directory/'after-browser.db'),'browser changed actual business/history DB')
+        require(raw['before_browser']==sealed_snapshot(directory/'before-browser.db')==raw['after_browser']==sealed_snapshot(directory/'after-browser.db'),'browser changed actual business/history DB')
         require(raw['private_runtime_removed'] and raw['cleanup'] and all(c['group_gone'] for c in raw['cleanup']),'owned cleanup incomplete')
         browser=load(directory/'browser.json');require(browser==raw['browser'],'browser raw differs')
         require(browser['status']=='COLLECTED_NOT_A_VERDICT' and not browser['console_errors'],'browser collection failed')
@@ -115,14 +164,19 @@ def evaluate(directory,cache,python):
                         require(o['dom']['hash']==d['hash'] and ui['navigation']['at_unix']<=o['dom_at_unix']<=o['at_unix'],'capture navigation/time differs')
                         ids=[n['request_id'] for n in target if n.get('response_finished_at_unix',float('inf'))<=o['dom_at_unix']]
                         require(o['request_ids']==ids and len(ids)==(0 if d['kind']=='invalid' else i+1),'capture not bound to completed read/refresh')
+                        if target:
+                            n=target[i];require(n['method']=='GET' and n['query']=='' and n['authorization_present'] and n['request_id_sent']==n['request_id'] and ui['navigation']['at_unix']<=n['at_unix']<=n['response_finished_at_unix']<=o['dom_at_unix'],'actual read request phase/authentication differs')
+                            if i:
+                                clicks=[x for x in browser['clicks'] if x['id']==ident and x.get('text')=='从 Core 重新读取']
+                                require(len(clicks)==1 and ui['observations'][i-1]['at_unix']<=clicks[0]['at_unix']<=n['at_unix'],'refresh request outside actual click phase')
                         dom=o['dom']
                         if ident in ('CB01','CB02','CB05'):
                             p=c['pack'];require(d['entity_id']==p['context_pack_id'] and all(n['body']=={'context':p} and n['status']==200 for n in target),'wire body/scene differs')
                             idx=('CB01','CB02','CB05').index(ident);require(tokens['counts'][idx]==p['token_count']<=2500 and tokens['identity']==p['tokenizer'],'exact pinned pack count/identity differs')
                             require(shared.digest(p['rendered_content'].encode())==p['rendered_sha256'] and len(p['rendered_content'].encode())==p['rendered_utf8_bytes'],'actual rendered hash/bytes differs')
-                            require(dom['budget']['status']=='within' and f"{p['token_count']} / 2500" in dom['budget']['count'] and '构建不等于注入' in dom['budget']['boundary'] and '不证明当前可注入' in dom['budget']['boundary'],'budget/current admission boundary differs')
+                            budget_proof(dom,p)
                             require(next(r['text'] for r in dom['rawtexts'] if 'rendered_content' in r['label'])==p['rendered_content'],'actual full DOM render differs')
-                            for label,field in [('section_metrics','section_metrics'),('omissions','omissions'),('tokenizer','tokenizer'),('projection','projection'),('configuration','configuration')]:require(jsonblock(dom,label)==p[field],'dynamic DOM block differs: '+label)
+                            for field in ('section_metrics','omissions','tokenizer','projection','configuration','selected_optional_ids','selector','resume_comparison','memory','workspace','sample_window'):require(jsonblock(dom,field)==p[field],'dynamic DOM block differs: '+field)
                             kv={x['label']:x['text'] for x in dom['kv']};require(kv['context_pack_id']==p['context_pack_id'],'pack identity differs')
                             for field in ('task_id','project_id','source_event_id','command_event_id'):
                                 require(p[field] in dom['text'],'DOM metadata differs '+field)
@@ -135,7 +189,8 @@ def evaluate(directory,cache,python):
                                     require([x['href'] for x in row['links']]==['#/event/'+s for s in want_row['source_ids']],'omission source link differs')
                                 require(cp['note']['text'] not in p['rendered_content'],'omitted optional note was rendered')
                         else:
-                            require(dom['budget'] is None and not dom['rawtexts'] and not dom['digests'],'refused/local/pending page carries old pack success')
+                            require(dom['budget'] is None and no_success_residue(dom,d['kind']),'refused/local/pending page carries old pack success')
+                            require(not any(c['pack'][k] in dom['text'] for k in ('task_id','project_id','source_event_id','command_event_id')) and c['pack']['rendered_content'] not in dom['text'],'refused page mixes prior pack content')
                             if d['kind']=='invalid': require(dom['invalid'] and dom['alerts'],'local invalid not shown')
                             elif d['kind']=='pending': require(dom['pending'] and all(n['body']['error']['code']=='proxy_path_not_allowed' for n in target),'proxy pending conflated')
                             else: require(dom['alerts'] and all(n['status']==d['status'] and n['body']['error']['code'] in dom['text'] for n in target),'actual Core refusal not shown')
@@ -145,7 +200,9 @@ def evaluate(directory,cache,python):
                         if ident=='CB07':require(not events,'proxy refusal reached Core')
                         else:
                             require([e['kind'] for e in events]==['request_start','request_end'] and events[0]['path']==d['path'] and events[-1]['status']==n['status'],'actual Core read/zero-scan window differs')
+                            require(n['at_unix']<=events[0]['at_unix']<=events[-1]['at_unix']<=n['response_finished_at_unix'],'Core read outside actual browser request window')
                             audits=[a for a in raw['browser_audit']['matching'] if a['request_id']==n['request_id']]
+                            require(audits==audit_rows(directory/'after-browser.db',n['request_id']) and audits[0]['actor_id']==d['key_metadata']['actor_id'],'browser audit differs from actual DB/actor')
                             require(len(audits)==1 and audits[0]['status_code']==n['status'] and audits[0]['path']==d['path'] and audits[0]['error_code']==n['body'].get('error',{}).get('code'),'authorized browser audit differs')
                 if ident in ('CB01','CB02','CB05'):
                     required+=operation(directory,c['operation'])
@@ -161,6 +218,8 @@ def evaluate(directory,cache,python):
                     if ident=='CB05':
                         require(c['replay']['operation_receipt']=='core/CB05-replay-operation.json' and c['admission']['operation_receipt']=='core/CB05-admission-operation.json','old replay/admission operation role differs')
                         for key in ('replay','admission'):required+=operation(directory,c[key])
+                        require(c['replay']['http'] in calls and c['replay']['http']['request_body']==c['operation']['http']['request_body'] and c['replay']['http']['path']=='/v1/context/build','replay old key/source role differs')
+                        require(c['admission']['http'] in calls and c['admission']['http']['path']=='/v1/context/'+p['context_pack_id']+'/check-current' and c['admission']['http']['request_body']=={'host_id':fixture['host'],'source_event_id':source['event_id']},'current admission role differs')
                         require(c['replay']['http']['status']==200 and c['replay']['http']['body']=={'context':p,'replayed':True},'old replay changed')
                         require(c['admission']['http']['status']==409 and c['admission']['http']['body']['error']['code']=='context_stale','stale admission not refused')
                         require(not any(e['kind'].startswith('scanner_') for e in c['replay']['observer']),'replay scanned workspace')
