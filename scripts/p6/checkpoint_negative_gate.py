@@ -13,6 +13,8 @@ import re
 import sqlite3
 import subprocess
 import tarfile
+from datetime import datetime, timezone
+from urllib.parse import urlsplit, parse_qs
 from pathlib import Path
 
 SPEC_COMMIT = '5079948808d4c8aa9cb5763c747def422c12c055'
@@ -57,14 +59,26 @@ def dynamic_identity(dom, data, kind):
         return False
     scope = data['project_id'] + ' · ' + data['task_id'] + (' · session ' + data['session_id'] if data['session_id'] else ' · 无 session')
     good = value('scope') == scope and value('actor / host') == data['actor_id'] + ' · ' + data['host_id']
+    good = good and value('created_at') == format_timestamp(data['created_at'])
+    for label, field in (('source Event', 'source_event_id'), ('command Event', 'command_event_id')):
+        good = good and value(label) == '≡' + label + data[field]
+        links = [link for link in dom['links'] if link['text'].startswith('≡' + label)]
+        good = good and links == [{'text': '≡' + label + data[field], 'href': '#/event/' + data[field]}]
+    for field, route in (('project_id', 'project'), ('task_id', 'task')):
+        good = good and [link for link in dom['links'] if link['text'] == data[field]] == [{'text': data[field], 'href': '#/' + route + '/' + data[field]}]
     digests = {d['label']: d['value'] for d in dom['digests']}
     expected = {k: data[k] for k in ('projection_digest', 'full_context_digest', 'workspace_digest')} if kind == 'checkpoint' else {'truth_digest': data['truth_digest']}
     good = good and len(dom['digests']) == len(expected) and digests == expected
     if kind == 'checkpoint':
         good = good and value('task_revision') == 'r' + str(data['task_revision']) and value('reason') == data['reason']
+        good = good and value('trigger_provenance') == str(data['trigger_provenance'].get('level', '未知'))
         note = data['note']
         expected_texts = [{'label': 'note(记录在创建时的备注,非权威)', 'text': note['text']}] if note else []
     else:
+        checkpoint = data['checkpoint_id']
+        good = good and value('checkpoint') == (checkpoint or '—(该 Task 当时没有 checkpoint)')
+        if checkpoint:
+            good = good and [link for link in dom['links'] if link['text'] == checkpoint] == [{'text': checkpoint, 'href': '#/checkpoints?checkpoint_id=' + checkpoint}]
         note = data['note']
         expected_texts = [{'label': 'note.value', 'text': note['value']['text']}] if note and note['value'] else []
         expected_status = '这是收据生成时的比较结果；重新读取不会重新比较。 checkpoint_freshness: ' + data['comparison']['checkpoint_freshness'] + ' · workspace: ' + data['comparison']['workspace'] + ' · reconciliation_required: ' + str(data['comparison']['reconciliation_required']).lower()
@@ -74,6 +88,68 @@ def dynamic_identity(dom, data, kind):
             expected_status += ' 工作区存在差异；请按本条历史收据中的建议对账。'
         good = good and normalized(dom['comparison_status']) == expected_status
     return good and dom['rawtexts'] == expected_texts
+
+
+def format_timestamp(value):
+    """UI formatTimestamp: UTC ISO milliseconds (truncate, never round)."""
+    if not value:
+        return '—'
+    try:
+        parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if parsed.tzinfo is None:
+            raise ValueError('historical timestamps require explicit timezone')
+        return parsed.astimezone(timezone.utc).isoformat(timespec='milliseconds').replace('T', ' ').replace('+00:00', 'Z')
+    except ValueError:
+        return value
+
+
+def historical_read_body(state, path):
+    """Derive successful GET serialization from this runtime's physical DB only.
+
+    Latest follows command Event sequence, with an optional exact session filter.
+    Corrupt Checkpoint rows are decoded as stored, never replaced by valid originals.
+    None means this is not a historical object GET (auth/proxy/error stay separate).
+    """
+    target = urlsplit(path)
+    if re.fullmatch(r'/v1/checkpoints/[^/]+', target.path):
+        row = find(state, 'checkpoints', 'checkpoint_id', target.path.rsplit('/', 1)[1])
+        return {'checkpoint': decode_checkpoint(row)}
+    if re.fullmatch(r'/v1/resumes/[^/]+', target.path):
+        row = find(state, 'resume_results', 'resume_id', target.path.rsplit('/', 1)[1])
+        return {'resume': json.loads(row['result_json'])}
+    latest = re.fullmatch(r'/v1/tasks/([^/]+)/checkpoints/latest', target.path)
+    if latest:
+        task_id = latest[1]
+        find(state, 'tasks', 'task_id', task_id)
+        query = parse_qs(target.query, keep_blank_values=True)
+        if set(query) - {'session_id'} or len(query.get('session_id', [])) > 1:
+            raise ValueError('unsupported historical latest query')
+        session_id = query.get('session_id', [None])[0]
+        if session_id is not None and find(state, 'sessions', 'session_id', session_id)['task_id'] != task_id:
+            raise ValueError('latest session does not belong to requested Task')
+        rows = [c for c in state['checkpoints'] if c['task_id'] == task_id and (session_id is None or c['session_id'] == session_id)]
+        by_event = {e['event_id']: e for e in state['events']}
+        rows = [c for c in rows if c['command_event_id'] in by_event]
+        selected = max(rows, key=lambda c: (by_event[c['command_event_id']]['seq'], c['checkpoint_id'])) if rows else None
+        return {'checkpoint': decode_checkpoint(selected) if selected else None}
+    return None
+
+
+def no_success_residue(dom, kind):
+    """Error/local refusal/empty states have no historical success components."""
+    if any(dom[key] for key in ('kv', 'digests', 'rawtexts', 'next_action_rows')):
+        return False
+    if any(dom[key] is not None for key in ('checkpoint_boundary', 'comparison_status', 'note', 'next_actions', 'next_action_header')):
+        return False
+    allowed = ['error.details'] if kind in ('error', 'signin-error') else []
+    if [b['label'] for b in dom['jsonblocks']] != allowed:
+        return False
+    if any(re.match(r'#/(event|project|task|resumes|checkpoints)(/|\?)', link['href'] or '') or link['text'].startswith(('≡source Event', '≡command Event')) for link in dom['links']):
+        return False
+    # Confirm absence in the raw HTML too, not just its extracted arrays.
+    if re.search(r'class="[^"]*\b(?:kv|kv__digest|rawtext)\b|data-testid="(?:resume-note|next-action|next-actions|checkpoint-read-boundary|resume-comparison-status)"', dom['html']):
+        return False
+    return not any(marker in dom['text'] for marker in ('不可变快照:', '这是比较,不是恢复:', 'authority = false', '没有 note。'))
 
 
 def canonical(value):
@@ -292,6 +368,13 @@ class EvidenceStore:
             runtime = row['runtime_label']
             if [p['definition'] for p in ui['pages']] != row['pages']:
                 raise ValueError('browser target definitions differ from actual prepared objects')
+            read_state = self.database(runtime + '-before-browser.db')['state']
+            for page in ui['pages']:
+                definition = page['definition']
+                if definition['kind'] in ('checkpoint', 'resume', 'empty'):
+                    actual_body = historical_read_body(read_state, definition['path'])
+                    if actual_body is None or actual_body != definition['expected']:
+                        raise ValueError('prepared browser expected differs from actual historical DB GET')
             for phase, ref in (('before', '-before-browser.db'), ('after', '-after-browser.db')):
                 if ui[phase] != self.database(runtime + ref)['state']:
                     raise ValueError('browser state differs from actual DB')
@@ -310,6 +393,12 @@ class EvidenceStore:
             if [e['kind'] for e in audit_window] != ['request_start', 'request_end'] or audit_window[0]['method'] != 'GET' or audit_window[0]['path'] != '/v1/audit' or audit_window[1]['status'] != 200:
                 raise ValueError('separate audit response has no actual Core request window')
             for n in ui['network']:
+                if n not in trace:
+                    raise ValueError('variant browser response differs from actual global wire trace')
+                if n.get('status') == 200 and n['method'] == 'GET':
+                    actual_body = historical_read_body(read_state, n['path'] + n.get('query', ''))
+                    if actual_body is not None and n['body'] != actual_body:
+                        raise ValueError('browser successful GET body differs from actual historical DB GET')
                 if n.get('status') is None or n.get('body', {}).get('error', {}).get('code') == 'proxy_path_not_allowed':
                     continue
                 actual_window = [e for e in window if e.get('request_id') == n.get('request_id')]
@@ -502,8 +591,6 @@ def display_proof(page):
             exact = exact and data[kind + '_id'] in text and jsonblock(dom, 'projection') == data['projection'] and jsonblock(dom, 'workspace') == data['workspace']
             for field in ('actor_id', 'host_id', 'project_id', 'task_id', 'source_event_id', 'command_event_id'):
                 exact = exact and data[field] in text
-            exact = exact and any(data['source_event_id'] in (link['href'] or '') for link in dom['links'])
-            exact = exact and any(data['command_event_id'] in (link['href'] or '') for link in dom['links'])
             if kind == 'checkpoint':
                 exact = exact and dom['checkpoint_boundary'] == '读取历史记录不执行完整性比较，也不证明它与当前 Truth 或工作区匹配。' and str(data['task_revision']) in text
                 exact = exact and all(data[k] in text for k in ('projection_digest', 'full_context_digest', 'workspace_digest'))
@@ -521,14 +608,14 @@ def display_proof(page):
                 exact = exact and actions_proof(dom, data['next_actions'])
         elif kind in ('error', 'signin-error'):
             exact = exact and bool(dom['alerts']) and definition['expected']['error']['code'] in text and not dom['pending']
-            exact = exact and dom['checkpoint_boundary'] is None and dom['comparison_status'] is None
+            exact = exact and no_success_residue(dom, kind)
             exact = exact and jsonblock(dom, 'error.details') == definition['expected']['error']['details']
         elif kind == 'invalid':
-            exact = exact and dom['invalid'] and bool(dom['alerts']) and dom['checkpoint_boundary'] is None and dom['comparison_status'] is None
+            exact = exact and dom['invalid'] and bool(dom['alerts']) and no_success_residue(dom, kind)
         elif kind == 'pending':
-            exact = exact and dom['pending'] and dom['checkpoint_boundary'] is None and dom['comparison_status'] is None
+            exact = exact and dom['pending'] and no_success_residue(dom, kind)
         elif kind == 'empty':
-            exact = exact and definition['expected']['checkpoint'] is None and '空:Checkpoint' in text and not dom['pending']
+            exact = exact and definition['expected']['checkpoint'] is None and '空:Checkpoint' in text and not dom['pending'] and no_success_residue(dom, kind)
         else:
             exact = False
         target_network = [n for n in page['network'] if n['path'] == definition['path'].split('?')[0]

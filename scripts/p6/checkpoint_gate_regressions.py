@@ -45,7 +45,106 @@ def action_dom(raw, ident):
     return next(p for p in browser(raw, ident)['pages'] if p['definition']['kind'] == 'resume')['observations'][0]['dom']
 
 
+def object_page(raw, ident, kind):
+    return next(p for p in browser(raw, ident)['pages'] if p['definition']['kind'] == kind)
+
+
+def replace_dom(dom, old, new):
+    for key in ('text', 'html'):
+        dom[key] = dom[key].replace(old, new)
+
+
+def all_networks(raw):
+    yield raw['browser']['network']
+    for ui in raw['browser']['records']:
+        yield ui['network']
+        for p in ui['pages']: yield p['network']
+        for s in ui['switches']: yield s['network']
+
+
+def readback_mutation(raw, name):
+    """Sync all derived expectations/wire/DOM; physical DB and lineage stay true."""
+    if name in ('browser_expected_note_disagrees_with_DB', 'browser_resume_note_disagrees_with_DB', 'browser_wire_note_disagrees_with_DB'):
+        kind = 'resume' if name == 'browser_resume_note_disagrees_with_DB' else 'checkpoint'
+        ui = browser(raw, 'CP12.default'); target = next(s for s in ui['switches'] if s['kind'] == kind)['b']
+        p = next(p for p in record(raw, 'CP12.default')['pages'] if p['entity_id'] == target)
+        old = p['expected'][kind]['note']['value']['text'] if kind == 'resume' else p['expected'][kind]['note']['text']
+        new = 'WRONG B NOTE: copied from an unrelated historical source'
+        def note(data):
+            (data['note']['value'] if kind == 'resume' else data['note'])['text'] = new
+        if name != 'browser_wire_note_disagrees_with_DB':
+            note(p['expected'][kind])
+            for page in ui['pages']:
+                if page['definition']['entity_id'] != target: continue
+                note(page['definition']['expected'][kind])
+                for o in page['observations']:
+                    o['dom']['rawtexts'][0]['text'] = new; replace_dom(o['dom'], old, new)
+            for s in ui['switches']:
+                if s['kind'] != kind: continue
+                for phase in ('before', 'after'):
+                    s[phase]['dom']['rawtexts'][0]['text'] = new; replace_dom(s[phase]['dom'], old, new)
+        for network in all_networks(raw):
+            for n in network:
+                if n['path'] == '/v1/' + ('resumes/' if kind == 'resume' else 'checkpoints/') + target and n.get('status') == 200:
+                    note(n['body'][kind])
+        return {'variant': 'CP12.default', 'target': target, 'original_note': old, 'wrong_note': new, 'DB_and_lineage_unchanged': True}
+    ui = browser(raw, 'CP11.default')
+    p = ui['pages'][0]; definition = p['definition']; path = definition['path']
+    prepared = record(raw, 'CP11.default')['pages'][0]
+    if name == 'browser_latest_wrong_selection':
+        other = ui['pages'][1]
+        new = copy.deepcopy(other['definition']['expected'])
+        definition['entity_id'] = prepared['entity_id'] = new['checkpoint']['checkpoint_id']
+        replacement = other['observations'][0]['dom']
+    else:
+        new = {'checkpoint': None}; replacement = next(p for p in ui['pages'] if p['definition']['kind'] == 'empty')['observations'][0]['dom']
+        definition['kind'] = prepared['kind'] = 'empty'
+    definition['expected'] = copy.deepcopy(new); prepared['expected'] = copy.deepcopy(new)
+    for o in p['observations']:
+        o['dom'] = copy.deepcopy(replacement); o['dom']['hash'] = definition['hash']
+    for network in all_networks(raw):
+        for n in network:
+            if n['path'] + n.get('query', '') == path and n.get('status') == 200:
+                n['body'] = copy.deepcopy(new)
+    return {'variant': 'CP11.default', 'mutation': name, 'prepared_wrong_body': new, 'DB_and_lineage_unchanged': True}
+
+
 def mutate(raw, name, directory):
+    if name.startswith('browser_'):
+        return readback_mutation(raw, name)
+    if name.startswith('stale_success_') or name == 'old_success_data_on_404':
+        targets = {'old_success_data_on_404': 'CP23.checkpoint', 'stale_success_resume_404': 'CP23.resume',
+            'stale_success_checkpoint_invalid': 'CP24.checkpoint', 'stale_success_resume_invalid': 'CP24.resume',
+            'stale_success_signin': 'CP25.checkpoint_missing_objects_read', 'stale_success_scope': 'CP25.checkpoint_missing_state_read',
+            'stale_success_pending': 'CP26.p3_off_get', 'stale_success_empty': 'CP09.default'}
+        ident = targets[name]; p = browser(raw, ident)['pages'][0]
+        source_kind = 'resume' if 'resume' in name else 'checkpoint'
+        source = object_page(raw, 'CP01.default', source_kind)['observations'][0]['dom']
+        for o in p['observations']:
+            d = o['dom']
+            for k in ('kv', 'digests', 'rawtexts'): d[k] = copy.deepcopy(source[k])
+            d['jsonblocks'] += copy.deepcopy(source['jsonblocks'])
+            d['text'] += '\n' + str(source['kv']) + str(source['rawtexts']) + str(source['jsonblocks'])
+            d['html'] += '\n<dl class="kv">' + ''.join('<dt>'+v['label']+'</dt><dd>'+v['text']+'</dd>' for v in source['kv']) + '</dl>'
+        return {'variant': ident, 'mutation': name, 'dom': p['observations'][0]['dom']}
+    if name in ('incorrect_created_at', 'incorrect_resume_created_at', 'wrong_event_navigation', 'wrong_command_navigation', 'wrong_resume_event_navigation', 'wrong_resume_command_navigation', 'wrong_project_navigation', 'wrong_task_navigation', 'wrong_resume_checkpoint_navigation', 'wrong_trigger_level', 'wrong_resume_checkpoint_id'):
+        kind = 'resume' if 'resume' in name else 'checkpoint'; p = object_page(raw, 'CP02.default', kind)
+        for o in p['observations']:
+            d = o['dom']
+            if 'created_at' in name:
+                field = next(v for v in d['kv'] if v['label'] == 'created_at'); old = field['text']; field['text'] = '1999-01-01 00:00:00.000Z'; replace_dom(d, old, field['text'])
+            elif name in ('wrong_trigger_level', 'wrong_resume_checkpoint_id'):
+                label = 'trigger_provenance' if kind == 'checkpoint' else 'checkpoint'
+                next(v for v in d['kv'] if v['label'] == label)['text'] = 'WRONG'
+            else:
+                prefix = '≡command Event' if 'command' in name else '≡source Event'
+                if 'project' in name or 'task' in name or 'checkpoint_navigation' in name:
+                    field = 'project_id' if 'project' in name else 'task_id' if 'task' in name else 'checkpoint_id'
+                    link = next(v for v in d['links'] if v['text'] == p['definition']['expected'][kind][field])
+                else:
+                    link = next(v for v in d['links'] if v['text'].startswith(prefix))
+                old = link['href']; link['href'] = '#/event/evt_00000000000000000000000000?original=' + old.rsplit('/', 1)[-1]; replace_dom(d, old, link['href'])
+        return {'variant': 'CP02.default', 'mutation': name, 'dom': p['observations'][0]['dom']}
     if name.startswith('late_') and name != 'late_switch_wrong_dynamic_details':
         kind, fault = name[len('late_'):].split('_', 1)
         switch = next(s for s in browser(raw, 'CP12.default')['switches'] if s['kind'] == kind)
@@ -125,6 +224,9 @@ def mutate(raw, name, directory):
 
 def sync_artifacts(directory, raw, original_manifest):
     write(directory / 'browser.json', raw['browser'])
+    temporary = directory / 'browser-requests.jsonl.private-write'
+    temporary.write_text(''.join(json.dumps(n, ensure_ascii=False) + '\n' for n in raw['browser']['network']))
+    os.replace(temporary, directory / 'browser-requests.jsonl')
     for ui in raw['browser']['records']:
         observations = [o for p in ui['pages'] for o in p['observations']] + [s[k] for s in ui['switches'] for k in ('before', 'after')]
         for o in observations: write(directory / o['dom_file'], o['dom'])
@@ -156,6 +258,13 @@ def run(bundle, repository, out):
         names += ['late_' + kind + '_' + f for f in ('note', 'digest', 'projection', 'workspace', 'empty_input', 'third_input', 'missing_release', 'wrong_release_request', 'release_after_capture')]
     names += ['late_resume_comparison', 'duplicate_action', 'wrong_action_step', 'wrong_action_status', 'missing_action',
         'wrong_operation_file', 'observer_window_truncated', 'source_event_payload_changed', 'CONTROL_unknown_to_same']
+    new_names = ['browser_expected_note_disagrees_with_DB', 'old_success_data_on_404', 'incorrect_created_at', 'wrong_event_navigation',
+        'browser_resume_note_disagrees_with_DB', 'browser_wire_note_disagrees_with_DB', 'browser_latest_wrong_selection', 'browser_empty_conceals_DB_checkpoint',
+        'stale_success_resume_404', 'stale_success_checkpoint_invalid', 'stale_success_resume_invalid', 'stale_success_signin',
+        'stale_success_scope', 'stale_success_pending', 'stale_success_empty', 'incorrect_resume_created_at',
+        'wrong_command_navigation', 'wrong_resume_event_navigation', 'wrong_resume_command_navigation', 'wrong_project_navigation',
+        'wrong_task_navigation', 'wrong_resume_checkpoint_navigation', 'wrong_trigger_level', 'wrong_resume_checkpoint_id']
+    names += new_names
     checks = []
     for name in names:
         with tempfile.TemporaryDirectory(prefix='NEGATIVE-private-', dir=out) as temporary:
@@ -167,10 +276,21 @@ def run(bundle, repository, out):
             value = gate.evaluate_bundle(changed, matrix, expected_candidate=candidate, expected_archive=raw['source_archive_sha256'], evidence_directory=directory)
             rejected = value['status'] != 'PASS'
             cli_rejected = None
-            if name == 'missing_all_database_files':
+            if name == 'missing_all_database_files' or name in new_names:
+                selfchecks = gate.adversarial_bundle_checks(changed, matrix, candidate, raw['source_archive_sha256'], evidence_directory=directory)
+                value['harness_selfchecks'] = selfchecks['status']
+                write(directory / 'result.json', value)
+                write(directory / 'harness-selfchecks.json', selfchecks)
+                sync_artifacts(directory, changed, manifest)
                 try: cli_rejected = gate.verify_directory(directory, candidate, repository)['status'] != 'PASS'
                 except Exception as e: cli_rejected = True; patch['cli_rejection'] = type(e).__name__ + ': ' + str(e)
                 rejected = rejected and cli_rejected
+            if name.startswith('browser_'):
+                assert value['physical_evidence_binding']['status'] == 'BLOCKED' and 'actual historical DB GET' in value['physical_evidence_binding'].get('reason', ''), 'DB-to-browser readback gate did not reject'
+            elif name in new_names:
+                assert value['physical_evidence_binding']['status'] == 'PASS', 'unrelated physical binding failed for DOM component'
+                ident = patch['variant']
+                assert not next(r for r in value['records'] if r['id'] == ident)['invariants']['G7']['passed'], 'state/metadata G7 did not reject'
             if name.startswith('late_'):
                 assert not next(r for r in value['records'] if r['id'] == 'CP12.default').get('invariants', {}).get('G7', {}).get('passed', False), 'late dynamic check did not reject'
             if name in ('empty_actions_restored_claim', 'extra_unauthorized_action', 'duplicate_action', 'wrong_action_step', 'wrong_action_status', 'missing_action'):
@@ -190,6 +310,7 @@ def run(bundle, repository, out):
         'source_archive_sha256': raw['source_archive_sha256'], 'positive_manifest_sha256': before,
         'kind': 'AUTHOR_GATE_REGRESSION_COMPONENTS_NOT_MATRIX_VARIANTS', 'original_bundle_unchanged': True,
         'count': len(checks), 'legacy_review_bad_inputs_rejected': sum(c['rejected'] for c in checks[:8]), 'checks': checks,
+        'r01_r03_original_counterexamples_rejected': sum(c['rejected'] for c in checks[35:39]),
         'scope_acceptance_signed': False, 'verifier_sha256': digest(Path(__file__))}
     write(out / 'result.json', result)
     files = [{'path': p.name, 'bytes': p.stat().st_size, 'sha256': digest(p)} for p in sorted(out.iterdir()) if p.is_file() and p.name != 'manifest.json']

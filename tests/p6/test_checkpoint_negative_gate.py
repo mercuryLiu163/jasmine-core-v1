@@ -173,6 +173,69 @@ class LateDynamicAdversaries(unittest.TestCase):
                     self.assertIn(s['b'], dom['text'])
                     self.assertFalse(gate.switch_proof(fixture['row'], s)[0])
 
+class HistoricalReadbackAndMetadata(unittest.TestCase):
+    def setUp(self):
+        self.fixture = json.loads((ROOT / 'tests/p6/fixtures/cp12-author-143845d.component.json').read_text())
+
+    def test_timestamp_matches_ui_truncation_and_utc(self):
+        self.assertEqual(gate.format_timestamp('2026-10-10T02:33:15.355999Z'), '2026-10-10 02:33:15.355Z')
+        self.assertEqual(gate.format_timestamp('2026-10-09T19:33:15.355999-07:00'), '2026-10-10 02:33:15.355Z')
+        self.assertEqual(gate.format_timestamp('old-invalid-value'), 'old-invalid-value')
+
+    def test_exact_historical_timestamp_links_and_related_metadata(self):
+        for original in self.fixture['switches']:
+            kind = original['kind']; data = next(p['expected'][kind] for p in self.fixture['row']['pages'] if p['entity_id'] == original['b'])
+            baseline = original['after']['dom']; self.assertTrue(gate.dynamic_identity(baseline, data, kind))
+            for fault in ('created_at', 'source Event', 'command Event', 'project_id', 'task_id', 'trigger_provenance' if kind == 'checkpoint' else 'checkpoint'):
+                with self.subTest(kind=kind, fault=fault):
+                    d = copy.deepcopy(baseline)
+                    if fault.endswith('_id'):
+                        next(v for v in d['links'] if v['text'] == data[fault])['href'] += '?wrong=1'
+                    elif fault in ('source Event', 'command Event'):
+                        next(v for v in d['links'] if v['text'].startswith('≡' + fault))['href'] = '#/event/evt_WRONG?original=' + data['source_event_id' if fault == 'source Event' else 'command_event_id']
+                    else:
+                        next(v for v in d['kv'] if v['label'] == fault)['text'] = 'WRONG'
+                    self.assertFalse(gate.dynamic_identity(d, data, kind))
+
+    def test_db_serialization_latest_sequence_session_empty_and_actual_fork(self):
+        checkpoints = [copy.deepcopy(p['expected']['checkpoint']) for p in self.fixture['row']['pages'] if p['kind'] == 'checkpoint']
+        a, b = checkpoints[:2]; state = {'tasks': [{'task_id': a['task_id']}], 'sessions': [{'session_id': c['session_id'], 'task_id': c['task_id']} for c in checkpoints], 'events': [], 'checkpoints': [], 'resume_results': []}
+        for seq, c in enumerate(checkpoints, 1):
+            stored = copy.deepcopy(c)
+            for key in ('projection', 'workspace', 'note', 'trigger_provenance'):
+                value = stored.pop(key); stored[key + '_json'] = gate.canonical(value) if value is not None else None
+            state['checkpoints'].append(stored); state['events'].append({'event_id': c['command_event_id'], 'seq': seq})
+        path = '/v1/tasks/' + a['task_id'] + '/checkpoints/latest'
+        self.assertEqual(gate.historical_read_body(state, path), {'checkpoint': b})
+        state['events'][0]['seq'] = 100  # created_at cannot select the latest record
+        self.assertEqual(gate.historical_read_body(state, path), {'checkpoint': a})
+        self.assertEqual(gate.historical_read_body(state, path + '?session_id=' + b['session_id']), {'checkpoint': b})
+        state['checkpoints'][0]['projection_json'] = '{"actual_corrupt_fork":true}'
+        read = gate.historical_read_body(state, '/v1/checkpoints/' + a['checkpoint_id'])
+        self.assertEqual(read['checkpoint']['projection'], {'actual_corrupt_fork': True})
+        state['checkpoints'] = []
+        self.assertEqual(gate.historical_read_body(state, path), {'checkpoint': None})
+        resume = next(p['expected']['resume'] for p in self.fixture['row']['pages'] if p['kind'] == 'resume')
+        state['resume_results'] = [{'resume_id': resume['resume_id'], 'result_json': gate.canonical(resume)}]
+        self.assertEqual(gate.historical_read_body(state, '/v1/resumes/' + resume['resume_id']), {'resume': resume})
+        with self.assertRaises(ValueError): gate.historical_read_body(state, '/v1/checkpoints/ckp_MISSING')
+
+    def test_all_nonrecord_states_reject_each_success_component(self):
+        baseline = {'kv': [], 'digests': [], 'rawtexts': [], 'next_action_rows': [], 'checkpoint_boundary': None, 'comparison_status': None, 'note': None, 'next_actions': None, 'next_action_header': None, 'jsonblocks': [], 'links': [{'text': 'checkpoint', 'href': '#/pending/checkpoint'}], 'html': '<input value="ckp_requested">', 'text': 'input ckp_requested'}
+        for kind in ('error', 'signin-error', 'invalid', 'pending', 'empty'):
+            original = copy.deepcopy(baseline)
+            if kind in ('error', 'signin-error'): original['jsonblocks'] = [{'label': 'error.details', 'text': '{"id":"ckp_requested"}'}]
+            self.assertTrue(gate.no_success_residue(original, kind))
+            for fault in ('kv', 'digests', 'rawtexts', 'next_action_rows', 'note', 'next_actions', 'next_action_header', 'checkpoint_boundary', 'comparison_status', 'jsonblocks', 'links', 'html', 'text'):
+                with self.subTest(kind=kind, fault=fault):
+                    d = copy.deepcopy(original)
+                    if fault == 'links': d['links'].append({'text': 'source', 'href': '#/event/evt_OLD'})
+                    elif fault == 'jsonblocks': d['jsonblocks'].append({'label': 'projection', 'text': '{}'})
+                    elif fault == 'html': d['html'] += '<dl class="kv"><dt>checkpoint_id</dt><dd>OLD</dd></dl>'
+                    elif fault == 'text': d['text'] += '不可变快照:'
+                    else: d[fault] = ['OLD'] if isinstance(d[fault], list) else 'OLD'
+                    self.assertFalse(gate.no_success_residue(d, kind))
+
 class ReadonlySQLiteConstraintProof(unittest.TestCase):
     def test_check_constraints_are_verified_on_private_memory_copy(self):
         with tempfile.TemporaryDirectory() as temporary:
