@@ -258,6 +258,30 @@ def scene_pages(row, operation, calls, state):
     return roles
 
 
+def capture_roles(definition):
+    return ('read', 'refresh') if definition.get('refresh') else ('read',)
+
+
+def capture_receipts(observations, names):
+    """Require each role's own collection paths, even when its bytes are identical.
+
+    Names come from bound scene/page roles, never the submitted file inventory.
+    Request windows/times are separately checked by page_stage.
+    """
+    if len(observations) != len(names):
+        raise ValueError('page capture roles are missing/extra')
+    required = []
+    for o, name in zip(observations, names):
+        dom, png = 'dom/' + name + '.json', 'screenshots/' + name + '.png'
+        if (o['dom_file'], o['screenshot']) != (dom, png):
+            raise ValueError('page capture artifact identity differs from scene/page/read/refresh role')
+        required.extend((dom, png))
+    for first, second in zip(observations, observations[1:]):
+        if first['at_unix'] > second['dom_at_unix']:
+            raise ValueError('page capture roles overlap or are reversed')
+    return required
+
+
 def page_stage(page, ui, trace, observer, label, definition=None, observations=None, clicks=None):
     """Bind this exact page access phase and captures to this variant's real wire."""
     stage=page['stage']; start,end=stage['network_start'],stage['network_end']
@@ -270,7 +294,10 @@ def page_stage(page, ui, trace, observer, label, definition=None, observations=N
     observed=observer[begin:finish]
     if any(e not in ui['observer_window'] for e in observed): raise ValueError('page observer window is outside this scene')
     if stage['started_at_unix']>stage['finished_at_unix']: raise ValueError('reversed page phase')
-    definition=definition or page['definition']; observations=observations or page['observations']
+    definition=page['definition'] if definition is None else definition
+    observations=page['observations'] if observations is None else observations
+    required_captures = 2 if label.startswith('switch-') else len(capture_roles(definition))
+    if len(observations) != required_captures: raise ValueError('page capture roles are missing/extra')
     used_paths={definition['path']}
     if 'held' in page: used_paths.add(page['held']['path'])
     for n in network:
@@ -522,6 +549,9 @@ class EvidenceStore:
                         raise ValueError('prepared browser expected differs from actual historical DB GET')
             roles = scene_pages(row, self.json, calls['base'], read_state)
             for i,page in enumerate(ui['pages']):
+                # File paths are derived from already-bound scene/page definitions.
+                names = [ui['id']+'-'+str(i)+'-'+role for role in capture_roles(roles[i][1])]
+                for ref in capture_receipts(page['observations'], names): self.file(ref)
                 page_stage(page,ui,trace,observers[runtime],'signin' if page['definition']['kind']=='signin-error' else 'page-'+str(i),clicks=clicks)
             if row['case_id']=='CP12':
                 wanted=[['checkpoint',roles[0][1]['entity_id'],roles[2][1]['entity_id']],['resume',roles[1][1]['entity_id'],roles[3][1]['entity_id']]]
@@ -530,6 +560,9 @@ class EvidenceStore:
                     a=next(p for role,p in roles if p['kind']==s['kind'] and p['entity_id']==s['a'])
                     b=next(p for role,p in roles if p['kind']==s['kind'] and p['entity_id']==s['b'])
                     if s['initial_page']['definition']!=a: raise ValueError('scene switch initial role differs')
+                    prefix = ui['id']+'-switch-'+s['kind']+'-'
+                    for ref in capture_receipts(s['initial_page']['observations'], [prefix+'initial-'+role for role in capture_roles(a)]): self.file(ref)
+                    for ref in capture_receipts([s['before'],s['after']], [prefix+'before-release',prefix+'after-release']): self.file(ref)
                     page_stage(s['initial_page'],ui,trace,observers[runtime],'page-switch-'+s['kind']+'-initial',clicks=clicks)
                     page_stage(s,ui,trace,observers[runtime],'switch-'+s['kind'],definition={**b,'refresh':False},observations=[s['before'],s['after']],clicks=clicks)
                     if s['initial_page']['stage']['network_end']!=s['stage']['network_start']: raise ValueError('switch is detached from its initial page access')
@@ -735,9 +768,12 @@ def jsonblock(dom, prefix):
     return values[0]
 
 
-def display_proof(page):
+def display_proof(page, roles=None):
     definition = page['definition']
     kind = definition['kind']
+    roles = capture_roles(definition) if roles is None else roles
+    if len(page['observations']) != len(roles):
+        return False, [{'passed': False, 'reason': 'page capture roles are missing/extra', 'required_roles': roles}]
     results = []
     for observation in page['observations']:
         dom = observation['dom']
@@ -838,7 +874,7 @@ def switch_proof(row, switch):
     a = next(p for p in row['pages'] if p['kind'] == kind and p['entity_id'] == switch['a'])
     b = next(p for p in row['pages'] if p['kind'] == kind and p['entity_id'] == switch['b'])
     expected = {**b, 'refresh': False}
-    displays, evidence = display_proof({'definition': expected, 'observations': [switch['before'], switch['after']], 'network': switch['network']})
+    displays, evidence = display_proof({'definition': expected, 'observations': [switch['before'], switch['after']], 'network': switch['network']}, roles=('before-release','after-release'))
     if 'initial_page' in switch:
         displays = displays and display_proof(switch['initial_page'])[0]
     field = kind + '_id'

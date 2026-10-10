@@ -297,6 +297,55 @@ class SceneRolesAndRequestWindows(unittest.TestCase):
                 else:p['network'][0]['query']='?wrong=1'
                 with self.assertRaisesRegex(ValueError,'page'):gate.page_stage(p,ui,network,observer,'page-0')
 
+class RequiredCaptureRoles(unittest.TestCase):
+    def captures(self, prefix='CP02.default-0-', roles=('read','refresh')):
+        return [{'dom_file':'dom/'+prefix+role+'.json','screenshot':'screenshots/'+prefix+role+'.png',
+                 'dom':{'same_immutable_content':True},'dom_at_unix':i*2+1,'at_unix':i*2+1.1} for i,role in enumerate(roles)]
+
+    def test_distinct_role_receipts_allow_identical_immutable_content(self):
+        values=self.captures()
+        self.assertEqual(values[0]['dom'],values[1]['dom'])
+        self.assertEqual(len(gate.capture_receipts(values,['CP02.default-0-read','CP02.default-0-refresh'])),4)
+
+    def test_missing_extra_and_empty_captures_are_rejected(self):
+        values=self.captures();names=['CP02.default-0-read','CP02.default-0-refresh']
+        for obs in ([],values[:1],values+[copy.deepcopy(values[1])]):
+            with self.subTest(count=len(obs)),self.assertRaisesRegex(ValueError,'capture roles'):
+                gate.capture_receipts(obs,names)
+
+    def test_dom_and_screenshot_cannot_each_alias_initial_or_other_page(self):
+        for key in ('dom_file','screenshot'):
+            for foreign in (self.captures()[0],self.captures('CP01.default-0-')[1]):
+                with self.subTest(key=key,foreign=foreign[key]):
+                    obs=self.captures();obs[1][key]=foreign[key]
+                    with self.assertRaisesRegex(ValueError,'capture artifact identity'):
+                        gate.capture_receipts(obs,['CP02.default-0-read','CP02.default-0-refresh'])
+
+    def test_switch_initial_requires_its_own_read_and_refresh_receipts(self):
+        for kind in ('checkpoint','resume'):
+            prefix='CP12.default-switch-'+kind+'-initial-';values=self.captures(prefix)
+            names=[prefix+role for role in gate.capture_roles({'refresh':True})]
+            self.assertEqual(len(gate.capture_receipts(values,names)),4)
+            with self.assertRaisesRegex(ValueError,'capture roles'):gate.capture_receipts(values[:1],names)
+            values[1]['dom_file']=self.captures()[1]['dom_file']
+            with self.assertRaisesRegex(ValueError,'capture artifact identity'):gate.capture_receipts(values,names)
+
+    def test_before_after_release_are_distinct_from_initial_and_each_other(self):
+        prefix='CP12.default-switch-resume-';roles=('before-release','after-release');obs=self.captures(prefix,roles)
+        names=[prefix+role for role in roles];self.assertEqual(len(gate.capture_receipts(obs,names)),4)
+        obs[1]['screenshot']=obs[0]['screenshot']
+        with self.assertRaisesRegex(ValueError,'capture artifact identity'):gate.capture_receipts(obs,names)
+
+    def test_capture_roles_cannot_overlap_or_reverse(self):
+        obs=self.captures();obs[1]['dom_at_unix']=obs[0]['at_unix']-.01
+        with self.assertRaisesRegex(ValueError,'capture roles overlap'):
+            gate.capture_receipts(obs,['CP02.default-0-read','CP02.default-0-refresh'])
+
+    def test_display_requires_declared_refresh_and_nonrefresh_cardinality(self):
+        for refresh,obs in ((True,[]),(True,[{}]),(False,[]),(False,[{},{}])):
+            with self.subTest(refresh=refresh,count=len(obs)):
+                self.assertFalse(gate.display_proof({'definition':{'kind':'checkpoint','refresh':refresh},'observations':obs})[0])
+
 class ReadonlySQLiteConstraintProof(unittest.TestCase):
     def test_check_constraints_are_verified_on_private_memory_copy(self):
         with tempfile.TemporaryDirectory() as temporary:

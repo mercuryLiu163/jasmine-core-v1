@@ -14,6 +14,7 @@ from pathlib import Path
 import shutil
 import sys
 import tempfile
+import subprocess
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import checkpoint_negative_gate as gate
@@ -110,6 +111,33 @@ def readback_mutation(raw, name):
 
 
 def mutate(raw, name, directory):
+    if name in CAPTURE_NAMES:
+        pages=[]
+        if name=='all_refresh_captures_omitted':
+            pages=[p for ui in raw['browser']['records'] for p in list(ui['pages'])+[s['initial_page'] for s in ui['switches']]]
+        elif name.startswith('switch_initial'):
+            kind='resume' if 'resume' in name else 'checkpoint'
+            pages=[next(s for s in browser(raw,'CP12.default')['switches'] if s['kind']==kind)['initial_page']]
+        else:
+            pages=[object_page(raw,'CP02.default','resume' if 'resume' in name else 'checkpoint')]
+        omitted=[];changed_roles=0
+        for p in pages:
+            if not p['definition'].get('refresh'):continue
+            old=copy.deepcopy(p['observations'][1]);second=p['observations'][1];changed_roles+=1
+            if name.endswith('_omitted'):
+                p['observations']=p['observations'][:1];keys=('dom_file','screenshot')
+            elif name=='extra_refresh_capture':
+                p['observations'].append(copy.deepcopy(second));keys=()
+            elif name=='reversed_read_refresh_roles':
+                p['observations'].reverse();keys=()
+            else:
+                source=object_page(raw,'CP01.default','checkpoint')['observations'][1] if name=='refresh_borrows_other_page_files' else p['observations'][0]
+                keys=('dom_file',) if name=='refresh_aliases_only_DOM' else ('screenshot',) if name=='refresh_aliases_only_PNG' else ('dom_file','screenshot')
+                for key in keys:second[key]=source[key]
+                if 'dom_file' in keys:second['dom']=copy.deepcopy(source['dom'])
+            for key in keys:
+                path=old[key];(directory/path).unlink();omitted.append(path)
+        return {'mutation':name,'changed_capture_roles':changed_roles,'omitted_files':omitted,'omitted_count':len(omitted),'request_windows_and_DB_unchanged':True}
     if name in ('OTHER_TASK_page_substitution','OTHER_TASK_resume_substitution','SAME_TASK_old_resume_replaced_by_new','SAME_TASK_new_resume_replaced_by_old','SAME_TASK_checkpoint_role_substitution','CP11_session_role_substitution'):
         ident='CP02.default' if name.startswith('OTHER_TASK') else 'CP10.default' if 'resume_replaced' in name else 'CP12.default' if name=='SAME_TASK_checkpoint_role_substitution' else 'CP11.default'
         ui=browser(raw,ident); row=record(raw,ident)
@@ -274,6 +302,11 @@ def sync_artifacts(directory, raw, original_manifest):
     write(directory / 'manifest.json', manifest)
 
 
+CAPTURE_NAMES = ['one_regular_refresh_omitted','switch_initial_refresh_omitted','all_refresh_captures_omitted','refresh_reuses_initial_capture_files',
+    'regular_resume_refresh_omitted','switch_initial_resume_refresh_omitted','refresh_aliases_only_DOM','refresh_aliases_only_PNG',
+    'switch_initial_refresh_reuses_read_files','refresh_borrows_other_page_files','extra_refresh_capture','reversed_read_refresh_roles']
+
+
 def run(bundle, repository, out):
     os.umask(0o077); out.mkdir(parents=True, exist_ok=False)
     raw = load(bundle / 'raw-result.json'); matrix = load(bundle / 'matrix.json'); manifest = load(bundle / 'manifest.json')
@@ -295,6 +328,7 @@ def run(bundle, repository, out):
     names += new_names
     scene_names=['OTHER_TASK_page_substitution','OTHER_TASK_resume_substitution','SAME_TASK_old_resume_replaced_by_new','SAME_TASK_new_resume_replaced_by_old','SAME_TASK_checkpoint_role_substitution','CP11_session_role_substitution','SCENE_fixture_substitution','SCENE_lineage_substitution','PAGE_foreign_wire','PAGE_foreign_capture','PAGE_detached_request_id','PAGE_capture_before_response','PAGE_wrong_query','SWITCH_foreign_wire','SWITCH_reversed_roles']
     names+=scene_names
+    names+=CAPTURE_NAMES
     checks = []
     for name in names:
         with tempfile.TemporaryDirectory(prefix='NEGATIVE-private-', dir=out) as temporary:
@@ -306,7 +340,7 @@ def run(bundle, repository, out):
             value = gate.evaluate_bundle(changed, matrix, expected_candidate=candidate, expected_archive=raw['source_archive_sha256'], evidence_directory=directory)
             rejected = value['status'] != 'PASS'
             cli_rejected = None
-            if name == 'missing_all_database_files' or name in new_names or name in scene_names:
+            if name == 'missing_all_database_files' or name in new_names or name in scene_names or name in CAPTURE_NAMES:
                 selfchecks = gate.adversarial_bundle_checks(changed, matrix, candidate, raw['source_archive_sha256'], evidence_directory=directory)
                 value['harness_selfchecks'] = selfchecks['status']
                 write(directory / 'result.json', value)
@@ -315,6 +349,12 @@ def run(bundle, repository, out):
                 try: cli_rejected = gate.verify_directory(directory, candidate, repository)['status'] != 'PASS'
                 except Exception as e: cli_rejected = True; patch['cli_rejection'] = type(e).__name__ + ': ' + str(e)
                 rejected = rejected and cli_rejected
+            if name in CAPTURE_NAMES:
+                assert value['physical_evidence_binding']['status']=='BLOCKED' and 'capture' in value['physical_evidence_binding'].get('reason',''), 'mandatory capture role gate did not reject'
+                assert cli_rejected and 'cli_rejection' not in patch, 'capture rejection came from an exception'
+                cli=subprocess.run([sys.executable,str(Path(gate.__file__)), '--bundle',str(directory),'--expected-candidate',candidate,'--repository',str(repository)],capture_output=True,text=True)
+                patch['formal_cli']={'exit':cli.returncode,'stdout':cli.stdout,'stderr':cli.stderr}
+                assert cli.returncode==1 and not cli.stderr and json.loads(cli.stdout)['status']=='BLOCKED', 'formal CLI did not reject through the capture gate'
             if name in scene_names:
                 assert value['physical_evidence_binding']['status']=='BLOCKED' and any(marker in value['physical_evidence_binding'].get('reason','') for marker in ('scene','page','switch')), 'scene/page/history binding did not reject'
                 assert cli_rejected and 'cli_rejection' not in patch, 'formal scene rejection came from an exception rather than the gate'
@@ -345,7 +385,9 @@ def run(bundle, repository, out):
         'count': len(checks), 'legacy_review_bad_inputs_rejected': sum(c['rejected'] for c in checks[:8]), 'checks': checks,
         'r01_r03_original_counterexamples_rejected': sum(c['rejected'] for c in checks[35:39]),
         'scene_original_counterexamples_rejected':sum(c['rejected'] for c in checks[59:62]),
-        'scene_family_components_rejected':sum(c['rejected'] for c in checks[59:]),
+        'scene_family_components_rejected':sum(c['rejected'] for c in checks[59:74]),
+        'capture_original_counterexamples_rejected':sum(c['rejected'] for c in checks[74:78]),
+        'capture_family_components_rejected':sum(c['rejected'] for c in checks[74:]),
         'scope_acceptance_signed': False, 'verifier_sha256': digest(Path(__file__))}
     write(out / 'result.json', result)
     files = [{'path': p.name, 'bytes': p.stat().st_size, 'sha256': digest(p)} for p in sorted(out.iterdir()) if p.is_file() and p.name != 'manifest.json']
