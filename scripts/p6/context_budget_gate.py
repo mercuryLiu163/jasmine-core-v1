@@ -153,6 +153,14 @@ def evaluate(directory,cache,python):
                     require(not any(json.loads(r['full_result_json'])['source_event_id']==c['fixture']['source']['event_id'] and json.loads(r['full_result_json'])['reason']=='MANUAL' for r in op['after']['context_packs']) if ident=='CB04' else op['before']==op['after'],'failed build persisted a receipt')
                 else:
                     d=c['browser_definition'];ui=next(u for u in browser['records'] if u['id']==ident)
+                    kind={'CB06':'error','CB07':'pending','CB08':'invalid','CB09':'error'}.get(ident,'context')
+                    entity='bad-context-id' if ident=='CB08' else ids_in_source(None,'ctx') if ident=='CB09' else c['pack']['context_pack_id']
+                    expected_definition={'id':ident,'kind':kind,'hash':'#/context/'+entity,'path':None if ident=='CB08' else '/v1/context/'+entity,'entity_id':entity,'refresh':ident in ('CB01','CB02','CB05'),'status':403 if ident=='CB06' else 404 if ident in ('CB07','CB09') else 200}
+                    require({k:d[k] for k in expected_definition}==expected_definition,'frozen browser scene target/refresh role differs')
+                    if ident in ('CB06','CB07','CB08','CB09'):require(c['pack']==raw['cases'][0]['pack'],'refusal prior pack/scene binding differs')
+                    if ident=='CB09':require(not any(p['context_pack_id']==entity for p in state['context_packs']),'absent target actually exists')
+                    if ident=='CB08':require(not any(e.get('kind')=='request_start' and e.get('path')=='/v1/context/bad-context-id' for e in observer),'invalid target reached Core')
+                    if ident=='CB06':require('context:read' not in d['key_metadata']['scopes'],'scope-negative credential includes context:read')
                     require(ui['status']=='COLLECTED_NOT_A_VERDICT' and ui['navigation'] in browser['clicks'] and ui['navigation']['hash']==d['hash'],'actual navigation differs')
                     require(ui['network'] and all(n in browser['network'] and n['id']==ident for n in ui['network']),'scene wire differs')
                     role_names=[ident+'-read']+([ident+'-refresh'] if d['refresh'] else [])
@@ -168,7 +176,7 @@ def evaluate(directory,cache,python):
                             n=target[i];require(n['method']=='GET' and n['query']=='' and n['authorization_present'] and n['request_id_sent']==n['request_id'] and ui['navigation']['at_unix']<=n['at_unix']<=n['response_finished_at_unix']<=o['dom_at_unix'],'actual read request phase/authentication differs')
                             if i:
                                 clicks=[x for x in browser['clicks'] if x['id']==ident and x.get('text')=='从 Core 重新读取']
-                                require(len(clicks)==1 and ui['observations'][i-1]['at_unix']<=clicks[0]['at_unix']<=n['at_unix'],'refresh request outside actual click phase')
+                                require(len(clicks)==1 and ui['observations'][i-1]['at_unix']<=clicks[0]['started_at_unix']<=clicks[0]['at_unix'] and clicks[0]['started_at_unix']<=n['at_unix'],'refresh request outside actual click phase')
                         dom=o['dom']
                         if ident in ('CB01','CB02','CB05'):
                             p=c['pack'];require(d['entity_id']==p['context_pack_id'] and all(n['body']=={'context':p} and n['status']==200 for n in target),'wire body/scene differs')
@@ -193,7 +201,9 @@ def evaluate(directory,cache,python):
                             require(not any(c['pack'][k] in dom['text'] for k in ('task_id','project_id','source_event_id','command_event_id')) and c['pack']['rendered_content'] not in dom['text'],'refused page mixes prior pack content')
                             if d['kind']=='invalid': require(dom['invalid'] and dom['alerts'],'local invalid not shown')
                             elif d['kind']=='pending': require(dom['pending'] and all(n['body']['error']['code']=='proxy_path_not_allowed' for n in target),'proxy pending conflated')
-                            else: require(dom['alerts'] and all(n['status']==d['status'] and n['body']['error']['code'] in dom['text'] for n in target),'actual Core refusal not shown')
+                            else:
+                                code='forbidden_scope' if ident=='CB06' else 'not_found'
+                                require(dom['alerts'] and all(n['status']==d['status'] and n['body']['error']['code']==code and code in dom['text'] for n in target),'actual Core refusal not shown')
                     if d['refresh']:require(len([x for x in browser['clicks'] if x['id']==ident and x.get('text')=='从 Core 重新读取'])==1,'refresh not actual pointer click')
                     for n in target:
                         events=[e for e in observer if e.get('request_id')==n['request_id']]
@@ -201,7 +211,7 @@ def evaluate(directory,cache,python):
                         else:
                             require([e['kind'] for e in events]==['request_start','request_end'] and events[0]['path']==d['path'] and events[-1]['status']==n['status'],'actual Core read/zero-scan window differs')
                             index=target.index(n)
-                            phase_start=ui['navigation']['at_unix'] if index==0 else next(x['at_unix'] for x in browser['clicks'] if x['id']==ident and x.get('text')=='从 Core 重新读取')
+                            phase_start=ui['navigation']['at_unix'] if index==0 else next(x['started_at_unix'] for x in browser['clicks'] if x['id']==ident and x.get('text')=='从 Core 重新读取')
                             # CDP callbacks are delivered asynchronously: callback receipt
                             # time can follow the actual Core start. Bind both to the
                             # pre-dispatch navigation/click and completed DOM phase.

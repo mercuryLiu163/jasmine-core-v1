@@ -58,6 +58,7 @@ def main(args):
         ('missing_all_captures','delete all twenty DOM/PNG', 'capture'),
         ('missing_all_DB','delete all eighteen DB backups', 'database'),
         ('refresh_reuses_read','point refresh roles to read artifacts', 'role'),
+        ('suppress_refresh_role','change scene definition to omit its mandatory refresh', 'role'),
         ('false_omission_count','show zero omitted items instead of one', 'display'),
         ('false_omission_section','alter the visible omission section', 'display'),
         ('false_omission_tokens','change visible standalone token count', 'display'),
@@ -83,6 +84,7 @@ def main(args):
                 for ui in raw['browser']['records']:
                     if len(ui['observations'])==2:
                         for k in ('dom_file','screenshot'):ui['observations'][1][k]=ui['observations'][0][k]
+            elif ident=='suppress_refresh_role':raw['cases'][1]['browser_definition']['refresh']=False
             elif ident=='false_omission_count':budget['omissions']=budget['omissions'].replace('省略 1 项','省略 0 项')
             elif ident=='false_omission_section':budget['rows'][0]['text']=budget['rows'][0]['text'].replace('RESUME','AUTHORITY')
             elif ident=='false_omission_tokens':budget['rows'][0]['text']=budget['rows'][0]['text'].replace('standalone_tokens = ','standalone_tokens = 0')

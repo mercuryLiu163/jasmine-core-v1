@@ -28,8 +28,9 @@ function local(command, flag, value) {
 function snapshot(c) { return local('snapshot', '--db', c.database) }
 function observer(c) { return local('observer', '--path', c.observer_path) }
 async function click(selector, text) {
+  const started_at_unix = Date.now() / 1000
   const point = await clickByText(cdp, selector, text)
-  const r = { id: current.id, action: 'actual pointer click', selector, text, point, at_unix: Date.now() / 1000 }
+  const r = { id: current.id, action: 'actual pointer click', selector, text, point, started_at_unix, at_unix: Date.now() / 1000 }
   report.clicks.push(r)
   return r
 }
