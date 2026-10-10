@@ -497,6 +497,7 @@ def run(args):
                               'status': 'NOT_RUN', 'reason': 'Preparation or collection has not reached this variant'}
                              for c in matrix['cases'] for v in c['variants']]
         def put(row):
+            row.setdefault('runtime_label', 'base')
             i = next(i for i, existing in enumerate(report['records']) if existing['id'] == row['id'])
             report['records'][i] = row
         launcher_paths = ['scripts/p6/checkpoint_negatives.py', 'scripts/p6/checkpoint_negatives.mjs', 'scripts/p6/checkpoint_negative_gate.py']

@@ -1,0 +1,1992 @@
+{
+  "kind": "HISTORICAL_DOM_COMPONENT_FIXTURE_NOT_AN_ACCEPTANCE_RUN",
+  "source_candidate": "143845d93089a1a5edb41d381b26e71205ec7c8d",
+  "source_manifest_sha256": "a359137a9dcb1ff606693efdac2a5166249a32f2a8eeb78fe450e64626e91b56",
+  "source_run_verdict": "BLOCKED",
+  "row": {
+    "pages": [
+      {
+        "kind": "checkpoint",
+        "hash": "#/checkpoints?checkpoint_id=ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+        "path": "/v1/checkpoints/ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+        "expected": {
+          "checkpoint": {
+            "checkpoint_id": "ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+            "command_event_id": "evt_01M4HSAVK6B27WPMR2QRR3TK2N",
+            "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y",
+            "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+            "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+            "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+            "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+            "session_id": "ses_01M4HSAVH8AMG7W1RM0RDT2A9V",
+            "reason": "MANUAL",
+            "projection_version": "jasmine.task-snapshot.v1",
+            "projection_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+            "task_revision": 1,
+            "full_context_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+            "workspace_digest": "463513b01e642cbd30a0d3542018b1a4cacfb0870362644693d187cd9f0e303e",
+            "created_at": "2026-10-10T02:12:38.118317Z",
+            "projection": {
+              "active_rules": [],
+              "evidence": [],
+              "evidence_count": 0,
+              "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "evidence_refs": [],
+              "objects": [
+                {
+                  "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "object_type": "project",
+                  "revision": 1
+                },
+                {
+                  "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "object_type": "task",
+                  "revision": 1
+                }
+              ],
+              "project": {
+                "created_at": "2026-10-10T02:12:38.045493Z",
+                "description": "",
+                "name": "SYNTHETIC isolated CP11.default",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                "status": "active",
+                "updated_at": "2026-10-10T02:12:38.045493Z"
+              },
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "rules": [],
+              "snapshot_schema": "jasmine.task-snapshot.v1",
+              "source_bindings": [],
+              "steps": [],
+              "task": {
+                "acceptance_criteria": {
+                  "requirements": []
+                },
+                "created_at": "2026-10-10T02:12:38.047302Z",
+                "description": "",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                "status": "ACTIVE",
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                "title": "SYNTHETIC CP11.default",
+                "updated_at": "2026-10-10T02:12:38.047302Z"
+              },
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            "workspace": {
+              "algorithm": "jasmine-workspace-sha256-v1",
+              "captured_at": "2026-10-10T02:12:38.114950Z",
+              "changed_paths": [
+                "declared-input.txt"
+              ],
+              "complete": true,
+              "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+              "dirty": true,
+              "extra_paths": [
+                "declared-input.txt"
+              ],
+              "file_count": 2,
+              "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+              "is_git": true,
+              "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+              "partial_reasons": [],
+              "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+              "selected_hashes": {
+                "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+              }
+            },
+            "note": {
+              "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y",
+              "text": "SYNTHETIC historical note CP11.default-first"
+            },
+            "trigger_provenance": {
+              "level": "UNVERIFIED_REQUEST",
+              "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y"
+            }
+          }
+        },
+        "entity_id": "ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+        "refresh": true
+      },
+      {
+        "kind": "resume",
+        "hash": "#/resume/rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+        "path": "/v1/resumes/rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+        "expected": {
+          "resume": {
+            "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+            "checkpoint_id": "ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+            "command_event_id": "evt_01M4HSAVQHVCF2GJB39FFD2XDR",
+            "comparison": {
+              "checkpoint_freshness": "STATE_EQUAL",
+              "diff": {
+                "added": [],
+                "changed": [],
+                "evidence_changed": false,
+                "removed": [],
+                "workspace_paths": {
+                  "added": [],
+                  "changed": [],
+                  "removed": []
+                }
+              },
+              "reconciliation_required": false,
+              "warnings": [],
+              "workspace": "SAME"
+            },
+            "created_at": "2026-10-10T02:12:38.257487Z",
+            "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+            "next_actions": [],
+            "note": {
+              "authority": false,
+              "historical": true,
+              "value": {
+                "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y",
+                "text": "SYNTHETIC historical note CP11.default-first"
+              }
+            },
+            "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+            "projection": {
+              "active_rules": [],
+              "evidence": [],
+              "evidence_count": 0,
+              "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "evidence_refs": [],
+              "objects": [
+                {
+                  "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "object_type": "project",
+                  "revision": 1
+                },
+                {
+                  "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "object_type": "task",
+                  "revision": 1
+                }
+              ],
+              "project": {
+                "created_at": "2026-10-10T02:12:38.045493Z",
+                "description": "",
+                "name": "SYNTHETIC isolated CP11.default",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                "status": "active",
+                "updated_at": "2026-10-10T02:12:38.045493Z"
+              },
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "rules": [],
+              "snapshot_schema": "jasmine.task-snapshot.v1",
+              "source_bindings": [],
+              "steps": [],
+              "task": {
+                "acceptance_criteria": {
+                  "requirements": []
+                },
+                "created_at": "2026-10-10T02:12:38.047302Z",
+                "description": "",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                "status": "ACTIVE",
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                "title": "SYNTHETIC CP11.default",
+                "updated_at": "2026-10-10T02:12:38.047302Z"
+              },
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            "resume_id": "rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+            "sample_window": {
+              "finished_at_unix": 1791598358.257005,
+              "started_at_unix": 1791598358.206812
+            },
+            "session_id": null,
+            "source_event_id": "evt_01M4HSAVH18BT7V5WA7Z7XPF7Y",
+            "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+            "truth_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+            "workspace": {
+              "algorithm": "jasmine-workspace-sha256-v1",
+              "captured_at": "2026-10-10T02:12:38.254169Z",
+              "changed_paths": [
+                "declared-input.txt"
+              ],
+              "complete": true,
+              "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+              "dirty": true,
+              "extra_paths": [
+                "declared-input.txt"
+              ],
+              "file_count": 2,
+              "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+              "is_git": true,
+              "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+              "partial_reasons": [],
+              "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+              "selected_hashes": {
+                "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+              }
+            }
+          }
+        },
+        "entity_id": "rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+        "refresh": true
+      },
+      {
+        "kind": "checkpoint",
+        "hash": "#/checkpoints?checkpoint_id=ckp_01M4HSAVN59QJDPSATF3C3624D",
+        "path": "/v1/checkpoints/ckp_01M4HSAVN59QJDPSATF3C3624D",
+        "expected": {
+          "checkpoint": {
+            "checkpoint_id": "ckp_01M4HSAVN59QJDPSATF3C3624D",
+            "command_event_id": "evt_01M4HSAVN5XY3PMGT5851XG2PJ",
+            "source_event_id": "evt_01M4HSAVHBDQNXX0R3JR21J3BA",
+            "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+            "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+            "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+            "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+            "session_id": "ses_01M4HSAVH9TDN176TW41ADQ61S",
+            "reason": "MANUAL",
+            "projection_version": "jasmine.task-snapshot.v1",
+            "projection_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+            "task_revision": 1,
+            "full_context_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+            "workspace_digest": "28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84",
+            "created_at": "2026-10-10T02:12:38.181855Z",
+            "projection": {
+              "active_rules": [],
+              "evidence": [],
+              "evidence_count": 0,
+              "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "evidence_refs": [],
+              "objects": [
+                {
+                  "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "object_type": "project",
+                  "revision": 1
+                },
+                {
+                  "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "object_type": "task",
+                  "revision": 1
+                }
+              ],
+              "project": {
+                "created_at": "2026-10-10T02:12:38.045493Z",
+                "description": "",
+                "name": "SYNTHETIC isolated CP11.default",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                "status": "active",
+                "updated_at": "2026-10-10T02:12:38.045493Z"
+              },
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "rules": [],
+              "snapshot_schema": "jasmine.task-snapshot.v1",
+              "source_bindings": [],
+              "steps": [],
+              "task": {
+                "acceptance_criteria": {
+                  "requirements": []
+                },
+                "created_at": "2026-10-10T02:12:38.047302Z",
+                "description": "",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                "status": "ACTIVE",
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                "title": "SYNTHETIC CP11.default",
+                "updated_at": "2026-10-10T02:12:38.047302Z"
+              },
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            "workspace": {
+              "algorithm": "jasmine-workspace-sha256-v1",
+              "captured_at": "2026-10-10T02:12:38.178506Z",
+              "changed_paths": [
+                "declared-input.txt"
+              ],
+              "complete": true,
+              "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+              "dirty": true,
+              "extra_paths": [
+                "declared-input.txt"
+              ],
+              "file_count": 2,
+              "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+              "is_git": true,
+              "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+              "partial_reasons": [],
+              "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+              "selected_hashes": {
+                "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+              }
+            },
+            "note": {
+              "source_event_id": "evt_01M4HSAVHBDQNXX0R3JR21J3BA",
+              "text": "SYNTHETIC historical note CP11.default-last"
+            },
+            "trigger_provenance": {
+              "level": "UNVERIFIED_REQUEST",
+              "source_event_id": "evt_01M4HSAVHBDQNXX0R3JR21J3BA"
+            }
+          }
+        },
+        "entity_id": "ckp_01M4HSAVN59QJDPSATF3C3624D",
+        "refresh": true
+      },
+      {
+        "kind": "resume",
+        "hash": "#/resume/rms_01M4HSAVSJ1M43E9NBKVVGVW9K",
+        "path": "/v1/resumes/rms_01M4HSAVSJ1M43E9NBKVVGVW9K",
+        "expected": {
+          "resume": {
+            "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+            "checkpoint_id": "ckp_01M4HSAVN59QJDPSATF3C3624D",
+            "command_event_id": "evt_01M4HSAVSJ5YRC3A83EPC0EH07",
+            "comparison": {
+              "checkpoint_freshness": "STATE_EQUAL",
+              "diff": {
+                "added": [],
+                "changed": [],
+                "evidence_changed": false,
+                "removed": [],
+                "workspace_paths": {
+                  "added": [],
+                  "changed": [],
+                  "removed": []
+                }
+              },
+              "reconciliation_required": false,
+              "warnings": [],
+              "workspace": "SAME"
+            },
+            "created_at": "2026-10-10T02:12:38.322311Z",
+            "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+            "next_actions": [],
+            "note": {
+              "authority": false,
+              "historical": true,
+              "value": {
+                "source_event_id": "evt_01M4HSAVHBDQNXX0R3JR21J3BA",
+                "text": "SYNTHETIC historical note CP11.default-last"
+              }
+            },
+            "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+            "projection": {
+              "active_rules": [],
+              "evidence": [],
+              "evidence_count": 0,
+              "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "evidence_refs": [],
+              "objects": [
+                {
+                  "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "object_type": "project",
+                  "revision": 1
+                },
+                {
+                  "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "object_type": "task",
+                  "revision": 1
+                }
+              ],
+              "project": {
+                "created_at": "2026-10-10T02:12:38.045493Z",
+                "description": "",
+                "name": "SYNTHETIC isolated CP11.default",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                "status": "active",
+                "updated_at": "2026-10-10T02:12:38.045493Z"
+              },
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "rules": [],
+              "snapshot_schema": "jasmine.task-snapshot.v1",
+              "source_bindings": [],
+              "steps": [],
+              "task": {
+                "acceptance_criteria": {
+                  "requirements": []
+                },
+                "created_at": "2026-10-10T02:12:38.047302Z",
+                "description": "",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                "status": "ACTIVE",
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                "title": "SYNTHETIC CP11.default",
+                "updated_at": "2026-10-10T02:12:38.047302Z"
+              },
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            "resume_id": "rms_01M4HSAVSJ1M43E9NBKVVGVW9K",
+            "sample_window": {
+              "finished_at_unix": 1791598358.321867,
+              "started_at_unix": 1791598358.270802
+            },
+            "session_id": null,
+            "source_event_id": "evt_01M4HSAVH18BT7V5WA7Z7XPF7Y",
+            "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+            "truth_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+            "workspace": {
+              "algorithm": "jasmine-workspace-sha256-v1",
+              "captured_at": "2026-10-10T02:12:38.319147Z",
+              "changed_paths": [
+                "declared-input.txt"
+              ],
+              "complete": true,
+              "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+              "dirty": true,
+              "extra_paths": [
+                "declared-input.txt"
+              ],
+              "file_count": 2,
+              "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+              "is_git": true,
+              "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+              "partial_reasons": [],
+              "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+              "selected_hashes": {
+                "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+              }
+            }
+          }
+        },
+        "entity_id": "rms_01M4HSAVSJ1M43E9NBKVVGVW9K",
+        "refresh": true
+      }
+    ]
+  },
+  "switches": [
+    {
+      "kind": "checkpoint",
+      "a": "ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+      "b": "ckp_01M4HSAVN59QJDPSATF3C3624D",
+      "held": {
+        "state": "held",
+        "body": {
+          "checkpoint": {
+            "checkpoint_id": "ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+            "command_event_id": "evt_01M4HSAVK6B27WPMR2QRR3TK2N",
+            "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y",
+            "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+            "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+            "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+            "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+            "session_id": "ses_01M4HSAVH8AMG7W1RM0RDT2A9V",
+            "reason": "MANUAL",
+            "projection_version": "jasmine.task-snapshot.v1",
+            "projection_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+            "task_revision": 1,
+            "full_context_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+            "workspace_digest": "463513b01e642cbd30a0d3542018b1a4cacfb0870362644693d187cd9f0e303e",
+            "created_at": "2026-10-10T02:12:38.118317Z",
+            "projection": {
+              "active_rules": [],
+              "evidence": [],
+              "evidence_count": 0,
+              "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "evidence_refs": [],
+              "objects": [
+                {
+                  "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "object_type": "project",
+                  "revision": 1
+                },
+                {
+                  "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "object_type": "task",
+                  "revision": 1
+                }
+              ],
+              "project": {
+                "created_at": "2026-10-10T02:12:38.045493Z",
+                "description": "",
+                "name": "SYNTHETIC isolated CP11.default",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                "status": "active",
+                "updated_at": "2026-10-10T02:12:38.045493Z"
+              },
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "rules": [],
+              "snapshot_schema": "jasmine.task-snapshot.v1",
+              "source_bindings": [],
+              "steps": [],
+              "task": {
+                "acceptance_criteria": {
+                  "requirements": []
+                },
+                "created_at": "2026-10-10T02:12:38.047302Z",
+                "description": "",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                "status": "ACTIVE",
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                "title": "SYNTHETIC CP11.default",
+                "updated_at": "2026-10-10T02:12:38.047302Z"
+              },
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            "workspace": {
+              "algorithm": "jasmine-workspace-sha256-v1",
+              "captured_at": "2026-10-10T02:12:38.114950Z",
+              "changed_paths": [
+                "declared-input.txt"
+              ],
+              "complete": true,
+              "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+              "dirty": true,
+              "extra_paths": [
+                "declared-input.txt"
+              ],
+              "file_count": 2,
+              "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+              "is_git": true,
+              "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+              "partial_reasons": [],
+              "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+              "selected_hashes": {
+                "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+              }
+            },
+            "note": {
+              "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y",
+              "text": "SYNTHETIC historical note CP11.default-first"
+            },
+            "trigger_provenance": {
+              "level": "UNVERIFIED_REQUEST",
+              "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y"
+            }
+          }
+        },
+        "request_id": "ui-532db103-b987-47d0-81ec-2dd5652d7505",
+        "path": "/v1/checkpoints/ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+        "held_at_unix": 1791598375.436
+      },
+      "released": {
+        "state": "released",
+        "request_id": "ui-532db103-b987-47d0-81ec-2dd5652d7505",
+        "path": "/v1/checkpoints/ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+        "released_at_unix": 1791598375.656
+      },
+      "before": {
+        "dom": {
+          "hash": "#/checkpoints?checkpoint_id=ckp_01M4HSAVN59QJDPSATF3C3624D",
+          "text": "跳到主内容\nJasmine Core Dashboard P6-02\nOverview\nConversation\nInterpretations\n待审批 Review\nRules\n领域(未接入)\n退出(清除内存中的 token)\n\n受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、 Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02 TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task 验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6 已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。Validation、Context、Memory 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 P6_ENABLE_P4_READS/P6_ENABLE_P7_READS 显式开关才转发。\n\nCheckpoint(P3 只读)\n读取 Checkpoint(最新 / 按 ID)\ntask_id(读最新)\nsession_id(可空)\n读取最新\ncheckpoint_id\n按 ID 读取\n\nGET /v1/tasks/{tsk}/checkpoints/latest 需要一个 Task;GET /v1/checkpoints/{ckp} 按 ID 读。两者都需要 scope checkpoint:read。「没有 checkpoint」是空集,不是错误,也不是记录不存在。\n\n状态:PARTIAL / DEPENDENCY_PENDING —— 本页契约派生自尚未合并的分支 p3-checkpoint-context-resume(7016dab),不是已通过的 P6 能力。\n\n不可变快照: 这是 task_revision 1 时的快照(projection_version jasmine.task-snapshot.v1),是记录,不是当前 Truth。\n\n读取历史记录不执行完整性比较，也不证明它与当前 Truth 或工作区匹配。\n\ncheckpoint_id\nckp_01M4HSAVN59QJDPSATF3C3624D\nreason\nMANUAL\nrequired scope\ncheckpoint:read + objects:read + state:read + authority:read + evidence:read + events:read\nscope\nprj_01M4HSAVGXE8P4RP85D7NSN33V · tsk_01M4HSAVGZD7F489BV6ZAK1A0P · session ses_01M4HSAVH9TDN176TW41ADQ61S\nactor / host\nact_01M4HSAT2KK8B3FG4ESW5CNG99 · hst_01M4HSAT2KXKM8ZC329TETNBDK\nsource Event\n≡\nsource Event\nevt_01M4HSAVHBDQNXX0R3JR21J3BA\ncommand Event\n≡\ncommand Event\nevt_01M4HSAVN5XY3PMGT5851XG2PJ\ncreated_at\n2026-10-10 02:12:38.181Z\ntask_revision\nr1\ntrigger_provenance\nUNVERIFIED_REQUEST\ndigests\nprojection_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb\nfull_context_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb\nworkspace_digest 28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84\nnote(记录在创建时的备注,非权威)\n复制脱敏摘要\nSYNTHETIC historical note CP11.default-last\n▾ trigger_provenance\n90 字符\n复制(脱敏)\n{\n  \"level\": \"UNVERIFIED_REQUEST\",\n  \"source_event_id\": \"evt_01M4HSAVHBDQNXX0R3JR21J3BA\"\n}\n▾ projection(task_revision 1)\n1407 字符\n复制(脱敏)\n{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}\n▾ workspace\n837 字符\n复制(脱敏)\n{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.178506Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}\n从 Core 重新读取\n\n本段显示的是 2026-10-10T02:12:55.548Z 从 Core 读回的 Checkpoint(按 ID) 内容;它不是事务快照,也不是实时推送。",
+          "html": "\n    <noscript>这个 Dashboard 需要 JavaScript 才能读取 Core API。</noscript>\n    <div id=\"root\"><div class=\"app\"><a class=\"skip-link\" href=\"#main\">跳到主内容</a><header class=\"app__head\"><div class=\"app__brand\"><strong>Jasmine Core</strong> <span>Dashboard P6-02</span></div><nav class=\"app__nav\" aria-label=\"主导航\"><a href=\"#/overview\">Overview</a><a href=\"#/conversation\">Conversation</a><a href=\"#/interpretations\">Interpretations</a><a href=\"#/reviews\">待审批 Review</a><a href=\"#/rules\">Rules</a><details class=\"navmenu\"><summary>领域(未接入)</summary><ul><li><a href=\"#/pending/interpretation\">interpretation</a></li><li><a href=\"#/pending/checkpoint\">checkpoint</a></li><li><a href=\"#/pending/context\">context</a></li><li><a href=\"#/pending/memory\">memory</a></li><li><a href=\"#/pending/validation\">validation</a></li><li><a href=\"#/pending/registry\">registry</a></li><li><a href=\"#/pending/backup\">backup</a></li></ul></details></nav><button type=\"button\" class=\"app__signout\">退出(清除内存中的 token)</button></header><p class=\"readonly-banner\" role=\"note\">受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、 Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02 TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task 验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6 已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。<a href=\"#/pending/validation\">Validation</a>、<a href=\"#/pending/context\">Context</a>、<a href=\"#/pending/memory\">Memory</a> 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 <code>P6_ENABLE_P4_READS</code>/<code>P6_ENABLE_P7_READS</code> 显式开关才转发。</p><main id=\"main\"><div class=\"stack\"><nav class=\"breadcrumb\" aria-label=\"位置\"><span>Checkpoint(P3 只读)</span></nav><section class=\"panel\" aria-label=\"读取 Checkpoint(最新 / 按 ID)\"><header class=\"panel__head\"><h2>读取 Checkpoint(最新 / 按 ID)</h2></header><div class=\"panel__body\"><div class=\"filters\"><label for=\":r25:\">task_id(读最新)<input id=\":r25:\" placeholder=\"tsk_…\" autocomplete=\"off\" value=\"\"></label><label for=\":r27:\">session_id(可空)<input id=\":r27:\" placeholder=\"ses_…\" autocomplete=\"off\" value=\"\"></label><button type=\"button\">读取最新</button><label for=\":r26:\">checkpoint_id<input id=\":r26:\" placeholder=\"ckp_…\" autocomplete=\"off\" value=\"ckp_01M4HSAVN59QJDPSATF3C3624D\"></label><button type=\"button\">按 ID 读取</button></div><p class=\"state state--meta\"><code>GET /v1/tasks/{tsk}/checkpoints/latest</code> 需要一个 Task;<code>GET /v1/checkpoints/{ckp}</code> 按 ID 读。两者都需要 scope <code>checkpoint:read</code>。「没有 checkpoint」是空集,不是错误,也不是记录不存在。</p><p class=\"state state--meta\" data-testid=\"slice-status\"><strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— 本页契约派生自尚未合并的分支 <code>p3-checkpoint-context-resume</code>(<code>7016dab</code>),不是已通过的 P6 能力。</p><p class=\"state state--meta\"><strong>不可变快照:</strong> 这是 task_revision 1 时的快照(projection_version jasmine.task-snapshot.v1),是记录,不是当前 Truth。</p><p class=\"muted\" data-testid=\"checkpoint-read-boundary\">读取历史记录不执行完整性比较，也不证明它与当前 Truth 或工作区匹配。</p><dl class=\"kv\"><div><dt>checkpoint_id</dt><dd><code>ckp_01M4HSAVN59QJDPSATF3C3624D</code></dd></div><div><dt>reason</dt><dd><code>MANUAL</code></dd></div><div><dt>required scope</dt><dd><code>checkpoint:read + objects:read + state:read + authority:read + evidence:read + events:read</code></dd></div><div><dt>scope</dt><dd><a href=\"#/project/prj_01M4HSAVGXE8P4RP85D7NSN33V\"><code>prj_01M4HSAVGXE8P4RP85D7NSN33V</code></a> · <a href=\"#/task/tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"><code>tsk_01M4HSAVGZD7F489BV6ZAK1A0P</code></a> · session <code>ses_01M4HSAVH9TDN176TW41ADQ61S</code></dd></div><div><dt>actor / host</dt><dd><code>act_01M4HSAT2KK8B3FG4ESW5CNG99</code> · <code>hst_01M4HSAT2KXKM8ZC329TETNBDK</code></dd></div><div><dt>source Event</dt><dd><a class=\"trace trace--event\" href=\"#/event/evt_01M4HSAVHBDQNXX0R3JR21J3BA\" data-kind=\"event\" data-id=\"evt_01M4HSAVHBDQNXX0R3JR21J3BA\"><span aria-hidden=\"true\" class=\"trace__glyph\">≡</span><span class=\"trace__label\">source Event</span><code class=\"trace__id\">evt_01M4HSAVHBDQNXX0R3JR21J3BA</code></a></dd></div><div><dt>command Event</dt><dd><a class=\"trace trace--event\" href=\"#/event/evt_01M4HSAVN5XY3PMGT5851XG2PJ\" data-kind=\"event\" data-id=\"evt_01M4HSAVN5XY3PMGT5851XG2PJ\"><span aria-hidden=\"true\" class=\"trace__glyph\">≡</span><span class=\"trace__label\">command Event</span><code class=\"trace__id\">evt_01M4HSAVN5XY3PMGT5851XG2PJ</code></a></dd></div><div><dt>created_at</dt><dd>2026-10-10 02:12:38.181Z</dd></div><div><dt>task_revision</dt><dd><code>r1</code></dd></div><div><dt>trigger_provenance</dt><dd><code>UNVERIFIED_REQUEST</code></dd></div></dl><dl class=\"kv\"><div><dt>digests</dt><dd><span class=\"stack\"><span class=\"kv__digest\"><span class=\"muted\">projection_digest</span> <code class=\"wrap\">ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb</code></span><span class=\"kv__digest\"><span class=\"muted\">full_context_digest</span> <code class=\"wrap\">ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb</code></span><span class=\"kv__digest\"><span class=\"muted\">workspace_digest</span> <code class=\"wrap\">28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84</code></span></span></dd></div></dl><div class=\"rawtext\"><div class=\"rawtext__bar\"><span class=\"rawtext__label\">note(记录在创建时的备注,非权威)</span><span class=\"rawtext__actions\"><button type=\"button\">复制脱敏摘要</button></span></div><pre class=\"rawtext__body\">SYNTHETIC historical note CP11.default-last</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ trigger_provenance</button><span class=\"jsonblock__meta\">90 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"level\": \"UNVERIFIED_REQUEST\",\n  \"source_event_id\": \"evt_01M4HSAVHBDQNXX0R3JR21J3BA\"\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ projection(task_revision 1)</button><span class=\"jsonblock__meta\">1407 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ workspace</button><span class=\"jsonblock__meta\">837 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.178506Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}</pre></div><button type=\"button\">从 Core 重新读取</button><p class=\"state state--meta\">本段显示的是 <time datetime=\"2026-10-10T02:12:55.548Z\">2026-10-10T02:12:55.548Z</time> 从 Core 读回的<strong> Checkpoint(按 ID) </strong>内容;它不是事务快照,也不是实时推送。</p></div></section></div></main></div></div>\n  \n\n",
+          "inputs": [
+            {
+              "label": "task_id(读最新)",
+              "value": ""
+            },
+            {
+              "label": "session_id(可空)",
+              "value": ""
+            },
+            {
+              "label": "checkpoint_id",
+              "value": "ckp_01M4HSAVN59QJDPSATF3C3624D"
+            }
+          ],
+          "links": [
+            {
+              "text": "跳到主内容",
+              "href": "#main"
+            },
+            {
+              "text": "Overview",
+              "href": "#/overview"
+            },
+            {
+              "text": "Conversation",
+              "href": "#/conversation"
+            },
+            {
+              "text": "Interpretations",
+              "href": "#/interpretations"
+            },
+            {
+              "text": "待审批 Review",
+              "href": "#/reviews"
+            },
+            {
+              "text": "Rules",
+              "href": "#/rules"
+            },
+            {
+              "text": "interpretation",
+              "href": "#/pending/interpretation"
+            },
+            {
+              "text": "checkpoint",
+              "href": "#/pending/checkpoint"
+            },
+            {
+              "text": "context",
+              "href": "#/pending/context"
+            },
+            {
+              "text": "memory",
+              "href": "#/pending/memory"
+            },
+            {
+              "text": "validation",
+              "href": "#/pending/validation"
+            },
+            {
+              "text": "registry",
+              "href": "#/pending/registry"
+            },
+            {
+              "text": "backup",
+              "href": "#/pending/backup"
+            },
+            {
+              "text": "Validation",
+              "href": "#/pending/validation"
+            },
+            {
+              "text": "Context",
+              "href": "#/pending/context"
+            },
+            {
+              "text": "Memory",
+              "href": "#/pending/memory"
+            },
+            {
+              "text": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "href": "#/project/prj_01M4HSAVGXE8P4RP85D7NSN33V"
+            },
+            {
+              "text": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+              "href": "#/task/tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            {
+              "text": "≡source Eventevt_01M4HSAVHBDQNXX0R3JR21J3BA",
+              "href": "#/event/evt_01M4HSAVHBDQNXX0R3JR21J3BA"
+            },
+            {
+              "text": "≡command Eventevt_01M4HSAVN5XY3PMGT5851XG2PJ",
+              "href": "#/event/evt_01M4HSAVN5XY3PMGT5851XG2PJ"
+            }
+          ],
+          "kv": [
+            {
+              "label": "checkpoint_id",
+              "text": "ckp_01M4HSAVN59QJDPSATF3C3624D"
+            },
+            {
+              "label": "reason",
+              "text": "MANUAL"
+            },
+            {
+              "label": "required scope",
+              "text": "checkpoint:read + objects:read + state:read + authority:read + evidence:read + events:read"
+            },
+            {
+              "label": "scope",
+              "text": "prj_01M4HSAVGXE8P4RP85D7NSN33V · tsk_01M4HSAVGZD7F489BV6ZAK1A0P · session ses_01M4HSAVH9TDN176TW41ADQ61S"
+            },
+            {
+              "label": "actor / host",
+              "text": "act_01M4HSAT2KK8B3FG4ESW5CNG99 · hst_01M4HSAT2KXKM8ZC329TETNBDK"
+            },
+            {
+              "label": "source Event",
+              "text": "≡source Eventevt_01M4HSAVHBDQNXX0R3JR21J3BA"
+            },
+            {
+              "label": "command Event",
+              "text": "≡command Eventevt_01M4HSAVN5XY3PMGT5851XG2PJ"
+            },
+            {
+              "label": "created_at",
+              "text": "2026-10-10 02:12:38.181Z"
+            },
+            {
+              "label": "task_revision",
+              "text": "r1"
+            },
+            {
+              "label": "trigger_provenance",
+              "text": "UNVERIFIED_REQUEST"
+            },
+            {
+              "label": "digests",
+              "text": "projection_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcbfull_context_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcbworkspace_digest 28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84"
+            }
+          ],
+          "digests": [
+            {
+              "label": "projection_digest",
+              "value": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb"
+            },
+            {
+              "label": "full_context_digest",
+              "value": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb"
+            },
+            {
+              "label": "workspace_digest",
+              "value": "28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84"
+            }
+          ],
+          "rawtexts": [
+            {
+              "label": "note(记录在创建时的备注,非权威)",
+              "text": "SYNTHETIC historical note CP11.default-last"
+            }
+          ],
+          "jsonblocks": [
+            {
+              "label": "trigger_provenance",
+              "text": "{\n  \"level\": \"UNVERIFIED_REQUEST\",\n  \"source_event_id\": \"evt_01M4HSAVHBDQNXX0R3JR21J3BA\"\n}"
+            },
+            {
+              "label": "projection(task_revision 1)",
+              "text": "{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}"
+            },
+            {
+              "label": "workspace",
+              "text": "{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.178506Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}"
+            }
+          ],
+          "comparison_status": null,
+          "checkpoint_boundary": "读取历史记录不执行完整性比较，也不证明它与当前 Truth 或工作区匹配。",
+          "alerts": [],
+          "pending": false,
+          "invalid": false,
+          "note": null,
+          "next_actions": null,
+          "next_action_header": null,
+          "next_action_rows": []
+        },
+        "dom_file": "dom/CP12.default-switch-checkpoint-before-release.json",
+        "screenshot": "screenshots/CP12.default-switch-checkpoint-before-release.png",
+        "screenshot_clip": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 2008,
+          "scale": 1
+        },
+        "at_unix": 1791598375.655
+      },
+      "after": {
+        "dom": {
+          "hash": "#/checkpoints?checkpoint_id=ckp_01M4HSAVN59QJDPSATF3C3624D",
+          "text": "跳到主内容\nJasmine Core Dashboard P6-02\nOverview\nConversation\nInterpretations\n待审批 Review\nRules\n领域(未接入)\n退出(清除内存中的 token)\n\n受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、 Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02 TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task 验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6 已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。Validation、Context、Memory 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 P6_ENABLE_P4_READS/P6_ENABLE_P7_READS 显式开关才转发。\n\nCheckpoint(P3 只读)\n读取 Checkpoint(最新 / 按 ID)\ntask_id(读最新)\nsession_id(可空)\n读取最新\ncheckpoint_id\n按 ID 读取\n\nGET /v1/tasks/{tsk}/checkpoints/latest 需要一个 Task;GET /v1/checkpoints/{ckp} 按 ID 读。两者都需要 scope checkpoint:read。「没有 checkpoint」是空集,不是错误,也不是记录不存在。\n\n状态:PARTIAL / DEPENDENCY_PENDING —— 本页契约派生自尚未合并的分支 p3-checkpoint-context-resume(7016dab),不是已通过的 P6 能力。\n\n不可变快照: 这是 task_revision 1 时的快照(projection_version jasmine.task-snapshot.v1),是记录,不是当前 Truth。\n\n读取历史记录不执行完整性比较，也不证明它与当前 Truth 或工作区匹配。\n\ncheckpoint_id\nckp_01M4HSAVN59QJDPSATF3C3624D\nreason\nMANUAL\nrequired scope\ncheckpoint:read + objects:read + state:read + authority:read + evidence:read + events:read\nscope\nprj_01M4HSAVGXE8P4RP85D7NSN33V · tsk_01M4HSAVGZD7F489BV6ZAK1A0P · session ses_01M4HSAVH9TDN176TW41ADQ61S\nactor / host\nact_01M4HSAT2KK8B3FG4ESW5CNG99 · hst_01M4HSAT2KXKM8ZC329TETNBDK\nsource Event\n≡\nsource Event\nevt_01M4HSAVHBDQNXX0R3JR21J3BA\ncommand Event\n≡\ncommand Event\nevt_01M4HSAVN5XY3PMGT5851XG2PJ\ncreated_at\n2026-10-10 02:12:38.181Z\ntask_revision\nr1\ntrigger_provenance\nUNVERIFIED_REQUEST\ndigests\nprojection_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb\nfull_context_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb\nworkspace_digest 28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84\nnote(记录在创建时的备注,非权威)\n复制脱敏摘要\nSYNTHETIC historical note CP11.default-last\n▾ trigger_provenance\n90 字符\n复制(脱敏)\n{\n  \"level\": \"UNVERIFIED_REQUEST\",\n  \"source_event_id\": \"evt_01M4HSAVHBDQNXX0R3JR21J3BA\"\n}\n▾ projection(task_revision 1)\n1407 字符\n复制(脱敏)\n{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}\n▾ workspace\n837 字符\n复制(脱敏)\n{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.178506Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}\n从 Core 重新读取\n\n本段显示的是 2026-10-10T02:12:55.548Z 从 Core 读回的 Checkpoint(按 ID) 内容;它不是事务快照,也不是实时推送。",
+          "html": "\n    <noscript>这个 Dashboard 需要 JavaScript 才能读取 Core API。</noscript>\n    <div id=\"root\"><div class=\"app\"><a class=\"skip-link\" href=\"#main\">跳到主内容</a><header class=\"app__head\"><div class=\"app__brand\"><strong>Jasmine Core</strong> <span>Dashboard P6-02</span></div><nav class=\"app__nav\" aria-label=\"主导航\"><a href=\"#/overview\">Overview</a><a href=\"#/conversation\">Conversation</a><a href=\"#/interpretations\">Interpretations</a><a href=\"#/reviews\">待审批 Review</a><a href=\"#/rules\">Rules</a><details class=\"navmenu\"><summary>领域(未接入)</summary><ul><li><a href=\"#/pending/interpretation\">interpretation</a></li><li><a href=\"#/pending/checkpoint\">checkpoint</a></li><li><a href=\"#/pending/context\">context</a></li><li><a href=\"#/pending/memory\">memory</a></li><li><a href=\"#/pending/validation\">validation</a></li><li><a href=\"#/pending/registry\">registry</a></li><li><a href=\"#/pending/backup\">backup</a></li></ul></details></nav><button type=\"button\" class=\"app__signout\">退出(清除内存中的 token)</button></header><p class=\"readonly-banner\" role=\"note\">受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、 Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02 TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task 验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6 已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。<a href=\"#/pending/validation\">Validation</a>、<a href=\"#/pending/context\">Context</a>、<a href=\"#/pending/memory\">Memory</a> 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 <code>P6_ENABLE_P4_READS</code>/<code>P6_ENABLE_P7_READS</code> 显式开关才转发。</p><main id=\"main\"><div class=\"stack\"><nav class=\"breadcrumb\" aria-label=\"位置\"><span>Checkpoint(P3 只读)</span></nav><section class=\"panel\" aria-label=\"读取 Checkpoint(最新 / 按 ID)\"><header class=\"panel__head\"><h2>读取 Checkpoint(最新 / 按 ID)</h2></header><div class=\"panel__body\"><div class=\"filters\"><label for=\":r25:\">task_id(读最新)<input id=\":r25:\" placeholder=\"tsk_…\" autocomplete=\"off\" value=\"\"></label><label for=\":r27:\">session_id(可空)<input id=\":r27:\" placeholder=\"ses_…\" autocomplete=\"off\" value=\"\"></label><button type=\"button\">读取最新</button><label for=\":r26:\">checkpoint_id<input id=\":r26:\" placeholder=\"ckp_…\" autocomplete=\"off\" value=\"ckp_01M4HSAVN59QJDPSATF3C3624D\"></label><button type=\"button\">按 ID 读取</button></div><p class=\"state state--meta\"><code>GET /v1/tasks/{tsk}/checkpoints/latest</code> 需要一个 Task;<code>GET /v1/checkpoints/{ckp}</code> 按 ID 读。两者都需要 scope <code>checkpoint:read</code>。「没有 checkpoint」是空集,不是错误,也不是记录不存在。</p><p class=\"state state--meta\" data-testid=\"slice-status\"><strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— 本页契约派生自尚未合并的分支 <code>p3-checkpoint-context-resume</code>(<code>7016dab</code>),不是已通过的 P6 能力。</p><p class=\"state state--meta\"><strong>不可变快照:</strong> 这是 task_revision 1 时的快照(projection_version jasmine.task-snapshot.v1),是记录,不是当前 Truth。</p><p class=\"muted\" data-testid=\"checkpoint-read-boundary\">读取历史记录不执行完整性比较，也不证明它与当前 Truth 或工作区匹配。</p><dl class=\"kv\"><div><dt>checkpoint_id</dt><dd><code>ckp_01M4HSAVN59QJDPSATF3C3624D</code></dd></div><div><dt>reason</dt><dd><code>MANUAL</code></dd></div><div><dt>required scope</dt><dd><code>checkpoint:read + objects:read + state:read + authority:read + evidence:read + events:read</code></dd></div><div><dt>scope</dt><dd><a href=\"#/project/prj_01M4HSAVGXE8P4RP85D7NSN33V\"><code>prj_01M4HSAVGXE8P4RP85D7NSN33V</code></a> · <a href=\"#/task/tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"><code>tsk_01M4HSAVGZD7F489BV6ZAK1A0P</code></a> · session <code>ses_01M4HSAVH9TDN176TW41ADQ61S</code></dd></div><div><dt>actor / host</dt><dd><code>act_01M4HSAT2KK8B3FG4ESW5CNG99</code> · <code>hst_01M4HSAT2KXKM8ZC329TETNBDK</code></dd></div><div><dt>source Event</dt><dd><a class=\"trace trace--event\" href=\"#/event/evt_01M4HSAVHBDQNXX0R3JR21J3BA\" data-kind=\"event\" data-id=\"evt_01M4HSAVHBDQNXX0R3JR21J3BA\"><span aria-hidden=\"true\" class=\"trace__glyph\">≡</span><span class=\"trace__label\">source Event</span><code class=\"trace__id\">evt_01M4HSAVHBDQNXX0R3JR21J3BA</code></a></dd></div><div><dt>command Event</dt><dd><a class=\"trace trace--event\" href=\"#/event/evt_01M4HSAVN5XY3PMGT5851XG2PJ\" data-kind=\"event\" data-id=\"evt_01M4HSAVN5XY3PMGT5851XG2PJ\"><span aria-hidden=\"true\" class=\"trace__glyph\">≡</span><span class=\"trace__label\">command Event</span><code class=\"trace__id\">evt_01M4HSAVN5XY3PMGT5851XG2PJ</code></a></dd></div><div><dt>created_at</dt><dd>2026-10-10 02:12:38.181Z</dd></div><div><dt>task_revision</dt><dd><code>r1</code></dd></div><div><dt>trigger_provenance</dt><dd><code>UNVERIFIED_REQUEST</code></dd></div></dl><dl class=\"kv\"><div><dt>digests</dt><dd><span class=\"stack\"><span class=\"kv__digest\"><span class=\"muted\">projection_digest</span> <code class=\"wrap\">ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb</code></span><span class=\"kv__digest\"><span class=\"muted\">full_context_digest</span> <code class=\"wrap\">ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb</code></span><span class=\"kv__digest\"><span class=\"muted\">workspace_digest</span> <code class=\"wrap\">28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84</code></span></span></dd></div></dl><div class=\"rawtext\"><div class=\"rawtext__bar\"><span class=\"rawtext__label\">note(记录在创建时的备注,非权威)</span><span class=\"rawtext__actions\"><button type=\"button\">复制脱敏摘要</button></span></div><pre class=\"rawtext__body\">SYNTHETIC historical note CP11.default-last</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ trigger_provenance</button><span class=\"jsonblock__meta\">90 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"level\": \"UNVERIFIED_REQUEST\",\n  \"source_event_id\": \"evt_01M4HSAVHBDQNXX0R3JR21J3BA\"\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ projection(task_revision 1)</button><span class=\"jsonblock__meta\">1407 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ workspace</button><span class=\"jsonblock__meta\">837 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.178506Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}</pre></div><button type=\"button\">从 Core 重新读取</button><p class=\"state state--meta\">本段显示的是 <time datetime=\"2026-10-10T02:12:55.548Z\">2026-10-10T02:12:55.548Z</time> 从 Core 读回的<strong> Checkpoint(按 ID) </strong>内容;它不是事务快照,也不是实时推送。</p></div></section></div></main></div></div>\n  \n\n",
+          "inputs": [
+            {
+              "label": "task_id(读最新)",
+              "value": ""
+            },
+            {
+              "label": "session_id(可空)",
+              "value": ""
+            },
+            {
+              "label": "checkpoint_id",
+              "value": "ckp_01M4HSAVN59QJDPSATF3C3624D"
+            }
+          ],
+          "links": [
+            {
+              "text": "跳到主内容",
+              "href": "#main"
+            },
+            {
+              "text": "Overview",
+              "href": "#/overview"
+            },
+            {
+              "text": "Conversation",
+              "href": "#/conversation"
+            },
+            {
+              "text": "Interpretations",
+              "href": "#/interpretations"
+            },
+            {
+              "text": "待审批 Review",
+              "href": "#/reviews"
+            },
+            {
+              "text": "Rules",
+              "href": "#/rules"
+            },
+            {
+              "text": "interpretation",
+              "href": "#/pending/interpretation"
+            },
+            {
+              "text": "checkpoint",
+              "href": "#/pending/checkpoint"
+            },
+            {
+              "text": "context",
+              "href": "#/pending/context"
+            },
+            {
+              "text": "memory",
+              "href": "#/pending/memory"
+            },
+            {
+              "text": "validation",
+              "href": "#/pending/validation"
+            },
+            {
+              "text": "registry",
+              "href": "#/pending/registry"
+            },
+            {
+              "text": "backup",
+              "href": "#/pending/backup"
+            },
+            {
+              "text": "Validation",
+              "href": "#/pending/validation"
+            },
+            {
+              "text": "Context",
+              "href": "#/pending/context"
+            },
+            {
+              "text": "Memory",
+              "href": "#/pending/memory"
+            },
+            {
+              "text": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "href": "#/project/prj_01M4HSAVGXE8P4RP85D7NSN33V"
+            },
+            {
+              "text": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+              "href": "#/task/tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            {
+              "text": "≡source Eventevt_01M4HSAVHBDQNXX0R3JR21J3BA",
+              "href": "#/event/evt_01M4HSAVHBDQNXX0R3JR21J3BA"
+            },
+            {
+              "text": "≡command Eventevt_01M4HSAVN5XY3PMGT5851XG2PJ",
+              "href": "#/event/evt_01M4HSAVN5XY3PMGT5851XG2PJ"
+            }
+          ],
+          "kv": [
+            {
+              "label": "checkpoint_id",
+              "text": "ckp_01M4HSAVN59QJDPSATF3C3624D"
+            },
+            {
+              "label": "reason",
+              "text": "MANUAL"
+            },
+            {
+              "label": "required scope",
+              "text": "checkpoint:read + objects:read + state:read + authority:read + evidence:read + events:read"
+            },
+            {
+              "label": "scope",
+              "text": "prj_01M4HSAVGXE8P4RP85D7NSN33V · tsk_01M4HSAVGZD7F489BV6ZAK1A0P · session ses_01M4HSAVH9TDN176TW41ADQ61S"
+            },
+            {
+              "label": "actor / host",
+              "text": "act_01M4HSAT2KK8B3FG4ESW5CNG99 · hst_01M4HSAT2KXKM8ZC329TETNBDK"
+            },
+            {
+              "label": "source Event",
+              "text": "≡source Eventevt_01M4HSAVHBDQNXX0R3JR21J3BA"
+            },
+            {
+              "label": "command Event",
+              "text": "≡command Eventevt_01M4HSAVN5XY3PMGT5851XG2PJ"
+            },
+            {
+              "label": "created_at",
+              "text": "2026-10-10 02:12:38.181Z"
+            },
+            {
+              "label": "task_revision",
+              "text": "r1"
+            },
+            {
+              "label": "trigger_provenance",
+              "text": "UNVERIFIED_REQUEST"
+            },
+            {
+              "label": "digests",
+              "text": "projection_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcbfull_context_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcbworkspace_digest 28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84"
+            }
+          ],
+          "digests": [
+            {
+              "label": "projection_digest",
+              "value": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb"
+            },
+            {
+              "label": "full_context_digest",
+              "value": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb"
+            },
+            {
+              "label": "workspace_digest",
+              "value": "28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84"
+            }
+          ],
+          "rawtexts": [
+            {
+              "label": "note(记录在创建时的备注,非权威)",
+              "text": "SYNTHETIC historical note CP11.default-last"
+            }
+          ],
+          "jsonblocks": [
+            {
+              "label": "trigger_provenance",
+              "text": "{\n  \"level\": \"UNVERIFIED_REQUEST\",\n  \"source_event_id\": \"evt_01M4HSAVHBDQNXX0R3JR21J3BA\"\n}"
+            },
+            {
+              "label": "projection(task_revision 1)",
+              "text": "{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}"
+            },
+            {
+              "label": "workspace",
+              "text": "{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.178506Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}"
+            }
+          ],
+          "comparison_status": null,
+          "checkpoint_boundary": "读取历史记录不执行完整性比较，也不证明它与当前 Truth 或工作区匹配。",
+          "alerts": [],
+          "pending": false,
+          "invalid": false,
+          "note": null,
+          "next_actions": null,
+          "next_action_header": null,
+          "next_action_rows": []
+        },
+        "dom_file": "dom/CP12.default-switch-checkpoint-after-release.json",
+        "screenshot": "screenshots/CP12.default-switch-checkpoint-after-release.png",
+        "screenshot_clip": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 2008,
+          "scale": 1
+        },
+        "at_unix": 1791598375.924
+      },
+      "network": [
+        {
+          "id": "CP12.default",
+          "cdp_id": "24807.99",
+          "method": "GET",
+          "path": "/v1/checkpoints/ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+          "query": "",
+          "at_unix": 1791598375.425,
+          "request_id_sent": "ui-532db103-b987-47d0-81ec-2dd5652d7505",
+          "authorization_present": true,
+          "status": 200,
+          "request_id": "ui-532db103-b987-47d0-81ec-2dd5652d7505",
+          "body": {
+            "checkpoint": {
+              "checkpoint_id": "ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+              "command_event_id": "evt_01M4HSAVK6B27WPMR2QRR3TK2N",
+              "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y",
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+              "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+              "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+              "session_id": "ses_01M4HSAVH8AMG7W1RM0RDT2A9V",
+              "reason": "MANUAL",
+              "projection_version": "jasmine.task-snapshot.v1",
+              "projection_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+              "task_revision": 1,
+              "full_context_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+              "workspace_digest": "463513b01e642cbd30a0d3542018b1a4cacfb0870362644693d187cd9f0e303e",
+              "created_at": "2026-10-10T02:12:38.118317Z",
+              "projection": {
+                "active_rules": [],
+                "evidence": [],
+                "evidence_count": 0,
+                "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "evidence_refs": [],
+                "objects": [
+                  {
+                    "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                    "object_type": "project",
+                    "revision": 1
+                  },
+                  {
+                    "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                    "object_type": "task",
+                    "revision": 1
+                  }
+                ],
+                "project": {
+                  "created_at": "2026-10-10T02:12:38.045493Z",
+                  "description": "",
+                  "name": "SYNTHETIC isolated CP11.default",
+                  "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "revision": 1,
+                  "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                  "status": "active",
+                  "updated_at": "2026-10-10T02:12:38.045493Z"
+                },
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "rules": [],
+                "snapshot_schema": "jasmine.task-snapshot.v1",
+                "source_bindings": [],
+                "steps": [],
+                "task": {
+                  "acceptance_criteria": {
+                    "requirements": []
+                  },
+                  "created_at": "2026-10-10T02:12:38.047302Z",
+                  "description": "",
+                  "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "revision": 1,
+                  "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                  "status": "ACTIVE",
+                  "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "title": "SYNTHETIC CP11.default",
+                  "updated_at": "2026-10-10T02:12:38.047302Z"
+                },
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+              },
+              "workspace": {
+                "algorithm": "jasmine-workspace-sha256-v1",
+                "captured_at": "2026-10-10T02:12:38.114950Z",
+                "changed_paths": [
+                  "declared-input.txt"
+                ],
+                "complete": true,
+                "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+                "dirty": true,
+                "extra_paths": [
+                  "declared-input.txt"
+                ],
+                "file_count": 2,
+                "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+                "is_git": true,
+                "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+                "partial_reasons": [],
+                "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+                "selected_hashes": {
+                  "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                  "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+                }
+              },
+              "note": {
+                "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y",
+                "text": "SYNTHETIC historical note CP11.default-first"
+              },
+              "trigger_provenance": {
+                "level": "UNVERIFIED_REQUEST",
+                "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y"
+              }
+            }
+          }
+        },
+        {
+          "id": "CP12.default",
+          "cdp_id": "24807.100",
+          "method": "GET",
+          "path": "/v1/checkpoints/ckp_01M4HSAVN59QJDPSATF3C3624D",
+          "query": "",
+          "at_unix": 1791598375.55,
+          "request_id_sent": "ui-4c135f98-85ae-437a-9d68-b391cbee9b50",
+          "authorization_present": true,
+          "status": 200,
+          "request_id": "ui-4c135f98-85ae-437a-9d68-b391cbee9b50",
+          "body": {
+            "checkpoint": {
+              "checkpoint_id": "ckp_01M4HSAVN59QJDPSATF3C3624D",
+              "command_event_id": "evt_01M4HSAVN5XY3PMGT5851XG2PJ",
+              "source_event_id": "evt_01M4HSAVHBDQNXX0R3JR21J3BA",
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+              "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+              "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+              "session_id": "ses_01M4HSAVH9TDN176TW41ADQ61S",
+              "reason": "MANUAL",
+              "projection_version": "jasmine.task-snapshot.v1",
+              "projection_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+              "task_revision": 1,
+              "full_context_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+              "workspace_digest": "28d131815122ac1f7d4e6e60f0bfed0bdb9edbaf9e480f8b9a4bd1cc15838b84",
+              "created_at": "2026-10-10T02:12:38.181855Z",
+              "projection": {
+                "active_rules": [],
+                "evidence": [],
+                "evidence_count": 0,
+                "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "evidence_refs": [],
+                "objects": [
+                  {
+                    "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                    "object_type": "project",
+                    "revision": 1
+                  },
+                  {
+                    "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                    "object_type": "task",
+                    "revision": 1
+                  }
+                ],
+                "project": {
+                  "created_at": "2026-10-10T02:12:38.045493Z",
+                  "description": "",
+                  "name": "SYNTHETIC isolated CP11.default",
+                  "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "revision": 1,
+                  "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                  "status": "active",
+                  "updated_at": "2026-10-10T02:12:38.045493Z"
+                },
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "rules": [],
+                "snapshot_schema": "jasmine.task-snapshot.v1",
+                "source_bindings": [],
+                "steps": [],
+                "task": {
+                  "acceptance_criteria": {
+                    "requirements": []
+                  },
+                  "created_at": "2026-10-10T02:12:38.047302Z",
+                  "description": "",
+                  "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "revision": 1,
+                  "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                  "status": "ACTIVE",
+                  "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "title": "SYNTHETIC CP11.default",
+                  "updated_at": "2026-10-10T02:12:38.047302Z"
+                },
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+              },
+              "workspace": {
+                "algorithm": "jasmine-workspace-sha256-v1",
+                "captured_at": "2026-10-10T02:12:38.178506Z",
+                "changed_paths": [
+                  "declared-input.txt"
+                ],
+                "complete": true,
+                "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+                "dirty": true,
+                "extra_paths": [
+                  "declared-input.txt"
+                ],
+                "file_count": 2,
+                "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+                "is_git": true,
+                "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+                "partial_reasons": [],
+                "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+                "selected_hashes": {
+                  "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                  "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+                }
+              },
+              "note": {
+                "source_event_id": "evt_01M4HSAVHBDQNXX0R3JR21J3BA",
+                "text": "SYNTHETIC historical note CP11.default-last"
+              },
+              "trigger_provenance": {
+                "level": "UNVERIFIED_REQUEST",
+                "source_event_id": "evt_01M4HSAVHBDQNXX0R3JR21J3BA"
+              }
+            }
+          }
+        }
+      ],
+      "intervention": "Targeted real GET Response delayed; only AbortSignal removed to force late arrival; body unchanged."
+    },
+    {
+      "kind": "resume",
+      "a": "rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+      "b": "rms_01M4HSAVSJ1M43E9NBKVVGVW9K",
+      "held": {
+        "state": "held",
+        "body": {
+          "resume": {
+            "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+            "checkpoint_id": "ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+            "command_event_id": "evt_01M4HSAVQHVCF2GJB39FFD2XDR",
+            "comparison": {
+              "checkpoint_freshness": "STATE_EQUAL",
+              "diff": {
+                "added": [],
+                "changed": [],
+                "evidence_changed": false,
+                "removed": [],
+                "workspace_paths": {
+                  "added": [],
+                  "changed": [],
+                  "removed": []
+                }
+              },
+              "reconciliation_required": false,
+              "warnings": [],
+              "workspace": "SAME"
+            },
+            "created_at": "2026-10-10T02:12:38.257487Z",
+            "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+            "next_actions": [],
+            "note": {
+              "authority": false,
+              "historical": true,
+              "value": {
+                "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y",
+                "text": "SYNTHETIC historical note CP11.default-first"
+              }
+            },
+            "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+            "projection": {
+              "active_rules": [],
+              "evidence": [],
+              "evidence_count": 0,
+              "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+              "evidence_refs": [],
+              "objects": [
+                {
+                  "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "object_type": "project",
+                  "revision": 1
+                },
+                {
+                  "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "object_type": "task",
+                  "revision": 1
+                }
+              ],
+              "project": {
+                "created_at": "2026-10-10T02:12:38.045493Z",
+                "description": "",
+                "name": "SYNTHETIC isolated CP11.default",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                "status": "active",
+                "updated_at": "2026-10-10T02:12:38.045493Z"
+              },
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "rules": [],
+              "snapshot_schema": "jasmine.task-snapshot.v1",
+              "source_bindings": [],
+              "steps": [],
+              "task": {
+                "acceptance_criteria": {
+                  "requirements": []
+                },
+                "created_at": "2026-10-10T02:12:38.047302Z",
+                "description": "",
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "revision": 1,
+                "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                "status": "ACTIVE",
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                "title": "SYNTHETIC CP11.default",
+                "updated_at": "2026-10-10T02:12:38.047302Z"
+              },
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            "resume_id": "rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+            "sample_window": {
+              "finished_at_unix": 1791598358.257005,
+              "started_at_unix": 1791598358.206812
+            },
+            "session_id": null,
+            "source_event_id": "evt_01M4HSAVH18BT7V5WA7Z7XPF7Y",
+            "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+            "truth_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+            "workspace": {
+              "algorithm": "jasmine-workspace-sha256-v1",
+              "captured_at": "2026-10-10T02:12:38.254169Z",
+              "changed_paths": [
+                "declared-input.txt"
+              ],
+              "complete": true,
+              "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+              "dirty": true,
+              "extra_paths": [
+                "declared-input.txt"
+              ],
+              "file_count": 2,
+              "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+              "is_git": true,
+              "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+              "partial_reasons": [],
+              "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+              "selected_hashes": {
+                "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+              }
+            }
+          }
+        },
+        "request_id": "ui-efca1822-b585-4d47-b3f1-37a4fe6767b3",
+        "path": "/v1/resumes/rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+        "held_at_unix": 1791598376.285
+      },
+      "released": {
+        "state": "released",
+        "request_id": "ui-efca1822-b585-4d47-b3f1-37a4fe6767b3",
+        "path": "/v1/resumes/rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+        "released_at_unix": 1791598376.509
+      },
+      "before": {
+        "dom": {
+          "hash": "#/resume/rms_01M4HSAVSJ1M43E9NBKVVGVW9K",
+          "text": "跳到主内容\nJasmine Core Dashboard P6-02\nOverview\nConversation\nInterpretations\n待审批 Review\nRules\n领域(未接入)\n退出(清除内存中的 token)\n\n受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、 Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02 TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task 验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6 已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。Validation、Context、Memory 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 P6_ENABLE_P4_READS/P6_ENABLE_P7_READS 显式开关才转发。\n\nResume(P3 只读)\n按 ID 读取 Resume\nresume_id\n读取这个 resume\n\nGET /v1/resumes/{rms} · scope resume:read +checkpoint:read。Resume 是精确的历史 receipts,不是恢复操作。\n\n状态:PARTIAL / DEPENDENCY_PENDING —— 本页契约派生自尚未合并的分支 p3-checkpoint-context-resume(7016dab),不是已通过的 P6 能力。\n\n这是比较,不是恢复: comparison / next_actions 描述 checkpoint 与当前投影的差异;本页不会应用任何东西,Truth 未被改动。\n\n这是收据生成时的比较结果；重新读取不会重新比较。\n\ncheckpoint_freshness: STATE_EQUAL · workspace: SAME · reconciliation_required: false\n\nresume_id\nrms_01M4HSAVSJ1M43E9NBKVVGVW9K\nrequired scope\nresume:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read\nscope\nprj_01M4HSAVGXE8P4RP85D7NSN33V · tsk_01M4HSAVGZD7F489BV6ZAK1A0P · 无 session\nactor / host\nact_01M4HSAT2KK8B3FG4ESW5CNG99 · hst_01M4HSAT2KXKM8ZC329TETNBDK\nsource Event\n≡\nsource Event\nevt_01M4HSAVH18BT7V5WA7Z7XPF7Y\ncommand Event\n≡\ncommand Event\nevt_01M4HSAVSJ5YRC3A83EPC0EH07\ncreated_at\n2026-10-10 02:12:38.322Z\ncheckpoint\nckp_01M4HSAVN59QJDPSATF3C3624D\ndigests\ntruth_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb\n\nnote:historical,authority = false(Core 明确否认其权威性)\n\nnote.value\n复制脱敏摘要\nSYNTHETIC historical note CP11.default-last\n▾ comparison(checkpoint 与当前投影的差异)\n314 字符\n复制(脱敏)\n{\n  \"checkpoint_freshness\": \"STATE_EQUAL\",\n  \"diff\": {\n    \"added\": [],\n    \"changed\": [],\n    \"evidence_changed\": false,\n    \"removed\": [],\n    \"workspace_paths\": {\n      \"added\": [],\n      \"changed\": [],\n      \"removed\": []\n    }\n  },\n  \"reconciliation_required\": false,\n  \"warnings\": [],\n  \"workspace\": \"SAME\"\n}\n▾ next_actions\n2 字符\n复制(脱敏)\n[]\n▾ projection\n1407 字符\n复制(脱敏)\n{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}\n▾ workspace\n837 字符\n复制(脱敏)\n{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.319147Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}\n▾ sample_window\n83 字符\n复制(脱敏)\n{\n  \"finished_at_unix\": 1791598358.321867,\n  \"started_at_unix\": 1791598358.270802\n}\n从 Core 重新读取\n\n本段显示的是 2026-10-10T02:12:56.404Z 从 Core 读回的 Resume 内容;它不是事务快照,也不是实时推送。",
+          "html": "\n    <noscript>这个 Dashboard 需要 JavaScript 才能读取 Core API。</noscript>\n    <div id=\"root\"><div class=\"app\"><a class=\"skip-link\" href=\"#main\">跳到主内容</a><header class=\"app__head\"><div class=\"app__brand\"><strong>Jasmine Core</strong> <span>Dashboard P6-02</span></div><nav class=\"app__nav\" aria-label=\"主导航\"><a href=\"#/overview\">Overview</a><a href=\"#/conversation\">Conversation</a><a href=\"#/interpretations\">Interpretations</a><a href=\"#/reviews\">待审批 Review</a><a href=\"#/rules\">Rules</a><details class=\"navmenu\"><summary>领域(未接入)</summary><ul><li><a href=\"#/pending/interpretation\">interpretation</a></li><li><a href=\"#/pending/checkpoint\">checkpoint</a></li><li><a href=\"#/pending/context\">context</a></li><li><a href=\"#/pending/memory\">memory</a></li><li><a href=\"#/pending/validation\">validation</a></li><li><a href=\"#/pending/registry\">registry</a></li><li><a href=\"#/pending/backup\">backup</a></li></ul></details></nav><button type=\"button\" class=\"app__signout\">退出(清除内存中的 token)</button></header><p class=\"readonly-banner\" role=\"note\">受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、 Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02 TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task 验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6 已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。<a href=\"#/pending/validation\">Validation</a>、<a href=\"#/pending/context\">Context</a>、<a href=\"#/pending/memory\">Memory</a> 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 <code>P6_ENABLE_P4_READS</code>/<code>P6_ENABLE_P7_READS</code> 显式开关才转发。</p><main id=\"main\"><div class=\"stack\"><nav class=\"breadcrumb\" aria-label=\"位置\"><span>Resume(P3 只读)</span></nav><section class=\"panel\" aria-label=\"按 ID 读取 Resume\"><header class=\"panel__head\"><h2>按 ID 读取 Resume</h2></header><div class=\"panel__body\"><div class=\"filters\"><label for=\":r29:\">resume_id<input id=\":r29:\" placeholder=\"rms_…\" autocomplete=\"off\" value=\"rms_01M4HSAVSJ1M43E9NBKVVGVW9K\"></label><button type=\"button\">读取这个 resume</button></div><p class=\"state state--meta\"><code>GET /v1/resumes/{rms}</code> · scope <code>resume:read</code> +<code>checkpoint:read</code>。Resume 是<strong>精确的历史 receipts</strong>,不是恢复操作。</p><p class=\"state state--meta\" data-testid=\"slice-status\"><strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— 本页契约派生自尚未合并的分支 <code>p3-checkpoint-context-resume</code>(<code>7016dab</code>),不是已通过的 P6 能力。</p><p class=\"state state--meta\"><strong>这是比较,不是恢复:</strong> comparison / next_actions 描述 checkpoint 与当前投影的差异;本页不会应用任何东西,Truth 未被改动。</p><div class=\"state state--meta\" data-testid=\"resume-comparison-status\"><p>这是收据生成时的比较结果；重新读取不会重新比较。</p><p>checkpoint_freshness: <code>STATE_EQUAL</code> · workspace: <code>SAME</code> · reconciliation_required: <code>false</code></p></div><dl class=\"kv\"><div><dt>resume_id</dt><dd><code>rms_01M4HSAVSJ1M43E9NBKVVGVW9K</code></dd></div><div><dt>required scope</dt><dd><code>resume:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read</code></dd></div><div><dt>scope</dt><dd><a href=\"#/project/prj_01M4HSAVGXE8P4RP85D7NSN33V\"><code>prj_01M4HSAVGXE8P4RP85D7NSN33V</code></a> · <a href=\"#/task/tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"><code>tsk_01M4HSAVGZD7F489BV6ZAK1A0P</code></a> · 无 session</dd></div><div><dt>actor / host</dt><dd><code>act_01M4HSAT2KK8B3FG4ESW5CNG99</code> · <code>hst_01M4HSAT2KXKM8ZC329TETNBDK</code></dd></div><div><dt>source Event</dt><dd><a class=\"trace trace--event\" href=\"#/event/evt_01M4HSAVH18BT7V5WA7Z7XPF7Y\" data-kind=\"event\" data-id=\"evt_01M4HSAVH18BT7V5WA7Z7XPF7Y\"><span aria-hidden=\"true\" class=\"trace__glyph\">≡</span><span class=\"trace__label\">source Event</span><code class=\"trace__id\">evt_01M4HSAVH18BT7V5WA7Z7XPF7Y</code></a></dd></div><div><dt>command Event</dt><dd><a class=\"trace trace--event\" href=\"#/event/evt_01M4HSAVSJ5YRC3A83EPC0EH07\" data-kind=\"event\" data-id=\"evt_01M4HSAVSJ5YRC3A83EPC0EH07\"><span aria-hidden=\"true\" class=\"trace__glyph\">≡</span><span class=\"trace__label\">command Event</span><code class=\"trace__id\">evt_01M4HSAVSJ5YRC3A83EPC0EH07</code></a></dd></div><div><dt>created_at</dt><dd>2026-10-10 02:12:38.322Z</dd></div><div><dt>checkpoint</dt><dd><a href=\"#/checkpoints?checkpoint_id=ckp_01M4HSAVN59QJDPSATF3C3624D\"><code>ckp_01M4HSAVN59QJDPSATF3C3624D</code></a></dd></div><div><dt>digests</dt><dd><span class=\"kv__digest\"><span class=\"muted\">truth_digest</span> <code class=\"wrap\">ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb</code></span></dd></div></dl><div class=\"state state--meta\" data-testid=\"resume-note\"><p class=\"state__headline\">note:historical,authority = false(Core 明确否认其权威性)</p><div class=\"rawtext\"><div class=\"rawtext__bar\"><span class=\"rawtext__label\">note.value</span><span class=\"rawtext__actions\"><button type=\"button\">复制脱敏摘要</button></span></div><pre class=\"rawtext__body\">SYNTHETIC historical note CP11.default-last</pre></div></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ comparison(checkpoint 与当前投影的差异)</button><span class=\"jsonblock__meta\">314 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"checkpoint_freshness\": \"STATE_EQUAL\",\n  \"diff\": {\n    \"added\": [],\n    \"changed\": [],\n    \"evidence_changed\": false,\n    \"removed\": [],\n    \"workspace_paths\": {\n      \"added\": [],\n      \"changed\": [],\n      \"removed\": []\n    }\n  },\n  \"reconciliation_required\": false,\n  \"warnings\": [],\n  \"workspace\": \"SAME\"\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ next_actions</button><span class=\"jsonblock__meta\">2 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">[]</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ projection</button><span class=\"jsonblock__meta\">1407 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ workspace</button><span class=\"jsonblock__meta\">837 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.319147Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ sample_window</button><span class=\"jsonblock__meta\">83 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"finished_at_unix\": 1791598358.321867,\n  \"started_at_unix\": 1791598358.270802\n}</pre></div><button type=\"button\">从 Core 重新读取</button><p class=\"state state--meta\">本段显示的是 <time datetime=\"2026-10-10T02:12:56.404Z\">2026-10-10T02:12:56.404Z</time> 从 Core 读回的<strong> Resume </strong>内容;它不是事务快照,也不是实时推送。</p></div></section></div></main></div></div>\n  \n\n",
+          "inputs": [
+            {
+              "label": "resume_id",
+              "value": "rms_01M4HSAVSJ1M43E9NBKVVGVW9K"
+            }
+          ],
+          "links": [
+            {
+              "text": "跳到主内容",
+              "href": "#main"
+            },
+            {
+              "text": "Overview",
+              "href": "#/overview"
+            },
+            {
+              "text": "Conversation",
+              "href": "#/conversation"
+            },
+            {
+              "text": "Interpretations",
+              "href": "#/interpretations"
+            },
+            {
+              "text": "待审批 Review",
+              "href": "#/reviews"
+            },
+            {
+              "text": "Rules",
+              "href": "#/rules"
+            },
+            {
+              "text": "interpretation",
+              "href": "#/pending/interpretation"
+            },
+            {
+              "text": "checkpoint",
+              "href": "#/pending/checkpoint"
+            },
+            {
+              "text": "context",
+              "href": "#/pending/context"
+            },
+            {
+              "text": "memory",
+              "href": "#/pending/memory"
+            },
+            {
+              "text": "validation",
+              "href": "#/pending/validation"
+            },
+            {
+              "text": "registry",
+              "href": "#/pending/registry"
+            },
+            {
+              "text": "backup",
+              "href": "#/pending/backup"
+            },
+            {
+              "text": "Validation",
+              "href": "#/pending/validation"
+            },
+            {
+              "text": "Context",
+              "href": "#/pending/context"
+            },
+            {
+              "text": "Memory",
+              "href": "#/pending/memory"
+            },
+            {
+              "text": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "href": "#/project/prj_01M4HSAVGXE8P4RP85D7NSN33V"
+            },
+            {
+              "text": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+              "href": "#/task/tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            {
+              "text": "≡source Eventevt_01M4HSAVH18BT7V5WA7Z7XPF7Y",
+              "href": "#/event/evt_01M4HSAVH18BT7V5WA7Z7XPF7Y"
+            },
+            {
+              "text": "≡command Eventevt_01M4HSAVSJ5YRC3A83EPC0EH07",
+              "href": "#/event/evt_01M4HSAVSJ5YRC3A83EPC0EH07"
+            },
+            {
+              "text": "ckp_01M4HSAVN59QJDPSATF3C3624D",
+              "href": "#/checkpoints?checkpoint_id=ckp_01M4HSAVN59QJDPSATF3C3624D"
+            }
+          ],
+          "kv": [
+            {
+              "label": "resume_id",
+              "text": "rms_01M4HSAVSJ1M43E9NBKVVGVW9K"
+            },
+            {
+              "label": "required scope",
+              "text": "resume:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read"
+            },
+            {
+              "label": "scope",
+              "text": "prj_01M4HSAVGXE8P4RP85D7NSN33V · tsk_01M4HSAVGZD7F489BV6ZAK1A0P · 无 session"
+            },
+            {
+              "label": "actor / host",
+              "text": "act_01M4HSAT2KK8B3FG4ESW5CNG99 · hst_01M4HSAT2KXKM8ZC329TETNBDK"
+            },
+            {
+              "label": "source Event",
+              "text": "≡source Eventevt_01M4HSAVH18BT7V5WA7Z7XPF7Y"
+            },
+            {
+              "label": "command Event",
+              "text": "≡command Eventevt_01M4HSAVSJ5YRC3A83EPC0EH07"
+            },
+            {
+              "label": "created_at",
+              "text": "2026-10-10 02:12:38.322Z"
+            },
+            {
+              "label": "checkpoint",
+              "text": "ckp_01M4HSAVN59QJDPSATF3C3624D"
+            },
+            {
+              "label": "digests",
+              "text": "truth_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb"
+            }
+          ],
+          "digests": [
+            {
+              "label": "truth_digest",
+              "value": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb"
+            }
+          ],
+          "rawtexts": [
+            {
+              "label": "note.value",
+              "text": "SYNTHETIC historical note CP11.default-last"
+            }
+          ],
+          "jsonblocks": [
+            {
+              "label": "comparison(checkpoint 与当前投影的差异)",
+              "text": "{\n  \"checkpoint_freshness\": \"STATE_EQUAL\",\n  \"diff\": {\n    \"added\": [],\n    \"changed\": [],\n    \"evidence_changed\": false,\n    \"removed\": [],\n    \"workspace_paths\": {\n      \"added\": [],\n      \"changed\": [],\n      \"removed\": []\n    }\n  },\n  \"reconciliation_required\": false,\n  \"warnings\": [],\n  \"workspace\": \"SAME\"\n}"
+            },
+            {
+              "label": "next_actions",
+              "text": "[]"
+            },
+            {
+              "label": "projection",
+              "text": "{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}"
+            },
+            {
+              "label": "workspace",
+              "text": "{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.319147Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}"
+            },
+            {
+              "label": "sample_window",
+              "text": "{\n  \"finished_at_unix\": 1791598358.321867,\n  \"started_at_unix\": 1791598358.270802\n}"
+            }
+          ],
+          "comparison_status": "这是收据生成时的比较结果；重新读取不会重新比较。\n\ncheckpoint_freshness: STATE_EQUAL · workspace: SAME · reconciliation_required: false",
+          "checkpoint_boundary": null,
+          "alerts": [],
+          "pending": false,
+          "invalid": false,
+          "note": "note:historical,authority = false(Core 明确否认其权威性)note.value复制脱敏摘要SYNTHETIC historical note CP11.default-last",
+          "next_actions": null,
+          "next_action_header": null,
+          "next_action_rows": []
+        },
+        "dom_file": "dom/CP12.default-switch-resume-before-release.json",
+        "screenshot": "screenshots/CP12.default-switch-resume-before-release.png",
+        "screenshot_clip": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 2433,
+          "scale": 1
+        },
+        "at_unix": 1791598376.509
+      },
+      "after": {
+        "dom": {
+          "hash": "#/resume/rms_01M4HSAVSJ1M43E9NBKVVGVW9K",
+          "text": "跳到主内容\nJasmine Core Dashboard P6-02\nOverview\nConversation\nInterpretations\n待审批 Review\nRules\n领域(未接入)\n退出(清除内存中的 token)\n\n受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、 Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02 TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task 验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6 已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。Validation、Context、Memory 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 P6_ENABLE_P4_READS/P6_ENABLE_P7_READS 显式开关才转发。\n\nResume(P3 只读)\n按 ID 读取 Resume\nresume_id\n读取这个 resume\n\nGET /v1/resumes/{rms} · scope resume:read +checkpoint:read。Resume 是精确的历史 receipts,不是恢复操作。\n\n状态:PARTIAL / DEPENDENCY_PENDING —— 本页契约派生自尚未合并的分支 p3-checkpoint-context-resume(7016dab),不是已通过的 P6 能力。\n\n这是比较,不是恢复: comparison / next_actions 描述 checkpoint 与当前投影的差异;本页不会应用任何东西,Truth 未被改动。\n\n这是收据生成时的比较结果；重新读取不会重新比较。\n\ncheckpoint_freshness: STATE_EQUAL · workspace: SAME · reconciliation_required: false\n\nresume_id\nrms_01M4HSAVSJ1M43E9NBKVVGVW9K\nrequired scope\nresume:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read\nscope\nprj_01M4HSAVGXE8P4RP85D7NSN33V · tsk_01M4HSAVGZD7F489BV6ZAK1A0P · 无 session\nactor / host\nact_01M4HSAT2KK8B3FG4ESW5CNG99 · hst_01M4HSAT2KXKM8ZC329TETNBDK\nsource Event\n≡\nsource Event\nevt_01M4HSAVH18BT7V5WA7Z7XPF7Y\ncommand Event\n≡\ncommand Event\nevt_01M4HSAVSJ5YRC3A83EPC0EH07\ncreated_at\n2026-10-10 02:12:38.322Z\ncheckpoint\nckp_01M4HSAVN59QJDPSATF3C3624D\ndigests\ntruth_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb\n\nnote:historical,authority = false(Core 明确否认其权威性)\n\nnote.value\n复制脱敏摘要\nSYNTHETIC historical note CP11.default-last\n▾ comparison(checkpoint 与当前投影的差异)\n314 字符\n复制(脱敏)\n{\n  \"checkpoint_freshness\": \"STATE_EQUAL\",\n  \"diff\": {\n    \"added\": [],\n    \"changed\": [],\n    \"evidence_changed\": false,\n    \"removed\": [],\n    \"workspace_paths\": {\n      \"added\": [],\n      \"changed\": [],\n      \"removed\": []\n    }\n  },\n  \"reconciliation_required\": false,\n  \"warnings\": [],\n  \"workspace\": \"SAME\"\n}\n▾ next_actions\n2 字符\n复制(脱敏)\n[]\n▾ projection\n1407 字符\n复制(脱敏)\n{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}\n▾ workspace\n837 字符\n复制(脱敏)\n{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.319147Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}\n▾ sample_window\n83 字符\n复制(脱敏)\n{\n  \"finished_at_unix\": 1791598358.321867,\n  \"started_at_unix\": 1791598358.270802\n}\n从 Core 重新读取\n\n本段显示的是 2026-10-10T02:12:56.404Z 从 Core 读回的 Resume 内容;它不是事务快照,也不是实时推送。",
+          "html": "\n    <noscript>这个 Dashboard 需要 JavaScript 才能读取 Core API。</noscript>\n    <div id=\"root\"><div class=\"app\"><a class=\"skip-link\" href=\"#main\">跳到主内容</a><header class=\"app__head\"><div class=\"app__brand\"><strong>Jasmine Core</strong> <span>Dashboard P6-02</span></div><nav class=\"app__nav\" aria-label=\"主导航\"><a href=\"#/overview\">Overview</a><a href=\"#/conversation\">Conversation</a><a href=\"#/interpretations\">Interpretations</a><a href=\"#/reviews\">待审批 Review</a><a href=\"#/rules\">Rules</a><details class=\"navmenu\"><summary>领域(未接入)</summary><ul><li><a href=\"#/pending/interpretation\">interpretation</a></li><li><a href=\"#/pending/checkpoint\">checkpoint</a></li><li><a href=\"#/pending/context\">context</a></li><li><a href=\"#/pending/memory\">memory</a></li><li><a href=\"#/pending/validation\">validation</a></li><li><a href=\"#/pending/registry\">registry</a></li><li><a href=\"#/pending/backup\">backup</a></li></ul></details></nav><button type=\"button\" class=\"app__signout\">退出(清除内存中的 token)</button></header><p class=\"readonly-banner\" role=\"note\">受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、 Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02 TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task 验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6 已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入 INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。<a href=\"#/pending/validation\">Validation</a>、<a href=\"#/pending/context\">Context</a>、<a href=\"#/pending/memory\">Memory</a> 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 <code>P6_ENABLE_P4_READS</code>/<code>P6_ENABLE_P7_READS</code> 显式开关才转发。</p><main id=\"main\"><div class=\"stack\"><nav class=\"breadcrumb\" aria-label=\"位置\"><span>Resume(P3 只读)</span></nav><section class=\"panel\" aria-label=\"按 ID 读取 Resume\"><header class=\"panel__head\"><h2>按 ID 读取 Resume</h2></header><div class=\"panel__body\"><div class=\"filters\"><label for=\":r29:\">resume_id<input id=\":r29:\" placeholder=\"rms_…\" autocomplete=\"off\" value=\"rms_01M4HSAVSJ1M43E9NBKVVGVW9K\"></label><button type=\"button\">读取这个 resume</button></div><p class=\"state state--meta\"><code>GET /v1/resumes/{rms}</code> · scope <code>resume:read</code> +<code>checkpoint:read</code>。Resume 是<strong>精确的历史 receipts</strong>,不是恢复操作。</p><p class=\"state state--meta\" data-testid=\"slice-status\"><strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— 本页契约派生自尚未合并的分支 <code>p3-checkpoint-context-resume</code>(<code>7016dab</code>),不是已通过的 P6 能力。</p><p class=\"state state--meta\"><strong>这是比较,不是恢复:</strong> comparison / next_actions 描述 checkpoint 与当前投影的差异;本页不会应用任何东西,Truth 未被改动。</p><div class=\"state state--meta\" data-testid=\"resume-comparison-status\"><p>这是收据生成时的比较结果；重新读取不会重新比较。</p><p>checkpoint_freshness: <code>STATE_EQUAL</code> · workspace: <code>SAME</code> · reconciliation_required: <code>false</code></p></div><dl class=\"kv\"><div><dt>resume_id</dt><dd><code>rms_01M4HSAVSJ1M43E9NBKVVGVW9K</code></dd></div><div><dt>required scope</dt><dd><code>resume:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read</code></dd></div><div><dt>scope</dt><dd><a href=\"#/project/prj_01M4HSAVGXE8P4RP85D7NSN33V\"><code>prj_01M4HSAVGXE8P4RP85D7NSN33V</code></a> · <a href=\"#/task/tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"><code>tsk_01M4HSAVGZD7F489BV6ZAK1A0P</code></a> · 无 session</dd></div><div><dt>actor / host</dt><dd><code>act_01M4HSAT2KK8B3FG4ESW5CNG99</code> · <code>hst_01M4HSAT2KXKM8ZC329TETNBDK</code></dd></div><div><dt>source Event</dt><dd><a class=\"trace trace--event\" href=\"#/event/evt_01M4HSAVH18BT7V5WA7Z7XPF7Y\" data-kind=\"event\" data-id=\"evt_01M4HSAVH18BT7V5WA7Z7XPF7Y\"><span aria-hidden=\"true\" class=\"trace__glyph\">≡</span><span class=\"trace__label\">source Event</span><code class=\"trace__id\">evt_01M4HSAVH18BT7V5WA7Z7XPF7Y</code></a></dd></div><div><dt>command Event</dt><dd><a class=\"trace trace--event\" href=\"#/event/evt_01M4HSAVSJ5YRC3A83EPC0EH07\" data-kind=\"event\" data-id=\"evt_01M4HSAVSJ5YRC3A83EPC0EH07\"><span aria-hidden=\"true\" class=\"trace__glyph\">≡</span><span class=\"trace__label\">command Event</span><code class=\"trace__id\">evt_01M4HSAVSJ5YRC3A83EPC0EH07</code></a></dd></div><div><dt>created_at</dt><dd>2026-10-10 02:12:38.322Z</dd></div><div><dt>checkpoint</dt><dd><a href=\"#/checkpoints?checkpoint_id=ckp_01M4HSAVN59QJDPSATF3C3624D\"><code>ckp_01M4HSAVN59QJDPSATF3C3624D</code></a></dd></div><div><dt>digests</dt><dd><span class=\"kv__digest\"><span class=\"muted\">truth_digest</span> <code class=\"wrap\">ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb</code></span></dd></div></dl><div class=\"state state--meta\" data-testid=\"resume-note\"><p class=\"state__headline\">note:historical,authority = false(Core 明确否认其权威性)</p><div class=\"rawtext\"><div class=\"rawtext__bar\"><span class=\"rawtext__label\">note.value</span><span class=\"rawtext__actions\"><button type=\"button\">复制脱敏摘要</button></span></div><pre class=\"rawtext__body\">SYNTHETIC historical note CP11.default-last</pre></div></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ comparison(checkpoint 与当前投影的差异)</button><span class=\"jsonblock__meta\">314 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"checkpoint_freshness\": \"STATE_EQUAL\",\n  \"diff\": {\n    \"added\": [],\n    \"changed\": [],\n    \"evidence_changed\": false,\n    \"removed\": [],\n    \"workspace_paths\": {\n      \"added\": [],\n      \"changed\": [],\n      \"removed\": []\n    }\n  },\n  \"reconciliation_required\": false,\n  \"warnings\": [],\n  \"workspace\": \"SAME\"\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ next_actions</button><span class=\"jsonblock__meta\">2 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">[]</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ projection</button><span class=\"jsonblock__meta\">1407 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ workspace</button><span class=\"jsonblock__meta\">837 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.319147Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}</pre></div><div class=\"jsonblock\"><div class=\"jsonblock__bar\"><button type=\"button\" aria-expanded=\"true\" class=\"jsonblock__toggle\">▾ sample_window</button><span class=\"jsonblock__meta\">83 字符</span><button type=\"button\">复制(脱敏)</button></div><pre class=\"jsonblock__body\">{\n  \"finished_at_unix\": 1791598358.321867,\n  \"started_at_unix\": 1791598358.270802\n}</pre></div><button type=\"button\">从 Core 重新读取</button><p class=\"state state--meta\">本段显示的是 <time datetime=\"2026-10-10T02:12:56.404Z\">2026-10-10T02:12:56.404Z</time> 从 Core 读回的<strong> Resume </strong>内容;它不是事务快照,也不是实时推送。</p></div></section></div></main></div></div>\n  \n\n",
+          "inputs": [
+            {
+              "label": "resume_id",
+              "value": "rms_01M4HSAVSJ1M43E9NBKVVGVW9K"
+            }
+          ],
+          "links": [
+            {
+              "text": "跳到主内容",
+              "href": "#main"
+            },
+            {
+              "text": "Overview",
+              "href": "#/overview"
+            },
+            {
+              "text": "Conversation",
+              "href": "#/conversation"
+            },
+            {
+              "text": "Interpretations",
+              "href": "#/interpretations"
+            },
+            {
+              "text": "待审批 Review",
+              "href": "#/reviews"
+            },
+            {
+              "text": "Rules",
+              "href": "#/rules"
+            },
+            {
+              "text": "interpretation",
+              "href": "#/pending/interpretation"
+            },
+            {
+              "text": "checkpoint",
+              "href": "#/pending/checkpoint"
+            },
+            {
+              "text": "context",
+              "href": "#/pending/context"
+            },
+            {
+              "text": "memory",
+              "href": "#/pending/memory"
+            },
+            {
+              "text": "validation",
+              "href": "#/pending/validation"
+            },
+            {
+              "text": "registry",
+              "href": "#/pending/registry"
+            },
+            {
+              "text": "backup",
+              "href": "#/pending/backup"
+            },
+            {
+              "text": "Validation",
+              "href": "#/pending/validation"
+            },
+            {
+              "text": "Context",
+              "href": "#/pending/context"
+            },
+            {
+              "text": "Memory",
+              "href": "#/pending/memory"
+            },
+            {
+              "text": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "href": "#/project/prj_01M4HSAVGXE8P4RP85D7NSN33V"
+            },
+            {
+              "text": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+              "href": "#/task/tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+            },
+            {
+              "text": "≡source Eventevt_01M4HSAVH18BT7V5WA7Z7XPF7Y",
+              "href": "#/event/evt_01M4HSAVH18BT7V5WA7Z7XPF7Y"
+            },
+            {
+              "text": "≡command Eventevt_01M4HSAVSJ5YRC3A83EPC0EH07",
+              "href": "#/event/evt_01M4HSAVSJ5YRC3A83EPC0EH07"
+            },
+            {
+              "text": "ckp_01M4HSAVN59QJDPSATF3C3624D",
+              "href": "#/checkpoints?checkpoint_id=ckp_01M4HSAVN59QJDPSATF3C3624D"
+            }
+          ],
+          "kv": [
+            {
+              "label": "resume_id",
+              "text": "rms_01M4HSAVSJ1M43E9NBKVVGVW9K"
+            },
+            {
+              "label": "required scope",
+              "text": "resume:read + objects:read + state:read + authority:read + evidence:read + events:read + checkpoint:read"
+            },
+            {
+              "label": "scope",
+              "text": "prj_01M4HSAVGXE8P4RP85D7NSN33V · tsk_01M4HSAVGZD7F489BV6ZAK1A0P · 无 session"
+            },
+            {
+              "label": "actor / host",
+              "text": "act_01M4HSAT2KK8B3FG4ESW5CNG99 · hst_01M4HSAT2KXKM8ZC329TETNBDK"
+            },
+            {
+              "label": "source Event",
+              "text": "≡source Eventevt_01M4HSAVH18BT7V5WA7Z7XPF7Y"
+            },
+            {
+              "label": "command Event",
+              "text": "≡command Eventevt_01M4HSAVSJ5YRC3A83EPC0EH07"
+            },
+            {
+              "label": "created_at",
+              "text": "2026-10-10 02:12:38.322Z"
+            },
+            {
+              "label": "checkpoint",
+              "text": "ckp_01M4HSAVN59QJDPSATF3C3624D"
+            },
+            {
+              "label": "digests",
+              "text": "truth_digest ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb"
+            }
+          ],
+          "digests": [
+            {
+              "label": "truth_digest",
+              "value": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb"
+            }
+          ],
+          "rawtexts": [
+            {
+              "label": "note.value",
+              "text": "SYNTHETIC historical note CP11.default-last"
+            }
+          ],
+          "jsonblocks": [
+            {
+              "label": "comparison(checkpoint 与当前投影的差异)",
+              "text": "{\n  \"checkpoint_freshness\": \"STATE_EQUAL\",\n  \"diff\": {\n    \"added\": [],\n    \"changed\": [],\n    \"evidence_changed\": false,\n    \"removed\": [],\n    \"workspace_paths\": {\n      \"added\": [],\n      \"changed\": [],\n      \"removed\": []\n    }\n  },\n  \"reconciliation_required\": false,\n  \"warnings\": [],\n  \"workspace\": \"SAME\"\n}"
+            },
+            {
+              "label": "next_actions",
+              "text": "[]"
+            },
+            {
+              "label": "projection",
+              "text": "{\n  \"active_rules\": [],\n  \"evidence\": [],\n  \"evidence_count\": 0,\n  \"evidence_digest\": \"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945\",\n  \"evidence_refs\": [],\n  \"objects\": [\n    {\n      \"object_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n      \"object_type\": \"project\",\n      \"revision\": 1\n    },\n    {\n      \"object_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n      \"object_type\": \"task\",\n      \"revision\": 1\n    }\n  ],\n  \"project\": {\n    \"created_at\": \"2026-10-10T02:12:38.045493Z\",\n    \"description\": \"\",\n    \"name\": \"SYNTHETIC isolated CP11.default\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGXQCY3HR7A2E6EG4DY\",\n    \"status\": \"active\",\n    \"updated_at\": \"2026-10-10T02:12:38.045493Z\"\n  },\n  \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n  \"rules\": [],\n  \"snapshot_schema\": \"jasmine.task-snapshot.v1\",\n  \"source_bindings\": [],\n  \"steps\": [],\n  \"task\": {\n    \"acceptance_criteria\": {\n      \"requirements\": []\n    },\n    \"created_at\": \"2026-10-10T02:12:38.047302Z\",\n    \"description\": \"\",\n    \"project_id\": \"prj_01M4HSAVGXE8P4RP85D7NSN33V\",\n    \"revision\": 1,\n    \"source_event_id\": \"evt_01M4HSAVGZ48XVTSN959ZYH27D\",\n    \"status\": \"ACTIVE\",\n    \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\",\n    \"title\": \"SYNTHETIC CP11.default\",\n    \"updated_at\": \"2026-10-10T02:12:38.047302Z\"\n  },\n  \"task_id\": \"tsk_01M4HSAVGZD7F489BV6ZAK1A0P\"\n}"
+            },
+            {
+              "label": "workspace",
+              "text": "{\n  \"algorithm\": \"jasmine-workspace-sha256-v1\",\n  \"captured_at\": \"2026-10-10T02:12:38.319147Z\",\n  \"changed_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"complete\": true,\n  \"coverage\": \"tracked-plus-nonignored-untracked-and-project-hook-binding\",\n  \"dirty\": true,\n  \"extra_paths\": [\n    \"declared-input.txt\"\n  ],\n  \"file_count\": 2,\n  \"git_head\": \"85565e703ce4d89bc212838ced289b02d62eb6c9\",\n  \"is_git\": true,\n  \"manifest_sha256\": \"a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6\",\n  \"partial_reasons\": [],\n  \"root\": \"/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace\",\n  \"selected_hashes\": {\n    \"declared-input.txt\": \"5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46\",\n    \"tracked.txt\": \"a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252\"\n  }\n}"
+            },
+            {
+              "label": "sample_window",
+              "text": "{\n  \"finished_at_unix\": 1791598358.321867,\n  \"started_at_unix\": 1791598358.270802\n}"
+            }
+          ],
+          "comparison_status": "这是收据生成时的比较结果；重新读取不会重新比较。\n\ncheckpoint_freshness: STATE_EQUAL · workspace: SAME · reconciliation_required: false",
+          "checkpoint_boundary": null,
+          "alerts": [],
+          "pending": false,
+          "invalid": false,
+          "note": "note:historical,authority = false(Core 明确否认其权威性)note.value复制脱敏摘要SYNTHETIC historical note CP11.default-last",
+          "next_actions": null,
+          "next_action_header": null,
+          "next_action_rows": []
+        },
+        "dom_file": "dom/CP12.default-switch-resume-after-release.json",
+        "screenshot": "screenshots/CP12.default-switch-resume-after-release.png",
+        "screenshot_clip": {
+          "x": 0,
+          "y": 0,
+          "width": 1400,
+          "height": 2433,
+          "scale": 1
+        },
+        "at_unix": 1791598376.8
+      },
+      "network": [
+        {
+          "id": "CP12.default",
+          "cdp_id": "24807.105",
+          "method": "GET",
+          "path": "/v1/resumes/rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+          "query": "",
+          "at_unix": 1791598376.278,
+          "request_id_sent": "ui-efca1822-b585-4d47-b3f1-37a4fe6767b3",
+          "authorization_present": true,
+          "status": 200,
+          "request_id": "ui-efca1822-b585-4d47-b3f1-37a4fe6767b3",
+          "body": {
+            "resume": {
+              "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+              "checkpoint_id": "ckp_01M4HSAVK6XJ54E6XWA6MSY7KN",
+              "command_event_id": "evt_01M4HSAVQHVCF2GJB39FFD2XDR",
+              "comparison": {
+                "checkpoint_freshness": "STATE_EQUAL",
+                "diff": {
+                  "added": [],
+                  "changed": [],
+                  "evidence_changed": false,
+                  "removed": [],
+                  "workspace_paths": {
+                    "added": [],
+                    "changed": [],
+                    "removed": []
+                  }
+                },
+                "reconciliation_required": false,
+                "warnings": [],
+                "workspace": "SAME"
+              },
+              "created_at": "2026-10-10T02:12:38.257487Z",
+              "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+              "next_actions": [],
+              "note": {
+                "authority": false,
+                "historical": true,
+                "value": {
+                  "source_event_id": "evt_01M4HSAVHDDWVEW0G3Z66R364Y",
+                  "text": "SYNTHETIC historical note CP11.default-first"
+                }
+              },
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "projection": {
+                "active_rules": [],
+                "evidence": [],
+                "evidence_count": 0,
+                "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "evidence_refs": [],
+                "objects": [
+                  {
+                    "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                    "object_type": "project",
+                    "revision": 1
+                  },
+                  {
+                    "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                    "object_type": "task",
+                    "revision": 1
+                  }
+                ],
+                "project": {
+                  "created_at": "2026-10-10T02:12:38.045493Z",
+                  "description": "",
+                  "name": "SYNTHETIC isolated CP11.default",
+                  "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "revision": 1,
+                  "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                  "status": "active",
+                  "updated_at": "2026-10-10T02:12:38.045493Z"
+                },
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "rules": [],
+                "snapshot_schema": "jasmine.task-snapshot.v1",
+                "source_bindings": [],
+                "steps": [],
+                "task": {
+                  "acceptance_criteria": {
+                    "requirements": []
+                  },
+                  "created_at": "2026-10-10T02:12:38.047302Z",
+                  "description": "",
+                  "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "revision": 1,
+                  "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                  "status": "ACTIVE",
+                  "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "title": "SYNTHETIC CP11.default",
+                  "updated_at": "2026-10-10T02:12:38.047302Z"
+                },
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+              },
+              "resume_id": "rms_01M4HSAVQHGBZHYRX3GMJKWQJ8",
+              "sample_window": {
+                "finished_at_unix": 1791598358.257005,
+                "started_at_unix": 1791598358.206812
+              },
+              "session_id": null,
+              "source_event_id": "evt_01M4HSAVH18BT7V5WA7Z7XPF7Y",
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+              "truth_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+              "workspace": {
+                "algorithm": "jasmine-workspace-sha256-v1",
+                "captured_at": "2026-10-10T02:12:38.254169Z",
+                "changed_paths": [
+                  "declared-input.txt"
+                ],
+                "complete": true,
+                "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+                "dirty": true,
+                "extra_paths": [
+                  "declared-input.txt"
+                ],
+                "file_count": 2,
+                "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+                "is_git": true,
+                "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+                "partial_reasons": [],
+                "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+                "selected_hashes": {
+                  "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                  "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+                }
+              }
+            }
+          }
+        },
+        {
+          "id": "CP12.default",
+          "cdp_id": "24807.106",
+          "method": "GET",
+          "path": "/v1/resumes/rms_01M4HSAVSJ1M43E9NBKVVGVW9K",
+          "query": "",
+          "at_unix": 1791598376.403,
+          "request_id_sent": "ui-7167a26e-f967-4b59-a645-4a52adbbc5db",
+          "authorization_present": true,
+          "status": 200,
+          "request_id": "ui-7167a26e-f967-4b59-a645-4a52adbbc5db",
+          "body": {
+            "resume": {
+              "actor_id": "act_01M4HSAT2KK8B3FG4ESW5CNG99",
+              "checkpoint_id": "ckp_01M4HSAVN59QJDPSATF3C3624D",
+              "command_event_id": "evt_01M4HSAVSJ5YRC3A83EPC0EH07",
+              "comparison": {
+                "checkpoint_freshness": "STATE_EQUAL",
+                "diff": {
+                  "added": [],
+                  "changed": [],
+                  "evidence_changed": false,
+                  "removed": [],
+                  "workspace_paths": {
+                    "added": [],
+                    "changed": [],
+                    "removed": []
+                  }
+                },
+                "reconciliation_required": false,
+                "warnings": [],
+                "workspace": "SAME"
+              },
+              "created_at": "2026-10-10T02:12:38.322311Z",
+              "host_id": "hst_01M4HSAT2KXKM8ZC329TETNBDK",
+              "next_actions": [],
+              "note": {
+                "authority": false,
+                "historical": true,
+                "value": {
+                  "source_event_id": "evt_01M4HSAVHBDQNXX0R3JR21J3BA",
+                  "text": "SYNTHETIC historical note CP11.default-last"
+                }
+              },
+              "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+              "projection": {
+                "active_rules": [],
+                "evidence": [],
+                "evidence_count": 0,
+                "evidence_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+                "evidence_refs": [],
+                "objects": [
+                  {
+                    "object_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                    "object_type": "project",
+                    "revision": 1
+                  },
+                  {
+                    "object_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                    "object_type": "task",
+                    "revision": 1
+                  }
+                ],
+                "project": {
+                  "created_at": "2026-10-10T02:12:38.045493Z",
+                  "description": "",
+                  "name": "SYNTHETIC isolated CP11.default",
+                  "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "revision": 1,
+                  "source_event_id": "evt_01M4HSAVGXQCY3HR7A2E6EG4DY",
+                  "status": "active",
+                  "updated_at": "2026-10-10T02:12:38.045493Z"
+                },
+                "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                "rules": [],
+                "snapshot_schema": "jasmine.task-snapshot.v1",
+                "source_bindings": [],
+                "steps": [],
+                "task": {
+                  "acceptance_criteria": {
+                    "requirements": []
+                  },
+                  "created_at": "2026-10-10T02:12:38.047302Z",
+                  "description": "",
+                  "project_id": "prj_01M4HSAVGXE8P4RP85D7NSN33V",
+                  "revision": 1,
+                  "source_event_id": "evt_01M4HSAVGZ48XVTSN959ZYH27D",
+                  "status": "ACTIVE",
+                  "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+                  "title": "SYNTHETIC CP11.default",
+                  "updated_at": "2026-10-10T02:12:38.047302Z"
+                },
+                "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P"
+              },
+              "resume_id": "rms_01M4HSAVSJ1M43E9NBKVVGVW9K",
+              "sample_window": {
+                "finished_at_unix": 1791598358.321867,
+                "started_at_unix": 1791598358.270802
+              },
+              "session_id": null,
+              "source_event_id": "evt_01M4HSAVH18BT7V5WA7Z7XPF7Y",
+              "task_id": "tsk_01M4HSAVGZD7F489BV6ZAK1A0P",
+              "truth_digest": "ea45e11ac67e3ebf371f62cff38fe7b657f97989e91caa81f4e7a9ed5b47dfcb",
+              "workspace": {
+                "algorithm": "jasmine-workspace-sha256-v1",
+                "captured_at": "2026-10-10T02:12:38.319147Z",
+                "changed_paths": [
+                  "declared-input.txt"
+                ],
+                "complete": true,
+                "coverage": "tracked-plus-nonignored-untracked-and-project-hook-binding",
+                "dirty": true,
+                "extra_paths": [
+                  "declared-input.txt"
+                ],
+                "file_count": 2,
+                "git_head": "85565e703ce4d89bc212838ced289b02d62eb6c9",
+                "is_git": true,
+                "manifest_sha256": "a4b7f7dfac144b10db5bf27dc541e91d4ade8c627075a4ad25b9a4289f4a45b6",
+                "partial_reasons": [],
+                "root": "/private/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/p6-checkpoint-private-s77ceyt1/workspace",
+                "selected_hashes": {
+                  "declared-input.txt": "5852822a94272f3f119925149c09f4c90c746ffbb8605378a647552a4bfd1d46",
+                  "tracked.txt": "a3ec366fba89323bb17006fcff3d91879e0e61ce2210aff32b723f6d60a44252"
+                }
+              }
+            }
+          }
+        }
+      ],
+      "intervention": "Targeted real GET Response delayed; only AbortSignal removed to force late arrival; body unchanged."
+    }
+  ]
+}

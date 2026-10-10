@@ -185,9 +185,18 @@ class EvidenceStore:
                 tables = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
                 data = {t: sorted([dict(r) for r in con.execute('SELECT * FROM "' + t.replace('"', '""') + '"')], key=canonical) for t in tables}
                 schema = [dict(r) for r in con.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name')]
+                # SQLite skips CHECK validation for an immutable/read-only handle.
+                # Validate a byte-equivalent in-memory backup, never write the sealed DB.
+                memory = sqlite3.connect(':memory:')
+                try:
+                    con.backup(memory)
+                    integrity = [r[0] for r in memory.execute('PRAGMA integrity_check')]
+                    foreign_keys = [list(r) for r in memory.execute('PRAGMA foreign_key_check')]
+                finally:
+                    memory.close()
                 self.dbs[name] = {'state': {t: rows for t, rows in data.items() if t not in ('api_keys', 'audit_log')},
-                    'all_tables': data, 'schema': schema, 'integrity': [r[0] for r in con.execute('PRAGMA integrity_check')],
-                    'foreign_keys': [list(r) for r in con.execute('PRAGMA foreign_key_check')],
+                    'all_tables': data, 'schema': schema, 'integrity': integrity,
+                    'foreign_keys': foreign_keys,
                     'ignore_check_constraints': con.execute('PRAGMA ignore_check_constraints').fetchone()[0]}
             finally:
                 con.close()
@@ -220,6 +229,8 @@ class EvidenceStore:
         unique_ops = {}
         for row in raw['records']:
             runtime = row['runtime_label']
+            if runtime != (row['id'] if row.get('injection') else 'base'):
+                raise ValueError('wrong variant runtime binding')
             for op in all_operations(row):
                 path = op['operation_receipt']
                 if self.json(path) != op or not path.endswith('-operation.json'):
@@ -324,7 +335,13 @@ class EvidenceStore:
             raise ValueError('not the frozen single mutation; another guard may shadow intended guard')
         expected = copy.deepcopy(original['all_tables'])
         expected['checkpoints'] = sorted([new if r['checkpoint_id'] == old['checkpoint_id'] else r for r in expected['checkpoints']], key=canonical)
-        if expected != fork['all_tables'] or fork['state'] != row['operations'][0]['before']:
+        operation_start = copy.deepcopy(fork['state'])
+        # The owned migration runner acquires exactly this metadata lock on startup.
+        # The offline image was captured after base shutdown, which released it.
+        if not any(r['key'] == 'migration_lock' for r in operation_start['core_meta']):
+            operation_start['core_meta'].append({'key': 'migration_lock', 'value': 'jasmine-core'})
+            operation_start['core_meta'].sort(key=canonical)
+        if expected != fork['all_tables'] or operation_start != row['operations'][0]['before']:
             raise ValueError('fork / original / actual operation DB mismatch')
         if original['schema'] != fork['schema'] or i['schema_before'] != original['schema'] or i['schema_after'] != fork['schema']:
             raise ValueError('injection schema mismatch')
@@ -659,7 +676,9 @@ def scenario_checks(row, ui, common):
         valid_integrity = injection['integrity_check'] == ['CHECK constraint failed in checkpoints'] if row['id'] == 'CP20.column_version' else injection['integrity_check'] == ['ok']
         fault_ok = injection['mode'] == 'REAL_CORE_CORRUPT_STORE' and injection['schema_before'] == injection['schema_after'] and injection['foreign_key_check'] == [] and injection['ignore_check_constraints_after'] == 0 and valid_integrity
         h = ops[0]['http']
-        return [mutation_good, fault_ok and source_ok, h['status'] == 409 and h['body']['error']['code'] == 'checkpoint_integrity_error' and append_ok,
+        guard_message = {'CP13': 'checkpoint is ahead of current Truth', 'CP14': 'checkpoint is ahead of current Truth',
+                         'CP15': 'Rule version is ahead of current Truth', 'CP19': 'malformed checkpoint projection'}.get(case, 'checkpoint identity or stored digest mismatch')
+        return [mutation_good, fault_ok and source_ok, h['status'] == 409 and h['body']['error']['code'] == 'checkpoint_integrity_error' and h['body']['error']['message'] == guard_message and append_ok,
                 pages_ok and row['absence']['resume']['observed_new_count'] == 0 and row['absence']['resume']['reason']]
     if case == 'CP22':
         key = row['injection']['synthetic_removed_key']

@@ -8,6 +8,8 @@ import time
 import unittest
 import sys
 import os
+import hashlib
+import sqlite3
 
 ROOT = Path(__file__).resolve().parents[2]
 def load(name):
@@ -152,6 +154,36 @@ class FrozenFaultMutation(unittest.TestCase):
         self.assertNotEqual(expected, shadow)
         self.assertNotIn('task_revision=?', sql)
         self.assertEqual(parameters[-1], original['checkpoint_id'])
+
+class LateDynamicAdversaries(unittest.TestCase):
+    def test_each_dynamic_field_and_exact_input_are_checked_after_release(self):
+        fixture = json.loads((ROOT / 'tests/p6/fixtures/cp12-author-143845d.component.json').read_text())
+        for original in fixture['switches']:
+            self.assertTrue(gate.switch_proof(fixture['row'], original)[0])
+            kind = original['kind']
+            for fault in ('note', 'digest', 'projection', 'workspace', 'empty_input', 'third_input', 'wrong_release') + (('comparison',) if kind == 'resume' else ()):
+                with self.subTest(kind=kind, fault=fault):
+                    s = copy.deepcopy(original); dom = s['after']['dom']
+                    if fault == 'note': dom['rawtexts'][0]['text'] = 'WRONG_NOTE'
+                    elif fault == 'digest': dom['digests'][0]['value'] = '0' * 64
+                    elif fault in ('projection', 'workspace', 'comparison'): next(b for b in dom['jsonblocks'] if b['label'].startswith(fault))['text'] = '{}'
+                    elif fault in ('empty_input', 'third_input'): next(i for i in dom['inputs'] if i['label'] == kind + '_id')['value'] = '' if fault == 'empty_input' else 'COMPONENT_THIRD_ID'
+                    else: s['released']['request_id'] = 'WRONG_RELEASE'
+                    # The IDs and ordinary page snapshots are deliberately still right.
+                    self.assertIn(s['b'], dom['text'])
+                    self.assertFalse(gate.switch_proof(fixture['row'], s)[0])
+
+class ReadonlySQLiteConstraintProof(unittest.TestCase):
+    def test_check_constraints_are_verified_on_private_memory_copy(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            directory = Path(temporary); path = directory / 'component.db'
+            con = sqlite3.connect(path); con.execute('CREATE TABLE fixture(value TEXT CHECK(value="valid"))')
+            con.execute('PRAGMA ignore_check_constraints=ON'); con.execute('INSERT INTO fixture VALUES("old-version")'); con.commit(); con.close()
+            before = hashlib.sha256(path.read_bytes()).hexdigest()
+            index = directory / 'receipt-index.json'; index.write_text(json.dumps({'files': [{'path': path.name, 'bytes': path.stat().st_size, 'sha256': before}]}))
+            store = gate.EvidenceStore(directory, hashlib.sha256(index.read_bytes()).hexdigest())
+            self.assertEqual(store.database(path.name)['integrity'], ['CHECK constraint failed in fixture'])
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), before)
 
 if __name__ == '__main__':
     unittest.main()
