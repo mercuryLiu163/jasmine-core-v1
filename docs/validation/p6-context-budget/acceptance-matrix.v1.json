@@ -1,0 +1,77 @@
+{
+  "spec_id": "P6-CONTEXT-BUDGET-v1",
+  "status": "FROZEN_FOR_AUTHOR_IMPLEMENTATION",
+  "baseline_commit": "17b6987",
+  "cases": [
+    {
+      "id": "CB01",
+      "mode": "REAL_CORE_BROWSER",
+      "target": "normal_pack",
+      "expected": "200; within budget; exact render and no false injection"
+    },
+    {
+      "id": "CB02",
+      "mode": "REAL_CORE_BROWSER",
+      "target": "optional_checkpoint_note",
+      "expected": "200; optional_budget omission; full mandatory rules retained and note source shown"
+    },
+    {
+      "id": "CB03",
+      "mode": "REAL_CORE_HTTP",
+      "target": "hard_authority_overflow",
+      "expected": "409 AUTHORITY_TOO_LARGE; zero Context/command/request-key append"
+    },
+    {
+      "id": "CB04",
+      "mode": "REAL_CORE_HTTP",
+      "target": "normal_rule_mandatory_overflow",
+      "expected": "409 CONTEXT_MANDATORY_TOO_LARGE; zero Context/command/request-key append"
+    },
+    {
+      "id": "CB05",
+      "mode": "REAL_CORE_BROWSER",
+      "target": "old_pack_after_hard_overflow",
+      "expected": "historical read/replay unchanged; replay zero scanner calls; check-current refuses stale; no new injection claim"
+    },
+    {
+      "id": "CB06",
+      "mode": "REAL_CORE_BROWSER",
+      "target": "context_read_scope_missing",
+      "expected": "403 forbidden_scope; no old success content"
+    },
+    {
+      "id": "CB07",
+      "mode": "REAL_PROXY_BROWSER",
+      "target": "p3_proxy_off",
+      "expected": "dependency pending proxy_path_not_allowed; no target Core call/old success"
+    },
+    {
+      "id": "CB08",
+      "mode": "REAL_BROWSER_LOCAL",
+      "target": "invalid_context_id",
+      "expected": "local invalid; zero target GET/old success"
+    },
+    {
+      "id": "CB09",
+      "mode": "REAL_CORE_BROWSER",
+      "target": "absent_context_id",
+      "expected": "404 not_found; measured absence; no invented source lineage/old success"
+    }
+  ],
+  "counts": {
+    "scenarios": 9,
+    "browser_cases": 7,
+    "HTTP_only_cases": 2
+  },
+  "required_case_gates": [
+    "outcome_and_actual_target",
+    "display_or_refusal_boundary",
+    "DB_truth_history_immutability",
+    "source_command_request_audit_binding"
+  ],
+  "component_only": [
+    "old/corrupt pack count above metadata limit",
+    "missing/malformed count/limit/omission metadata",
+    "alias/missing capture/source links/wire/DB backups"
+  ]
+}
