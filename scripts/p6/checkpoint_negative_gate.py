@@ -290,6 +290,8 @@ class EvidenceStore:
         for ui in browser['records']:
             row = next(r for r in raw['records'] if r['id'] == ui['id'])
             runtime = row['runtime_label']
+            if [p['definition'] for p in ui['pages']] != row['pages']:
+                raise ValueError('browser target definitions differ from actual prepared objects')
             for phase, ref in (('before', '-before-browser.db'), ('after', '-after-browser.db')):
                 if ui[phase] != self.database(runtime + ref)['state']:
                     raise ValueError('browser state differs from actual DB')
@@ -297,6 +299,22 @@ class EvidenceStore:
             if not window or not any(observers[runtime][i:i+len(window)] == window for i in range(len(observers[runtime]))):
                 raise ValueError('browser observer is not a complete actual contiguous window')
             final_all = self.database(runtime + '-after-browser.db')['all_tables']
+            browser_key = find(final_all, 'api_keys', 'key_id', ui['key_metadata']['key_id'])
+            if browser_key['actor_id'] != ui['key_metadata']['actor_id'] or json.loads(browser_key['scopes']) != ui['key_metadata']['scopes']:
+                raise ValueError('browser key metadata differs from actual issued key')
+            request_ids = {n.get('request_id') for n in ui['network'] if n.get('request_id')}
+            if ui['audit_read']['matching'] != [a for a in ui['audit_read']['body']['entries'] if a['request_id'] in request_ids]:
+                raise ValueError('browser matching audit is not the actual response subset')
+            audit_request = ui['audit_read']['request_id']
+            audit_window = [e for e in window if e.get('request_id') == audit_request]
+            if [e['kind'] for e in audit_window] != ['request_start', 'request_end'] or audit_window[0]['method'] != 'GET' or audit_window[0]['path'] != '/v1/audit' or audit_window[1]['status'] != 200:
+                raise ValueError('separate audit response has no actual Core request window')
+            for n in ui['network']:
+                if n.get('status') is None or n.get('body', {}).get('error', {}).get('code') == 'proxy_path_not_allowed':
+                    continue
+                actual_window = [e for e in window if e.get('request_id') == n.get('request_id')]
+                if [e['kind'] for e in actual_window] != ['request_start', 'request_end'] or actual_window[0]['method'] != n['method'] or actual_window[0]['path'] != n['path'] or actual_window[1]['status'] != n['status']:
+                    raise ValueError('completed browser GET has no exact actual Core window')
             for audit in ui['audit_read']['body']['entries']:
                 stored = dict(find(final_all, 'audit_log', 'audit_id', audit['audit_id']))
                 stored['detail'] = json.loads(stored.pop('detail_json'))
@@ -308,6 +326,8 @@ class EvidenceStore:
                     raise ValueError('DOM artifact differs')
                 if not self.file(o['screenshot']).startswith(b'\x89PNG\r\n\x1a\n'):
                     raise ValueError('missing/non-PNG screenshot')
+        if len(raw['browser_database_invariants']) != 12 or {e['runtime'] for e in raw['browser_database_invariants']} != runtime_names:
+            raise ValueError('incomplete global browser database invariant topology')
         for entry in raw['browser_database_invariants']:
             for field, ref in (('before', '-before-browser.db'), ('after', '-after-browser.db')):
                 if entry[field] != self.database(entry['runtime'] + ref)['state']:
