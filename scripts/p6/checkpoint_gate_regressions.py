@@ -110,6 +110,34 @@ def readback_mutation(raw, name):
 
 
 def mutate(raw, name, directory):
+    if name in ('OTHER_TASK_page_substitution','OTHER_TASK_resume_substitution','SAME_TASK_old_resume_replaced_by_new','SAME_TASK_new_resume_replaced_by_old','SAME_TASK_checkpoint_role_substitution','CP11_session_role_substitution'):
+        ident='CP02.default' if name.startswith('OTHER_TASK') else 'CP10.default' if 'resume_replaced' in name else 'CP12.default' if name=='SAME_TASK_checkpoint_role_substitution' else 'CP11.default'
+        ui=browser(raw,ident); row=record(raw,ident)
+        if name.startswith('OTHER_TASK'):
+            kind='resume' if 'resume' in name else 'checkpoint'; index=next(i for i,p in enumerate(ui['pages']) if p['definition']['kind']==kind); source=object_page(raw,'CP01.default',kind)
+        elif 'resume_replaced' in name:
+            indices=[i for i,p in enumerate(ui['pages']) if p['definition']['kind']=='resume'];index=indices[0] if 'old_resume' in name else indices[1];source=ui['pages'][indices[1] if 'old_resume' in name else indices[0]]
+        elif name=='SAME_TASK_checkpoint_role_substitution': index=2;source=ui['pages'][0]
+        else:index=1;source=ui['pages'][2]
+        old=copy.deepcopy(row['pages'][index]);replacement=copy.deepcopy(source);ui['pages'][index]=replacement;row['pages'][index]=copy.deepcopy(replacement['definition'])
+        return {'variant':ident,'old_role_definition':old,'replacement_definition':replacement['definition'],'actual_operations_DB_lineage_and_variant_wire_unchanged':True}
+    if name in ('SCENE_fixture_substitution','SCENE_lineage_substitution'):
+        field='fixture' if 'fixture' in name else 'lineage';record(raw,'CP02.default')[field]=copy.deepcopy(record(raw,'CP01.default')[field]);return {'variant':'CP02.default','field':field,'source_case':'CP01.default'}
+    if name.startswith('PAGE_'):
+        page=browser(raw,'CP02.default')['pages'][0];foreign=browser(raw,'CP01.default')['pages'][0]
+        if name=='PAGE_foreign_wire': page['network']=copy.deepcopy(foreign['network'])
+        elif name=='PAGE_foreign_capture':page['observations']=copy.deepcopy(foreign['observations'])
+        elif name=='PAGE_detached_request_id':page['observations'][0]['request_ids']=[foreign['network'][0]['request_id']]
+        elif name=='PAGE_capture_before_response':page['observations'][0]['dom_at_unix']=page['network'][0]['at_unix']-.1
+        elif name=='PAGE_wrong_query':page['network'][0]['query']='?session_id=ses_OTHER'
+        else:raise ValueError(name)
+        return {'variant':'CP02.default','mutation':name,'stage':page['stage'],'observations':page['observations'],'page_wire':page['network']}
+    if name in ('SWITCH_foreign_wire','SWITCH_reversed_roles'):
+        ui=browser(raw,'CP12.default');switch=ui['switches'][0]
+        if name=='SWITCH_foreign_wire':switch['network']=copy.deepcopy(browser(raw,'CP01.default')['pages'][0]['network'])
+        else:
+            switch['a'],switch['b']=switch['b'],switch['a'];record(raw,'CP12.default')['switches'][0][1:]=[switch['a'],switch['b']]
+        return {'variant':'CP12.default','mutation':name,'switch':switch}
     if name.startswith('browser_'):
         return readback_mutation(raw, name)
     if name.startswith('stale_success_') or name == 'old_success_data_on_404':
@@ -228,7 +256,7 @@ def sync_artifacts(directory, raw, original_manifest):
     temporary.write_text(''.join(json.dumps(n, ensure_ascii=False) + '\n' for n in raw['browser']['network']))
     os.replace(temporary, directory / 'browser-requests.jsonl')
     for ui in raw['browser']['records']:
-        observations = [o for p in ui['pages'] for o in p['observations']] + [s[k] for s in ui['switches'] for k in ('before', 'after')]
+        observations = [o for p in ui['pages'] for o in p['observations']] + [s[k] for s in ui['switches'] for k in ('before', 'after')] + [o for s in ui['switches'] for o in s.get('initial_page',{}).get('observations',[])]
         for o in observations: write(directory / o['dom_file'], o['dom'])
     for row in raw['records']:
         for op in gate.all_operations(row):
@@ -265,6 +293,8 @@ def run(bundle, repository, out):
         'wrong_command_navigation', 'wrong_resume_event_navigation', 'wrong_resume_command_navigation', 'wrong_project_navigation',
         'wrong_task_navigation', 'wrong_resume_checkpoint_navigation', 'wrong_trigger_level', 'wrong_resume_checkpoint_id']
     names += new_names
+    scene_names=['OTHER_TASK_page_substitution','OTHER_TASK_resume_substitution','SAME_TASK_old_resume_replaced_by_new','SAME_TASK_new_resume_replaced_by_old','SAME_TASK_checkpoint_role_substitution','CP11_session_role_substitution','SCENE_fixture_substitution','SCENE_lineage_substitution','PAGE_foreign_wire','PAGE_foreign_capture','PAGE_detached_request_id','PAGE_capture_before_response','PAGE_wrong_query','SWITCH_foreign_wire','SWITCH_reversed_roles']
+    names+=scene_names
     checks = []
     for name in names:
         with tempfile.TemporaryDirectory(prefix='NEGATIVE-private-', dir=out) as temporary:
@@ -276,7 +306,7 @@ def run(bundle, repository, out):
             value = gate.evaluate_bundle(changed, matrix, expected_candidate=candidate, expected_archive=raw['source_archive_sha256'], evidence_directory=directory)
             rejected = value['status'] != 'PASS'
             cli_rejected = None
-            if name == 'missing_all_database_files' or name in new_names:
+            if name == 'missing_all_database_files' or name in new_names or name in scene_names:
                 selfchecks = gate.adversarial_bundle_checks(changed, matrix, candidate, raw['source_archive_sha256'], evidence_directory=directory)
                 value['harness_selfchecks'] = selfchecks['status']
                 write(directory / 'result.json', value)
@@ -285,6 +315,9 @@ def run(bundle, repository, out):
                 try: cli_rejected = gate.verify_directory(directory, candidate, repository)['status'] != 'PASS'
                 except Exception as e: cli_rejected = True; patch['cli_rejection'] = type(e).__name__ + ': ' + str(e)
                 rejected = rejected and cli_rejected
+            if name in scene_names:
+                assert value['physical_evidence_binding']['status']=='BLOCKED' and any(marker in value['physical_evidence_binding'].get('reason','') for marker in ('scene','page','switch')), 'scene/page/history binding did not reject'
+                assert cli_rejected and 'cli_rejection' not in patch, 'formal scene rejection came from an exception rather than the gate'
             if name.startswith('browser_'):
                 assert value['physical_evidence_binding']['status'] == 'BLOCKED' and 'actual historical DB GET' in value['physical_evidence_binding'].get('reason', ''), 'DB-to-browser readback gate did not reject'
             elif name in new_names:
@@ -311,6 +344,8 @@ def run(bundle, repository, out):
         'kind': 'AUTHOR_GATE_REGRESSION_COMPONENTS_NOT_MATRIX_VARIANTS', 'original_bundle_unchanged': True,
         'count': len(checks), 'legacy_review_bad_inputs_rejected': sum(c['rejected'] for c in checks[:8]), 'checks': checks,
         'r01_r03_original_counterexamples_rejected': sum(c['rejected'] for c in checks[35:39]),
+        'scene_original_counterexamples_rejected':sum(c['rejected'] for c in checks[59:62]),
+        'scene_family_components_rejected':sum(c['rejected'] for c in checks[59:]),
         'scope_acceptance_signed': False, 'verifier_sha256': digest(Path(__file__))}
     write(out / 'result.json', result)
     files = [{'path': p.name, 'bytes': p.stat().st_size, 'sha256': digest(p)} for p in sorted(out.iterdir()) if p.is_file() and p.name != 'manifest.json']

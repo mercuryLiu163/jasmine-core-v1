@@ -152,6 +152,145 @@ def no_success_residue(dom, kind):
     return not any(marker in dom['text'] for marker in ('不可变快照:', '这是比较,不是恢复:', 'authority = false', '没有 note。'))
 
 
+def scene_pages(row, operation, calls, state):
+    """Frozen page roles reconstructed from named physical operations, never pages.
+
+    CP11 selections, CP12 reuse, fault forks and CP26 reuse are explicit exceptions.
+    A same-Task new Resume cannot replace the immutable old Resume role in CP10.
+    """
+    ident, case = row['id'], row['case_id']
+    label = ident if case in {'CP%02d' % n for n in range(1, 12)} else 'CP11.default' if case == 'CP12' else 'fault-base' if row.get('injection') else 'CP01.default'
+    tasks = [h['body']['object'] for h in calls if h['method'] == 'POST' and h['path'] == '/v1/tasks' and h['request_body']['title'] == 'SYNTHETIC ' + label and h['status'] == 201]
+    if len(tasks) != 1 or tasks[0]['task_id'] != row['fixture']['task']['task_id'] or tasks[0]['project_id'] != row['fixture']['project']['project_id']:
+        raise ValueError('scene fixture identity differs from actual named Task creation')
+    fixture = row['fixture']; task_id = tasks[0]['task_id']
+    source = find(state, 'events', 'event_id', fixture['source']['event_id'])
+    if serialized_event(source) != fixture['source'] or source['task_id'] != task_id or source['project_id'] != tasks[0]['project_id'] or source['host_id'] != fixture['host']:
+        raise ValueError('scene fixture source/scope is not the actual Task source')
+    roles = []
+    def op(path):
+        value = operation(path)
+        h = value['http']
+        entity = h['body'].get('checkpoint') or h['body'].get('resume')
+        if entity and (entity['task_id'] != task_id or entity['project_id'] != fixture['project']['project_id'] or entity['host_id'] != fixture['host']):
+            raise ValueError('scene operation entity belongs to another Task/scope')
+        return value
+    def add(kind, entity, role):
+        key = kind + '_id'; target = entity[key]; path = '/v1/' + ('checkpoints/' if kind == 'checkpoint' else 'resumes/') + target
+        # Actual fork decoding is authoritative for the readonly fault pages.
+        expected = historical_read_body(state, path)
+        roles.append((role, {'kind': kind, 'hash': '#/checkpoints?checkpoint_id=' + target if kind == 'checkpoint' else '#/resume/' + target,
+                              'path': path, 'expected': expected, 'entity_id': target, 'refresh': True}))
+    cp_path = 'base/' + label + '-checkpoint-operation.json'
+    if case in {'CP%02d' % n for n in range(1, 11)}:
+        cp = None if case == 'CP09' else op(cp_path)
+        first = op('base/' + ident + '-resume-operation.json')
+        expected_ops = [first]
+        if case == 'CP10':
+            expected_ops += [op('base/' + ident + suffix + '-operation.json') for suffix in ('-historic-get', '-replay-resume', '-fresh-resume')]
+        if row['checkpoint_creation'] != cp or row['operations'] != expected_ops:
+            raise ValueError('scene creation/read/replay operation roles differ')
+        if cp: add('checkpoint', cp['http']['body']['checkpoint'], 'created-checkpoint')
+        else:
+            path = '/v1/tasks/' + task_id + '/checkpoints/latest'
+            roles.append(('empty-task-latest', {'kind':'empty','hash':'#/checkpoints?task_id='+task_id,'path':path,'expected':historical_read_body(state,path),'entity_id':None}))
+        add('resume', first['http']['body']['resume'], 'old-resume' if case == 'CP10' else 'created-resume')
+        if case == 'CP10': add('resume', expected_ops[-1]['http']['body']['resume'], 'new-resume')
+    elif case in ('CP11', 'CP12'):
+        creates = [op('base/CP11.default-' + name + '-checkpoint-operation.json') for name in ('first', 'last')]
+        a, b = [v['http']['body']['checkpoint'] for v in creates]
+        if row['checkpoint_creation'] != creates[0]: raise ValueError('scene shared Checkpoint creation differs')
+        if case == 'CP11':
+            if row['checkpoint_creations'] != creates or row['operations'] != []: raise ValueError('scene selection creation roles differ')
+            paths = ['/v1/tasks/'+task_id+'/checkpoints/latest' + ('?session_id='+session if session else '') for session in (None,a['session_id'],b['session_id'])]
+            for i,path in enumerate(paths):
+                h = row['selection'][i]
+                if h not in calls or h['method']!='GET' or h['path']!=path or h['body']!=historical_read_body(state,path): raise ValueError('scene session selection is not the actual requested read')
+                expected=h['body']; target=expected['checkpoint']['checkpoint_id']
+                roles.append(('latest-session-'+str(i),{'kind':'checkpoint','hash':'#/checkpoints?task_id='+task_id+('&session_id='+ (a['session_id'] if i==1 else b['session_id']) if i else ''),'path':path,'expected':expected,'entity_id':target}))
+            if len(row['selection'])!=3: raise ValueError('extra scene selection')
+            other = [h['body']['object'] for h in calls if h['method']=='POST' and h['path']=='/v1/tasks' and h['request_body']['title']=='SYNTHETIC CP11-other-task']
+            if len(other)!=1: raise ValueError('missing explicit CP11 empty Task creation')
+            sessions=[h['body']['object'] for h in calls if h['method']=='POST' and h['path']=='/v1/sessions' and h['request_body']['task_id']==other[0]['task_id'] and h['request_body']['title']=='SYNTHETIC empty session']
+            if len(sessions)!=1: raise ValueError('missing explicit empty session creation')
+            empty=row['empty_selection']; path='/v1/tasks/'+other[0]['task_id']+'/checkpoints/latest?session_id='+sessions[0]['session_id']
+            if empty not in calls or empty['path']!=path or empty['body']!=historical_read_body(state,path): raise ValueError('scene empty selection differs')
+            roles.append(('other-task-empty-session',{'kind':'empty','hash':'#/checkpoints?task_id='+other[0]['task_id']+'&session_id='+sessions[0]['session_id'],'path':path,'expected':empty['body'],'entity_id':None}))
+            add('checkpoint', a, 'by-id-with-unused-invalid-inputs'); roles[-1][1]['hash']+='&task_id=bad-task&session_id=bad-session'
+        else:
+            resumes=[op('base/switch-'+name+'-resume-operation.json') for name in ('A','B')]
+            if row['resume_creations']!=resumes or row['operations']!=[]: raise ValueError('scene A/B Resume creation roles differ')
+            for name,c,r in zip(('A','B'),(a,b),resumes):
+                if r['http']['request_body']['checkpoint_id']!=c['checkpoint_id']: raise ValueError('scene Resume A/B references wrong Checkpoint')
+                add('checkpoint',c,'checkpoint-'+name);add('resume',r['http']['body']['resume'],'resume-'+name)
+    elif row.get('injection'):
+        cp=op(cp_path); target=op(ident+'/'+ident+'-resume-operation.json')
+        if row['checkpoint_creation']!=cp or row['operations']!=[target]: raise ValueError('scene fault operation roles differ')
+        add('checkpoint',cp['http']['body']['checkpoint'],'actual-fork-checkpoint')
+        if target['http']['status']==201: add('resume',target['http']['body']['resume'],'fault-resume-success')
+    elif case in ('CP23','CP24','CP25'):
+        kind=row['variant_id'].split('_',1)[0]
+        if case=='CP24':
+            target='invalid-'+kind; path='/v1/'+('checkpoints/' if kind=='checkpoint' else 'resumes/')+target
+            if row['operations']!=[]: raise ValueError('invalid scene must have no target operation')
+            definition={'kind':'invalid','hash':'#/checkpoints?checkpoint_id='+target if kind=='checkpoint' else '#/resume/'+target,'path':path,'expected':None,'entity_id':target}
+        else:
+            target_op=op('base/'+ident+'-operation.json'); h=target_op['http']; target=h['path'].rsplit('/',1)[1]
+            if row['operations']!=[target_op]: raise ValueError('scene refusal operation differs')
+            definition={'kind':'error','hash':'#/checkpoints?checkpoint_id='+target if kind=='checkpoint' else '#/resume/'+target,'path':h['path'],'expected':h['body'],'entity_id':target,'expected_status':404 if case=='CP23' else 403}
+            if case=='CP25' and row['missing_scope']=='objects:read':
+                signin=[c for c in calls if c['phase']=='signin-refusal-precondition' and c['key_id']==h['key_id']]
+                if len(signin)!=1: raise ValueError('scene signin request identity differs')
+                definition.update(kind='signin-error',path=signin[0]['path'],expected=signin[0]['body'])
+        roles.append(('refusal-'+kind,definition))
+    elif case=='CP26':
+        if row['operations']!=[]: raise ValueError('proxy scene must have no target Core operation')
+        cp=op(cp_path)['http']['body']['checkpoint']
+        if row['variant_id']=='p3_off_get':
+            target=cp['checkpoint_id'];roles.append(('proxy-pending',{'kind':'pending','hash':'#/checkpoints?checkpoint_id='+target,'path':'/v1/checkpoints/'+target,'expected':None,'entity_id':target}))
+        else: add('checkpoint',cp,'proxy-probe-readable-checkpoint')
+    else: raise ValueError('unknown frozen scene')
+    actual=[p for role,p in roles]
+    if row['pages']!=actual: raise ValueError('scene page identity/history roles differ from actual operations/selectors')
+    unique={(p['kind'],p['entity_id']) for p in actual if p['kind'] in ('checkpoint','resume')}
+    lineage=[('resume' if 'resume_id' in m['entity'] else 'checkpoint',m['entity'].get('resume_id') or m['entity']['checkpoint_id']) for m in row['lineage']]
+    if len(lineage)!=len(unique) or set(lineage)!=unique: raise ValueError('scene page objects do not match its own source/command lineage')
+    return roles
+
+
+def page_stage(page, ui, trace, observer, label, definition=None, observations=None, clicks=None):
+    """Bind this exact page access phase and captures to this variant's real wire."""
+    stage=page['stage']; start,end=stage['network_start'],stage['network_end']
+    if stage['id']!=ui['id'] or stage['label']!=label or not (isinstance(start,int) and isinstance(end,int) and 0<=start<=end<=len(trace)):
+        raise ValueError('page request window has wrong scene/stage identity')
+    network=page['network']
+    if trace[start:end]!=network or any(n not in ui['network'] or n['id']!=ui['id'] for n in network): raise ValueError('page wire is not this scene access-stage slice')
+    begin,finish=stage['observer_start'],stage['observer_end']
+    if not (isinstance(begin,int) and isinstance(finish,int) and 0<=begin<=finish<=len(observer)): raise ValueError('page observer indices are invalid')
+    observed=observer[begin:finish]
+    if any(e not in ui['observer_window'] for e in observed): raise ValueError('page observer window is outside this scene')
+    if stage['started_at_unix']>stage['finished_at_unix']: raise ValueError('reversed page phase')
+    for n in network:
+        if not stage['started_at_unix']<=n['at_unix']<=n['response_finished_at_unix']<=stage['finished_at_unix']: raise ValueError('page wire completion is outside access stage')
+        if n.get('body',{}).get('error',{}).get('code')!='proxy_path_not_allowed':
+            window=[e for e in observed if e.get('request_id')==n['request_id']]
+            if [e['kind'] for e in window]!=['request_start','request_end'] or not stage['started_at_unix']<=window[0]['at_unix']<=window[-1]['at_unix']<=stage['finished_at_unix']: raise ValueError('page Core request is not in this actual access window')
+    definition=definition or page['definition']; observations=observations or page['observations']
+    if clicks is not None:
+        navigation=page['navigation']
+        if navigation not in clicks or navigation['id']!=ui['id'] or navigation['hash']!=definition['hash'] or navigation['action']!='actual browser hash navigation' or not stage['started_at_unix']<=navigation['at_unix']<=observations[0]['dom_at_unix']: raise ValueError('page navigation is not this scene access phase')
+        if definition.get('refresh') or label.startswith('switch-'):
+            refresh=[c for c in clicks if c['id']==ui['id'] and c['action']=='actual pointer click' and c.get('text')=='从 Core 重新读取' and stage['started_at_unix']<=c['at_unix']<=stage['finished_at_unix']]
+            if len(refresh)!=1: raise ValueError('page refresh is not an actual click in this phase')
+    target=[n for n in network if n['method']=='GET' and n['path']+n['query']==definition['path']]
+    for i,o in enumerate(observations):
+        if not stage['started_at_unix']<=o['dom_at_unix']<=o['at_unix']<=stage['finished_at_unix']: raise ValueError('page capture is outside its access phase')
+        ids=[n['request_id'] for n in target if n['response_finished_at_unix']<=o['dom_at_unix']]
+        required=0 if definition['kind']=='invalid' else 2 if i and definition.get('refresh') else 1
+        if o['request_ids']!=ids or len(ids)!=required: raise ValueError('page capture is not bound to the required read/refresh requests')
+    if len(target)!=(0 if definition['kind']=='invalid' else 2 if definition.get('refresh') else 1): raise ValueError('page access target request count differs')
+
+
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
 
@@ -375,6 +514,20 @@ class EvidenceStore:
                     actual_body = historical_read_body(read_state, definition['path'])
                     if actual_body is None or actual_body != definition['expected']:
                         raise ValueError('prepared browser expected differs from actual historical DB GET')
+            roles = scene_pages(row, self.json, calls['base'], read_state)
+            for i,page in enumerate(ui['pages']):
+                page_stage(page,ui,trace,observers[runtime],'signin' if page['definition']['kind']=='signin-error' else 'page-'+str(i),clicks=clicks)
+            if row['case_id']=='CP12':
+                wanted=[['checkpoint',roles[0][1]['entity_id'],roles[2][1]['entity_id']],['resume',roles[1][1]['entity_id'],roles[3][1]['entity_id']]]
+                if row['switches']!=wanted or [[s['kind'],s['a'],s['b']] for s in ui['switches']]!=wanted: raise ValueError('scene A/B switch roles differ')
+                for s in ui['switches']:
+                    a=next(p for role,p in roles if p['kind']==s['kind'] and p['entity_id']==s['a'])
+                    b=next(p for role,p in roles if p['kind']==s['kind'] and p['entity_id']==s['b'])
+                    if s['initial_page']['definition']!=a: raise ValueError('scene switch initial role differs')
+                    page_stage(s['initial_page'],ui,trace,observers[runtime],'page-switch-'+s['kind']+'-initial',clicks=clicks)
+                    page_stage(s,ui,trace,observers[runtime],'switch-'+s['kind'],definition={**b,'refresh':False},observations=[s['before'],s['after']],clicks=clicks)
+                    if s['initial_page']['stage']['network_end']!=s['stage']['network_start']: raise ValueError('switch is detached from its initial page access')
+            elif ui['switches']: raise ValueError('unexpected scene switches')
             for phase, ref in (('before', '-before-browser.db'), ('after', '-after-browser.db')):
                 if ui[phase] != self.database(runtime + ref)['state']:
                     raise ValueError('browser state differs from actual DB')
@@ -409,7 +562,7 @@ class EvidenceStore:
                 stored['detail'] = json.loads(stored.pop('detail_json'))
                 if audit != stored:
                     raise ValueError('browser audit differs from actual DB')
-            observations = [o for p in ui['pages'] for o in p['observations']] + [s[k] for s in ui['switches'] for k in ('before', 'after')]
+            observations = [o for p in ui['pages'] for o in p['observations']] + [s[k] for s in ui['switches'] for k in ('before', 'after')] + [o for s in ui['switches'] for o in s['initial_page']['observations']]
             for o in observations:
                 if self.json(o['dom_file']) != o['dom']:
                     raise ValueError('DOM artifact differs')
@@ -424,7 +577,7 @@ class EvidenceStore:
         dbs = {p for p in self.required if p.endswith('.db')}
         if len(dbs) != 154 or {p for p in self.files if p.endswith('.db')} != dbs:
             raise ValueError('incomplete frozen 154 DB evidence topology')
-        return {'status': 'PASS', 'required_database_files': len(dbs), 'unique_operations': len(unique_ops), 'required_artifact_paths': sorted(self.required)}
+        return {'status': 'PASS', 'required_database_files': len(dbs), 'unique_operations': len(unique_ops), 'scene_page_roles_bound':len(browser['records']), 'required_artifact_paths': sorted(self.required)}
 
     def check_injection(self, row):
         i = row['injection']; ident = row['id']
@@ -680,6 +833,8 @@ def switch_proof(row, switch):
     b = next(p for p in row['pages'] if p['kind'] == kind and p['entity_id'] == switch['b'])
     expected = {**b, 'refresh': False}
     displays, evidence = display_proof({'definition': expected, 'observations': [switch['before'], switch['after']], 'network': switch['network']})
+    if 'initial_page' in switch:
+        displays = displays and display_proof(switch['initial_page'])[0]
     field = kind + '_id'
     inputs = [[i['value'] for i in switch[k]['dom']['inputs'] if i['label'] == field] for k in ('before', 'after')]
     exact_input = inputs == [[switch['b']], [switch['b']]]

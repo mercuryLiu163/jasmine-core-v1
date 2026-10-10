@@ -59,6 +59,7 @@ async function login(c) {
   }
 }
 async function capture(name) {
+  const domAt = Date.now() / 1000
   const dom = await evaluate(cdp, `(() => ({
     hash: location.hash, text: document.body.innerText,
     html: (()=>{const x=document.body.cloneNode(true);for(const i of x.querySelectorAll('input[type=password]'))i.setAttribute('value','[REDACTED]');return x.innerHTML})(),
@@ -87,7 +88,17 @@ async function capture(name) {
   const shot = await cdp.send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: true, clip })
   const screenshot = 'screenshots/' + name + '.png'
   await writeFile(join(cfg.out, screenshot), Buffer.from(shot.data, 'base64'))
-  return { dom, dom_file: file, screenshot, screenshot_clip: clip, at_unix: Date.now() / 1000 }
+  return { dom, dom_file: file, screenshot, screenshot_clip: clip, dom_at_unix: domAt, at_unix: Date.now() / 1000 }
+}
+function beginStage(c, label) {
+  return { id: c.id, label, started_at_unix: Date.now()/1000, network_start: report.network.length, observer_start: observer(c).length }
+}
+function endStage(c, stage) {
+  return { ...stage, network_end: report.network.length, observer_end: observer(c).length, finished_at_unix: Date.now()/1000 }
+}
+function associate(observation, p, network) {
+  observation.request_ids = network.filter(n => n.method === 'GET' && n.path + n.query === p.path && n.response_finished_at_unix <= observation.dom_at_unix).map(n => n.request_id)
+  return observation
 }
 async function expand() {
   if (await evaluate(cdp, '[...document.querySelectorAll("details:not([open]) summary")].some(x=>x.textContent.includes("错误 details"))')) await click('summary', '错误 details')
@@ -95,6 +106,7 @@ async function expand() {
   for (const label of labels) await click('.jsonblock__toggle', label)
 }
 async function page(c, p, index) {
+  const stage = p.kind === 'signin-error' ? current.login_stage : beginStage(c, 'page-' + index)
   const start = report.network.length
   if (p.kind !== 'signin-error' && await evaluate(cdp, 'location.hash===' + JSON.stringify(p.hash))) {
     await evaluate(cdp, 'location.hash="#/"')
@@ -102,7 +114,8 @@ async function page(c, p, index) {
     report.clicks.push({ id: current.id, action: 'actual browser hash navigation to unmount previous object', hash: '#/', at_unix: Date.now() / 1000 })
   }
   await evaluate(cdp, 'location.hash=' + JSON.stringify(p.hash))
-  report.clicks.push({ id: current.id, action: 'actual browser hash navigation', hash: p.hash, at_unix: Date.now() / 1000 })
+  const navigation = { id: current.id, action: 'actual browser hash navigation', hash: p.hash, at_unix: Date.now() / 1000 }
+  report.clicks.push(navigation)
   const state = p.kind === 'invalid' ? '!!document.querySelector("[data-testid=invalid-id]")'
     : p.kind === 'pending' ? '!!document.querySelector("[data-testid=dependency-pending]")'
       : p.kind === 'error' || p.kind === 'signin-error' ? '!!document.querySelector("[role=alert]")'
@@ -111,7 +124,8 @@ async function page(c, p, index) {
             : '!!document.querySelector("[data-testid=resume-comparison-status]")&&document.body.textContent.includes(' + JSON.stringify(p.entity_id) + ')'
   await waitFor(cdp, 'location.hash===' + JSON.stringify(p.hash) + '&&(' + state + ')')
   await expand()
-  const first = await capture(c.id + '-' + index + '-read')
+  await Promise.allSettled(pendingBodies)
+  const first = associate(await capture(c.id + '-' + index + '-read'), p, p.kind === 'signin-error' ? current.login_network : report.network.slice(start))
   const observations = [first]
   if (p.refresh) {
     await click('button', '从 Core 重新读取')
@@ -124,15 +138,17 @@ async function page(c, p, index) {
       await new Promise(r => setTimeout(r, 30))
     }
     await expand()
-    observations.push(await capture(c.id + '-' + index + '-refresh'))
+    await Promise.allSettled(pendingBodies)
+    observations.push(associate(await capture(c.id + '-' + index + '-refresh'), p, report.network.slice(start)))
   }
   await Promise.allSettled(pendingBodies)
-  return { definition: p, observations, network: p.kind === 'signin-error' ? current.login_network : report.network.slice(start) }
+  return { definition: p, observations, navigation, stage: endStage(c, stage), network: p.kind === 'signin-error' ? current.login_network : report.network.slice(start) }
 }
 async function lateSwitch(c, kind, a, b) {
   const pa = c.pages.find(p => p.kind === kind && p.entity_id === a)
   const pb = c.pages.find(p => p.kind === kind && p.entity_id === b)
-  await page(c, pa, 'switch-' + kind + '-initial')
+  const initialPage = await page(c, pa, 'switch-' + kind + '-initial')
+  const stage = beginStage(c, 'switch-' + kind)
   const start = report.network.length
   // Remove only the targeted AbortSignal so a genuine Response can arrive late.
   // No headers, URL, payload or Core state are altered. This is labelled transport intervention.
@@ -155,16 +171,20 @@ async function lateSwitch(c, kind, a, b) {
   await waitFor(cdp, 'window.__checkpointHold?.state==="held"')
   const held = await evaluate(cdp, '({state:window.__checkpointHold.state,body:window.__checkpointHold.body,request_id:window.__checkpointHold.request_id,path:window.__checkpointHold.path,held_at_unix:window.__checkpointHold.held_at_unix})')
   await evaluate(cdp, 'location.hash=' + JSON.stringify(pb.hash))
+  const navigation = { id: current.id, action: 'actual browser hash navigation', hash: pb.hash, at_unix: Date.now()/1000 }
+  report.clicks.push(navigation)
   await waitFor(cdp, 'document.body.textContent.includes(' + JSON.stringify(b) + ')&&!!document.querySelector(' + JSON.stringify(kind === 'checkpoint' ? '[data-testid=checkpoint-read-boundary]' : '[data-testid=resume-comparison-status]') + ')')
   await expand()
-  const before = await capture(c.id + '-switch-' + kind + '-before-release')
+  await Promise.allSettled(pendingBodies)
+  const before = associate(await capture(c.id + '-switch-' + kind + '-before-release'), pb, report.network.slice(start))
   await evaluate(cdp, 'window.__checkpointHold.release();window.fetch=window.__checkpointHold.original')
   await new Promise(r => setTimeout(r, 180))
   await expand()
-  const after = await capture(c.id + '-switch-' + kind + '-after-release')
+  await Promise.allSettled(pendingBodies)
+  const after = associate(await capture(c.id + '-switch-' + kind + '-after-release'), pb, report.network.slice(start))
   const released = await evaluate(cdp, '({state:window.__checkpointHold.state,request_id:window.__checkpointHold.request_id,path:window.__checkpointHold.path,released_at_unix:window.__checkpointHold.released_at_unix})')
   await Promise.allSettled(pendingBodies)
-  return { kind, a, b, held, released, before, after, network: report.network.slice(start),
+  return { kind, a, b, held, released, before, after, navigation, initial_page: initialPage, stage: endStage(c, stage), network: report.network.slice(start),
     intervention: 'Targeted real GET Response delayed; only AbortSignal removed to force late arrival; body unchanged.' }
 }
 async function audit(c, network) {
@@ -213,7 +233,7 @@ try {
     if (m.method === 'Network.loadingFinished') {
       const row = report.network.findLast(r => r.cdp_id === m.params.requestId)
       if (row) pendingBodies.push(cdp.send('Network.getResponseBody', { requestId: row.cdp_id })
-        .then(r => { row.body = JSON.parse(r.base64Encoded ? Buffer.from(r.body, 'base64').toString() : r.body) })
+        .then(r => { row.body = JSON.parse(r.base64Encoded ? Buffer.from(r.body, 'base64').toString() : r.body); row.response_finished_at_unix = Date.now()/1000 })
         .catch(e => { row.body_capture_error = String(e) }))
     }
   })
@@ -224,6 +244,7 @@ try {
     const start = observer(c).length
     try {
       current.before = snapshot(c)
+      current.login_stage = beginStage(c, 'signin')
       await login(c)
       current.login_network = report.network.slice(networkStart)
       for (let i = 0; i < c.pages.length; i++) current.pages.push(await page(c, c.pages[i], i))

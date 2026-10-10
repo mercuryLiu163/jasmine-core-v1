@@ -236,6 +236,60 @@ class HistoricalReadbackAndMetadata(unittest.TestCase):
                     else: d[fault] = ['OLD'] if isinstance(d[fault], list) else 'OLD'
                     self.assertFalse(gate.no_success_residue(d, kind))
 
+class SceneRolesAndRequestWindows(unittest.TestCase):
+    def scene(self, case):
+        f=json.loads((ROOT/'tests/p6/fixtures/cp12-author-143845d.component.json').read_text())
+        pages=f['row']['pages']; a=copy.deepcopy(pages[0]['expected']['checkpoint']); old=copy.deepcopy(pages[1]['expected']['resume']); new=copy.deepcopy(pages[3]['expected']['resume'])
+        source={'event_id':a['source_event_id'],'task_id':a['task_id'],'project_id':a['project_id'],'host_id':a['host_id'],'payload':{}}
+        stored=copy.deepcopy(a)
+        for key in ('projection','workspace','note','trigger_provenance'): stored[key+'_json']=gate.canonical(stored.pop(key))
+        state={'events':[{**{k:v for k,v in source.items() if k!='payload'},'payload_json':'{}'}],'checkpoints':[stored],'resume_results':[{'resume_id':r['resume_id'],'result_json':gate.canonical(r)} for r in (old,new)]}
+        ops={'base/'+case+'-checkpoint-operation.json':{'http':{'body':{'checkpoint':a}}},'base/'+case+'-resume-operation.json':{'http':{'body':{'resume':old}}}}
+        operations=[ops['base/'+case+'-resume-operation.json']]
+        expected=copy.deepcopy(pages[:2]); lineage=[{'entity':a},{'entity':old}]
+        if case=='CP10.default':
+            for suffix,entity in (('-historic-get',old),('-replay-resume',old),('-fresh-resume',new)):
+                op={'http':{'body':{'resume':entity}}};ops['base/'+case+suffix+'-operation.json']=op;operations.append(op)
+            expected.append(copy.deepcopy(pages[3]));lineage.append({'entity':new})
+        row={'id':case,'case_id':case.split('.')[0],'fixture':{'task':{'task_id':a['task_id']},'project':{'project_id':a['project_id']},'source':source,'host':a['host_id']},'checkpoint_creation':ops['base/'+case+'-checkpoint-operation.json'],'operations':operations,'pages':expected,'lineage':lineage}
+        calls=[{'method':'POST','path':'/v1/tasks','status':201,'request_body':{'title':'SYNTHETIC '+case},'body':{'object':{'task_id':a['task_id'],'project_id':a['project_id']}}}]
+        return row,ops,calls,state
+
+    def test_scene_fixture_and_own_lineage_are_mandatory(self):
+        row,ops,calls,state=self.scene('CP02.default');self.assertEqual(len(gate.scene_pages(row,ops.__getitem__,calls,state)),2)
+        for fault in ('fixture','lineage','page'):
+            with self.subTest(fault=fault):
+                changed=copy.deepcopy(row)
+                if fault=='fixture':changed['fixture']['task']['task_id']='tsk_OTHER_TASK'
+                elif fault=='lineage':changed['lineage']=[]
+                else:changed['pages'][0]=copy.deepcopy(changed['pages'][1])
+                with self.assertRaisesRegex(ValueError,'scene'):gate.scene_pages(changed,ops.__getitem__,calls,state)
+
+    def test_same_task_old_and_new_resume_roles_cannot_be_duplicated_or_swapped(self):
+        row,ops,calls,state=self.scene('CP10.default');roles=gate.scene_pages(row,ops.__getitem__,calls,state);self.assertEqual([r for r,p in roles],['created-checkpoint','old-resume','new-resume'])
+        for indices in ((2,2),(1,1),(2,1)):
+            with self.subTest(indices=indices):
+                changed=copy.deepcopy(row);changed['pages'][1:]=[copy.deepcopy(row['pages'][i]) for i in indices]
+                with self.assertRaisesRegex(ValueError,'scene page identity/history roles'):gate.scene_pages(changed,ops.__getitem__,calls,state)
+
+    def test_page_access_wire_capture_and_refresh_must_share_one_scene_phase(self):
+        network=[{'id':'CP02.default','method':'GET','path':'/v1/resumes/rms_COMPONENT','query':'','request_id':'req-'+str(i),'at_unix':i+2,'response_finished_at_unix':i+2.2,'body':{}} for i in range(2)]
+        observer=[{'request_id':n['request_id'],'kind':kind,'at_unix':n['at_unix']+offset} for n in network for kind,offset in [('request_start',0),('request_end',.1)]]
+        ui={'id':'CP02.default','network':network,'observer_window':observer}
+        page={'stage':{'id':ui['id'],'label':'page-0','network_start':0,'network_end':2,'observer_start':0,'observer_end':4,'started_at_unix':1,'finished_at_unix':6},'network':network,'definition':{'kind':'resume','path':'/v1/resumes/rms_COMPONENT','refresh':True},'observations':[{'dom_at_unix':2.5,'at_unix':2.6,'request_ids':['req-0']},{'dom_at_unix':4,'at_unix':4.1,'request_ids':['req-0','req-1']}]}
+        gate.page_stage(page,ui,network,observer,'page-0')
+        for fault in ('foreign_stage','foreign_wire','detached_capture','before_response','missing_refresh','foreign_observer','wrong_query'):
+            with self.subTest(fault=fault):
+                p=copy.deepcopy(page)
+                if fault=='foreign_stage':p['stage']['id']='CP01.default'
+                elif fault=='foreign_wire':p['network'][0]['id']='CP01.default'
+                elif fault=='detached_capture':p['observations'][0]['request_ids']=['req-OTHER']
+                elif fault=='before_response':p['observations'][0]['dom_at_unix']=1.1
+                elif fault=='missing_refresh':p['observations'][1]['request_ids']=['req-0']
+                elif fault=='foreign_observer':p['stage']['observer_start']=3
+                else:p['network'][0]['query']='?wrong=1'
+                with self.assertRaisesRegex(ValueError,'page'):gate.page_stage(p,ui,network,observer,'page-0')
+
 class ReadonlySQLiteConstraintProof(unittest.TestCase):
     def test_check_constraints_are_verified_on_private_memory_copy(self):
         with tempfile.TemporaryDirectory() as temporary:
