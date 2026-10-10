@@ -1,0 +1,135 @@
+{
+  "kind": "AUTHOR_INITIAL_REFRESH_CAPTURE_REPAIR_NOT_INDEPENDENT_ACCEPTANCE",
+  "created_at_utc": "2026-10-10T10:07:50.156480+00:00",
+  "candidate_commit": "6fec85d7a396896da428a2a5ff59e683c3300cfd",
+  "source_tree": "4c070385db3fce2279d2f9186142963b6bf46958",
+  "source_archive_sha256": "dc2b1f702f1167ab222b458aa15e85a2bcbe49a06bb303ab80747ce30c5fa96c",
+  "spec_commit": "5079948808d4c8aa9cb5763c747def422c12c055",
+  "matrix_sha256": "5e3fcdd9808437dbad7908b52255c52a73b94ee4bf4496b6da9f29b83c954514",
+  "input_review": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-96613e0-20261009/REVIEW.md",
+  "attribution": "FIRST_DISCOVERED_PREEXISTING_OMISSION_NOT_INTRODUCED_REGRESSION",
+  "bundles": [
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-run-12",
+      "manifest_sha256": "aacd556bbdead06df211ee6807e07a634aaa1a387711e21955b00010d38136a4",
+      "bound_file_count": 538,
+      "all_bound_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-gate-regressions-6fec85d-01",
+      "manifest_sha256": "52fffe628c3a5aba64458248b8d9923aa4f58df45b7db3f9db09f4b9cb8523cf",
+      "bound_file_count": 87,
+      "all_bound_bytes_rechecked": true
+    }
+  ],
+  "supplement": {
+    "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-repair-receipts-6fec85d",
+    "manifest_sha256": "69d67d9e37a50ca451132f01c853b7eba7d3af01c99172bb9dd8373d93ff2228",
+    "bound_file_count": 12,
+    "all_bound_bytes_rechecked": true
+  },
+  "intermediate_failure_preserved": [
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-run-11",
+      "manifest_sha256": "558bc21c83954ab032d5f70bb8d8c5f21473899b6a946199aff45e71f6247596",
+      "bound_file_count": 538,
+      "all_bound_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-gate-regressions-f2dcb07-01",
+      "manifest_sha256": "98dffb1a6d24815b2e81eadfcb8981706d26a727c1d46a090fbb9268db7ad489",
+      "bound_file_count": 75,
+      "all_bound_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-repair-receipts-f2dcb07",
+      "manifest_sha256": "ee14fa26a8671765ab022f82b01f7671b2fa335b5da4e4258549984dfc8be53e",
+      "bound_file_count": 12,
+      "all_bound_bytes_rechecked": true
+    }
+  ],
+  "historical_preservation": {
+    "status": "PASS",
+    "bundles": [
+      {
+        "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-run-10",
+        "manifest": "manifest.json",
+        "manifest_sha256": "97716a9dbff93311fc0ff255a38ce407dc0dccb1e4d75ef028270208e2901d85",
+        "bound_file_count": 538,
+        "all_bound_bytes_rechecked": true
+      },
+      {
+        "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-nonauthor-run-96613e0-20261009",
+        "manifest": "manifest.json",
+        "manifest_sha256": "967847bb424ca7d398d4c83a0335be4a23c44b74659bdce5ed75b2ec37e8eca8",
+        "bound_file_count": 538,
+        "all_bound_bytes_rechecked": true
+      },
+      {
+        "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-gate-regressions-96613e0-01",
+        "manifest": "manifest.json",
+        "manifest_sha256": "36b53b87606cf4efe809dd941de7f841ea9b8fa5c2f7f1e5167788280a31b5e9",
+        "bound_file_count": 75,
+        "all_bound_bytes_rechecked": true
+      },
+      {
+        "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-nonauthor-regressions-96613e0-20261009",
+        "manifest": "manifest.json",
+        "manifest_sha256": "bad90c00ef144846bd4f5fb3ab7a2a71b161ddc0ca038d211350c47fed527dc6",
+        "bound_file_count": 75,
+        "all_bound_bytes_rechecked": true
+      },
+      {
+        "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-96613e0-20261009",
+        "manifest": "review-manifest.json",
+        "manifest_sha256": "a548ec3dc2d929f8c83fe840bf2bba27d731a3968d18979b9220489c1af852d3",
+        "bound_file_count": 16,
+        "all_bound_bytes_rechecked": true
+      }
+    ]
+  },
+  "verification": {
+    "status": "PASS",
+    "counts": {
+      "PASS": 43,
+      "FAIL": 0,
+      "BLOCKED": 0
+    },
+    "predicates_passed": 155,
+    "invariants_passed": 301,
+    "manifest_files": 538,
+    "manifest_sha256": "aacd556bbdead06df211ee6807e07a634aaa1a387711e21955b00010d38136a4",
+    "required_database_files": 154,
+    "unique_operations": 53,
+    "required_paths": 500,
+    "required_refresh_roles": 41,
+    "cleanup_groups": 27,
+    "all_groups_gone": true,
+    "profile_removed": true,
+    "private_runtime_removed": true,
+    "all_bound_bytes_rechecked": true,
+    "candidate": "6fec85d7a396896da428a2a5ff59e683c3300cfd",
+    "tree": "4c070385db3fce2279d2f9186142963b6bf46958",
+    "archive_sha256": "dc2b1f702f1167ab222b458aa15e85a2bcbe49a06bb303ab80747ce30c5fa96c",
+    "role": "author-implementation-check",
+    "independent": false,
+    "scope_acceptance_signed": false,
+    "focused_unittest_methods_passed": 31,
+    "component_counterexamples_rejected": 86,
+    "prior_components_rejected": 74,
+    "capture_original_counterexamples_rejected": 4,
+    "capture_family_components_CLI_blocked_without_exception": 12,
+    "all_refresh_omitted_files_rejected": 82,
+    "original_bundle_unchanged": true
+  },
+  "independent_code_review": "NOT_RUN_FOR_NEW_CANDIDATE",
+  "independent_isolated_validation": "NOT_RUN_FOR_NEW_CANDIDATE",
+  "scope_acceptance_signed": false,
+  "P6_V1_complete": false,
+  "item6_flag": 0,
+  "daily_use_released": false,
+  "product_code_changed_in_repair": false,
+  "main_or_deployment_changed": false,
+  "existing_service_restart": false,
+  "actual_entry_or_database_accessed": false
+}
