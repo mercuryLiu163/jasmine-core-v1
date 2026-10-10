@@ -281,6 +281,7 @@ def page_stage(page, ui, trace, observer, label, definition=None, observations=N
         if n.get('body',{}).get('error',{}).get('code')!='proxy_path_not_allowed':
             window=[e for e in observed if e.get('request_id')==n['request_id']]
             if [e['kind'] for e in window]!=['request_start','request_end'] or not stage['started_at_unix']<=window[0]['at_unix']<=window[-1]['at_unix']<=stage['finished_at_unix']: raise ValueError('page Core request is not in this actual access window')
+            if window[0]['method']!=n['method'] or window[0]['path']!=n['path'] or window[0]['query']!=parse_qs(n['query'].removeprefix('?'),keep_blank_values=True) or window[-1]['status']!=n['status']: raise ValueError('page Core full path/query/response differs from its wire request')
     if clicks is not None:
         navigation=page['navigation']
         if navigation not in clicks or navigation['id']!=ui['id'] or navigation['hash']!=definition['hash'] or navigation['action']!='actual browser hash navigation' or not stage['started_at_unix']<=navigation['at_unix']<=observations[0]['dom_at_unix']: raise ValueError('page navigation is not this scene access phase')

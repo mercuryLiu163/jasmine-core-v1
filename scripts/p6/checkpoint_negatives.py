@@ -142,7 +142,7 @@ def serve(args):
     class ObservedApplication(Application):
         def handle(self, request):
             local.request_id = request.request_id
-            observe('request_start', request_id=request.request_id, method=request.method, path=request.path)
+            observe('request_start', request_id=request.request_id, method=request.method, path=request.path, query=request.query)
             try:
                 response = super().handle(request)
                 observe('request_end', request_id=request.request_id, status=response.status)

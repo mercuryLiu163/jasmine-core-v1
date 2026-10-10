@@ -274,10 +274,14 @@ class SceneRolesAndRequestWindows(unittest.TestCase):
 
     def test_page_access_wire_capture_and_refresh_must_share_one_scene_phase(self):
         network=[{'id':'CP02.default','method':'GET','path':'/v1/resumes/rms_COMPONENT','query':'','request_id':'req-'+str(i),'at_unix':i+2,'response_finished_at_unix':i+2.2,'body':{}} for i in range(2)]
-        observer=[{'request_id':n['request_id'],'kind':kind,'at_unix':n['at_unix']+offset} for n in network for kind,offset in [('request_start',0),('request_end',.1)]]
+        for n in network: n['status']=200
+        observer=[{'request_id':n['request_id'],'kind':kind,'at_unix':n['at_unix']+offset,'method':n['method'],'path':n['path'],'query':{},'status':200} for n in network for kind,offset in [('request_start',0),('request_end',.1)]]
         ui={'id':'CP02.default','network':network,'observer_window':observer}
         page={'stage':{'id':ui['id'],'label':'page-0','network_start':0,'network_end':2,'observer_start':0,'observer_end':4,'started_at_unix':1,'finished_at_unix':6},'network':network,'definition':{'kind':'resume','path':'/v1/resumes/rms_COMPONENT','refresh':True},'observations':[{'dom_at_unix':2.5,'at_unix':2.6,'request_ids':['req-0']},{'dom_at_unix':4,'at_unix':4.1,'request_ids':['req-0','req-1']}]}
         gate.page_stage(page,ui,network,observer,'page-0')
+        changed_observer=copy.deepcopy(observer);changed_observer[0]['query']={'wrong':['1']}
+        with self.assertRaisesRegex(ValueError,'page Core full path/query'):
+            gate.page_stage(page,{**ui,'observer_window':changed_observer},network,changed_observer,'page-0')
         unrelated={'id':ui['id'],'method':'GET','path':'/v1/health','query':'','request_id':'aborted-overview','at_unix':1.5,'failed_at_unix':2,'loading_error':'net::ERR_ABORTED','canceled':True}
         with_background=copy.deepcopy(page); with_background['network']=[unrelated]+network;with_background['stage']['network_end']=3
         gate.page_stage(with_background,{**ui,'network':with_background['network']},with_background['network'],observer,'page-0')
