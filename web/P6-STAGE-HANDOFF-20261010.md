@@ -9,7 +9,7 @@
 
 ## 后续顺序
 
-1. Context 超预算切片：候选 `2a37a1a` 已完成作者隔离验证 9/9、36/36，重封存反证 19/19 拒绝，正式 CLI PASS/exit 0。**非作者评审／复验 NOT_RUN，限定验收未签署**。失败构建看板回执仍缺，CB03/04 只证明真实 API 拒绝；下一步绑定此候选独立闭合。
+1. Context 超预算切片：候选 `3747ce1` 已一次修复 F01–F07，作者全新隔离验证 9/9、36/36，24/24 完整性测试，重封存反证 42/42 拒绝（原19+复核/扩展23，含原8种误报协议），正式 CLI PASS/exit 0。**非作者评审／复验 NOT_RUN，限定验收未签署**。失败构建看板回执仍缺，CB03/04 只证明真实 API 拒绝；下一步绑定此候选独立闭合。
 2. 旧 Memory 与当前 Authority 冲突：另行冻结，当前尚未启动。
 3. Context 实际注入回执：真实 Agent 收到的内容与 exact pack 对上，构建不等于注入。
 4. 真实对话→提取→Review→写入：不能用本轮合成输入冒充真实使用链。
@@ -24,6 +24,8 @@ main、主工作树、正式部署及旧证据未改；item 6=0，日常使用�
 
 详细状态见 [剩余清单](P6-REMAINING-TASKS.md)。
 
-Context 作者报告：[AUTHOR-RESULT-2a37a1a.md](../docs/validation/p6-context-budget/AUTHOR-RESULT-2a37a1a.md)。
+Context 作者报告：[AUTHOR-REPAIR-3747ce1.md](../docs/validation/p6-context-budget/AUTHOR-REPAIR-3747ce1.md)。
 规格 v1 保留，v2 明确既有 `context_not_found` 错误码并固定同一 9 场景／阈值。
 作者的资格工具时序误判、运行中资格代码漂移和反证构造中止均保留，不能当作成功证据。
+
+上轮 `2a37a1a` 非作者 REVISE_REQUIRED 与八份误报原件保持历史状态；本轮新候选仍待非作者统一复评／复验，不能沿用旧结论签署。
