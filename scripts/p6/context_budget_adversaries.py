@@ -56,7 +56,7 @@ def main(args):
     definitions=[
         ('missing_refresh_captures','delete all six refresh DOM/PNG', 'capture'),
         ('missing_all_captures','delete all twenty DOM/PNG', 'capture'),
-        ('missing_all_DB','delete all eighteen DB backups', 'database'),
+        ('missing_all_DB','delete all consistent DB backups including audit-read witness', 'database'),
         ('refresh_reuses_read','point refresh roles to read artifacts', 'role'),
         ('suppress_refresh_role','change scene definition to omit its mandatory refresh', 'role'),
         ('false_omission_count','show zero omitted items instead of one', 'display'),

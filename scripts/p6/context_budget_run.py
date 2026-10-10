@@ -64,7 +64,7 @@ def run(args):
         (out / 'source.tar').write_bytes(archive_bytes)
         for path in ['scripts/p6/context_budget_run.py', 'scripts/p6/context_budget_gate.py', 'scripts/p6/context_budget_browser.mjs']:
             if (ROOT/path).read_bytes() != (archive/path).read_bytes(): raise RuntimeError('launcher/archive drift')
-        for path in ['scripts/p6/checkpoint_negatives.py','scripts/p6/checkpoint_negative_gate.py']:
+        for path in ['scripts/p6/checkpoint_negatives.py','scripts/p6/checkpoint_negative_gate.py','scripts/p6/context_budget_integrity.py']:
             if (ROOT/path).read_bytes() != (archive/path).read_bytes(): raise RuntimeError('helper/archive drift')
         module_spec=importlib.util.spec_from_file_location('context_budget_frozen_gate',archive/'scripts/p6/context_budget_gate.py')
         frozen_gate=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(frozen_gate)
@@ -133,6 +133,7 @@ def run(args):
         ids={n.get('request_id') for n in raw['browser']['network'] if n.get('request_id')}
         audit=client.request('GET','/v1/audit?limit=1000',key='admin',phase='browser-authorized-audit')
         raw['browser_audit']={'http':audit,'matching':[a for a in audit['body']['entries'] if a['request_id'] in ids]}
+        shared.backup(client.database,out/'after-audit.db')
         raw['status']='COLLECTED_NOT_A_VERDICT'
     except Exception as exc: raw['error']=type(exc).__name__+': '+str(exc);raw['status']='COLLECTION_FAILED'
     finally:
