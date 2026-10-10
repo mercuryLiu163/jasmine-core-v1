@@ -200,7 +200,12 @@ def evaluate(directory,cache,python):
                         if ident=='CB07':require(not events,'proxy refusal reached Core')
                         else:
                             require([e['kind'] for e in events]==['request_start','request_end'] and events[0]['path']==d['path'] and events[-1]['status']==n['status'],'actual Core read/zero-scan window differs')
-                            require(n['at_unix']<=events[0]['at_unix']<=events[-1]['at_unix']<=n['response_finished_at_unix'],'Core read outside actual browser request window')
+                            index=target.index(n)
+                            phase_start=ui['navigation']['at_unix'] if index==0 else next(x['at_unix'] for x in browser['clicks'] if x['id']==ident and x.get('text')=='从 Core 重新读取')
+                            # CDP callbacks are delivered asynchronously: callback receipt
+                            # time can follow the actual Core start. Bind both to the
+                            # pre-dispatch navigation/click and completed DOM phase.
+                            require(phase_start<=events[0]['at_unix']<=events[-1]['at_unix']<=ui['observations'][index]['dom_at_unix'],'Core read outside actual navigation/click capture phase')
                             audits=[a for a in raw['browser_audit']['matching'] if a['request_id']==n['request_id']]
                             require(audits==audit_rows(directory/'after-browser.db',n['request_id']) and audits[0]['actor_id']==d['key_metadata']['actor_id'],'browser audit differs from actual DB/actor')
                             require(len(audits)==1 and audits[0]['status_code']==n['status'] and audits[0]['path']==d['path'] and audits[0]['error_code']==n['body'].get('error',{}).get('code'),'authorized browser audit differs')
