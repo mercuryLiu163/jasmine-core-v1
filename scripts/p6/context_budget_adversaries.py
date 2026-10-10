@@ -124,7 +124,14 @@ def main(args):
             if ident=='missing_actual_audit':
                 db=directory/'after-browser.db';temp_db=db.with_suffix('.component-temp');shutil.copyfile(db,temp_db);os.replace(temp_db,db)
                 request=next(r for r in raw['browser']['records'] if r['id']=='CB02')['observations'][0]['request_ids'][0]
-                con=sqlite3.connect(db);con.execute('DELETE FROM audit_log WHERE request_id=?',(request,));con.commit();con.close()
+                con=sqlite3.connect(db)
+                try:
+                    # Explicit evidence-corruption component, only in the copied DB.
+                    # The real Core append-only guard is left intact everywhere else.
+                    for (name,) in con.execute("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name='audit_log'").fetchall():
+                        con.execute('DROP TRIGGER "'+name.replace('"','""')+'"')
+                    con.execute('DELETE FROM audit_log WHERE request_id=?',(request,));con.commit()
+                finally:con.close()
             changed=evaluate(directory,args.cache,args.python);write(directory/'result.json',changed);seal(directory,args.expected_candidate)
             cli=subprocess.run([str(args.python),str(ROOT/'scripts/p6/context_budget_gate.py'),'--bundle',str(directory),'--expected-candidate',args.expected_candidate,'--cache',str(args.cache),'--python',str(args.python)],text=True,capture_output=True,timeout=90)
             verdict=json.loads(cli.stdout);reason=verdict.get('reason') or '; '.join(r.get('reason','') for r in verdict.get('records',[]) if r['status']!='PASS')
