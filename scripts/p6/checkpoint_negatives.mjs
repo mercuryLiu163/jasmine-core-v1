@@ -64,14 +64,19 @@ async function capture(name) {
     html: (()=>{const x=document.body.cloneNode(true);for(const i of x.querySelectorAll('input[type=password]'))i.setAttribute('value','[REDACTED]');return x.innerHTML})(),
     inputs: [...document.querySelectorAll('input')].map(x => ({label: document.querySelector('label[for="'+x.id+'"]')?.textContent.trim(), value: x.type==='password'?'[REDACTED]':x.value})),
     links: [...document.querySelectorAll('a')].map(x => ({text:x.textContent.trim(),href:x.getAttribute('href')})),
+    kv: [...document.querySelectorAll('dl.kv dt')].map(x=>({label:x.textContent.trim(),text:x.nextElementSibling.textContent.trim()})),
+    digests: [...document.querySelectorAll('.kv__digest')].map(x=>({label:x.querySelector('.muted').textContent.trim(),value:x.querySelector('code').textContent})),
+    rawtexts: [...document.querySelectorAll('.rawtext')].map(x=>({label:x.querySelector('.rawtext__label').textContent.trim(),text:x.querySelector('.rawtext__body')?.textContent??null})),
     jsonblocks: [...document.querySelectorAll('.jsonblock')].map(x=>({label:x.querySelector('.jsonblock__toggle')?.textContent.trim().replace(/^[▾▸]/,'').trim(),text:x.querySelector('pre')?.textContent??null})),
-    comparison_status: document.querySelector('[data-testid="resume-comparison-status"]')?.textContent??null,
+    comparison_status: document.querySelector('[data-testid="resume-comparison-status"]')?.innerText??null,
     checkpoint_boundary: document.querySelector('[data-testid="checkpoint-read-boundary"]')?.textContent??null,
     alerts: [...document.querySelectorAll('[role=alert]')].map(x=>x.textContent),
     pending: !!document.querySelector('[data-testid="dependency-pending"]'),
     invalid: !!document.querySelector('[data-testid="invalid-id"]'),
     note: document.querySelector('[data-testid="resume-note"]')?.textContent??null,
-    next_actions: document.querySelector('[data-testid="next-actions"]')?.textContent??null
+    next_actions: document.querySelector('[data-testid="next-actions"]')?.textContent??null,
+    next_action_header: document.querySelector('[data-testid="next-actions"] > .muted')?.textContent??null,
+    next_action_rows: [...document.querySelectorAll('[data-testid="next-action"]')].map(x=>({text:x.textContent,codes:[...x.querySelectorAll('code')].map(y=>y.textContent),fields:[...x.querySelectorAll('span')].map(y=>y.textContent)}))
   }))()`)
   const file = 'dom/' + name + '.json'
   await writeFile(join(cfg.out, file), safeJson(dom))
@@ -139,13 +144,16 @@ async function lateSwitch(c, kind, a, b) {
       if(u.pathname!==${JSON.stringify(pa.path)}) return original(input,options);
       const response=await original(input,{...options,signal:undefined});
       window.__checkpointHold.body=await response.clone().json();
+      window.__checkpointHold.request_id=response.headers.get('x-request-id');
+      window.__checkpointHold.path=u.pathname;
+      window.__checkpointHold.held_at_unix=Date.now()/1000;
       window.__checkpointHold.state='held';
-      return new Promise(resolve=>{window.__checkpointHold.release=()=>{window.__checkpointHold.state='released';resolve(response)}});
+      return new Promise(resolve=>{window.__checkpointHold.release=()=>{window.__checkpointHold.state='released';window.__checkpointHold.released_at_unix=Date.now()/1000;resolve(response)}});
     };
   })()`)
   await click('button', '从 Core 重新读取')
   await waitFor(cdp, 'window.__checkpointHold?.state==="held"')
-  const held = await evaluate(cdp, '({state:window.__checkpointHold.state,body:window.__checkpointHold.body})')
+  const held = await evaluate(cdp, '({state:window.__checkpointHold.state,body:window.__checkpointHold.body,request_id:window.__checkpointHold.request_id,path:window.__checkpointHold.path,held_at_unix:window.__checkpointHold.held_at_unix})')
   await evaluate(cdp, 'location.hash=' + JSON.stringify(pb.hash))
   await waitFor(cdp, 'document.body.textContent.includes(' + JSON.stringify(b) + ')&&!!document.querySelector(' + JSON.stringify(kind === 'checkpoint' ? '[data-testid=checkpoint-read-boundary]' : '[data-testid=resume-comparison-status]') + ')')
   await expand()
@@ -154,16 +162,17 @@ async function lateSwitch(c, kind, a, b) {
   await new Promise(r => setTimeout(r, 180))
   await expand()
   const after = await capture(c.id + '-switch-' + kind + '-after-release')
+  const released = await evaluate(cdp, '({state:window.__checkpointHold.state,request_id:window.__checkpointHold.request_id,path:window.__checkpointHold.path,released_at_unix:window.__checkpointHold.released_at_unix})')
   await Promise.allSettled(pendingBodies)
-  return { kind, a, b, held, before, after, network: report.network.slice(start),
+  return { kind, a, b, held, released, before, after, network: report.network.slice(start),
     intervention: 'Targeted real GET Response delayed; only AbortSignal removed to force late arrival; body unchanged.' }
 }
 async function audit(c, network) {
-  const r = await fetch(c.core + '/v1/audit?limit=1000&actor_id=' + c.key_metadata.actor_id,
+  const r = await fetch(c.core + '/v1/audit?limit=1000',
     { headers: { Authorization: 'Bearer ' + c.admin_token } })
   const body = await r.json()
   const ids = new Set(network.map(n => n.request_id).filter(Boolean))
-  return { channel: 'separate-authorized-validator-direct-Core-HTTP', path: '/v1/audit?limit=1000&actor_id=' + c.key_metadata.actor_id,
+  return { channel: 'separate-authorized-validator-direct-Core-HTTP', path: '/v1/audit?limit=1000',
     status: r.status, request_id: r.headers.get('x-request-id'), body, matching: body.entries?.filter(x => ids.has(x.request_id)) ?? [] }
 }
 try {

@@ -214,10 +214,12 @@ class Client:
         trace = lines(self.runtime / 'observer.jsonl')
         observed = [e for e in trace if e.get('request_id') == r['request_id']]
         audit = self.request('GET', '/v1/audit?limit=1000&actor_id=' + r['actor_id'], key='admin', phase='separate-audit-validator')
+        prefix = self.evidence.name + '/'
         proof = {'http': r, 'before': before, 'after': after, 'observer': observed,
                 'observer_started': next(e for e in reversed(trace) if e['kind'] == 'observer_started' and e['pid'] == observed[0]['pid']),
                 'audit_read': audit, 'audit': [a for a in audit['body'].get('entries', []) if a['request_id'] == r['request_id']],
-                'database_receipts': [name + '-before.db', name + '-after.db']}
+                'operation_receipt': prefix + name + '-operation.json',
+                'database_receipts': [prefix + name + '-before.db', prefix + name + '-after.db']}
         write(self.evidence / (name + '-operation.json'), proof)
         return proof
 
@@ -502,11 +504,12 @@ def run(args):
         if any(digest((ROOT / p).read_bytes()) != report['launcher_source_hashes'][p] for p in launcher_paths):
             raise RuntimeError('launcher does not match candidate archive')
         report['core_source_hashes'] = {p: digest((archive / p).read_bytes()) for p in
-                                       ['src/jasmine_core/continuity.py', 'src/jasmine_core/continuity_scan.py']}
+                                       ['src/jasmine_core/continuity.py', 'src/jasmine_core/continuity_scan.py', 'src/jasmine_core/api/handlers.py', 'src/jasmine_core/api/server.py']}
         report['matrix_sha256'] = digest((archive / SPEC / 'acceptance-matrix.v1.json').read_bytes())
         expected_matrix = subprocess.check_output(['git', '-C', str(ROOT), 'show', SPEC_COMMIT + ':' + SPEC + '/acceptance-matrix.v1.json'])
         if digest(expected_matrix) != report['matrix_sha256']:
             raise RuntimeError('frozen matrix drift')
+        write(out / 'source-bindings.json', {k: report[k] for k in ('candidate_commit', 'source_tree', 'source_archive_sha256', 'core_source_hashes', 'launcher_source_hashes', 'matrix_sha256')})
         write(out / 'matrix.json', matrix)
         sys.path.insert(0, str(archive / 'src'))
         workspace = private / 'workspace'
@@ -659,8 +662,10 @@ def run(args):
                 destination.mkdir()
                 shutil.copy2(runtime / 'private-credentials.json', fork / 'private-credentials.json')
                 injection = inject(out / 'fault-base-original.db', fork / 'core.db', fault_cp, ident)
+                injection.update(original_backup_path='fault-base-original.db', fork_backup_path=ident + '/fault-before-serving.db')
                 write(destination / 'injection.json', injection)
-                backup(fork / 'core.db', destination / 'fault-before-serving.db')
+                # No server has opened this fork; preserve the exact checkpointed byte image.
+                shutil.copy2(fork / 'core.db', destination / 'fault-before-serving.db')
                 _, c = start_core(owned, archive, fork, env, ident + '-core', destination)
                 clients.append(c)
                 op = c.resume(f, ident, fault_cp)
@@ -792,12 +797,16 @@ def run(args):
             shutil.rmtree(private)
         report['profile_removed'] = profile_removed
         report['private_runtime_removed'] = not private.exists()
+        receipt_files = [{'path': p.relative_to(out).as_posix(), 'bytes': p.stat().st_size, 'sha256': digest(p.read_bytes())}
+                         for p in sorted(out.rglob('*')) if p.is_file() and p.name not in ('raw-result.json', 'result.json', 'manifest.json', 'receipt-index.json', 'harness-selfchecks.json')]
+        write(out / 'receipt-index.json', {'kind': 'RAW_COLLECTION_FILE_INDEX', 'files': receipt_files})
+        report['receipt_index_sha256'] = digest((out / 'receipt-index.json').read_bytes())
         write(out / 'raw-result.json', report)
         matrix_path = out / 'matrix.json'
         if matrix_path.exists():
             matrix = json.loads(matrix_path.read_text())
-            verdict = evaluate_bundle(report, matrix, expected_candidate=candidate, expected_archive=archive_sha)
-            checks = adversarial_bundle_checks(report, matrix, candidate, archive_sha)
+            verdict = evaluate_bundle(report, matrix, expected_candidate=candidate, expected_archive=archive_sha, evidence_directory=out)
+            checks = adversarial_bundle_checks(report, matrix, candidate, archive_sha, evidence_directory=out)
             write(out / 'harness-selfchecks.json', checks)
             verdict['harness_selfchecks'] = checks['status']
             if verdict['status'] == 'PASS' and checks['status'] != 'PASS':

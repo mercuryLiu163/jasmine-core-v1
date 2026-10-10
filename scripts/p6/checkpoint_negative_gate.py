@@ -9,6 +9,8 @@ import copy
 import hashlib
 import io
 import json
+import re
+import sqlite3
 import subprocess
 import tarfile
 from pathlib import Path
@@ -16,6 +18,62 @@ from pathlib import Path
 SPEC_COMMIT = '5079948808d4c8aa9cb5763c747def422c12c055'
 MATRIX_SHA256 = '5e3fcdd9808437dbad7908b52255c52a73b94ee4bf4496b6da9f29b83c954514'
 OP_TABLES = ('events', 'checkpoints', 'checkpoint_request_keys', 'resume_results', 'resume_request_keys')
+CORE_SOURCES = {'src/jasmine_core/continuity.py', 'src/jasmine_core/continuity_scan.py', 'src/jasmine_core/api/handlers.py', 'src/jasmine_core/api/server.py'}
+LAUNCHER_SOURCES = {'scripts/p6/checkpoint_negatives.py', 'scripts/p6/checkpoint_negatives.mjs', 'scripts/p6/checkpoint_negative_gate.py'}
+
+
+def normalized(text):
+    return ' '.join(text.split())
+
+
+def action_row(action):
+    """Exact visible row contract, including all subject fields, in receipt order."""
+    if isinstance(action, dict) and isinstance(action.get('kind'), str):
+        fields = [k + ' = ' + (v if isinstance(v, str) else json.dumps(v, ensure_ascii=False, separators=(',', ':'))) for k, v in action.items() if k != 'kind']
+        tail = ' ' + ', '.join(fields) if fields else ''
+        return {'text': action['kind'] + tail, 'codes': [action['kind']], 'fields': [tail] if fields else []}
+    value = action if isinstance(action, str) else json.dumps(action, ensure_ascii=False, separators=(',', ':'))
+    return {'text': value, 'codes': [value], 'fields': []}
+
+
+def actions_proof(dom, actions):
+    expected = [action_row(a) for a in actions]
+    if dom['next_action_rows'] != expected:
+        return False
+    if not actions:
+        return dom['next_actions'] is None and dom['next_action_header'] is None and jsonblock(dom, 'next_actions') == []
+    header = f'next_actions({len(actions)} 条,建议而非已执行)'
+    return dom['next_action_header'] == header and dom['next_actions'] == header + ''.join(r['text'] for r in expected)
+
+
+def dynamic_identity(dom, data, kind):
+    rows = dom['kv']
+    def value(label):
+        matches = [r['text'] for r in rows if r['label'] == label]
+        if len(matches) != 1:
+            raise ValueError('Missing/duplicate key-value row ' + label)
+        return normalized(matches[0])
+    if value(kind + '_id') != data[kind + '_id']:
+        return False
+    scope = data['project_id'] + ' · ' + data['task_id'] + (' · session ' + data['session_id'] if data['session_id'] else ' · 无 session')
+    good = value('scope') == scope and value('actor / host') == data['actor_id'] + ' · ' + data['host_id']
+    digests = {d['label']: d['value'] for d in dom['digests']}
+    expected = {k: data[k] for k in ('projection_digest', 'full_context_digest', 'workspace_digest')} if kind == 'checkpoint' else {'truth_digest': data['truth_digest']}
+    good = good and len(dom['digests']) == len(expected) and digests == expected
+    if kind == 'checkpoint':
+        good = good and value('task_revision') == 'r' + str(data['task_revision']) and value('reason') == data['reason']
+        note = data['note']
+        expected_texts = [{'label': 'note(记录在创建时的备注,非权威)', 'text': note['text']}] if note else []
+    else:
+        note = data['note']
+        expected_texts = [{'label': 'note.value', 'text': note['value']['text']}] if note and note['value'] else []
+        expected_status = '这是收据生成时的比较结果；重新读取不会重新比较。 checkpoint_freshness: ' + data['comparison']['checkpoint_freshness'] + ' · workspace: ' + data['comparison']['workspace'] + ' · reconciliation_required: ' + str(data['comparison']['reconciliation_required']).lower()
+        if data['comparison']['workspace'] == 'UNKNOWN':
+            expected_status += ' 工作区未确认；相同的 Truth 投影不能证明工作区匹配。'
+        elif data['comparison']['workspace'] == 'MISMATCH':
+            expected_status += ' 工作区存在差异；请按本条历史收据中的建议对账。'
+        good = good and normalized(dom['comparison_status']) == expected_status
+    return good and dom['rawtexts'] == expected_texts
 
 
 def canonical(value):
@@ -24,6 +82,255 @@ def canonical(value):
 
 def sha(value):
     return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def all_operations(row):
+    return row['operations'] + row.get('checkpoint_creations', []) + row.get('resume_creations', []) + ([row['checkpoint_creation']] if row.get('checkpoint_creation') else [])
+
+
+def serialized_event(row):
+    value = dict(row)
+    value['payload'] = json.loads(value.pop('payload_json'))
+    return value
+
+
+def expected_injection(original, ident, injection, original_state):
+    """Frozen single mutation, reconstructed from the actual original DB record.
+
+    Every other field is unchanged: a Task-ahead mutation cannot shadow Rule-ahead.
+    Never execute SQL supplied by a receipt.
+    """
+    p = json.loads(original['projection_json'])
+    fields = {}
+    if ident == 'CP13.default':
+        fields['task_revision'] = original['task_revision'] + 1
+        p['task']['revision'] = fields['task_revision']
+        next(o for o in p['objects'] if o['object_type'] == 'task')['revision'] = fields['task_revision']
+    elif ident == 'CP14.default':
+        p['steps'][0]['revision'] += 1
+        next(o for o in p['objects'] if o['object_type'] == 'step')['revision'] += 1
+    elif ident == 'CP15.default':
+        p['rules'][0]['version'] += 1
+    elif ident in ('CP16.default', 'CP17.default', 'CP18.default'):
+        k = {'CP16.default': 'projection_digest', 'CP17.default': 'full_context_digest', 'CP18.default': 'workspace_digest'}[ident]
+        fields[k] = ('1' if original[k][0] != '1' else '2') + original[k][1:]
+    elif ident == 'CP19.default':
+        p = []
+    elif ident == 'CP20.column_version':
+        fields['projection_version'] = 'jasmine.task-snapshot.v0'
+    elif ident == 'CP20.inner_schema':
+        p['snapshot_schema'] = 'jasmine.task-snapshot.v0'
+    elif ident == 'CP21.default':
+        changed_id = json.loads(injection['mutated']['projection_json'])['task_id']
+        if changed_id == original['task_id'] or not any(t['task_id'] == changed_id for t in original_state['tasks']):
+            raise ValueError('identity mutation must reference a real other Task')
+        p['task_id'] = changed_id
+    elif ident == 'CP22.default':
+        key = injection['synthetic_removed_key']
+        if key[0] != 'step' or not re.fullmatch(r'stp_[0-9A-HJKMNP-TV-Z]{26}', key[1]) or any(s['step_id'] == key[1] for s in original_state['steps']):
+            raise ValueError('removed member must be labelled synthetic and absent')
+        p['objects'].append({'object_type': 'step', 'object_id': key[1], 'revision': 99})
+        p['objects'].sort(key=lambda o: (o['object_type'], o['object_id']))
+    else:
+        raise ValueError('unexpected fault variant')
+    if ident not in ('CP16.default', 'CP17.default', 'CP18.default', 'CP20.column_version'):
+        fields.update(projection_json=canonical(p), projection_digest=sha(p), full_context_digest=sha(p))
+    sql = 'UPDATE checkpoints SET ' + ','.join(k + '=?' for k in fields) + ' WHERE checkpoint_id=?'
+    return {**original, **fields}, sql, [*fields.values(), original['checkpoint_id']]
+
+
+class EvidenceStore:
+    """Mandatory physical evidence, with read-only SQLite and exact cross references."""
+    def __init__(self, directory, index_sha):
+        self.directory = Path(directory).resolve()
+        data = (self.directory / 'receipt-index.json').read_bytes()
+        if not isinstance(index_sha, str) or hashlib.sha256(data).hexdigest() != index_sha:
+            raise ValueError('missing/wrong receipt index binding')
+        values = json.loads(data)['files']
+        self.files = {r['path']: r for r in values}
+        if len(values) != len(self.files):
+            raise ValueError('duplicate collection artifact')
+        self.index_sha = index_sha
+        self.cache = {}
+        self.dbs = {}
+        self.json_cache = {}
+        self.required = set()
+
+    def file(self, name):
+        if name not in self.files or not isinstance(name, str) or Path(name).is_absolute() or '..' in Path(name).parts:
+            raise ValueError('unindexed/unsafe required evidence: ' + str(name))
+        path = self.directory / name
+        if path.is_symlink() or not path.resolve().is_relative_to(self.directory) or not path.is_file():
+            raise ValueError('missing/unsafe required evidence: ' + name)
+        self.required.add(name)
+        if name not in self.cache:
+            data = path.read_bytes()
+            entry = self.files[name]
+            if len(data) != entry['bytes'] or hashlib.sha256(data).hexdigest() != entry['sha256']:
+                raise ValueError('collection artifact bytes differ: ' + name)
+            self.cache[name] = data
+        return self.cache[name]
+
+    def json(self, name):
+        if name not in self.json_cache:
+            self.json_cache[name] = json.loads(self.file(name))
+        return self.json_cache[name]
+
+    def database(self, name):
+        self.file(name)
+        if name not in self.dbs:
+            con = sqlite3.connect((self.directory / name).as_uri() + '?mode=ro&immutable=1', uri=True)
+            con.row_factory = sqlite3.Row
+            try:
+                tables = [r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+                data = {t: sorted([dict(r) for r in con.execute('SELECT * FROM "' + t.replace('"', '""') + '"')], key=canonical) for t in tables}
+                schema = [dict(r) for r in con.execute('SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name')]
+                self.dbs[name] = {'state': {t: rows for t, rows in data.items() if t not in ('api_keys', 'audit_log')},
+                    'all_tables': data, 'schema': schema, 'integrity': [r[0] for r in con.execute('PRAGMA integrity_check')],
+                    'foreign_keys': [list(r) for r in con.execute('PRAGMA foreign_key_check')],
+                    'ignore_check_constraints': con.execute('PRAGMA ignore_check_constraints').fetchone()[0]}
+            finally:
+                con.close()
+        return self.dbs[name]
+
+    def check(self, raw):
+        if raw['receipt_index_sha256'] != self.index_sha:
+            raise ValueError('wrong raw receipt index')
+        binding_fields = ('candidate_commit', 'source_tree', 'source_archive_sha256', 'core_source_hashes', 'launcher_source_hashes', 'matrix_sha256')
+        if self.json('source-bindings.json') != {k: raw[k] for k in binding_fields}:
+            raise ValueError('source receipt differs from required source bindings')
+        runtime_names = {'base'} | {r['id'] for r in raw['records'] if r['case_id'] in ('CP13', 'CP14', 'CP15', 'CP16', 'CP17', 'CP18', 'CP19', 'CP20', 'CP21', 'CP22')}
+        if len(runtime_names) != 12:
+            raise ValueError('incomplete runtime matrix')
+        calls, observers = {}, {}
+        for runtime in sorted(runtime_names):
+            calls[runtime] = self.json(runtime + '-http-calls.json')
+            observers[runtime] = self.json(runtime + '-observer.json')
+            for phase in ('before-browser', 'after-browser', 'final'):
+                db = self.database(runtime + '-' + phase + '.db')
+                logical = runtime + ('-final-state.json' if phase == 'final' else '-' + phase + '.json')
+                if db['state'] != self.json(logical):
+                    raise ValueError('DB/logic mismatch: ' + logical)
+        requests = {h['request_id']: h for hs in calls.values() for h in hs}
+        if len(requests) != sum(len(hs) for hs in calls.values()):
+            raise ValueError('duplicate actual HTTP request id')
+        def http(h):
+            if requests.get(h['request_id']) != h:
+                raise ValueError('embedded HTTP differs from raw file: ' + h['request_id'])
+        unique_ops = {}
+        for row in raw['records']:
+            runtime = row['runtime_label']
+            for op in all_operations(row):
+                path = op['operation_receipt']
+                if self.json(path) != op or not path.endswith('-operation.json'):
+                    raise ValueError('operation file differs')
+                prefix = path[:-len('-operation.json')]
+                refs = [prefix + '-before.db', prefix + '-after.db']
+                if op['database_receipts'] != refs:
+                    raise ValueError('wrong operation DB references')
+                for phase, ref in zip(('before', 'after'), refs):
+                    if self.database(ref)['state'] != op[phase]:
+                        raise ValueError('embedded operation state differs from DB: ' + ref)
+                op_runtime = Path(path).parts[0]
+                http(op['http']); http(op['audit_read'])
+                observed = [e for e in observers[op_runtime] if e.get('request_id') == op['http']['request_id']]
+                if observed != op['observer'] or op['observer_started'] not in observers[op_runtime]:
+                    raise ValueError('operation scanner window differs from raw observer')
+                after_all = self.database(refs[1])['all_tables']
+                key = find(after_all, 'api_keys', 'key_id', op['http']['key_id'])
+                if key['actor_id'] != op['http']['actor_id'] or json.loads(key['scopes']) != op['http']['scopes']:
+                    raise ValueError('actual key metadata differs')
+                audits = [a for a in after_all['audit_log'] if a['request_id'] == op['http']['request_id']]
+                def audit_value(a):
+                    value = dict(a); value['detail'] = json.loads(value.pop('detail_json')); return value
+                if [audit_value(a) for a in audits] != op['audit']:
+                    raise ValueError('actual operation audit differs')
+                unique_ops[op['http']['request_id']] = path
+            state = self.database(runtime + '-before-browser.db')['state']
+            for mapping in row['lineage']:
+                for key in ('source_read', 'command_read'):
+                    h = mapping[key]; http(h)
+                    event = find(state, 'events', 'event_id', h['body']['event']['event_id'])
+                    if serialized_event(event) != h['body']['event']:
+                        raise ValueError('source/command HTTP differs from actual Event DB')
+                entity = mapping['entity']
+                kind = 'resume' if 'resume_id' in entity else 'checkpoint'
+                stored = find(state, 'resume_results' if kind == 'resume' else 'checkpoints', kind + '_id', entity[kind + '_id'])
+                actual = json.loads(stored['result_json']) if kind == 'resume' else decode_checkpoint(stored)
+                if actual != entity:
+                    raise ValueError('source mapping differs from actual receipt')
+            if not row['lineage']:
+                http(row['precondition_source_read'])
+                event = find(state, 'events', 'event_id', row['fixture']['source']['event_id'])
+                if serialized_event(event) != row['fixture']['source']:
+                    raise ValueError('legitimate precondition source differs')
+            if row.get('injection'):
+                self.check_injection(row)
+        actual_operation_paths = {n for n in self.files if n.endswith('-operation.json')}
+        if set(unique_ops.values()) != actual_operation_paths or len(unique_ops) != 53:
+            raise ValueError('missing/extra/duplicate operation receipt')
+        browser = raw['browser']
+        if self.json('browser.json') != browser:
+            raise ValueError('browser file differs from embedded raw')
+        trace = [json.loads(line) for line in self.file('browser-requests.jsonl').decode().splitlines() if line]
+        clicks = [json.loads(line) for line in self.file('click-trace.jsonl').decode().splitlines() if line]
+        if trace != browser['network'] or clicks != browser['clicks']:
+            raise ValueError('browser/click trace differs from embedded raw')
+        for ui in browser['records']:
+            row = next(r for r in raw['records'] if r['id'] == ui['id'])
+            runtime = row['runtime_label']
+            for phase, ref in (('before', '-before-browser.db'), ('after', '-after-browser.db')):
+                if ui[phase] != self.database(runtime + ref)['state']:
+                    raise ValueError('browser state differs from actual DB')
+            window = ui['observer_window']
+            if not window or not any(observers[runtime][i:i+len(window)] == window for i in range(len(observers[runtime]))):
+                raise ValueError('browser observer is not a complete actual contiguous window')
+            final_all = self.database(runtime + '-after-browser.db')['all_tables']
+            for audit in ui['audit_read']['body']['entries']:
+                stored = dict(find(final_all, 'audit_log', 'audit_id', audit['audit_id']))
+                stored['detail'] = json.loads(stored.pop('detail_json'))
+                if audit != stored:
+                    raise ValueError('browser audit differs from actual DB')
+            observations = [o for p in ui['pages'] for o in p['observations']] + [s[k] for s in ui['switches'] for k in ('before', 'after')]
+            for o in observations:
+                if self.json(o['dom_file']) != o['dom']:
+                    raise ValueError('DOM artifact differs')
+                if not self.file(o['screenshot']).startswith(b'\x89PNG\r\n\x1a\n'):
+                    raise ValueError('missing/non-PNG screenshot')
+        for entry in raw['browser_database_invariants']:
+            for field, ref in (('before', '-before-browser.db'), ('after', '-after-browser.db')):
+                if entry[field] != self.database(entry['runtime'] + ref)['state']:
+                    raise ValueError('global browser state differs from DB')
+        dbs = {p for p in self.required if p.endswith('.db')}
+        if len(dbs) != 154 or {p for p in self.files if p.endswith('.db')} != dbs:
+            raise ValueError('incomplete frozen 154 DB evidence topology')
+        return {'status': 'PASS', 'required_database_files': len(dbs), 'unique_operations': len(unique_ops), 'required_artifact_paths': sorted(self.required)}
+
+    def check_injection(self, row):
+        i = row['injection']; ident = row['id']
+        if i != self.json(ident + '/injection.json') or i['variant'] != ident or i['mode'] != 'REAL_CORE_CORRUPT_STORE':
+            raise ValueError('wrong injection file/label')
+        if i['original_backup_path'] != 'fault-base-original.db' or i['fork_backup_path'] != ident + '/fault-before-serving.db':
+            raise ValueError('wrong original/fork references')
+        for path, field in ((i['original_backup_path'], 'original_backup_sha256'), (i['fork_backup_path'], 'fork_sha256_before_serving')):
+            if hashlib.sha256(self.file(path)).hexdigest() != i[field]:
+                raise ValueError('injection original/fork byte hash differs')
+        original = self.database(i['original_backup_path']); fork = self.database(i['fork_backup_path'])
+        old = find(original['state'], 'checkpoints', 'checkpoint_id', i['original']['checkpoint_id'])
+        if old != i['original'] or decode_checkpoint(old) != row['checkpoint_creation']['http']['body']['checkpoint']:
+            raise ValueError('injection original differs from actual valid source')
+        new, sql, parameters = expected_injection(old, ident, i, original['state'])
+        if i['mutated'] != new or i['sql'] != sql or i['parameters'] != parameters:
+            raise ValueError('not the frozen single mutation; another guard may shadow intended guard')
+        expected = copy.deepcopy(original['all_tables'])
+        expected['checkpoints'] = sorted([new if r['checkpoint_id'] == old['checkpoint_id'] else r for r in expected['checkpoints']], key=canonical)
+        if expected != fork['all_tables'] or fork['state'] != row['operations'][0]['before']:
+            raise ValueError('fork / original / actual operation DB mismatch')
+        if original['schema'] != fork['schema'] or i['schema_before'] != original['schema'] or i['schema_after'] != fork['schema']:
+            raise ValueError('injection schema mismatch')
+        for actual, field in (('integrity', 'integrity_check'), ('foreign_keys', 'foreign_key_check'), ('ignore_check_constraints', 'ignore_check_constraints_after')):
+            if fork[actual] != i[field]:
+                raise ValueError('injection PRAGMA receipt differs from actual fork')
 
 
 def find(snapshot, table, field, value):
@@ -153,6 +460,7 @@ def display_proof(page):
         exact = dom['hash'] == definition['hash'] and bool(observation['dom_file']) and bool(observation['screenshot'])
         if kind in ('checkpoint', 'resume'):
             data = definition['expected'][kind]
+            exact = exact and dynamic_identity(dom, data, kind)
             exact = exact and definition['entity_id'] == data[kind + '_id']
             exact = exact and data[kind + '_id'] in text and jsonblock(dom, 'projection') == data['projection'] and jsonblock(dom, 'workspace') == data['workspace']
             for field in ('actor_id', 'host_id', 'project_id', 'task_id', 'source_event_id', 'command_event_id'):
@@ -160,7 +468,7 @@ def display_proof(page):
             exact = exact and any(data['source_event_id'] in (link['href'] or '') for link in dom['links'])
             exact = exact and any(data['command_event_id'] in (link['href'] or '') for link in dom['links'])
             if kind == 'checkpoint':
-                exact = exact and bool(dom['checkpoint_boundary']) and str(data['task_revision']) in text
+                exact = exact and dom['checkpoint_boundary'] == '读取历史记录不执行完整性比较，也不证明它与当前 Truth 或工作区匹配。' and str(data['task_revision']) in text
                 exact = exact and all(data[k] in text for k in ('projection_digest', 'full_context_digest', 'workspace_digest'))
                 exact = exact and data['projection_version'] in text and jsonblock(dom, 'trigger_provenance') == data['trigger_provenance']
                 if data['note']:
@@ -173,8 +481,7 @@ def display_proof(page):
                 if data['note']:
                     exact = exact and data['note']['authority'] is False and data['note']['historical'] is True
                     exact = exact and data['note']['value']['text'] in dom['note'] and 'authority = false' in dom['note']
-                if data['next_actions']:
-                    exact = exact and '建议而非已执行' in dom['next_actions'] and all(a['kind'] in dom['next_actions'] for a in data['next_actions'])
+                exact = exact and actions_proof(dom, data['next_actions'])
         elif kind in ('error', 'signin-error'):
             exact = exact and bool(dom['alerts']) and definition['expected']['error']['code'] in text and not dom['pending']
             exact = exact and dom['checkpoint_boundary'] is None and dom['comparison_status'] is None
@@ -216,8 +523,7 @@ def browser_audit_proof(ui):
                 return False
             continue
         if n['method'] == 'GET' and n['path'] in ('/v1/health', '/v1/meta/schema'):
-            # These exact candidate routes are public=True and create no audit.
-            # Keep their genuine ingress/egress and zero scan windows as absence proof.
+            # Public probes are audited with actor_id=None; do not filter them out.
             window = [e for e in ui['observer_window'] if e.get('request_id') == n.get('request_id')]
             starts = [e for e in window if e['kind'] == 'request_start']
             ends = [e for e in window if e['kind'] == 'request_end']
@@ -225,7 +531,10 @@ def browser_audit_proof(ui):
                 return False
             if any(e['kind'] in ('scanner_call_enter', 'scanner_popen_attempt') for e in window):
                 return False
-            if any(a['request_id'] == n['request_id'] for a in audit['matching']):
+            matches = [a for a in audit['matching'] if a['request_id'] == n['request_id']]
+            if len(matches) != 1 or not {'actor_id', 'scope', 'method', 'path', 'status_code', 'error_code'} <= set(matches[0]) or matches[0]['actor_id'] is not None or matches[0]['scope'] is not None:
+                return False
+            if (matches[0]['method'], matches[0]['path'], matches[0]['status_code'], matches[0]['error_code']) != ('GET', n['path'], 200, None):
                 return False
             continue
         matches = [a for a in audit['matching'] if a['request_id'] == n['request_id']]
@@ -239,6 +548,24 @@ def browser_audit_proof(ui):
         if a['actor_id'] != ui['key_metadata']['actor_id']:
             return False
     return True
+
+
+def switch_proof(row, switch):
+    kind = switch['kind']
+    a = next(p for p in row['pages'] if p['kind'] == kind and p['entity_id'] == switch['a'])
+    b = next(p for p in row['pages'] if p['kind'] == kind and p['entity_id'] == switch['b'])
+    expected = {**b, 'refresh': False}
+    displays, evidence = display_proof({'definition': expected, 'observations': [switch['before'], switch['after']], 'network': switch['network']})
+    field = kind + '_id'
+    inputs = [[i['value'] for i in switch[k]['dom']['inputs'] if i['label'] == field] for k in ('before', 'after')]
+    exact_input = inputs == [[switch['b']], [switch['b']]]
+    held, released = switch['held'], switch['released']
+    wire = [n for n in switch['network'] if n.get('request_id') == held['request_id']]
+    correlated = len(wire) == 1 and wire[0]['path'] == a['path'] and wire[0]['method'] == 'GET' and wire[0]['status'] == 200 and wire[0]['body'] == held['body'] == a['expected']
+    correlated = correlated and held['path'] == released['path'] == a['path'] and held['request_id'] == released['request_id']
+    correlated = correlated and held['state'] == 'held' and released['state'] == 'released'
+    correlated = correlated and held['held_at_unix'] <= switch['before']['at_unix'] <= released['released_at_unix'] <= switch['after']['at_unix']
+    return displays and exact_input and correlated, {'dynamic_displays': evidence, 'exact_target_inputs': inputs, 'release_correlated_to_held_wire_response': correlated}
 
 
 def scenario_checks(row, ui, common):
@@ -312,7 +639,7 @@ def scenario_checks(row, ui, common):
     if case == 'CP12':
         switches = ui['switches']
         held = len(switches) == 2 and {s['kind'] for s in switches} == {'checkpoint', 'resume'} and all(s['held']['state'] == 'held' and s['held']['body'] == next(p['expected'] for p in row['pages'] if p['kind'] == s['kind'] and p['entity_id'] == s['a']) for s in switches)
-        no_old = all(s['b'] in s['after']['dom']['text'] and s['a'] not in s['after']['dom']['text'] and all(i['value'] != s['a'] for i in s['after']['dom']['inputs']) for s in switches)
+        no_old = all(s['b'] in s['after']['dom']['text'] and s['a'] not in s['after']['dom']['text'] and switch_proof(row, s)[0] for s in switches)
         return [held, no_old, no_old and all(s['before']['dom']['hash'] == s['after']['dom']['hash'] for s in switches), pages_ok and append_ok]
     if case in ('CP13', 'CP14', 'CP15', 'CP16', 'CP17', 'CP18', 'CP19', 'CP20', 'CP21'):
         injection = row['injection']
@@ -377,6 +704,7 @@ def evaluate_record(row, ui, case):
     proofs = [operation_proof(o) for o in unique.values()]
     lineage_ok, lineage = lineage_proof(row)
     displays = [display_proof(p) for p in ui['pages']]
+    switches = [switch_proof(row, s) for s in ui['switches']]
     browser_unchanged = ui['before'] == ui['after']
     measured_absence = {'reason': row['absence'], 'browser_database_rows_unchanged': browser_unchanged,
                         'scanner_popen_attempt_count': sum(e['kind'] == 'scanner_popen_attempt' for e in ui['observer_window']),
@@ -389,7 +717,7 @@ def evaluate_record(row, ui, case):
         'G4': {'passed': all(n['method'] == 'GET' for n in ui['network']), 'evidence': {'network': ui['network'], 'explicit_operator_probe': ui.get('proxy_probe')}},
         'G5': {'passed': lineage_ok, 'evidence': lineage},
         'G6': {'passed': all(p['audit_bound'] for p in proofs) and browser_audit_proof(ui), 'evidence': {'operations': proofs, 'browser_audit': ui['audit_read'], 'observer_window': ui['observer_window']}},
-        'G7': {'passed': bool(displays) and all(d[0] for d in displays), 'evidence': [d[1] for d in displays]},
+        'G7': {'passed': bool(displays) and all(d[0] for d in displays) and all(s[0] for s in switches), 'evidence': {'pages': [d[1] for d in displays], 'switches': [s[1] for s in switches]}},
     }
     outcomes = scenario_checks(row, ui, common)
     if len(outcomes) != len(case['required_predicates']):
@@ -412,7 +740,7 @@ def evaluate_record(row, ui, case):
             'predicates': predicates, 'invariants': common}
 
 
-def evaluate_bundle(raw, matrix, *, expected_candidate=None, expected_archive=None):
+def evaluate_bundle(raw, matrix, *, expected_candidate=None, expected_archive=None, evidence_directory=None):
     required = [(case, variant, case['id'] + '.' + variant['id']) for case in matrix['cases'] for variant in case['variants']]
     output = {'status': 'BLOCKED', 'role': raw.get('role'), 'scope_acceptance_signed': False, 'records': [],
               'candidate_commit': raw.get('candidate_commit'), 'source_archive_sha256': raw.get('source_archive_sha256'),
@@ -436,33 +764,43 @@ def evaluate_bundle(raw, matrix, *, expected_candidate=None, expected_archive=No
     browser_ok = browser.get('console_errors') == [] and browser.get('credential_storage') == {'local': 0, 'session': 0, 'indexed': 0} and bool(browser.get('browser_version'))
     invariant = bool(raw.get('browser_database_invariants')) and all(r['before'] == r['after'] for r in raw['browser_database_invariants'])
     sources = raw.get('core_source_hashes', {})
-    observer_sources = bool(sources)
+    observer_sources = set(sources) == CORE_SOURCES and all(isinstance(v, str) and re.fullmatch('[0-9a-f]{64}', v) for v in sources.values())
+    observer_sources = observer_sources and set(raw.get('launcher_source_hashes', {})) == LAUNCHER_SOURCES
     for r in records:
         operations = r.get('operations', []) + r.get('checkpoint_creations', []) + r.get('resume_creations', [])
         if r.get('checkpoint_creation'):
             operations.append(r['checkpoint_creation'])
         for op in operations:
             s = op.get('observer_started', {})
-            observer_sources = observer_sources and s.get('continuity_source_sha256') == sources.get('src/jasmine_core/continuity.py') and s.get('scanner_source_sha256') == sources.get('src/jasmine_core/continuity_scan.py')
+            observer_sources = observer_sources and isinstance(s.get('continuity_source_sha256'), str) and isinstance(s.get('scanner_source_sha256'), str) and s['continuity_source_sha256'] == sources['src/jasmine_core/continuity.py'] and s['scanner_source_sha256'] == sources['src/jasmine_core/continuity_scan.py']
+    try:
+        if evidence_directory is None:
+            raise ValueError('physical evidence directory is mandatory; memory-only PASS is forbidden')
+        store = evidence_directory if isinstance(evidence_directory, EvidenceStore) else EvidenceStore(evidence_directory, raw['receipt_index_sha256'])
+        evidence = store.check(raw)
+    except Exception as exc:
+        evidence = {'status': 'BLOCKED', 'reason': type(exc).__name__ + ': ' + str(exc)}
     output['binding'] = binding
     output['complete_unique_matrix'] = uniqueness
     output['cleanup'] = cleanup
     output['actual_browser_and_no_persistent_credentials'] = browser_ok
     output['browser_database_invariants'] = invariant
     output['observed_scanner_sources_bound'] = observer_sources
+    output['physical_evidence_binding'] = evidence
     output['counts'] = {s: sum(r['status'] == s for r in output['records']) for s in ('PASS', 'FAIL', 'BLOCKED')}
-    if binding and uniqueness and cleanup and browser_ok and invariant and observer_sources and not raw.get('error') and all(r['status'] == 'PASS' for r in output['records']):
+    if binding and uniqueness and cleanup and browser_ok and invariant and observer_sources and evidence['status'] == 'PASS' and not raw.get('error') and all(r['status'] == 'PASS' for r in output['records']):
         output['status'] = 'PASS'
-    elif output['counts']['BLOCKED']:
+    elif output['counts']['BLOCKED'] or evidence['status'] == 'BLOCKED':
         output['status'] = 'BLOCKED'
     else:
         output['status'] = 'FAIL'
     return output
 
 
-def adversarial_bundle_checks(raw, matrix, expected_candidate, expected_archive):
+def adversarial_bundle_checks(raw, matrix, expected_candidate, expected_archive, *, evidence_directory=None):
     """Mutated in-memory copies of this real run; never rewrite its raw evidence."""
-    baseline = evaluate_bundle(raw, matrix, expected_candidate=expected_candidate, expected_archive=expected_archive)
+    store = EvidenceStore(evidence_directory, raw['receipt_index_sha256']) if evidence_directory is not None else None
+    baseline = evaluate_bundle(raw, matrix, expected_candidate=expected_candidate, expected_archive=expected_archive, evidence_directory=store)
     if baseline['status'] != 'PASS':
         return {'status': 'BLOCKED', 'reason': 'Real baseline must pass before full-bundle adversaries are evaluable'}
     checks = []
@@ -486,7 +824,7 @@ def adversarial_bundle_checks(raw, matrix, expected_candidate, expected_archive)
             changed['candidate_commit'] = '0' * 40
         else:
             changed['source_archive_sha256'] = '0' * 64
-        result = evaluate_bundle(changed, matrix, expected_candidate=expected_candidate, expected_archive=expected_archive)
+        result = evaluate_bundle(changed, matrix, expected_candidate=expected_candidate, expected_archive=expected_archive, evidence_directory=store)
         checks.append({'mutation': name, 'observed_verdict': result['status'], 'rejected': result['status'] != 'PASS', 'counts': result['counts']})
     return {'status': 'PASS' if all(c['rejected'] for c in checks) else 'FAIL', 'kind': 'COMPONENT_FULL_BUNDLE_ADVERSARIES_NOT_MATRIX_VARIANTS', 'checks': checks}
 
@@ -535,8 +873,10 @@ def verify_directory(directory, expected_candidate, repository):
             if json.loads((directory / o['dom_file']).read_text()) != o['dom']:
                 raise ValueError('embedded DOM differs from artifact')
     matrix = json.loads((directory / 'matrix.json').read_text())
-    value = evaluate_bundle(raw, matrix, expected_candidate=expected_candidate, expected_archive=expected_archive)
-    checks = adversarial_bundle_checks(raw, matrix, expected_candidate, expected_archive)
+    value = evaluate_bundle(raw, matrix, expected_candidate=expected_candidate, expected_archive=expected_archive, evidence_directory=directory)
+    if value['physical_evidence_binding']['status'] == 'PASS' and not set(value['physical_evidence_binding']['required_artifact_paths']) <= set(paths):
+        raise ValueError('required physical evidence omitted from manifest')
+    checks = adversarial_bundle_checks(raw, matrix, expected_candidate, expected_archive, evidence_directory=directory)
     if checks != json.loads((directory / 'harness-selfchecks.json').read_text()):
         raise ValueError('recomputed harness selfchecks differ')
     value['harness_selfchecks'] = checks['status']
