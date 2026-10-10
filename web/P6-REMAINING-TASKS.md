@@ -10,7 +10,28 @@ Status marks: **D** delivered · **P** partially delivered (gap named) · **N** 
 **B** dependency-blocked. Evidence binding is a bundle directory under `validation-runs/p6/` plus
 the compliance record that maps requirements to code.
 
-## Current handoff — 2026-10-09 (America/Los_Angeles)
+## Current handoff — 2026-10-10 (America/Los_Angeles)
+
+Checkpoint/Resume historical display, comparison and read-entry negatives are now
+**SIGNED_SCOPED_ACCEPTANCE** at `6fec85d7a396896da428a2a5ff59e683c3300cfd`:
+non-author review APPROVE, fresh isolated 43/43 variants, 155/155 scenario predicates,
+301/301 invariants; 31/31 focused tests and 86/86 rejected adversaries. The original
+four refresh-capture counterexamples are closed by the formal CLI (BLOCKED, exit 1).
+Signoff: `../../../evidence/p6-checkpoint-review-6fec85d-20261010/REVIEW.md`.
+This closes only the frozen Checkpoint/Resume slice, not all P6, P3/P4 or V1.
+
+This checklist is a post-signoff derivative in the new `p6-context-budget` worktree.
+The checklist bytes bound by frozen spec `5079948` remain in that Git snapshot and
+in the unchanged `p6-checkpoint-negatives` worktree. Do not use this updated document
+to recompute that historical freeze, and do not rewrite the historical freeze receipt.
+
+**Next bounded work: Context budget display / refusal**, using private Core/DB/Chrome.
+Memory-vs-current-Authority follows separately. Real injection, native conversation
+chain, real Validation FAIL and final integration/deployment remain open. P4's memory
+benefit acceptance remains unpassed, with its experiment route stopped; do not restart.
+Main, the actual deployment, old evidence and item-6 flag 0 remain unchanged; daily use
+is not released. See [the current stage handoff](P6-STAGE-HANDOFF-20261010.md).
+
 
 The five missing browser-write paths are now **scope-accepted** at clean archived repair
 candidate `25cfc38a6fc8ce40729ccb9d6551e38331c6fd89`: non-author code review **APPROVE** and
@@ -30,7 +51,7 @@ Item 6 is **D for its reviewed scope**: implementation review APPROVE and isolat
 The final Dashboard confirmation flag is **0**, daily use is **not released**, and primary/main
 have not been merged. Eleven suite skips remain skips; P6/V1 is **not accepted**.
 
-See [the stage handoff](P6-STAGE-HANDOFF-20261009.md) for source hashes, deployment evidence,
+See [the historical item-6 deployment handoff](P6-STAGE-HANDOFF-20261009.md) for source hashes, deployment evidence,
 closed items and the next bounded work item. This is a documentation update; prior Gate results
 remain bound to their original code and environments. The approved deployment plan and its
 review remain separate local files under `docs/deployment/`; this update does not commit them.
@@ -102,7 +123,7 @@ scope-accepted**, with the final Web switch **0** and daily use **not released**
 
 | View | Status | Gap / note | Evidence binding |
 | --- | --- | --- | --- |
-| Checkpoint Compare (P6-03a) | **P** | views delivered and verified against a real P3 Core; the negatives “old checkpoint is only history, revision-ahead/partial fingerprint must not show match” are **not all exercised** — the real run compares equal revisions (`STATE_EQUAL`) and a second checkpoint exists only for the switch check | real `20261008T075256Z-p6-03a-realcore/` (26/26 at `f323c779`); simulated `20261008T075317Z-p6-03a-gate-regression/` (15/15) |
+| Checkpoint Compare (P6-03a) | **P overall; historical/negative slice signed** | Original runs retain their normal-only boundaries. The subsequent frozen Checkpoint/Resume slice at `6fec85d` is SIGNED_SCOPED_ACCEPTANCE: 26 scenarios/43 variants, 155/301 assertions, including revision-ahead, partial fingerprint, history identity and read-entry negatives. No whole P3/P6 acceptance is inferred | original real `20261008T075256Z-p6-03a-realcore/` (26/26 at `f323c779`), simulated `20261008T075317Z-p6-03a-gate-regression/` (15/15); scoped signoff `../../../evidence/p6-checkpoint-review-6fec85d-20261010/REVIEW.md` |
 | Context Inspector (P6-03a) | **P** | persisted pack, exact rendered content, section/token metrics, rule versions, memory ids, state revision all verified. **Injection attempt/receipt is not available**, so “built ≠ injected” is stated and the receipt half cannot PASS | same |
 | Memory Jobs/Recall (P6-03b1) | **P** | jobs/detail/retry, bank mapping, source Event/Evidence, query/result trace verified against real P4 code; engine-dependent extraction/reflect content remains unproven; the labelled wire-double outage and recovery slice is covered separately by T05 (19/19), without proving real Hindsight behaviour | real `20261008T075258Z-p6-03-realcore/` (35/35) + `...-ui/` (10/10); simulated `20261008T075355Z-p6-03b1-clickthrough/` (11/11) |
 | Memory Inspector 管理 (P6-03b2) | **P** | the five commands + `reflect` delivered behind a default-off switch, exercised through the real P4 Core and through the browser; soft-delete/provenance/idempotency verified; **“historical Memory conflicting with current Authority is conspicuous” is not exercised**, and engine-dependent `reflect` content is unproven | real Core 35/35 + UI 10/10; fixture `20261008T075346Z-p6-03b2-clickthrough/` (16/16 twice + 4/4 off); `P6-03B2-COMPLIANCE.md` criterion 9b |
@@ -131,7 +152,7 @@ Negative cases (§7), which ones are actually covered:
 | project A slow response arriving after switching to B; same id, different revision | **covered** — T07 (the rapid-switch phase was falsified and fixed) + `revision_conflict` |
 | API 404/401/403/422/503, disconnection, unknown enum, truncated paging | **covered** across the P1/P6-01/P6-02/P6-03 Gates |
 | secret-looking raw text, HTML/script, artifact path traversal, external links | **covered for text/protocol** (T02, proxy allowlist), and now for artifacts: the Inspector refuses `../`, absolute, `C:`, UNC, URL and symlinked declared paths, renders artifact content as text only (a browser probe confirms nothing from an HTML artifact is parsed and the global it sets stays undefined), masks by default and withholds the original with Core's own reason. Exercised on a **labelled fixture root**, since the real records have no manifest | `20261008T174844Z-p6-03c-validation-drilldown/`; `web/P6-03C-COMPLIANCE.md` |
-| **Memory unavailable / stale Memory vs Authority conflict / old Checkpoint / Context over budget** | **partly covered now**: the outage *and the same-environment recovery* are covered by `20261008T130315Z-p6-t05-degraded/` — the engine is stopped (P4's own probe records `unreachable`, Core stays `ok`, the P1 reads and views are unaffected, and a 200-with-`degraded`-payload `reflect` is recorded as a degradation, not a success), then restarted on the **same address** without restarting the Core, after which health reports `degraded: false` / `core_impact: none` and a real `reflect` reaches the engine. **Still not covered**: stale Memory vs current Authority, an old/atypical Checkpoint, and an over-budget Context |
+| **Memory unavailable / stale Memory vs Authority conflict / old Checkpoint / Context over budget** | **partly covered now**: the outage *and the same-environment recovery* are covered by `20261008T130315Z-p6-t05-degraded/` — the engine is stopped (P4's own probe records `unreachable`, Core stays `ok`, the P1 reads and views are unaffected, and a 200-with-`degraded`-payload `reflect` is recorded as a degradation, not a success), then restarted on the **same address** without restarting the Core, after which health reports `degraded: false` / `core_impact: none` and a real `reflect` reaches the engine. **Remaining**: stale Memory vs current Authority and Context budget negatives. Old/atypical Checkpoint and Resume negatives are now signed only within the frozen `6fec85d` matrix; the older outage run does not inherit that signoff |
 | Validation missing Context or Agent transcript / mocked response | **covered for the real data**: every one of the 63 real cases shows the Context link missing with its own `missing_reason` (27 reason-only, 30 recorded-but-no-pack, 6 sentinel, 0 packs), `agent_response` is missing in all 42 cases of the six BLOCKED runs, the recorded verdict is served unchanged, and a record marked `synthetic: true` is graded `simulated` and never `real`. An **unmarked** mock under a `mode: real` manifest remains undetectable by a read-only contract, and the API says so rather than claiming otherwise | `20261008T174844Z-p6-03c-validation-drilldown/`; ADR 0015 §4.2 in the P7-01 worktree |
 
 ## 5. §8 bundle format and merge gate
@@ -175,14 +196,33 @@ bounded signature. Do not schedule this coverage slice again or treat it as the 
 The remaining P3 diagnostic limitation and separate dependencies below remain open; this
 signature does not choose or start the next dependency task.
 
+**Completed bounded follow-up: Checkpoint/Resume negatives.**
+Candidate `6fec85d` has APPROVE / VALIDATION PASS / SIGNED_SCOPED_ACCEPTANCE.
+Do not schedule its 43 frozen variants or its closed refresh-capture defect again as
+remaining work. Historical failed reviews and author runs remain unchanged.
+
+**Current priority order:**
+
+| Remaining work | Required proof | Current boundary |
+| --- | --- | --- |
+| Context budget, then historical Memory vs current Authority | Accurate dashboard anomaly display without false success | Context budget slice starting in isolation; Memory conflict not started |
+| Real Context injection receipt | Exact pack actually delivered to Agent | Built pack is insufficient; native receipt pending |
+| Real conversation → extraction → Review → write | Whole actual user chain | Synthetic isolated sources cannot close T03 |
+| Real Validation FAIL | Failure classification and original output, linked to real Run | Synthetic/NEGATIVE tool inputs cannot replace it |
+| Branch integration and final deployed entry acceptance | Signed slices work together in one fixed version | No main merge/deployment/daily-use release authorised |
+
+P4 memory-benefit acceptance remains unpassed; its experimental route is stopped and
+is not restarted by any of these steps. A real Validation FAIL must not be obtained
+by quietly restarting the stopped P4 experiment.
+
 **Dependencies / decisions still separate:**
 
 * P7-01 criterion 1 / T06 needs a genuinely failing recorded scenario with failure classification
   and original output, using `recorder.py`; do not turn a deliberately falsified fixture or
   negative bundle into a real acceptance run.
 * T04 still needs a genuine Context injection receipt. A built pack is not an injected pack.
-* T05 still lacks stale Memory vs Authority, old/atypical Checkpoint and over-budget Context
-  negatives; real engine extraction/reflect claims remain outside the wire-double evidence.
+* T05 still lacks stale Memory vs Authority and Context budget negatives; the
+  Checkpoint/Resume historical-negative slice is separately signed at `6fec85d`; real engine extraction/reflect claims remain outside the wire-double evidence.
 * `manual-reapply` needs its own provenance/permission design and explicit operator decision.
 * `TASK-p4-interpreter-symlink.md` remains a separately owned environment/installer task. The
   newer item-6 suite records 0 failures/errors and 11 skips; do not describe the older nine
