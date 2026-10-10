@@ -346,6 +346,11 @@ class RequiredCaptureRoles(unittest.TestCase):
             with self.subTest(refresh=refresh,count=len(obs)):
                 self.assertFalse(gate.display_proof({'definition':{'kind':'checkpoint','refresh':refresh},'observations':obs})[0])
 
+    def test_missing_capture_verdict_survives_formal_receipt_json_roundtrip(self):
+        passed, evidence=gate.display_proof({'definition':{'kind':'checkpoint','refresh':True},'observations':[{}]})
+        self.assertFalse(passed)
+        self.assertEqual(evidence,json.loads(json.dumps(evidence)))
+
 class ReadonlySQLiteConstraintProof(unittest.TestCase):
     def test_check_constraints_are_verified_on_private_memory_copy(self):
         with tempfile.TemporaryDirectory() as temporary:

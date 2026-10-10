@@ -773,7 +773,7 @@ def display_proof(page, roles=None):
     kind = definition['kind']
     roles = capture_roles(definition) if roles is None else roles
     if len(page['observations']) != len(roles):
-        return False, [{'passed': False, 'reason': 'page capture roles are missing/extra', 'required_roles': roles}]
+        return False, [{'passed': False, 'reason': 'page capture roles are missing/extra', 'required_roles': list(roles)}]
     results = []
     for observation in page['observations']:
         dom = observation['dom']
