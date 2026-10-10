@@ -1,0 +1,145 @@
+{
+  "kind": "AUTHOR_R01_R03_REPAIR_NOT_INDEPENDENT_ACCEPTANCE",
+  "created_at_utc": "2026-10-10T03:04:12.182371+00:00",
+  "candidate_commit": "cf3c655fee6facecae83f1f3a67b069fa5d9e9fa",
+  "candidate_tree": "cc5d0941dd1926f9c956f6ae6f6294873ad7f23b",
+  "source_archive_sha256": "7a0b6780c4cf2291baa0a426ac71ee8f55e1ae43b5bc5756d5d93b404ff5c5e6",
+  "spec_commit": "5079948808d4c8aa9cb5763c747def422c12c055",
+  "spec_unchanged": true,
+  "report": {
+    "path": "REPAIR-REPORT-cf3c655-20261009.md",
+    "bytes": 8056,
+    "sha256": "843b88bdb048a3bcdccb493377a5ea8690d1ff1ac7b6534ce51be388acde6de1"
+  },
+  "classification": {
+    "R01": "previous_F03_DB_to_browser_branch_incomplete",
+    "R02": "preexisting_state_cleanup_omission",
+    "R03": "preexisting_historical_metadata_omission",
+    "introduced_regression_confirmed": false
+  },
+  "original_review_inputs": [
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/DB-versus-browser-proof.json",
+      "bytes": 712,
+      "sha256": "12fe1e3ec044d5c8f8219b99ea706f010d7881015a5f65d21fda21cdcfa9e88e"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/REVIEW.md",
+      "bytes": 8037,
+      "sha256": "d0d81bb2df8915f305297bd0ced3c7e3c67f9f3241335702829405b8d045d796"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/SUMMARY.json",
+      "bytes": 817,
+      "sha256": "685a19964c88e99b5fe3d2e87e45627752121efc3552de6440af0bf0b4bf3334"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/additional-adversaries.json",
+      "bytes": 1239,
+      "sha256": "3b0c24cc8b29aafda2ebefac4c3372955229e0aa2f2d11898470d4f6c33bf6db"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/attribution-and-formal-cli.json",
+      "bytes": 1671,
+      "sha256": "cef1adf930a8d4806b0d31df9801206cbba1d198167ff480bceee503be5680d9"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/attribution-part1.json",
+      "bytes": 525,
+      "sha256": "f92fe8b7e09e8042fd98c562f7209184d224151eb72ef825fd067f0590dcc3af"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/original-6a90c92-gate.py",
+      "bytes": 41718,
+      "sha256": "76326888a6f3c49f8f1398cf2d60917645198033b8d32c440be78d70262d2207"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/probe-part2.py",
+      "bytes": 5984,
+      "sha256": "d7f19c3c34df60eec4a7791f0083eece531082d315ac9a849fa3b2e514e8d463"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/probe.py",
+      "bytes": 5972,
+      "sha256": "64f11f6c3af581c655c4045766cddf2661e387afd620bd968e4f4f59093851c3"
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-review-f3f560d-20261009/review-manifest.json",
+      "bytes": 1498,
+      "sha256": "609f68210ecd6a8d1ddf56d8be28ca308b9527f310d3dfd36c66290886b80d2f"
+    }
+  ],
+  "bundles": [
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-run-07",
+      "manifest_sha256": "632244bd07a3af1b140b2802860765fa91d3568ff1be4872fa5b7a0cd61be875",
+      "bound_file_count": 538,
+      "all_bound_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-gate-regressions-cf3c655-01",
+      "manifest_sha256": "a432083dc0efdbfbbf0e9607c085cf7b04e459c874e08a37301936e88374b42f",
+      "bound_file_count": 60,
+      "all_bound_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-author-run-06",
+      "manifest_sha256": "a43f0654a8fe8b946993e5291929e63e69f93e988f355b86de8c034cd2a622a5",
+      "bound_file_count": 538,
+      "all_bound_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-nonauthor-run-f3f560d-20261009",
+      "manifest_sha256": "6c7fc810c5c37b22d0794301952546f293871bc26b4fc1a6e55dc0fcfd2ade0e",
+      "bound_file_count": 538,
+      "all_bound_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-gate-regressions-f3f560d-01",
+      "manifest_sha256": "3c772ccb38c6bd05e4bffa9ef5dfa30008c6746f90cdd8bb261c1ac1e1f947f4",
+      "bound_file_count": 36,
+      "all_bound_bytes_rechecked": true
+    },
+    {
+      "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-nonauthor-regressions-f3f560d-20261009",
+      "manifest_sha256": "3c772ccb38c6bd05e4bffa9ef5dfa30008c6746f90cdd8bb261c1ac1e1f947f4",
+      "bound_file_count": 36,
+      "all_bound_bytes_rechecked": true
+    }
+  ],
+  "supplement": {
+    "path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/evidence/p6-checkpoint-repair-receipts-cf3c655",
+    "manifest_sha256": "962e9000525f9f4e34cbec5670732a3d09322f888954651229e298396bf3a478",
+    "bound_file_count": 6
+  },
+  "verification": {
+    "author_run_status": "PASS",
+    "variants_passed": 43,
+    "scenario_predicate_evaluations_passed": 155,
+    "global_invariant_evaluations_passed": 301,
+    "physical_binding_status": "PASS",
+    "required_database_files": 154,
+    "unique_operations": 53,
+    "required_artifact_paths": 492,
+    "manifest_files": 538,
+    "focused_unittest_methods_passed": 20,
+    "component_counterexamples_rejected": 59,
+    "legacy_review_categories_rejected": 8,
+    "current_review_original_counterexamples_rejected": 4,
+    "new_component_counterexamples_formal_verifier_rejected": 24,
+    "DB_readback_negatives_blocked_by_exact_guard": 5,
+    "new_DOM_negatives_physical_PASS_and_G7_rejected": 19,
+    "original_bundle_unchanged": true
+  },
+  "independent_code_review": "NOT_RUN_FOR_NEW_CANDIDATE",
+  "independent_isolated_validation": "NOT_RUN_FOR_NEW_CANDIDATE",
+  "scope_acceptance_signed": false,
+  "P6_V1_complete": false,
+  "item6_flag": 0,
+  "daily_use_released": false,
+  "product_code_changed_in_repair": false,
+  "main_or_deployment_changed": false,
+  "existing_service_restart": false,
+  "actual_entry_or_database_accessed": false,
+  "notes": "This report commit binds receipt bytes. New author run is not independent acceptance. Historical REVISE_REQUIRED remains."
+}
