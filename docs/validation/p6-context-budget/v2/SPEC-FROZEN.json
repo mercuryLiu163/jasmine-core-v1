@@ -1,0 +1,27 @@
+{
+  "spec_id": "P6-CONTEXT-BUDGET-v2",
+  "status": "FROZEN_FOR_AUTHOR_IMPLEMENTATION",
+  "counts": {
+    "scenarios": 9,
+    "browser_cases": 7,
+    "HTTP_only_cases": 2,
+    "case_gate_evaluations": 36
+  },
+  "files": [
+    {
+      "path": "docs/validation/p6-context-budget/v2/ACCEPTANCE-SPEC-v2.md",
+      "bytes": 4794,
+      "sha256": "527e31dd2d06dc03f0e7340858e2f4310740c6f20ac47d413834890dc82401ca"
+    },
+    {
+      "path": "docs/validation/p6-context-budget/v2/acceptance-matrix.v2.json",
+      "bytes": 2515,
+      "sha256": "d36e4c86f71eebf2321e1c940d097e244339fff4d0b6846166f7eeb8eef49272"
+    }
+  ],
+  "scope_acceptance_signed": false,
+  "independent_spec_review": "NOT_RUN",
+  "item6_flag": 0,
+  "P4_experiment_restart": false,
+  "previous_freeze_unchanged": "docs/validation/p6-context-budget/SPEC-FROZEN.json"
+}

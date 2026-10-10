@@ -111,10 +111,10 @@ def evaluate(directory,cache,python):
         with tempfile.TemporaryDirectory(prefix='p6-context-recompute-') as temp:
             tree=Path(temp)
             with tarfile.open(fileobj=io.BytesIO(archive)) as source:source.extractall(tree,filter='data')
-            frozen=load(tree/'docs/validation/p6-context-budget/SPEC-FROZEN.json')
+            frozen=load(tree/'docs/validation/p6-context-budget/v2/SPEC-FROZEN.json')
             for f in frozen['files']:
                 data=(tree/f['path']).read_bytes();require(len(data)==f['bytes'] and shared.digest(data)==f['sha256'],'Context spec freeze drift')
-            require((tree/'docs/validation/p6-context-budget/acceptance-matrix.v1.json').read_bytes()==(directory/'matrix.json').read_bytes(),'frozen matrix drift')
+            require((tree/'docs/validation/p6-context-budget/v2/acceptance-matrix.v2.json').read_bytes()==(directory/'matrix.json').read_bytes(),'frozen matrix drift')
             code='import sys,json;sys.path.insert(0,sys.argv[1]);from jasmine_core.context.tokens import Tokenizer;t=Tokenizer(cache_dir=sys.argv[2]);print(json.dumps({"identity":t.identity,"counts":[t.count(s) for s in json.load(sys.stdin)]}))'
             packs=[c['pack'] for c in raw['cases'] if c['id'] in ('CB01','CB02','CB05')]
             counted=subprocess.run([str(python),'-I','-c',code,str(tree/'src'),str(cache)],input=json.dumps([p['rendered_content'] for p in packs]),capture_output=True,text=True,timeout=30)
@@ -202,7 +202,7 @@ def evaluate(directory,cache,python):
                             if d['kind']=='invalid': require(dom['invalid'] and dom['alerts'],'local invalid not shown')
                             elif d['kind']=='pending': require(dom['pending'] and all(n['body']['error']['code']=='proxy_path_not_allowed' for n in target),'proxy pending conflated')
                             else:
-                                code='forbidden_scope' if ident=='CB06' else 'not_found'
+                                code='forbidden_scope' if ident=='CB06' else 'context_not_found'
                                 require(dom['alerts'] and all(n['status']==d['status'] and n['body']['error']['code']==code and code in dom['text'] for n in target),'actual Core refusal not shown')
                     if d['refresh']:require(len([x for x in browser['clicks'] if x['id']==ident and x.get('text')=='从 Core 重新读取'])==1,'refresh not actual pointer click')
                     for n in target:

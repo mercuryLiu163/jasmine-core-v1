@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import io
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -15,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import checkpoint_negatives as shared
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = 'docs/validation/p6-context-budget'
+SPEC = 'docs/validation/p6-context-budget/v2'
 PYTHON = ROOT.parent / 'p6-03-integration/validation-runs/p6/realcore-toolchain/venv/bin/python3.13'
 CACHE = ROOT.parent / 'p6-03-integration/validation-runs/p6/realcore-toolchain/tiktoken-cache'
 write = shared.write
@@ -54,6 +55,7 @@ def run(args):
            'native_injection_claimed': False, 'failed_build_dashboard_receipt': 'UNAVAILABLE_EXISTING_CONTRACT',
            'P4_experiment_restart': False}
     client = None
+    frozen_gate = None
     try:
         candidate = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', args.ref], text=True).strip()
         archive_bytes = subprocess.check_output(['git', '-C', str(ROOT), 'archive', '--format=tar', candidate])
@@ -62,7 +64,11 @@ def run(args):
         (out / 'source.tar').write_bytes(archive_bytes)
         for path in ['scripts/p6/context_budget_run.py', 'scripts/p6/context_budget_gate.py', 'scripts/p6/context_budget_browser.mjs']:
             if (ROOT/path).read_bytes() != (archive/path).read_bytes(): raise RuntimeError('launcher/archive drift')
-        matrix = json.loads((archive / SPEC / 'acceptance-matrix.v1.json').read_text())
+        for path in ['scripts/p6/checkpoint_negatives.py','scripts/p6/checkpoint_negative_gate.py']:
+            if (ROOT/path).read_bytes() != (archive/path).read_bytes(): raise RuntimeError('helper/archive drift')
+        module_spec=importlib.util.spec_from_file_location('context_budget_frozen_gate',archive/'scripts/p6/context_budget_gate.py')
+        frozen_gate=importlib.util.module_from_spec(module_spec);module_spec.loader.exec_module(frozen_gate)
+        matrix = json.loads((archive / SPEC / 'acceptance-matrix.v2.json').read_text())
         write(out / 'matrix.json', matrix)
         raw.update(candidate_commit=candidate, source_tree=subprocess.check_output(['git','-C',str(ROOT),'rev-parse',candidate+'^{tree}'],text=True).strip(), source_archive_sha256=digest(archive_bytes), matrix_sha256=digest((out/'matrix.json').read_bytes()))
         workspace = private / 'workspace'; workspace.mkdir(); (workspace/'input.txt').write_text('private Context budget fixture\n')
@@ -102,8 +108,7 @@ def run(args):
         case('CB05',f3,old,old_pack,replay=replay,admission=check)
         for ident,kind in [('CB06','error'),('CB07','pending'),('CB08','invalid'),('CB09','error')]:
             case(ident,f1,pack=p1,kind=kind)
-        from context_budget_gate import ids_in_source
-        absent=ids_in_source(archive,'ctx')
+        absent=frozen_gate.ids_in_source(archive,'ctx')
         raw['cases'][-1]['absent_id']=absent
         # Successful source/command reads are real Core responses, independently auditable.
         for c in raw['cases']:
@@ -138,8 +143,8 @@ def run(args):
         shutil.rmtree(private,ignore_errors=True);raw['private_runtime_removed']=not private.exists()
         write(out/'raw-result.json',raw)
     # Qualification uses the unchanged installed library and the copied offline asset.
-    from context_budget_gate import evaluate
-    result=evaluate(out,args.cache,args.python);write(out/'result.json',result)
+    result=frozen_gate.evaluate(out,args.cache,args.python) if frozen_gate else {'status':'BLOCKED','reason':raw.get('error'),'counts':{'PASS':0,'FAIL':0,'BLOCKED':9}}
+    write(out/'result.json',result)
     files=[{'path':p.relative_to(out).as_posix(),'bytes':p.stat().st_size,'sha256':digest(p.read_bytes())}for p in sorted(out.rglob('*'))if p.is_file() and p.name!='manifest.json']
     write(out/'manifest.json',{'candidate_commit':raw.get('candidate_commit'),'source_archive_sha256':raw.get('source_archive_sha256'),'files':files})
     print(json.dumps({'status':result['status'],'counts':result['counts'],'error':raw.get('error')}))
