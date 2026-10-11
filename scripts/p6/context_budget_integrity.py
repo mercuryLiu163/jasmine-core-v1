@@ -132,6 +132,66 @@ def scalar_columns(row, pack):
         else:require(value==pack[key],'F01 Context scalar column differs '+key)
 
 
+def creation_relation(before, after, item, response, payload, actor, checkpoint):
+    """One complete production creation contract, shared by Context/Checkpoint."""
+    from jasmine_core import SCHEMA_VERSION, clock, ids
+    from jasmine_core.canonical import sha256_hex
+    from jasmine_core.models import NewEvent
+    body=item['body'];http=item['http']
+    kind='checkpoint' if checkpoint else 'context'
+    column=kind+'_id' if checkpoint else 'context_pack_id'
+    table='checkpoint_request_keys' if checkpoint else 'context_request_keys'
+    identity={'actor_id':actor['actor_id'],'actor_kind':actor['kind'],'host_id':body['host_id'],
+              'project_id':response['projection']['project_id'],'task_id':body['task_id'],
+              'session_id':body.get('session_id')}
+    event=after.execute('SELECT * FROM events WHERE event_id=?',(response['command_event_id'],)).fetchone()
+    require(event is not None,'creation command absent')
+    require(ids.is_id(response[column],'ckp' if checkpoint else 'ctx') and
+            ids.is_id(event['event_id'],'evt'),'creation identifier shape differs')
+    source='core-continuity' if checkpoint else 'core-context'
+    typ='checkpoint.created' if checkpoint else 'context.built'
+    require(set(event.keys())=={'event_id','seq','schema_version','event_type','source_system',
+            'source_event_id','occurred_at','recorded_at','actor_id','actor_kind','host_id',
+            'session_id','project_id','task_id','payload_json','body_sha256'},
+            'creation command envelope shape differs')
+    require(event['schema_version']==SCHEMA_VERSION and event['event_type']==typ and
+            event['source_system']==source and event['source_event_id'] is None and
+            json.loads(event['payload_json'])==payload,'creation command envelope/source/payload differs')
+    for key,value in identity.items():
+        require(event[key]==value,'creation registered command identity differs '+key)
+        if key!='actor_kind':require(response[key]==value,'creation response/request identity differs '+key)
+    start=http['started_at_unix'];end=http['finished_at_unix']
+    created=clock.parse_rfc3339(response['created_at']);occurred=clock.parse_rfc3339(event['occurred_at'])
+    recorded=clock.parse_rfc3339(event['recorded_at'])
+    require(start<=created.timestamp()<=occurred.timestamp()<=recorded.timestamp()<=end,
+            'creation command/result outside actual request window')
+    require(event['seq']==before.execute('SELECT COALESCE(MAX(seq),0)+1 FROM events').fetchone()[0],
+            'creation command sequence differs from before snapshot')
+    spec=NewEvent(event_type=typ,source_system=source,payload=payload,occurred_at=occurred,
+                  event_id=event['event_id'],**identity)
+    require(event['body_sha256']==spec.digest(),'creation command production body digest differs')
+    hashed=sha256_hex({'body':body,'task_id':body['task_id']}) if checkpoint else sha256_hex(body)
+    expected={'actor_id':actor['actor_id'],'idempotency_key':body['idempotency_key'],
+              'request_hash':hashed,column:response[column]}
+    previous=[dict(r) for r in before.execute('SELECT * FROM '+table)]
+    current=[dict(r) for r in after.execute('SELECT * FROM '+table)]
+    require(all(r in current for r in previous) and
+            [r for r in current if r not in previous]==[expected],
+            'creation request key/actor/hash/result mapping differs')
+
+
+def original_source(before, item, actor):
+    from jasmine_core import SCHEMA_VERSION
+    from jasmine_core.continuity_source import source_for_task
+    body=item['body']
+    caller,source,task=source_for_task(before,source_event_id=body['source_event_id'],
+        task_id=body['task_id'],host_id=body['host_id'],actor_id=actor['actor_id'],
+        session_id=body.get('session_id'),current_step_id=body.get('current_step_id'),schema_version=SCHEMA_VERSION)
+    require(caller==actor and actor['home_host_id']==body['host_id'],
+            'creation registered caller/request host differs')
+    return source,task
+
+
 def production_check(item):
     from jasmine_core.task_snapshot import read_task_snapshot
     from jasmine_core.continuity import ContinuityStore,compare_checkpoint
@@ -147,14 +207,25 @@ def production_check(item):
         if item['kind']=='checkpoint':
             response=item['checkpoint'];row=after.execute('SELECT * FROM checkpoints WHERE checkpoint_id=?',(response['checkpoint_id'],)).fetchone()
             require(row is not None and ContinuityStore(after,schema_version=12).get_checkpoint(response['checkpoint_id'])==response,'F04 Checkpoint response differs from actual DB')
-            require(response['note']==body['note'] and response['source_event_id']==body['source_event_id'],'F04 Checkpoint note/request/source differs')
+            require(response['note']==body.get('note') and response['source_event_id']==body['source_event_id'] and
+                    response['reason']==body['reason'],'F04 Checkpoint note/reason/request/source differs')
             require(response['projection']==snapshot['truth_projection'] and response['full_context_digest']==snapshot['truth_digest']==response['projection_digest'],'F04 Checkpoint projection differs from build-before Truth')
             event=after.execute('SELECT * FROM events WHERE event_id=?',(response['command_event_id'],)).fetchone()
-            expected={'text':'','checkpoint_id':response['checkpoint_id'],'truth_digest':snapshot['truth_digest'],'reason':body['reason'],'trigger_provenance':response['trigger_provenance'],'source_event_id':body['source_event_id']}
-            require(event is not None and event['event_type']=='checkpoint.created' and json.loads(event['payload_json'])==expected and event['actor_id']==response['actor_id'],'F04 Checkpoint command differs')
             actor,_=credential(item['after'],item['http'])
-            from jasmine_core.continuity_source import source_for_task
-            _,source,_=source_for_task(before,source_event_id=body['source_event_id'],task_id=body['task_id'],host_id=body['host_id'],actor_id=actor['actor_id'],session_id=body.get('session_id'),schema_version=12)
+            source,task=original_source(before,item,actor)
+            from jasmine_core.continuity_source import source_for_task,verified_transition
+            provenance={'level':'UNVERIFIED_REQUEST','source_event_id':source['event_id']}
+            if body['reason']=='STEP_VERIFIED':provenance=verified_transition(before,source,body.get('current_step_id'))
+            require(response['trigger_provenance']==provenance,'F04 original trigger provenance differs')
+            if body.get('note'):
+                source_for_task(before,source_event_id=body['note']['source_event_id'],task_id=body['task_id'],
+                    host_id=body['host_id'],actor_id=actor['actor_id'],schema_version=12)
+            require(response['projection_version']==snapshot['truth_projection']['snapshot_schema'] and
+                    response['task_revision']==task['revision'] and
+                    response['workspace_digest']==sha256_hex(response['workspace']),
+                    'F04 Checkpoint row revision/version/workspace digest differs')
+            expected={'text':'','checkpoint_id':response['checkpoint_id'],'truth_digest':snapshot['truth_digest'],'reason':body['reason'],'trigger_provenance':provenance,'source_event_id':body['source_event_id']}
+            require(event is not None and event['event_type']=='checkpoint.created' and json.loads(event['payload_json'])==expected and event['actor_id']==response['actor_id'],'F04 Checkpoint command differs')
             require(source is not None,'F04 original source absent')
             expected_identity={'actor_id':actor['actor_id'],'host_id':body['host_id'],'project_id':snapshot['truth_projection']['project_id'],'task_id':body['task_id'],'session_id':body.get('session_id')}
             require(actor['home_host_id']==body['host_id'],'F04 registered actor/request host differs')
@@ -162,9 +233,15 @@ def production_check(item):
                 require(response[key]==row[key]==event[key]==value,'F04 Checkpoint request/command identity differs '+key)
             for key in ('host_id','project_id','task_id','session_id'):
                 require(source[key]==expected_identity[key],'F04 original source/request identity differs '+key)
+            creation_relation(before,after,item,response,expected,actor,True)
             return
         workspace=pack['workspace'] if pack else {};comparison=compare_checkpoint(cp,snapshot['truth_projection'],workspace)
         if pack:
+            actor,_=credential(item['after'],item['http']);source,task=original_source(before,item,actor)
+            require(pack['source_event_id']==source['event_id'] and pack['reason']==body['reason'] and
+                    pack['current_step_id']==body.get('current_step_id') and
+                    pack['trigger_provenance']=={'level':'UNVERIFIED_REQUEST','source_event_id':source['event_id']},
+                    'F01 Context original request/provenance differs')
             require(pack['projection']==snapshot['truth_projection'] and pack['truth_digest']==snapshot['truth_digest'],'F01 pack differs from original Authority/build-before Truth')
             require(pack['selector']==snapshot['auxiliary'] and pack['resume_comparison']==comparison,'F04 selected Checkpoint/comparison differs')
             require(pack['workspace_digest']==sha256_hex(workspace) and pack['config_digest']==sha256_hex(pack['configuration']),'F01 workspace/config digest differs')
@@ -175,6 +252,7 @@ def production_check(item):
             payload={'text':'','context_pack_id':pack['context_pack_id'],'source_event_id':pack['source_event_id'],'truth_digest':pack['truth_digest'],'rendered_sha256':pack['rendered_sha256'],'config_digest':pack['config_digest'],'token_count':pack['token_count']}
             require(event is not None and event['event_type']=='context.built' and json.loads(event['payload_json'])==payload,'F01 immutable Context command digest/count differs')
             for key in ('actor_id','host_id','project_id','task_id','session_id'):require(event[key]==pack[key],'F01 Context command identity differs')
+            creation_relation(before,after,item,pack,payload,actor,False)
         else:
             try:render(snapshot['truth_projection'],comparison,cp,{'status':'not_configured','selected':[]},tokenizer,source_event_id=body['source_event_id'])
             except RenderOverflow as exc:require(exc.code==item['error']['code'] and exc.details==item['error']['details'],'F01 mandatory overflow differs from actual Authority')

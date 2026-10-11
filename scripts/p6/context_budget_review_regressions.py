@@ -52,6 +52,18 @@ RESIDUALS = [
     ('checkpoint_identity_'+role+'_'+field,'R03') for role in ('response','command')
     for field in ('host_id','actor_id','project_id','task_id','session_id')
 ] + [('negative_then_affirmative','R04')]
+COMPLETE_RELATIONS = [
+    ('complete_relations_audit_'+role+'_'+field,'R05')
+    for role in ('operation','browser')
+    for field in ('empty_body','disconnected_body','count','borrowed_earlier_body',
+                  'wrong_selected','query_filter','query_cardinality','window')
+] + [
+    ('complete_relations_creation_'+role+'_'+field,'R06')
+    for role in ('checkpoint','context')
+    for field in ('actor_kind','source_system','source_event_id','schema_version',
+                  'body_sha256','timewindow','seq','key_actor','key_idempotency',
+                  'key_hash','key_result')
+]
 POSITIVES = [('honest_direct_negative','R04'),('historical_raw_claim','R01/R04')]
 
 
@@ -75,7 +87,70 @@ def change_DB(directory,table,where,args,updates):
 
 def mutation(directory,raw,calls,ident,cache):
     cb1=raw['cases'][0];cb2=raw['cases'][1]
-    if ident.startswith('metadata_claim_') or ident in ('honest_direct_negative','historical_raw_claim','negative_then_affirmative'):
+    if ident.startswith('complete_relations_audit_'):
+        role,field=ident.removeprefix('complete_relations_audit_').split('_',1)
+        op=cb2['checkpoint_operation']
+        h=op['audit_read'] if role=='operation' else raw['browser_audit']['http']
+        request=h['request_id'];updates={};body=copy.deepcopy(h['body'])
+        if field=='empty_body':body={'entries':[],'count':0}
+        elif field=='disconnected_body':
+            ids={op['http']['request_id']} if role=='operation' else {r['request_id'] for r in raw['browser_audit']['matching']}
+            body['entries']=[r for r in body['entries'] if r['request_id'] not in ids]
+            body['count']=len(body['entries'])
+        elif field=='count':body['count']+=1
+        elif field=='borrowed_earlier_body':body=copy.deepcopy(cb1['operation']['audit_read']['body'])
+        elif field=='wrong_selected':
+            selected=op['audit'] if role=='operation' else raw['browser_audit']['matching']
+            consumed={r['request_id'] for r in selected}
+            selected[:]=[copy.deepcopy(next(r for r in body['entries'] if r['request_id'] not in consumed))]
+        elif field=='query_filter':updates['path']='/v1/audit?limit=1000&actor_id=act_'+'0'*25+'1'
+        elif field=='query_cardinality':updates['path']=h['path']+'&limit=1000'
+        elif field=='window':
+            target=op['http'] if role=='operation' else cb1['operation']['http']
+            updates.update(started_at_unix=target['started_at_unix']-1,finished_at_unix=target['started_at_unix']-.5)
+        if field not in ('wrong_selected','query_filter','query_cardinality','window'):updates['body']=body
+        def alter(v):
+            if v.get('request_id')==request and 'request_body' in v and 'body' in v:v.update(copy.deepcopy(updates))
+        recurse(raw,alter);recurse(calls,alter)
+    elif ident.startswith('complete_relations_creation_'):
+        role,field=ident.removeprefix('complete_relations_creation_').split('_',1)
+        response=cb2['checkpoint_operation']['http']['body']['checkpoint'] if role=='checkpoint' else cb1['pack']
+        event=response['command_event_id'];column='checkpoint_id' if role=='checkpoint' else 'context_pack_id'
+        if field.startswith('key_'):
+            table='checkpoint_request_keys' if role=='checkpoint' else 'context_request_keys'
+            keyfield={'key_actor':'actor_id','key_idempotency':'idempotency_key','key_hash':'request_hash','key_result':column}[field]
+            value={'key_actor':'act_'+'0'*25+'1','key_idempotency':'synthetic-other-key','key_hash':'0'*64,
+                   'key_result':('ckp_' if role=='checkpoint' else 'ctx_')+'0'*25+'1'}[field]
+            def alter(v):
+                if v.get(column)==response[column] and 'request_hash' in v and 'idempotency_key' in v:v[keyfield]=value
+            recurse(raw,alter);recurse(calls,alter)
+            change_DB(directory,table,column+'=?',[response[column]],{keyfield:value})
+        else:
+            key='occurred_at' if field=='timewindow' else field
+            row=next(e for e in raw['before_browser']['events'] if e['event_id']==event)
+            value={'actor_kind':'SYNTHETIC_OTHER_KIND','source_system':'synthetic-other-source',
+                   'source_event_id':cb1['fixture']['source']['event_id'],'schema_version':row['schema_version']+1,
+                   'body_sha256':'0'*64,'timewindow':'2000-01-01T00:00:00Z','seq':row['seq']+100000}[field]
+            updates={key:value}
+            # Keep source/time mutations internally hashed; reject their relation.
+            if field in ('source_system','source_event_id','timewindow'):
+                from jasmine_core.canonical import body_hash
+                from jasmine_core.clock import parse_rfc3339
+                changed={**row,**updates}
+                hashfields={k:changed[k] for k in ('event_type','source_system','source_event_id','actor_id','host_id','session_id','project_id','task_id')}
+                hashfields['occurred_at']=parse_rfc3339(changed['occurred_at']).isoformat().replace('+00:00','Z')
+                hashfields['payload']=json.loads(changed['payload_json'])
+                updates['body_sha256']=body_hash(hashfields)
+            def alter(v):
+                if v.get('event_id')==event:v.update(copy.deepcopy(updates))
+            recurse(raw,alter);recurse(calls,alter);change_DB(directory,'events','event_id=?',[event],updates)
+        # Snapshots are canonically sorted physical rows. Altering a key or
+        # digest may change that order; preserve the snapshot representation.
+        def sort_snapshots(v):
+            for table in ('events','checkpoint_request_keys','context_request_keys'):
+                if isinstance(v.get(table),list):v[table].sort(key=a.shared.canonical)
+        recurse(raw,sort_snapshots);recurse(calls,sort_snapshots)
+    elif ident.startswith('metadata_claim_') or ident in ('honest_direct_negative','historical_raw_claim','negative_then_affirmative'):
         observations=raw['browser']['records'][0]['observations']
         selected=observations[:1] if ident=='metadata_claim_first' else observations[1:] if ident=='metadata_claim_refresh' else observations
         for o in selected:
@@ -207,7 +282,7 @@ def main(args):
     hashes={str(p.relative_to(original)):hashlib.sha256(p.read_bytes()).hexdigest() for p in original.rglob('*') if p.is_file()};records=[]
     sys.path.insert(0,str(ROOT/'src'))
     with tempfile.TemporaryDirectory(prefix='p6-context-review-regressions-') as temp:
-        for ident,family in ORIGINAL_EIGHT+EXTENSIONS+RESIDUALS+POSITIVES:
+        for ident,family in ORIGINAL_EIGHT+EXTENSIONS+RESIDUALS+COMPLETE_RELATIONS+POSITIVES:
             directory=Path(temp)/ident;shutil.copytree(original,directory)
             raw=json.loads((directory/'raw-result.json').read_text());calls=json.loads((directory/'http-calls.json').read_text())
             mutation(directory,raw,calls,ident,args.cache);a.sync(directory,raw);a.write(directory/'http-calls.json',calls)

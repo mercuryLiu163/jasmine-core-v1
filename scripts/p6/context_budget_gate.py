@@ -9,6 +9,7 @@ import sqlite3
 import sys
 import tarfile
 import tempfile
+from urllib.parse import urlsplit, parse_qs
 
 sys.path.insert(0,str(Path(__file__).resolve().parent))
 import checkpoint_negatives as shared
@@ -88,6 +89,53 @@ def http_identity(directory,h,observer,scope):
     return actor
 
 
+def audit_consumption(directory, h, phase, targets, matching, calls, observer):
+    """Bind the actual authorized response to the actions its consumer proves."""
+    require(h.get('phase')==phase and h in calls,'audit consumer role/receipt differs')
+    require(h['method']=='GET' and h['status']==200 and h['request_body'] is None,
+            'audit consumer method/outcome/body differs')
+    url=urlsplit(h['path']);query=parse_qs(url.query,keep_blank_values=True)
+    wanted={'limit':['1000']}
+    if phase=='separate-audit-validator':
+        require(len(targets)==1,'operation audit target cardinality differs')
+        wanted['actor_id']=[targets[0]['actor_id']]
+    require(url.path=='/v1/audit' and not url.scheme and not url.netloc and not url.fragment and query==wanted,
+            'audit consumer endpoint/filter differs')
+    http_identity(directory,h,observer,'admin')
+    own=audit_rows(directory/'after-audit.db',h['request_id'])[0]
+    # Core writes this GET's audit after producing its response. Reconstruct
+    # the actual bounded, ascending-seq query at that request, not today's tail.
+    physical=[]
+    for row in sealed_tables(directory/'after-audit.db')['audit_log']:
+        if row['seq']>=own['seq']:continue
+        if 'actor_id' in wanted and row['actor_id']!=wanted['actor_id'][0]:continue
+        row=dict(row);row['detail']=json.loads(row.pop('detail_json'));physical.append(row)
+    physical=sorted(physical,key=lambda r:r['seq'])[:1000]
+    require(h['body']=={'entries':physical,'count':len(physical)},
+            'audit response differs from physical query/window')
+    ids=[t['request_id'] for t in targets]
+    require(len(set(ids))==len(ids),'duplicate audit consumer targets')
+    selected=[r for r in physical if r['request_id'] in ids]
+    require(selected==matching and len(selected)==len(ids),
+            'audit response does not supply every consumed target')
+    for target in targets:
+        request=target['request_id'];window=[r for r in observer if r.get('request_id')==request]
+        require(window and window[0]['kind']=='request_start' and window[-1]['kind']=='request_end',
+                'audit target request window absent')
+        require(window[0]['method']==target['method'] and
+                window[0]['path']==target['path'].split('?')[0] and
+                window[-1]['status']==target['status'], 'audit target observer identity/outcome differs')
+        require(window[-1]['at_unix']<=h['started_at_unix']<=h['finished_at_unix'],
+                'audit read precedes consumed action')
+        expected=audit_rows(directory/'after-audit.db',request)
+        require(len(expected)==1 and [r for r in selected if r['request_id']==request]==expected,
+                'audit consumed target differs from physical row')
+        row=expected[0]
+        require((row['actor_id'],row['method'],row['path'],row['status_code'],row['error_code'])==
+                (target['actor_id'],target['method'],target['path'].split('?')[0],target['status'],
+                 target['body'].get('error',{}).get('code')),'audit consumed action identity/outcome differs')
+
+
 def operation(directory,op):
     name=op['operation_receipt'];require(load(directory/name)==op,'operation receipt differs')
     expected=[name.removesuffix('-operation.json')+'-'+phase+'.db' for phase in ('before','after')]
@@ -145,6 +193,10 @@ def evaluate(directory,cache,python):
             frozen=load(tree/'docs/validation/p6-context-budget/v2/SPEC-FROZEN.json')
             for f in frozen['files']:
                 data=(tree/f['path']).read_bytes();require(len(data)==f['bytes'] and shared.digest(data)==f['sha256'],'Context spec freeze drift')
+            relations=load(tree/'docs/validation/p6-context-budget/REPAIR-COMPLETE-RELATIONS-FROZEN.json')
+            for f in relations['files']:
+                data=(tree/f['path']).read_bytes()
+                require(len(data)==f['bytes'] and shared.digest(data)==f['sha256'],'complete relations contract freeze drift')
             require((tree/'docs/validation/p6-context-budget/v2/acceptance-matrix.v2.json').read_bytes()==(directory/'matrix.json').read_bytes(),'frozen matrix drift')
             observer_witness(observer,tree,raw['cleanup'])
             code='import sys,json;sys.path.insert(0,sys.argv[1]);from jasmine_core.context.tokens import Tokenizer;t=Tokenizer(cache_dir=sys.argv[2]);print(json.dumps({"identity":t.identity,"counts":[t.count(s) for s in json.load(sys.stdin)]}))'
@@ -179,16 +231,25 @@ def evaluate(directory,cache,python):
             if h.get('phase') in ('separate-audit-validator','browser-authorized-audit','source-command-readback'):
                 require(h['method']=='GET' and h['status']==200,'F03 authorized readback method/outcome differs')
                 http_identity(directory,h,observer,'events:read' if h['phase']=='source-command-readback' else 'admin')
-        def admin_readback(h,phase):
-            require(h.get('phase')==phase,'F03 admin readback consumer phase differs')
-            require(h['method']=='GET' and h['status']==200,'F03 admin readback consumer method/outcome differs')
-            require(h in calls,'F03 admin readback consumer absent from calls')
-            http_identity(directory,h,observer,'admin')
-        admin_readback(raw['browser_audit']['http'],'browser-authorized-audit')
+        browser_targets=[]
+        definitions={c['id']:c.get('browser_definition') for c in raw['cases']}
+        observed={e.get('request_id') for e in observer if e.get('kind')=='request_start'}
+        # Include bootstrap and stale-route requests too. Proxy-only refusals
+        # have no Core request window and therefore no Core audit obligation.
+        for n in browser['network']:
+            if n['request_id'] not in observed:continue
+            d=definitions[n['id']]
+            require(d is not None,'browser audit credential definition absent')
+            actor,_=credential(directory/'after-audit.db',d['key_metadata'])
+            public=n['path'].split('?')[0] in ('/v1/health','/v1/meta/schema')
+            browser_targets.append({**n,'actor_id':None if public else actor['actor_id']})
+        audit_consumption(directory,raw['browser_audit']['http'],'browser-authorized-audit',
+                          browser_targets,raw['browser_audit']['matching'],calls,observer)
         for c in raw['cases']:
             for field in ('operation','checkpoint_operation','replay','admission'):
                 op=c.get(field)
-                if op:admin_readback(op['audit_read'],'separate-audit-validator')
+                if op:audit_consumption(directory,op['audit_read'],'separate-audit-validator',
+                                        [op['http']],op['audit'],calls,observer)
         for c in raw['cases']:
             gates={};ident=c['id']
             try:
