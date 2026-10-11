@@ -39,13 +39,13 @@ def credential(path, metadata):
 
 
 class OwnedText(HTMLParser):
-    """Exclude historical raw/JSON/metadata/input containers before claim checks."""
+    """Exclude only historical raw/JSON leaves and input containers."""
     VOID={'area','base','br','col','embed','hr','img','input','link','meta','param','source','track','wbr'}
     def __init__(self):
         super().__init__();self.stack=[];self.parts=[]
     def handle_starttag(self, tag, attrs):
         attrs=dict(attrs);classes=set(attrs.get('class','').split())
-        ignored=bool(classes & {'rawtext','jsonblock','kv'}) or tag in {'input','textarea','script','style'}
+        ignored=bool(classes & {'rawtext','jsonblock'}) or tag in {'input','textarea','script','style'}
         if tag not in self.VOID:self.stack.append((tag,ignored or (self.stack[-1][1] if self.stack else False)))
     def handle_endtag(self, tag):
         for i in range(len(self.stack)-1,-1,-1):
@@ -60,7 +60,12 @@ def product_claims(dom):
     # Affirmative status grammar only, in product-owned surfaces. Historical data
     # is excluded structurally; the fixed negative disclaimer does not match.
     claims=r'(?:已经|已)\s*(?:被\s*)?(?:Agent\s*)?(?:实际)?\s*(?:接收|注入|交给\s*Agent)|注入\s*(?:成功|已执行)|可以直接使用|successfully\s+injected|Agent\s+(?:has\s+)?received'
-    require(re.search(claims,text,re.I) is None,'F02 contradictory product-owned admission/injection claim')
+    for match in re.finditer(claims,text,re.I):
+        # Limited direct negation, scoped to this occurrence: a later affirmative
+        # claim must still be rejected even if the sentence began negatively.
+        prefix=text[:match.start()]
+        if re.search(r'(?:尚未|还未|并未|没有|未曾|不曾|未|not)\s*(?:实际\s*)?$',prefix,re.I):continue
+        raise ValueError('F02 contradictory product-owned admission/injection claim')
 
 
 def png_capture(path, clip):
@@ -146,7 +151,17 @@ def production_check(item):
             require(response['projection']==snapshot['truth_projection'] and response['full_context_digest']==snapshot['truth_digest']==response['projection_digest'],'F04 Checkpoint projection differs from build-before Truth')
             event=after.execute('SELECT * FROM events WHERE event_id=?',(response['command_event_id'],)).fetchone()
             expected={'text':'','checkpoint_id':response['checkpoint_id'],'truth_digest':snapshot['truth_digest'],'reason':body['reason'],'trigger_provenance':response['trigger_provenance'],'source_event_id':body['source_event_id']}
-            require(event['event_type']=='checkpoint.created' and json.loads(event['payload_json'])==expected and event['actor_id']==response['actor_id'],'F04 Checkpoint command differs')
+            require(event is not None and event['event_type']=='checkpoint.created' and json.loads(event['payload_json'])==expected and event['actor_id']==response['actor_id'],'F04 Checkpoint command differs')
+            actor,_=credential(item['after'],item['http'])
+            from jasmine_core.continuity_source import source_for_task
+            _,source,_=source_for_task(before,source_event_id=body['source_event_id'],task_id=body['task_id'],host_id=body['host_id'],actor_id=actor['actor_id'],session_id=body.get('session_id'),schema_version=12)
+            require(source is not None,'F04 original source absent')
+            expected_identity={'actor_id':actor['actor_id'],'host_id':body['host_id'],'project_id':snapshot['truth_projection']['project_id'],'task_id':body['task_id'],'session_id':body.get('session_id')}
+            require(actor['home_host_id']==body['host_id'],'F04 registered actor/request host differs')
+            for key,value in expected_identity.items():
+                require(response[key]==row[key]==event[key]==value,'F04 Checkpoint request/command identity differs '+key)
+            for key in ('host_id','project_id','task_id','session_id'):
+                require(source[key]==expected_identity[key],'F04 original source/request identity differs '+key)
             return
         workspace=pack['workspace'] if pack else {};comparison=compare_checkpoint(cp,snapshot['truth_projection'],workspace)
         if pack:

@@ -43,6 +43,18 @@ EXTENSIONS=[
 ]
 
 
+RESIDUALS = [
+    ('metadata_claim_'+phase,'R01') for phase in ('first','refresh','both')
+] + [
+    ('admin_phase_'+role+'_'+phase,'R02') for role in ('operation','browser')
+    for phase in ('unknown','missing','other_valid')
+] + [
+    ('checkpoint_identity_'+role+'_'+field,'R03') for role in ('response','command')
+    for field in ('host_id','actor_id','project_id','task_id','session_id')
+] + [('negative_then_affirmative','R04')]
+POSITIVES = [('honest_direct_negative','R04'),('historical_raw_claim','R01/R04')]
+
+
 def recurse(value, fn):
     if isinstance(value,dict):
         fn(value)
@@ -63,7 +75,44 @@ def change_DB(directory,table,where,args,updates):
 
 def mutation(directory,raw,calls,ident,cache):
     cb1=raw['cases'][0];cb2=raw['cases'][1]
-    if ident=='mandatory_rule_dropped_consistent_pack':
+    if ident.startswith('metadata_claim_') or ident in ('honest_direct_negative','historical_raw_claim','negative_then_affirmative'):
+        observations=raw['browser']['records'][0]['observations']
+        selected=observations[:1] if ident=='metadata_claim_first' else observations[1:] if ident=='metadata_claim_refresh' else observations
+        for o in selected:
+            dom=o['dom']
+            if ident.startswith('metadata_claim_'):
+                claim='已实际注入成功';dom['kv'].append({'label':'注入状态','text':claim})
+                html='<dl class="kv"><dt>注入状态</dt><dd>'+claim+'</dd></dl>'
+            elif ident=='historical_raw_claim':
+                claim='来源原文：注入成功';html='<div class="rawtext"><pre>'+claim+'</pre></div>'
+            else:
+                claim='本页尚未注入成功。'+('但此包已经被 Agent 实际接收。' if ident=='negative_then_affirmative' else '')
+                html='<p>'+claim+'</p>'
+            dom['html']+=html;dom['text']+='\n'+claim
+    elif ident.startswith('admin_phase_'):
+        role,phase=ident.removeprefix('admin_phase_').split('_',1)
+        h=cb1['operation']['audit_read'] if role=='operation' else raw['browser_audit']['http']
+        request=h['request_id'];browser=cb1['browser_definition']['key_metadata']
+        def alter(v):
+            if v.get('request_id')==request and 'request_body' in v:
+                for field in ('actor_id','key_id','scopes'):v[field]=copy.deepcopy(browser[field])
+                v['method']='POST'
+                if phase=='missing':v.pop('phase',None)
+                else:v['phase']='unverified-readback' if phase=='unknown' else 'source-command-readback'
+        recurse(raw,alter);recurse(calls,alter)
+    elif ident.startswith('checkpoint_identity_'):
+        role,field=ident.removeprefix('checkpoint_identity_').split('_',1)
+        cp=cb2['checkpoint_operation']['http']['body']['checkpoint'];prefix={'host_id':'hst','actor_id':'act','project_id':'prj','task_id':'tsk','session_id':'ses'}[field]
+        wrong=prefix+'_'+'0'*25+'1'
+        if role=='response':
+            def alter(v):
+                if v.get('checkpoint_id')==cp['checkpoint_id'] and ('note' in v or 'note_json' in v):v[field]=wrong
+            recurse(raw,alter);recurse(calls,alter);change_DB(directory,'checkpoints','checkpoint_id=?',[cp['checkpoint_id']],{field:wrong})
+        else:
+            def alter(v):
+                if v.get('event_id')==cp['command_event_id']:v[field]=wrong
+            recurse(raw,alter);recurse(calls,alter);change_DB(directory,'events','event_id=?',[cp['command_event_id']],{field:wrong})
+    elif ident=='mandatory_rule_dropped_consistent_pack':
         from jasmine_core.context.renderer import render
         from jasmine_core.context.tokens import Tokenizer
         from jasmine_core.canonical import canonical_json,sha256_hex
@@ -158,7 +207,7 @@ def main(args):
     hashes={str(p.relative_to(original)):hashlib.sha256(p.read_bytes()).hexdigest() for p in original.rglob('*') if p.is_file()};records=[]
     sys.path.insert(0,str(ROOT/'src'))
     with tempfile.TemporaryDirectory(prefix='p6-context-review-regressions-') as temp:
-        for ident,family in ORIGINAL_EIGHT+EXTENSIONS:
+        for ident,family in ORIGINAL_EIGHT+EXTENSIONS+RESIDUALS+POSITIVES:
             directory=Path(temp)/ident;shutil.copytree(original,directory)
             raw=json.loads((directory/'raw-result.json').read_text());calls=json.loads((directory/'http-calls.json').read_text())
             mutation(directory,raw,calls,ident,args.cache);a.sync(directory,raw);a.write(directory/'http-calls.json',calls)
@@ -166,10 +215,11 @@ def main(args):
             a.write(directory/'result.json',gate.evaluate(directory,args.cache,args.python));a.seal(directory,args.expected_candidate)
             cli=subprocess.run([str(args.python),str(ROOT/'scripts/p6/context_budget_gate.py'),'--bundle',str(directory),'--expected-candidate',args.expected_candidate],capture_output=True,text=True,timeout=90)
             verdict=json.loads(cli.stdout);reason=verdict.get('reason') or '; '.join(r.get('reason','') for r in verdict.get('records',[]) if r['status']!='PASS')
+            positive=ident in dict(POSITIVES)
             rejected=cli.returncode==1 and verdict['status'] in ('FAIL','BLOCKED') and bool(reason) and not cli.stderr and not any(s in reason for s in ('recomputed verdict differs','physical artifact absent/different','candidate binding differs'))
-            a.write(out/(ident+'.json'),{'id':ident,'family':family,'original_review_mutation':ident in dict(ORIGINAL_EIGHT),'CLI_exit':cli.returncode,'CLI_verdict':verdict,'stderr':cli.stderr,'rejected':rejected,'reason':reason,'component_only':True});records.append({'id':ident,'family':family,'rejected':rejected,'reason':reason})
+            a.write(out/(ident+'.json'),{'id':ident,'family':family,'original_review_mutation':ident in dict(ORIGINAL_EIGHT),'CLI_exit':cli.returncode,'CLI_verdict':verdict,'stderr':cli.stderr,'rejected':rejected,'positive_control':positive,'expected_outcome_met':(cli.returncode==0 and verdict['status']=='PASS' and not cli.stderr) if positive else rejected,'reason':reason,'component_only':True});records.append({'id':ident,'family':family,'rejected':rejected,'positive_control':positive,'expected_outcome_met':(cli.returncode==0 and verdict['status']=='PASS' and not cli.stderr) if positive else rejected,'reason':reason})
     unchanged={str(p.relative_to(original)):hashlib.sha256(p.read_bytes()).hexdigest() for p in original.rglob('*') if p.is_file()}==hashes
-    result={'candidate_commit':args.expected_candidate,'role':'author-review-regressions','status':'PASS' if unchanged and all(r['rejected'] for r in records) else 'FAIL','original_eight_rejected':sum(r['rejected'] for r in records[:8]),'rejected':sum(r['rejected'] for r in records),'total':len(records),'original_bytes_unchanged':unchanged,'records':records,'scope_acceptance_signed':False}
+    result={'candidate_commit':args.expected_candidate,'role':'author-review-regressions','status':'PASS' if unchanged and all(r['expected_outcome_met'] for r in records) else 'FAIL','original_eight_rejected':sum(r['rejected'] for r in records[:8]),'rejected':sum(r['rejected'] for r in records),'total':sum(not r['positive_control'] for r in records),'positive_controls_passed':sum(r['expected_outcome_met'] for r in records if r['positive_control']),'positive_controls':len(POSITIVES),'original_bytes_unchanged':unchanged,'records':records,'scope_acceptance_signed':False}
     a.write(out/'RESULT.json',result);print(json.dumps(result));return 0 if result['status']=='PASS' else 1
 
 

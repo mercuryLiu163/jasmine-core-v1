@@ -64,6 +64,8 @@ def budget_proof(dom,p):
         require(normalized(budget['omissions'])==headline+''.join(r['text'] for r in expected) and budget['no_omissions'] is None,'exact visible omission count/boundary differs')
     else:require(budget['omissions'] is None and budget['no_omissions']=='Core 记录中没有 optional_budget 省略项；其他原因见 omissions 原件。','false optional omission outcome')
     require(dom['alerts']==([budget['omissions']] if omissions else []),'F02 unexpected product-owned alert')
+    labels=['context_pack_id','reason','required scope','scope','actor / host','source Event','command Event','created_at','current_step_id','trigger_provenance','digests']
+    require([x['label'] for x in dom['kv']]==labels,'F02 unexpected Context status/metadata fields')
     kv={x['label']:normalized(x['text']) for x in dom['kv']}
     for label,value in {'context_pack_id':p['context_pack_id'],'reason':p['reason'],'actor / host':p['actor_id']+' · '+p['host_id'],'created_at':format_timestamp(p['created_at']),'scope':p['project_id']+' · '+p['task_id']+(' · session '+p['session_id'] if p['session_id'] else ' · 无 session')}.items():
         require(sum(x['label']==label for x in dom['kv'])==1 and kv[label]==value,'exact Context metadata differs '+label)
@@ -159,7 +161,7 @@ def evaluate(directory,cache,python):
                     receipt_name='CB05-old' if name=='CB05' else name
                     expected_db=['core/'+receipt_name+'-'+phase+'.db' for phase in ('before','after')]
                     require(op['database_receipts']==expected_db,'F01/F04 named build-before DB role differs')
-                    truth_inputs.append({'id':name,'kind':'checkpoint' if field=='checkpoint_operation' else 'context','before':str(directory.resolve()/op['database_receipts'][0]),'after':str(directory.resolve()/op['database_receipts'][1]),'body':h['request_body'],'cache':str(cache),'pack':c['pack'] if field=='operation' else None,'checkpoint':h['body'].get('checkpoint'),'error':h['body'].get('error')})
+                    truth_inputs.append({'id':name,'kind':'checkpoint' if field=='checkpoint_operation' else 'context','before':str(directory.resolve()/op['database_receipts'][0]),'after':str(directory.resolve()/op['database_receipts'][1]),'body':h['request_body'],'http':h,'cache':str(cache),'pack':c['pack'] if field=='operation' else None,'checkpoint':h['body'].get('checkpoint'),'error':h['body'].get('error')})
             checked=subprocess.run([str(python),'-I',str(tree/'scripts/p6/context_budget_integrity.py'),'--source',str(tree/'src')],input=json.dumps(truth_inputs),capture_output=True,text=True,timeout=60)
             require(checked.returncode==0 and not checked.stderr,'production Truth qualification unavailable: '+checked.stderr)
             truth=json.loads(checked.stdout)
@@ -174,14 +176,19 @@ def evaluate(directory,cache,python):
         calls=load(directory/'http-calls.json');required=['source.tar','matrix.json','raw-result.json','browser.json','browser-requests.jsonl','click-trace.jsonl','http-calls.json','observer.jsonl','before-browser.db','after-browser.db','after-audit.db']
         require(sealed_snapshot(directory/'after-audit.db')==raw['after_browser'],'F03 authorized audit read mutated business/history')
         for h in calls:
-            if h['phase'] in ('separate-audit-validator','browser-authorized-audit','source-command-readback'):
+            if h.get('phase') in ('separate-audit-validator','browser-authorized-audit','source-command-readback'):
                 require(h['method']=='GET' and h['status']==200,'F03 authorized readback method/outcome differs')
                 http_identity(directory,h,observer,'events:read' if h['phase']=='source-command-readback' else 'admin')
-        require(raw['browser_audit']['http'] in calls,'F03 authorized browser audit HTTP receipt differs')
+        def admin_readback(h,phase):
+            require(h.get('phase')==phase,'F03 admin readback consumer phase differs')
+            require(h['method']=='GET' and h['status']==200,'F03 admin readback consumer method/outcome differs')
+            require(h in calls,'F03 admin readback consumer absent from calls')
+            http_identity(directory,h,observer,'admin')
+        admin_readback(raw['browser_audit']['http'],'browser-authorized-audit')
         for c in raw['cases']:
             for field in ('operation','checkpoint_operation','replay','admission'):
                 op=c.get(field)
-                if op:require(op['audit_read'] in calls,'F03 separate admin audit readback differs')
+                if op:admin_readback(op['audit_read'],'separate-audit-validator')
         for c in raw['cases']:
             gates={};ident=c['id']
             try:

@@ -1,0 +1,28 @@
+{
+  "status": "FROZEN_AUTHOR_REPAIR_CONTRACT",
+  "previous_candidate": "3747ce1d4d5506e4b041c60b9d8025de5c85f9eb",
+  "scenarios": 9,
+  "gates": 36,
+  "focused_tests": 31,
+  "existing_adversaries": 19,
+  "review_adversaries": 43,
+  "positive_controls": 2,
+  "scope_acceptance_signed": false,
+  "files": [
+    {
+      "path": "docs/validation/p6-context-budget/REPAIR-CONTRACT-R01-R04.md",
+      "bytes": 1402,
+      "sha256": "f250207361f4d78342303a0b249b82f3557397132f3f97f4e73c75b23e37c79e"
+    },
+    {
+      "path": "scripts/p6/context_budget_review_regressions.py",
+      "bytes": 16754,
+      "sha256": "e175a4ee988693e94caed1a65d84ec30306ee03bc81aa256cdc5f7992c58898f"
+    },
+    {
+      "path": "tests/p6/test_context_budget_integrity.py",
+      "bytes": 8141,
+      "sha256": "3a9293721ba5d3fa6deead8a63cf157a448cfcf3cae871bff5d1df9f066f0327"
+    }
+  ]
+}

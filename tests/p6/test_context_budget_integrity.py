@@ -38,6 +38,20 @@ class IntegrityTests(unittest.TestCase):
         product_claims({'html':'<div class="jsonblock"><pre>{"text":"注入成功"}</pre></div>'})
     def test_F02_negative_statement_passes(self):
         product_claims({'html':'<p>重新读取不证明当前可注入。本页没有 Agent 实际接收回执，构建不等于注入。</p>'})
+    def test_R01_KV_status_claim_refused(self):
+        with self.assertRaisesRegex(ValueError,'F02'):product_claims({'html':'<dl class="kv"><dt>注入状态</dt><dd>已实际注入成功</dd></dl>'})
+    def test_R04_direct_negative_passes(self):
+        product_claims({'html':'<p>本页尚未注入成功。</p>'})
+    def test_R04_direct_negative_actual_passes(self):
+        product_claims({'html':'<p>还未实际注入成功。</p>'})
+    def test_R04_negative_then_positive_refused(self):
+        with self.assertRaisesRegex(ValueError,'F02'):product_claims({'html':'<p>尚未注入成功。但此包已实际注入成功。</p>'})
+    def test_R04_positive_then_negative_refused(self):
+        with self.assertRaisesRegex(ValueError,'F02'):product_claims({'html':'<p>此包已实际注入成功。另一包尚未注入成功。</p>'})
+    def test_R04_historical_quote_and_negative_pass(self):
+        product_claims({'html':'<p>本页尚未注入成功。</p><div class="rawtext"><pre>已实际注入成功</pre></div>'})
+    def test_R01_KV_negative_passes(self):
+        product_claims({'html':'<dl class="kv"><dt>说明</dt><dd>尚未注入成功</dd></dl>'})
     def image(self,data):
         p=self.root/'capture.png';p.write_bytes(data);return p
     def clip(self):return {'x':0,'y':0,'width':1400,'height':2,'scale':1}
