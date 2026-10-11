@@ -91,7 +91,7 @@ def http_identity(directory,h,observer,scope):
 
 def audit_consumption(directory, h, phase, targets, matching, calls, observer):
     """Bind the actual authorized response to the actions its consumer proves."""
-    require(h.get('phase')==phase and h in calls,'audit consumer role/receipt differs')
+    require(h.get('phase')==phase and shared.canonical(h) in [shared.canonical(c) for c in calls],'audit consumer role/receipt differs')
     require(h['method']=='GET' and h['status']==200 and h['request_body'] is None,
             'audit consumer method/outcome/body differs')
     url=urlsplit(h['path']);query=parse_qs(url.query,keep_blank_values=True)
@@ -111,12 +111,12 @@ def audit_consumption(directory, h, phase, targets, matching, calls, observer):
         if 'actor_id' in wanted and row['actor_id']!=wanted['actor_id'][0]:continue
         row=dict(row);row['detail']=json.loads(row.pop('detail_json'));physical.append(row)
     physical=sorted(physical,key=lambda r:r['seq'])[:1000]
-    require(h['body']=={'entries':physical,'count':len(physical)},
+    require(shared.canonical(h['body'])==shared.canonical({'entries':physical,'count':len(physical)}),
             'audit response differs from physical query/window')
     ids=[t['request_id'] for t in targets]
     require(len(set(ids))==len(ids),'duplicate audit consumer targets')
     selected=[r for r in physical if r['request_id'] in ids]
-    require(selected==matching and len(selected)==len(ids),
+    require(shared.canonical(selected)==shared.canonical(matching) and len(selected)==len(ids),
             'audit response does not supply every consumed target')
     for target in targets:
         request=target['request_id'];window=[r for r in observer if r.get('request_id')==request]
@@ -128,7 +128,7 @@ def audit_consumption(directory, h, phase, targets, matching, calls, observer):
         require(window[-1]['at_unix']<=h['started_at_unix']<=h['finished_at_unix'],
                 'audit read precedes consumed action')
         expected=audit_rows(directory/'after-audit.db',request)
-        require(len(expected)==1 and [r for r in selected if r['request_id']==request]==expected,
+        require(len(expected)==1 and shared.canonical([r for r in selected if r['request_id']==request])==shared.canonical(expected),
                 'audit consumed target differs from physical row')
         row=expected[0]
         require((row['actor_id'],row['method'],row['path'],row['status_code'],row['error_code'])==

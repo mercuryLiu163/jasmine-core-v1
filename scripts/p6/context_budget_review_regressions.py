@@ -56,7 +56,7 @@ COMPLETE_RELATIONS = [
     ('complete_relations_audit_'+role+'_'+field,'R05')
     for role in ('operation','browser')
     for field in ('empty_body','disconnected_body','count','borrowed_earlier_body',
-                  'wrong_selected','query_filter','query_cardinality','window')
+                  'wrong_selected','query_filter','query_cardinality','window','typed_count','typed_entry')
 ] + [
     ('complete_relations_creation_'+role+'_'+field,'R06')
     for role in ('checkpoint','context')
@@ -98,6 +98,8 @@ def mutation(directory,raw,calls,ident,cache):
             body['entries']=[r for r in body['entries'] if r['request_id'] not in ids]
             body['count']=len(body['entries'])
         elif field=='count':body['count']+=1
+        elif field=='typed_count':body['count']=float(body['count'])
+        elif field=='typed_entry':body['entries'][0]['seq']=float(body['entries'][0]['seq'])
         elif field=='borrowed_earlier_body':body=copy.deepcopy(cb1['operation']['audit_read']['body'])
         elif field=='wrong_selected':
             selected=op['audit'] if role=='operation' else raw['browser_audit']['matching']
@@ -108,7 +110,7 @@ def mutation(directory,raw,calls,ident,cache):
         elif field=='window':
             target=op['http'] if role=='operation' else cb1['operation']['http']
             updates.update(started_at_unix=target['started_at_unix']-1,finished_at_unix=target['started_at_unix']-.5)
-        if field not in ('wrong_selected','query_filter','query_cardinality','window'):updates['body']=body
+        if field not in ('wrong_selected','query_filter','query_cardinality','window','typed_count','typed_entry'):updates['body']=body
         def alter(v):
             if v.get('request_id')==request and 'request_body' in v and 'body' in v:v.update(copy.deepcopy(updates))
         recurse(raw,alter);recurse(calls,alter)

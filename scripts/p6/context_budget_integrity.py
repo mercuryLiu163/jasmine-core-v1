@@ -135,7 +135,7 @@ def scalar_columns(row, pack):
 def creation_relation(before, after, item, response, payload, actor, checkpoint):
     """One complete production creation contract, shared by Context/Checkpoint."""
     from jasmine_core import SCHEMA_VERSION, clock, ids
-    from jasmine_core.canonical import sha256_hex
+    from jasmine_core.canonical import sha256_hex, canonical_json
     from jasmine_core.models import NewEvent
     body=item['body'];http=item['http']
     kind='checkpoint' if checkpoint else 'context'
@@ -156,7 +156,7 @@ def creation_relation(before, after, item, response, payload, actor, checkpoint)
             'creation command envelope shape differs')
     require(event['schema_version']==SCHEMA_VERSION and event['event_type']==typ and
             event['source_system']==source and event['source_event_id'] is None and
-            json.loads(event['payload_json'])==payload,'creation command envelope/source/payload differs')
+            canonical_json(json.loads(event['payload_json']))==canonical_json(payload),'creation command envelope/source/payload differs')
     for key,value in identity.items():
         require(event[key]==value,'creation registered command identity differs '+key)
         if key!='actor_kind':require(response[key]==value,'creation response/request identity differs '+key)

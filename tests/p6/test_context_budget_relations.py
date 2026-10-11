@@ -91,6 +91,18 @@ class CreationRelations(unittest.TestCase):
             for name, mutate in changes + specific:
                 with self.subTest(checkpoint=checkpoint,mutation=name), self.assertRaises(ValueError): self.run_fixture(checkpoint,mutate)
 
+    def test_command_payload_json_type_must_match_the_expected_payload(self):
+        for checkpoint in (False,True):
+            def change(i,r,p,e,k):
+                p['token_count']=1
+                spec=NewEvent(event_type=e['event_type'],source_system=e['source_system'],
+                    actor_kind=e['actor_kind'],payload=p,occurred_at=clock.parse_rfc3339(e['occurred_at']),
+                    event_id=e['event_id'],**{f:e[f] for f in ('actor_id','host_id','task_id','project_id','session_id')})
+                e['body_sha256']=spec.digest()
+                e['payload_json']=json.dumps({**p,'token_count':True})
+            with self.subTest(checkpoint=checkpoint),self.assertRaisesRegex(ValueError,'envelope/source/payload'):
+                self.run_fixture(checkpoint,change)
+
     def test_relation_mutations_keep_the_production_server_command_digest(self):
         from unittest.mock import patch
         import context_budget_review_regressions as regressions
@@ -184,6 +196,17 @@ class AuditRelations(unittest.TestCase):
         h['body']={'entries':entries,'count':1000}
         with self.assertRaisesRegex(ValueError,'every consumed target'):
             audit_consumption(directory,h,'browser-authorized-audit',targets,matching,[copy.deepcopy(h)],observer)
+
+    def test_json_numeric_type_substitution_is_not_the_recorded_response(self):
+        for phase,change in (
+            ('browser-authorized-audit',lambda h:h['body']['entries'][0].__setitem__('seq',True)),
+            ('separate-audit-validator',lambda h:h['body'].__setitem__('count',True)),
+            ('browser-authorized-audit',lambda h:h['body'].__setitem__('count',float(h['body']['count']))),
+            ('separate-audit-validator',lambda h:h['body']['entries'][0].__setitem__('seq',float(h['body']['entries'][0]['seq'])))):
+            directory,h,targets,matching,calls,observer=self.fixture(phase)
+            change(h);calls[:]=[copy.deepcopy(h)]
+            with self.subTest(phase=phase),self.assertRaisesRegex(ValueError,'physical query'):
+                audit_consumption(directory,h,phase,targets,matching,calls,observer)
 
     def test_consumer_response_target_and_chronology_mutations(self):
         mutations=[('phase',lambda h,t,m,c,o:h.__setitem__('phase','other')),
