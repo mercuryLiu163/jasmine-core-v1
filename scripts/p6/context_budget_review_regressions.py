@@ -135,10 +135,10 @@ def mutation(directory,raw,calls,ident,cache):
             # Keep source/time mutations internally hashed; reject their relation.
             if field in ('source_system','source_event_id','timewindow'):
                 from jasmine_core.canonical import body_hash
-                from jasmine_core.clock import parse_rfc3339
                 changed={**row,**updates}
                 hashfields={k:changed[k] for k in ('event_type','source_system','source_event_id','actor_id','host_id','session_id','project_id','task_id')}
-                hashfields['occurred_at']=parse_rfc3339(changed['occurred_at']).isoformat().replace('+00:00','Z')
+                # Production creates these commands without client_occurred_at.
+                hashfields['occurred_at']=None
                 hashfields['payload']=json.loads(changed['payload_json'])
                 updates['body_sha256']=body_hash(hashfields)
             def alter(v):

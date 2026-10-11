@@ -91,6 +91,27 @@ class CreationRelations(unittest.TestCase):
             for name, mutate in changes + specific:
                 with self.subTest(checkpoint=checkpoint,mutation=name), self.assertRaises(ValueError): self.run_fixture(checkpoint,mutate)
 
+    def test_relation_mutations_keep_the_production_server_command_digest(self):
+        from unittest.mock import patch
+        import context_budget_review_regressions as regressions
+        for checkpoint in (False, True):
+            for field in ('source_system', 'source_event_id', 'timewindow'):
+                actor,body,result,payload,event,key,table=self.fixture(checkpoint)
+                role='checkpoint' if checkpoint else 'context'
+                raw={'cases':[{'pack':result,'fixture':{'source':{'event_id':ids.new_id('evt')}}},
+                              {'checkpoint_operation':{'http':{'body':{'checkpoint':result}}}}],
+                     'before_browser':{'events':[event]}}
+                with patch.object(regressions,'change_DB') as physical:
+                    regressions.mutation(Path('.'),raw,[], 'complete_relations_creation_'+role+'_'+field,None)
+                changed=raw['before_browser']['events'][0]
+                spec=NewEvent(event_type=changed['event_type'],source_system=changed['source_system'],
+                    source_event_id=changed['source_event_id'],actor_kind=changed['actor_kind'],
+                    occurred_at=clock.parse_rfc3339(changed['occurred_at']),payload=json.loads(changed['payload_json']),
+                    event_id=changed['event_id'], **{k:changed[k] for k in ('actor_id','host_id','project_id','task_id','session_id')})
+                with self.subTest(role=role,field=field):
+                    self.assertEqual(changed['body_sha256'],spec.digest())
+                    self.assertEqual(physical.call_args.args[-1]['body_sha256'],spec.digest())
+
 
 class AuditRelations(unittest.TestCase):
     def fixture(self, phase):
