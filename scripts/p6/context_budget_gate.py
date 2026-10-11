@@ -29,6 +29,11 @@ def require(ok,reason):
     if not ok:raise ValueError(reason)
 
 
+def same(left,right):
+    # A relation compares JSON values, not Python's bool/int/float coercions.
+    return shared.canonical(left)==shared.canonical(right)
+
+
 def sealed_tables(path):
     # These are consistent SQLite backup files, never a live WAL database.
     con=sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro&immutable=1',uri=True)
@@ -83,16 +88,16 @@ def http_identity(directory,h,observer,scope):
     rows=audit_rows(directory/'after-audit.db',h['request_id'])
     require(len(rows)==1,'F03 HTTP physical audit absent/duplicate')
     a=rows[0]
-    require((a['request_id'],a['actor_id'],a['method'],a['path'],a['status_code'],a['error_code'])==(h['request_id'],actor['actor_id'],h['method'],h['path'].split('?')[0],h['status'],h['body'].get('error',{}).get('code')),'F03 HTTP/audit actor/method/target differs')
+    require(same((a['request_id'],a['actor_id'],a['method'],a['path'],a['status_code'],a['error_code']),(h['request_id'],actor['actor_id'],h['method'],h['path'].split('?')[0],h['status'],h['body'].get('error',{}).get('code'))),'F03 HTTP/audit actor/method/target differs')
     window=[e for e in observer if e.get('request_id')==h['request_id']]
-    require(window and window[0]['kind']=='request_start' and window[-1]['kind']=='request_end' and window[0]['method']==h['method'] and window[0]['path']==h['path'].split('?')[0] and window[-1]['status']==h['status'],'F03 authorized HTTP observer target differs')
+    require(window and window[0]['kind']=='request_start' and window[-1]['kind']=='request_end' and same((window[0]['method'],window[0]['path'],window[-1]['status']),(h['method'],h['path'].split('?')[0],h['status'])),'F03 authorized HTTP observer target differs')
     return actor
 
 
 def audit_consumption(directory, h, phase, targets, matching, calls, observer):
     """Bind the actual authorized response to the actions its consumer proves."""
     require(h.get('phase')==phase and shared.canonical(h) in [shared.canonical(c) for c in calls],'audit consumer role/receipt differs')
-    require(h['method']=='GET' and h['status']==200 and h['request_body'] is None,
+    require(same((h['method'],h['status'],h['request_body']),('GET',200,None)),
             'audit consumer method/outcome/body differs')
     url=urlsplit(h['path']);query=parse_qs(url.query,keep_blank_values=True)
     wanted={'limit':['1000']}
@@ -122,25 +127,24 @@ def audit_consumption(directory, h, phase, targets, matching, calls, observer):
         request=target['request_id'];window=[r for r in observer if r.get('request_id')==request]
         require(window and window[0]['kind']=='request_start' and window[-1]['kind']=='request_end',
                 'audit target request window absent')
-        require(window[0]['method']==target['method'] and
-                window[0]['path']==target['path'].split('?')[0] and
-                window[-1]['status']==target['status'], 'audit target observer identity/outcome differs')
+        require(same((window[0]['method'],window[0]['path'],window[-1]['status']),
+                     (target['method'],target['path'].split('?')[0],target['status'])), 'audit target observer identity/outcome differs')
         require(window[-1]['at_unix']<=h['started_at_unix']<=h['finished_at_unix'],
                 'audit read precedes consumed action')
         expected=audit_rows(directory/'after-audit.db',request)
         require(len(expected)==1 and shared.canonical([r for r in selected if r['request_id']==request])==shared.canonical(expected),
                 'audit consumed target differs from physical row')
         row=expected[0]
-        require((row['actor_id'],row['method'],row['path'],row['status_code'],row['error_code'])==
+        require(same((row['actor_id'],row['method'],row['path'],row['status_code'],row['error_code']),
                 (target['actor_id'],target['method'],target['path'].split('?')[0],target['status'],
-                 target['body'].get('error',{}).get('code')),'audit consumed action identity/outcome differs')
+                 target['body'].get('error',{}).get('code'))),'audit consumed action identity/outcome differs')
 
 
 def operation(directory,op):
-    name=op['operation_receipt'];require(load(directory/name)==op,'operation receipt differs')
+    name=op['operation_receipt'];require(same(load(directory/name),op),'operation receipt differs')
     expected=[name.removesuffix('-operation.json')+'-'+phase+'.db' for phase in ('before','after')]
     require(op['database_receipts']==expected,'operation DB role differs')
-    for ref,phase in zip(expected,('before','after')):require(sealed_snapshot(directory/ref)==op[phase],'actual DB differs from operation '+phase)
+    for ref,phase in zip(expected,('before','after')):require(same(sealed_snapshot(directory/ref),op[phase]),'actual DB differs from operation '+phase)
     h=op['http'];rows=op['audit'];require(len(rows)==1,'missing/duplicate operation audit')
     require(rows==audit_rows(directory/expected[1],h['request_id']),'operation audit differs from actual DB')
     a=rows[0];require((a['request_id'],a['method'],a['path'],a['status_code'])==(h['request_id'],h['method'],h['path'],h['status']),'operation audit target differs')
@@ -217,7 +221,7 @@ def evaluate(directory,cache,python):
             checked=subprocess.run([str(python),'-I',str(tree/'scripts/p6/context_budget_integrity.py'),'--source',str(tree/'src')],input=json.dumps(truth_inputs),capture_output=True,text=True,timeout=60)
             require(checked.returncode==0 and not checked.stderr,'production Truth qualification unavailable: '+checked.stderr)
             truth=json.loads(checked.stdout)
-        require(raw['before_browser']==sealed_snapshot(directory/'before-browser.db')==raw['after_browser']==sealed_snapshot(directory/'after-browser.db'),'browser changed actual business/history DB')
+        require(all(same(raw['before_browser'],v) for v in (sealed_snapshot(directory/'before-browser.db'),raw['after_browser'],sealed_snapshot(directory/'after-browser.db'))),'browser changed actual business/history DB')
         require(raw['private_runtime_removed'] and raw['cleanup'] and all(c['group_gone'] for c in raw['cleanup']),'owned cleanup incomplete')
         browser=load(directory/'browser.json');require(browser==raw['browser'],'browser raw differs')
         require(browser['status']=='COLLECTED_NOT_A_VERDICT' and not browser['console_errors'],'browser collection failed')
@@ -226,7 +230,7 @@ def evaluate(directory,cache,python):
         want=[c['id'] for c in raw['cases'] if c['id'] not in ('CB03','CB04')]
         require([c['id'] for c in browser['records']]==want,'missing/extra browser scene')
         calls=load(directory/'http-calls.json');required=['source.tar','matrix.json','raw-result.json','browser.json','browser-requests.jsonl','click-trace.jsonl','http-calls.json','observer.jsonl','before-browser.db','after-browser.db','after-audit.db']
-        require(sealed_snapshot(directory/'after-audit.db')==raw['after_browser'],'F03 authorized audit read mutated business/history')
+        require(same(sealed_snapshot(directory/'after-audit.db'),raw['after_browser']),'F03 authorized audit read mutated business/history')
         for h in calls:
             if h.get('phase') in ('separate-audit-validator','browser-authorized-audit','source-command-readback'):
                 require(h['method']=='GET' and h['status']==200,'F03 authorized readback method/outcome differs')

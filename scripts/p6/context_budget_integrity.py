@@ -19,6 +19,10 @@ def require(ok, reason):
     if not ok: raise ValueError(reason)
 
 
+def same(left,right):
+    return json.dumps(left,sort_keys=True,separators=(',',':'),allow_nan=False)==json.dumps(right,sort_keys=True,separators=(',',':'),allow_nan=False)
+
+
 def connection(path):
     con=sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro&immutable=1',uri=True)
     con.row_factory=sqlite3.Row
@@ -124,12 +128,12 @@ def observer_witness(rows, archive, cleanup):
 
 def scalar_columns(row, pack):
     for key,value in row.items():
-        if key=='full_result_json':require(json.loads(value)==pack,'F01 stored full_result differs')
-        elif key=='projection_version':require(value==pack['projection']['snapshot_schema'],'F01 projection version column differs')
-        elif key=='selector_checkpoint_id':require(value==pack['selector']['latest_checkpoint_id'],'F01 selector column differs')
-        elif key=='selector_event_seq':require(value==pack['selector']['selection_event_seq'],'F01 selector sequence column differs')
-        elif key.endswith('_json'):require(json.loads(value)==pack[key[:-5]],'F01 Context JSON column differs '+key)
-        else:require(value==pack[key],'F01 Context scalar column differs '+key)
+        if key=='full_result_json':require(same(json.loads(value),pack),'F01 stored full_result differs')
+        elif key=='projection_version':require(same(value,pack['projection']['snapshot_schema']),'F01 projection version column differs')
+        elif key=='selector_checkpoint_id':require(same(value,pack['selector']['latest_checkpoint_id']),'F01 selector column differs')
+        elif key=='selector_event_seq':require(same(value,pack['selector']['selection_event_seq']),'F01 selector sequence column differs')
+        elif key.endswith('_json'):require(same(json.loads(value),pack[key[:-5]]),'F01 Context JSON column differs '+key)
+        else:require(same(value,pack[key]),'F01 Context scalar column differs '+key)
 
 
 def creation_relation(before, after, item, response, payload, actor, checkpoint):
@@ -206,17 +210,17 @@ def production_check(item):
         tokenizer=Tokenizer(cache_dir=item['cache']);pack=item.get('pack')
         if item['kind']=='checkpoint':
             response=item['checkpoint'];row=after.execute('SELECT * FROM checkpoints WHERE checkpoint_id=?',(response['checkpoint_id'],)).fetchone()
-            require(row is not None and ContinuityStore(after,schema_version=12).get_checkpoint(response['checkpoint_id'])==response,'F04 Checkpoint response differs from actual DB')
+            require(row is not None and same(ContinuityStore(after,schema_version=12).get_checkpoint(response['checkpoint_id']),response),'F04 Checkpoint response differs from actual DB')
             require(response['note']==body.get('note') and response['source_event_id']==body['source_event_id'] and
                     response['reason']==body['reason'],'F04 Checkpoint note/reason/request/source differs')
-            require(response['projection']==snapshot['truth_projection'] and response['full_context_digest']==snapshot['truth_digest']==response['projection_digest'],'F04 Checkpoint projection differs from build-before Truth')
+            require(same(response['projection'],snapshot['truth_projection']) and response['full_context_digest']==snapshot['truth_digest']==response['projection_digest'],'F04 Checkpoint projection differs from build-before Truth')
             event=after.execute('SELECT * FROM events WHERE event_id=?',(response['command_event_id'],)).fetchone()
             actor,_=credential(item['after'],item['http'])
             source,task=original_source(before,item,actor)
             from jasmine_core.continuity_source import source_for_task,verified_transition
             provenance={'level':'UNVERIFIED_REQUEST','source_event_id':source['event_id']}
             if body['reason']=='STEP_VERIFIED':provenance=verified_transition(before,source,body.get('current_step_id'))
-            require(response['trigger_provenance']==provenance,'F04 original trigger provenance differs')
+            require(same(response['trigger_provenance'],provenance),'F04 original trigger provenance differs')
             if body.get('note'):
                 source_for_task(before,source_event_id=body['note']['source_event_id'],task_id=body['task_id'],
                     host_id=body['host_id'],actor_id=actor['actor_id'],schema_version=12)
@@ -242,11 +246,11 @@ def production_check(item):
                     pack['current_step_id']==body.get('current_step_id') and
                     pack['trigger_provenance']=={'level':'UNVERIFIED_REQUEST','source_event_id':source['event_id']},
                     'F01 Context original request/provenance differs')
-            require(pack['projection']==snapshot['truth_projection'] and pack['truth_digest']==snapshot['truth_digest'],'F01 pack differs from original Authority/build-before Truth')
-            require(pack['selector']==snapshot['auxiliary'] and pack['resume_comparison']==comparison,'F04 selected Checkpoint/comparison differs')
+            require(same(pack['projection'],snapshot['truth_projection']) and pack['truth_digest']==snapshot['truth_digest'],'F01 pack differs from original Authority/build-before Truth')
+            require(same(pack['selector'],snapshot['auxiliary']) and same(pack['resume_comparison'],comparison),'F04 selected Checkpoint/comparison differs')
             require(pack['workspace_digest']==sha256_hex(workspace) and pack['config_digest']==sha256_hex(pack['configuration']),'F01 workspace/config digest differs')
             rendering=render(snapshot['truth_projection'],comparison,cp,pack['memory'],tokenizer,source_event_id=body['source_event_id'],current_step_id=body.get('current_step_id'))
-            require(all(pack[k]==v for k,v in rendering.items()),'F04/F01 production render/note omission differs')
+            require(all(same(pack[k],v) for k,v in rendering.items()),'F04/F01 production render/note omission differs')
             stored=after.execute('SELECT * FROM context_packs WHERE context_pack_id=?',(pack['context_pack_id'],)).fetchone();require(stored is not None,'F01 stored pack absent');scalar_columns(dict(stored),pack)
             event=after.execute('SELECT * FROM events WHERE event_id=?',(pack['command_event_id'],)).fetchone()
             payload={'text':'','context_pack_id':pack['context_pack_id'],'source_event_id':pack['source_event_id'],'truth_digest':pack['truth_digest'],'rendered_sha256':pack['rendered_sha256'],'config_digest':pack['config_digest'],'token_count':pack['token_count']}

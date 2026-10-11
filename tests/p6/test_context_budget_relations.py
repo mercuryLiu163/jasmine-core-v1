@@ -91,6 +91,19 @@ class CreationRelations(unittest.TestCase):
             for name, mutate in changes + specific:
                 with self.subTest(checkpoint=checkpoint,mutation=name), self.assertRaises(ValueError): self.run_fixture(checkpoint,mutate)
 
+    def test_complete_row_json_and_scalar_relations_preserve_types(self):
+        from context_budget_integrity import scalar_columns
+        row={'projection_version':1,'selector_event_seq':2,'token_count':3,
+             'projection_json':json.dumps({'snapshot_schema':1}),
+             'full_result_json':json.dumps({'projection':{'snapshot_schema':1},'selector':{'selection_event_seq':2},'token_count':3})}
+        pack={'projection':{'snapshot_schema':1},'selector':{'selection_event_seq':2},'token_count':3}
+        scalar_columns(row,pack)
+        for change in (lambda p:p['projection'].__setitem__('snapshot_schema',True),
+                       lambda p:p['selector'].__setitem__('selection_event_seq',2.0),
+                       lambda p:p.__setitem__('token_count',3.0)):
+            altered=copy.deepcopy(pack);change(altered)
+            with self.assertRaises(ValueError):scalar_columns(row,altered)
+
     def test_command_payload_json_type_must_match_the_expected_payload(self):
         for checkpoint in (False,True):
             def change(i,r,p,e,k):
@@ -102,6 +115,22 @@ class CreationRelations(unittest.TestCase):
                 e['payload_json']=json.dumps({**p,'token_count':True})
             with self.subTest(checkpoint=checkpoint),self.assertRaisesRegex(ValueError,'envelope/source/payload'):
                 self.run_fixture(checkpoint,change)
+
+    def test_actor_kind_counterexample_reaches_a_valid_database_enum(self):
+        from unittest.mock import patch
+        import context_budget_review_regressions as regressions
+        for checkpoint in (False,True):
+            actor,body,result,payload,event,key,table=self.fixture(checkpoint)
+            raw={'cases':[{'pack':result,'fixture':{'source':{'event_id':ids.new_id('evt')}}},
+                          {'checkpoint_operation':{'http':{'body':{'checkpoint':result}}}}],
+                 'before_browser':{'events':[event]}}
+            role='checkpoint' if checkpoint else 'context'
+            with patch.object(regressions,'change_DB') as physical:
+                regressions.mutation(Path('.'),raw,[],'complete_relations_creation_'+role+'_actor_kind',None)
+            changed=physical.call_args.args[-1]['actor_kind']
+            with self.subTest(role=role):
+                self.assertIn(changed,('human','agent','system'))
+                self.assertNotEqual(changed,actor['kind'])
 
     def test_relation_mutations_keep_the_production_server_command_digest(self):
         from unittest.mock import patch
@@ -207,6 +236,33 @@ class AuditRelations(unittest.TestCase):
             change(h);calls[:]=[copy.deepcopy(h)]
             with self.subTest(phase=phase),self.assertRaisesRegex(ValueError,'physical query'):
                 audit_consumption(directory,h,phase,targets,matching,calls,observer)
+
+    def test_action_and_observer_numeric_types_are_not_coerced(self):
+        for phase in ('browser-authorized-audit','separate-audit-validator'):
+            for field in ('action_status','observer_status','read_status'):
+                directory,h,targets,matching,calls,observer=self.fixture(phase)
+                if field=='action_status':targets[0]['status']=409.0
+                elif field=='observer_status':observer[1]['status']=409.0
+                else:h['status']=200.0;calls[:]=[copy.deepcopy(h)]
+                with self.subTest(phase=phase,field=field),self.assertRaises(ValueError):
+                    audit_consumption(directory,h,phase,targets,matching,calls,observer)
+
+    def test_typed_body_counterexamples_are_actually_applied(self):
+        import context_budget_review_regressions as regressions
+        for role in ('browser','operation'):
+            for field in ('typed_count','typed_entry'):
+                phase='browser-authorized-audit' if role=='browser' else 'separate-audit-validator'
+                directory,h,targets,matching,calls,observer=self.fixture(phase)
+                original=json.dumps(h['body'],sort_keys=True)
+                raw={'cases':[{'operation':{'audit_read':copy.deepcopy(h)}},
+                              {'checkpoint_operation':{'audit_read':h,'http':targets[0],'audit':matching}}],
+                     'browser_audit':{'http':h,'matching':matching}}
+                regressions.mutation(directory,raw,calls,'complete_relations_audit_'+role+'_'+field,None)
+                changed=raw['browser_audit']['http'] if role=='browser' else raw['cases'][1]['checkpoint_operation']['audit_read']
+                with self.subTest(role=role,field=field):
+                    self.assertNotEqual(json.dumps(changed['body'],sort_keys=True),original)
+                    with self.assertRaisesRegex(ValueError,'physical query'):
+                        audit_consumption(directory,changed,phase,targets,matching,calls,observer)
 
     def test_consumer_response_target_and_chronology_mutations(self):
         mutations=[('phase',lambda h,t,m,c,o:h.__setitem__('phase','other')),

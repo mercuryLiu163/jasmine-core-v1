@@ -8,7 +8,7 @@
 | --- | --- |
 | 读取请求 | HTTP收据属于 calls；固定 phase；GET、200、空请求体；/v1/audit；limit=1000；动作独立读取仅含原动作 actor_id 筛选；管理员真实 key/actor/scopes、物理自审计、observer窗口 |
 | 实际响应 | 从 after-audit.db 重建读请求自身 seq 之前的审计行，应用同一 actor 筛选、seq升序、1000上限；detail_json解码；完整 entries 与 count 必须以规范 JSON 比较一致（保留布尔／整数／浮点类型），不仅校验 detached matching |
-| 消费动作 | matching 必须恰为上述实际 entries 中所有目标 request_id 的选择；无重复、无遗漏；每条与物理审计一致，核对 actor/method/path/status/error；observer动作结束不得晚于读取开始 |
+| 消费动作 | matching 必须恰为上述实际 entries 中所有目标 request_id 的选择；无重复、无遗漏；每条以规范JSON与物理审计一致，核对 actor/method/path/status/error；动作、observer、实际响应之间不作数字类型强制相等；observer动作结束不得晚于读取开始 |
 | 浏览器全范围 | 同场景 key 绑定全部实际 Core 请求，包括 bootstrap、refresh、跨路由旧请求；仅 /v1/health 与 /v1/meta/schema 为生产 public 路由，actor为null；代理拒绝无Core窗口、不得补造Core审计 |
 | 历史正控制 | 不要求读回包含其自身审计，也不把正确早期历史读取改为最新读取；真实 query/window 重建后支持历史查询 |
 
@@ -19,7 +19,7 @@
 | 层 | 字段/关系 |
 | --- | --- |
 | 注册身份与来源 | key→actor(kind/home_host)；source_for_task 校验请求 task/host/session/current_step/source、原始Task与来源；Checkpoint note source独立检查；trigger provenance 由生产函数重新推导 |
-| 结果 | response与真实表行/解码JSON一致；actor/host/project/task/session来自请求/注册/前态Truth；source/reason、Checkpoint note/projection/revision/workspace digest；Context selector/comparison/render/config摘要等保留既有生产重算 |
+| 结果 | response以规范JSON与真实表行/解码JSON一致（包括标量、投影、选择器、完整结果和渲染字段）；actor/host/project/task/session来自请求/注册/前态Truth；source/reason、Checkpoint note/projection/revision/workspace digest；Context selector/comparison/render/config摘要等保留既有生产重算 |
 | 命令全部16列 | event_id合法且与结果command_event_id相连；seq为前态max+1；schema_version为生产版本；event_type与source_system为相应生产创建值；source_event_id为null；occurred_at/recorded_at在HTTP窗口内且created≤occurred≤recorded；actor_id/actor_kind/host_id/session_id/project_id/task_id与原身份一致；payload_json以规范JSON等于生产预期；body_sha256等于生产NewEvent.digest |
 | 键全部4列 | 原键不可变；恰增1行；actor_id等于注册actor；idempotency_key等于真实请求；request_hash为Checkpoint sha256({body,task_id})或Context sha256(body)；checkpoint_id/context_pack_id等于真实结果 |
 | 对照 | Context、Checkpoint两路均检验身份/来源/时间/摘要/序列/键所有字段，不允许仅修一个字段；正确历史读取、回放、真实直接否定和历史原文继续通过 |

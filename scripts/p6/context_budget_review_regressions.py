@@ -110,7 +110,7 @@ def mutation(directory,raw,calls,ident,cache):
         elif field=='window':
             target=op['http'] if role=='operation' else cb1['operation']['http']
             updates.update(started_at_unix=target['started_at_unix']-1,finished_at_unix=target['started_at_unix']-.5)
-        if field not in ('wrong_selected','query_filter','query_cardinality','window','typed_count','typed_entry'):updates['body']=body
+        if field not in ('wrong_selected','query_filter','query_cardinality','window'):updates['body']=body
         def alter(v):
             if v.get('request_id')==request and 'request_body' in v and 'body' in v:v.update(copy.deepcopy(updates))
         recurse(raw,alter);recurse(calls,alter)
@@ -130,7 +130,7 @@ def mutation(directory,raw,calls,ident,cache):
         else:
             key='occurred_at' if field=='timewindow' else field
             row=next(e for e in raw['before_browser']['events'] if e['event_id']==event)
-            value={'actor_kind':'SYNTHETIC_OTHER_KIND','source_system':'synthetic-other-source',
+            value={'actor_kind':'system','source_system':'synthetic-other-source',
                    'source_event_id':cb1['fixture']['source']['event_id'],'schema_version':row['schema_version']+1,
                    'body_sha256':'0'*64,'timewindow':'2000-01-01T00:00:00Z','seq':row['seq']+100000}[field]
             updates={key:value}
