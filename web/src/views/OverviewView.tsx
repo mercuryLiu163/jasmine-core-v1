@@ -213,7 +213,7 @@ export function OverviewView(): JSX.Element {
         <Unavailable
           feature="Hindsight / Memory 健康"
           owner="P4 独立线"
-          pending="读切片(health/jobs/items/traces)已实现但 P4 未合并,列为依赖未满足;retry 与生命周期管理 API 仍待交付"
+          pending="读取与管理代码已整合；本机版关闭 Memory 引擎、worker 和代理入口，收益验收未完成，P4 实验保持停止。"
         />
         <Unavailable
           feature="Backup / Storage / Devices"
