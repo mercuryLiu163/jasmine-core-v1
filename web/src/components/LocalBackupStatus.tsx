@@ -41,5 +41,6 @@ export function LocalBackupStatus(): JSX.Element {
       <p>备份时点后的写入不在该备份内。恢复配置与恢复历史数据不同；恢复数据前必须停服务并另存当前库。</p>
     </> : null}
     <p>Storage 容量统计、Devices 管理与在线心跳尚未实现。</p>
+    <p>此处备份覆盖 Core SQLite 数据库与运行配置；不包含 Hindsight PostgreSQL 或 Keychain。自动备份尚未提供。</p>
   </Panel>
 }
