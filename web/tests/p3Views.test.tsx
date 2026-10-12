@@ -445,7 +445,7 @@ describe('a malformed id is refused with the right reason', () => {
   })
 })
 
-describe('a successful read still says the milestone is pending', () => {
+describe('a successful read distinguishes records from release acceptance', () => {
   it.each([
     ['checkpoint', `#/checkpoints?checkpoint_id=${CHECKPOINT}`, /读取 Checkpoint/,
       'GET /v1/checkpoints/' + CHECKPOINT, () => ({ checkpoint: checkpoint() })],
@@ -453,14 +453,15 @@ describe('a successful read still says the milestone is pending', () => {
       'GET /v1/context/' + PACK, () => ({ context: pack() })],
     ['resume', `#/resume/${RESUME}`, /Resume/,
       'GET /v1/resumes/' + RESUME, () => ({ resume: resume() })],
-  ])('shows PARTIAL / DEPENDENCY_PENDING on a populated %s', async (_n, hash, region, route, body) => {
+  ])('shows record and acceptance boundaries on a populated %s', async (_n, hash, region, route, body) => {
     // A screenshot of a *populated* record is the one that could be read as "P6 passed":
     // P3 being unmerged is a property of the milestone, not of this response.
     const user = userEvent.setup()
     await enter(user, hash as string, { ...SIGNED_IN, [route as string]: { body: (body as () => unknown)() } })
     const panel = await screen.findByRole('region', { name: region as RegExp })
     const status = await within(panel).findByTestId('slice-status')
-    expect(status.textContent).toContain('PARTIAL / DEPENDENCY_PENDING')
+    expect(status.textContent).toContain('连续性记录读取')
+    expect(status.textContent).toContain('完整 P6/V1 验收仍未完成')
     expect(within(panel).queryByTestId('dependency-pending')).toBeNull()
   })
 })

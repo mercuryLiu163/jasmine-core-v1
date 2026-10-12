@@ -41,6 +41,7 @@ import {
 } from './views/ValidationViews'
 
 const NAV = [
+  { label: 'Validation', href: '#/validation/runs' },
   { label: 'Overview', href: hrefFor({ name: 'overview' }) },
   { label: 'Conversation', href: hrefFor({ name: 'conversation', projectId: null, taskId: null, sessionId: null }) },
   { label: 'Interpretations', href: hrefFor({ name: 'interpretations', projectId: null, taskId: null, eventId: null, status: null }) },
@@ -59,7 +60,7 @@ export function App(): JSX.Element {
       </a>
       <header className="app__head">
         <div className="app__brand">
-          <strong>Jasmine Core</strong> <span>Dashboard P6-02</span>
+          <strong>Jasmine Core</strong> <span>本机可用版</span>
         </div>
         {signedIn ? (
           <nav className="app__nav" aria-label="主导航">
@@ -74,7 +75,7 @@ export function App(): JSX.Element {
             ))}
             {pendingConfirmations.map((pending) => <a key={pending.id} href={`#/task/${pending.taskId}/confirmation`}>恢复未知确认 {pending.id}</a>)}
             <details className="navmenu">
-              <summary>领域(未接入)</summary>
+              <summary>尚未开放 / 使用范围</summary>
               <ul>
                 {pendingKeys().map((key) => (
                   <li key={key}>
@@ -95,14 +96,10 @@ export function App(): JSX.Element {
       {signedIn ? (
         <>
           <p className="readonly-banner" role="note">
-            受控写入:本页只提供已冻结的审计写(Interpretation 的 Correct/Reject/Re-run、
-            Review 的 Approve/Reject、Rule 的 Propose/Approve/Supersede/Retire,以及 P6-02
-            TaskStep 的 Task 创建、Step 创建/转换、Task 转换、Task/Step criteria 与 Task
-            验收)。人工确认使用专用 prepare/submit（P6_ENABLE_WEB_CONFIRMATIONS 显式启用），由 Core 扫描并准备材料；仅记录 INFO，状态另行提交。不代表 P6
-            已验收。浏览器还会发 GET,而 Core 的解释/Review 读取会执行惰性恢复(可能写入
-            INTERRUPTED 或完成待处理 rerun),详见 P6-02-COMPLIANCE.md。<a href={hrefFor({ name: 'pending', key: 'validation' })}>Validation</a>、
-            <a href={hrefFor({ name: 'pending', key: 'context' })}>Context</a>、
-            <a href={hrefFor({ name: 'pending', key: 'memory' })}>Memory</a> 等按依赖分别标注;Memory 的只读切片已实现,但 P4 未合并;Validation 的只读切片(P7-01)同样已实现,但 P7-01 未合并且其验收标准 1(真实 FAIL run)仍为 BLOCKED —— 因此两者都仍列在此处而不在导航里,并以 <code>P6_ENABLE_P4_READS</code>/<code>P6_ENABLE_P7_READS</code> 显式开关才转发。
+            已提供：项目与 Task/Step 管理、Rule 与 Review 审批、Evidence 读取和人工确认、Checkpoint/Context/Resume 读取、Validation 记录下钻。
+            人工确认仅记录 INFO，验收状态需另行提交。Context 已构建不等于已注入 Agent。
+            未开放：Memory 引擎与自动召回、Agent 自动接入、多设备在线状态；P4 收益实验已停止。完整 P6/V1 验收尚未完成。
+            <a href={hrefFor({ name: 'pending', key: 'memory' })}>未完成功能说明</a>。
           </p>
           <main id="main">{renderRoute(route)}</main>
         </>
@@ -118,6 +115,7 @@ function isCurrent(route: Route, href: string): boolean {
   if (href.includes('/conversation')) return route.name === 'conversation'
   if (href.includes('/interpretations')) return route.name === 'interpretations'
   if (href.includes('/reviews')) return route.name === 'reviews'
+  if (href.includes('/validation')) return route.name.startsWith('validation')
   if (href.includes('/rules')) return route.name === 'rules'
   return false
 }

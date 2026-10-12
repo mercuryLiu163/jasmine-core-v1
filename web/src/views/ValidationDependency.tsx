@@ -85,10 +85,8 @@ export function isValidationArtifactId(value: string): boolean {
 export function ValidationSliceStatus(): JSX.Element {
   return (
     <p className="state state--meta" data-testid="slice-status">
-      <strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— P7-01 只读切片的契约已冻结并经独立验证
-      (固定自 <code>{P7_CONTRACT_REF.slice(0, 7)}</code>),但该切片未合并进本基线;ADR 0015 §8 记录的
-      验收标准 1(读取真实 FAIL run)仍为 <strong>BLOCKED</strong>(磁盘上没有 FAIL case)。本页不是已通过的
-      P6 能力,也不把 synthetic fixture 当作证据。
+      <strong>Validation 记录读取</strong> —— 按原始记录展示 verdict 与缺失材料，不升级结论。
+      这不是完整 P7/V1 发布验收；模拟记录不能替代真实运行证据。
     </p>
   )
 }

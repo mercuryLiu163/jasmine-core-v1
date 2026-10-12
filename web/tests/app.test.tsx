@@ -412,6 +412,6 @@ describe('untrusted text rendering', () => {
 
     await waitFor(() => expect(screen.getByText('tool.result')).toBeTruthy())
     expect(screen.getAllByText('机器事件(非用户发言)').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/未接入/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/尚未开放/).length).toBeGreaterThan(0)
   })
 })

@@ -36,6 +36,7 @@ export function TaskView({ taskId, tab }: { taskId: string; tab: TaskTab }): JSX
             {candidate.label}
           </a>
         ))}
+        <a href={`#/checkpoints?task_id=${encodeURIComponent(taskId)}`}>最新 Checkpoint</a>
       </nav>
       {tab === 'board' ? <TaskBoard taskId={taskId} /> : null}
       {tab === 'history' ? <TaskHistory taskId={taskId} /> : null}

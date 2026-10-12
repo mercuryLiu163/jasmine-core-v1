@@ -172,8 +172,8 @@ function DependencyPending({
 function SliceStatus(): JSX.Element {
   return (
     <p className="state state--meta" data-testid="slice-status">
-      <strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— 本页契约派生自尚未合并的分支{' '}
-      <code>p3-checkpoint-context-resume</code>(<code>7016dab</code>),不是已通过的 P6 能力。
+      <strong>连续性记录读取</strong> —— 展示 Core 保存的记录；Context 构建与实际 Agent 注入分别核验。
+      完整 P6/V1 验收仍未完成。
     </p>
   )
 }

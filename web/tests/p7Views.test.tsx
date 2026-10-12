@@ -388,13 +388,13 @@ describe('a refused P7 read is shown as a missing dependency', () => {
     expect(panel.textContent).toContain('PARTIAL / DEPENDENCY_PENDING')
   })
 
-  it('states PARTIAL / DEPENDENCY_PENDING and the blocked criterion even when the read succeeds', async () => {
+  it('states recorded verdict and full release boundaries when the read succeeds', async () => {
     const user = userEvent.setup()
     await enter(user, '#/validation/runs', { 'GET /v1/validation/runs': { body: page() } })
     const panel = await screen.findByRole('region', { name: /Validation Runs/ })
     const status = within(panel).getByTestId('slice-status')
-    expect(status.textContent).toContain('PARTIAL / DEPENDENCY_PENDING')
-    expect(status.textContent).toContain('BLOCKED')
+    expect(status.textContent).toContain('按原始记录展示 verdict')
+    expect(status.textContent).toContain('不是完整 P7/V1 发布验收')
   })
 })
 

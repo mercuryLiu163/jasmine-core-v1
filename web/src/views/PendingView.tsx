@@ -33,14 +33,14 @@ const SPECS: Record<string, PendingSpec> = {
     title: 'Checkpoint Compare',
     feature: 'Checkpoint 列表、task_revision/current/fingerprint、freshness/integrity 与比较',
     owner: 'P3 主线(Checkpoint/Resume)',
-    pending: 'checkpoint 读取 API 与服务器侧 compare 结果',
+    pending: '本机版已提供按 Task 的最新 Checkpoint 与按 ID 读取；入口在 Task 页。全局列表尚未提供。',
     note: '旧 checkpoint 只作历史;本页不提供回滚 Current State 的入口。',
   },
   context: {
     title: 'Context Inspector',
     feature: '实际注入的 Context Pack、分区/总 token、rule versions、memory IDs',
     owner: 'P3 主线(Context 生命周期)',
-    pending: 'persisted pack 读取、exact rendered content、注入 attempt/receipt 契约',
+    pending: '已提供按 ID 的 persisted pack 与原文读取；自动 Agent 注入接线尚未开放。',
     note: 'built/persisted 不等于 injected;没有真实 receipt 时显示“注入未验证”,不会在 UI 里重新 build 一份冒充实际文本。',
   },
   memory: {
@@ -50,9 +50,7 @@ const SPECS: Record<string, PendingSpec> = {
     // The read slice exists (P6-03b1: health/jobs/items/traces) but its dependency is
     // unmerged, so it stays under this heading rather than in the nav. The writes and the
     // management contract are genuinely still missing.
-    pending:
-      '读切片(health/jobs/items/traces)已实现但 P4 未合并,因此列为依赖未满足,不在导航里;' +
-      'retry、bank 映射、obsolete/pin/delete、管理权限与审计契约仍待 P4 与 P6-03b2',
+    pending: 'Memory 读取与管理代码已整合，但本机发布关闭引擎、worker 和代理入口。收益验收未完成，P4 实验保持停止。',
     note: 'Memory 是 NON_AUTHORITATIVE;它不会修改 Rule/State,浏览器也不会接触 Hindsight 凭据。',
   },
   validation: {
@@ -61,9 +59,7 @@ const SPECS: Record<string, PendingSpec> = {
     owner: 'P7 owner(P7-01 最小读取切片)',
     // The read slice is implemented as a deep link (#/validation/runs) but its dependency is
     // unmerged, so it stays under this heading rather than in the nav — exactly like Memory.
-    pending:
-      '只读切片(runs 列表/详情、manifest、artifact metadata+content)已实现但 P7-01 未合并,因此列为依赖未满足,' +
-      '不在导航里;它的验收标准 1(读取一条真实 FAIL run)仍为 BLOCKED —— 磁盘上没有 FAIL case。',
+    pending: 'Validation 读取已整合，入口在主导航；完整 Scenario Runner 与发布验收尚未完成。',
     note:
       '当前 recorder 不等于完整 API;本页不生成占位 PASS 或伪 Agent 响应。Inspector 按记录原样展示 verdict,' +
       '缺失的 chain 段只标注 missing_reason,不会补写;artifact 内容只作为文本渲染,永不作为 HTML。',
