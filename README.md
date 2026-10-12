@@ -1,5 +1,10 @@
 # Jasmine Core V1
 
+## 本机可用版（2026-10-12）
+
+已完成的功能已整合供本机日常使用；Memory 与 Agent 自动接入未开放，完整 V1 验收仍未完成。见 [使用说明](docs/deployment/local-usable-release.md) 与 [本次部署结果](docs/deployment/local-usable-release-result.md)。
+
+
 Repository for the Jasmine Core V1 implementation and validation.
 
 ## Status
