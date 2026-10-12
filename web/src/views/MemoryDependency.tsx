@@ -29,10 +29,17 @@ import { isDependencyPending, type CoreApiError } from '../api/errors'
  */
 export function MemorySliceStatus({ slice = 'P6-03b1' }: { slice?: string } = {}): JSX.Element {
   return (
+    <div>
+    <nav aria-label="Memory 页面">
+      <a href="#/memory/health">健康</a> · <a href="#/memory/jobs">写入队列</a> ·{' '}
+      <a href="#/memory/items">记忆条目</a> · <a href="#/memory/traces">召回记录</a> ·{' '}
+      <a href="#/memory/reflect">显式历史反思</a>
+    </nav>
     <p className="state state--meta" data-testid="slice-status">
       <strong>Memory 功能读取 / 管理</strong> —— {slice}；健康和结果以 Core 响应为准。
       P4 收益实验保持停止，完整 P4/P6 阶段<strong>验收未通过</strong>。
     </p>
+    </div>
   )
 }
 
