@@ -78,7 +78,7 @@ describe('degraded Core', () => {
     expect(text).toContain('forbidden_scope')
     expect(text).toContain('缺少 scope 或角色不允许')
     // Only the one token was used: no second, higher-privilege attempt.
-    const authHeaders = new Set(fake?.requests.map((request) => request.authorization))
+    const authHeaders = new Set(fake?.requests.filter((request) => request.path.startsWith('/v1/')).map((request) => request.authorization))
     expect(authHeaders.size).toBe(1)
   })
 

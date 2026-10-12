@@ -41,6 +41,7 @@ import {
 } from './views/ValidationViews'
 
 const NAV = [
+  { label: 'Memory', href: '#/memory/health' },
   { label: 'Validation', href: '#/validation/runs' },
   { label: 'Overview', href: hrefFor({ name: 'overview' }) },
   { label: 'Conversation', href: hrefFor({ name: 'conversation', projectId: null, taskId: null, sessionId: null }) },
@@ -98,7 +99,7 @@ export function App(): JSX.Element {
           <p className="readonly-banner" role="note">
             已提供：项目与 Task/Step 管理、Rule 与 Review 审批、Evidence 读取和人工确认、Checkpoint/Context/Resume 读取、Validation 记录下钻。
             人工确认仅记录 INFO，验收状态需另行提交。Context 已构建不等于已注入 Agent。
-            未开放：Memory 引擎与自动召回、Agent 自动接入、多设备在线状态；P4 收益实验已停止。完整 P6/V1 验收尚未完成。
+            Memory 提供队列、条目管理与召回记录，实际健康状态请查看 Memory。未开放：Agent 自动采集/注入、多设备在线状态；P4 收益实验已停止。完整 P6/V1 验收尚未完成。
             <a href={hrefFor({ name: 'pending', key: 'memory' })}>未完成功能说明</a>。
           </p>
           <main id="main">{renderRoute(route)}</main>
@@ -116,6 +117,7 @@ function isCurrent(route: Route, href: string): boolean {
   if (href.includes('/interpretations')) return route.name === 'interpretations'
   if (href.includes('/reviews')) return route.name === 'reviews'
   if (href.includes('/validation')) return route.name.startsWith('validation')
+  if (href.includes('/memory')) return route.name.startsWith('memory')
   if (href.includes('/rules')) return route.name === 'rules'
   return false
 }

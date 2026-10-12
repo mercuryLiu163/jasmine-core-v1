@@ -30,8 +30,8 @@ import { isDependencyPending, type CoreApiError } from '../api/errors'
 export function MemorySliceStatus({ slice = 'P6-03b1' }: { slice?: string } = {}): JSX.Element {
   return (
     <p className="state state--meta" data-testid="slice-status">
-      <strong>状态:PARTIAL / DEPENDENCY_PENDING</strong> —— {slice} 的契约固定自 P4 提交{' '}
-      <code>0c4f8f0</code>,该阶段<strong>验收未通过</strong>;本页不是已通过的 P6 能力。
+      <strong>Memory 功能读取 / 管理</strong> —— {slice}；健康和结果以 Core 响应为准。
+      P4 收益实验保持停止，完整 P4/P6 阶段<strong>验收未通过</strong>。
     </p>
   )
 }

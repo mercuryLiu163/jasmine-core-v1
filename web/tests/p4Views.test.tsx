@@ -170,11 +170,11 @@ describe('a refused P4 read is shown as a missing dependency', () => {
     expect(panel.textContent).toContain('P4 阶段验收未通过')
   })
 
-  it('states PARTIAL / DEPENDENCY_PENDING on the view itself', async () => {
+  it('states the incomplete phase boundary on the view itself', async () => {
     const user = userEvent.setup()
     await enter(user, '#/memory/jobs', { ...SIGNED_IN, 'GET /v1/memory/jobs': PROXY_REFUSAL })
     const panel = await screen.findByRole('region', { name: /Memory Jobs/ })
-    expect(within(panel).getByTestId('slice-status').textContent).toContain('PARTIAL / DEPENDENCY_PENDING')
+    expect(within(panel).getByTestId('slice-status').textContent).toContain('Memory 功能读取 / 管理')
   })
 
   it.each(VIEWS)('%s states the status even when the read succeeds', async (
@@ -199,7 +199,7 @@ describe('a refused P4 read is shown as a missing dependency', () => {
     await enter(user, hash, { ...SIGNED_IN, ['GET ' + route]: { body: bodies[route] } })
     const panel = await screen.findByRole('region', { name: region })
     const status = await within(panel).findByTestId('slice-status')
-    expect(status.textContent).toContain('PARTIAL / DEPENDENCY_PENDING')
+    expect(status.textContent).toContain('Memory 功能读取 / 管理')
     // And it must name the pin and the unpassed acceptance, not just the status word.
     expect(status.textContent).toContain('验收未通过')
     expect(within(panel).queryByTestId('dependency-pending')).toBeNull()

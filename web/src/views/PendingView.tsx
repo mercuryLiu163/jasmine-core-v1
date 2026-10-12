@@ -8,6 +8,7 @@
  */
 
 import { Panel, Unavailable } from '../components/States'
+import { LocalBackupStatus } from '../components/LocalBackupStatus'
 
 interface PendingSpec {
   title: string
@@ -50,7 +51,7 @@ const SPECS: Record<string, PendingSpec> = {
     // The read slice exists (P6-03b1: health/jobs/items/traces) but its dependency is
     // unmerged, so it stays under this heading rather than in the nav. The writes and the
     // management contract are genuinely still missing.
-    pending: 'Memory 读取与管理代码已整合，但本机发布关闭引擎、worker 和代理入口。收益验收未完成，P4 实验保持停止。',
+    pending: 'Memory 写入队列、读取与管理已经整合；实际运行状态在主导航 Memory 中读取。Agent 自动采集/注入尚未接入，P4 收益实验保持停止。',
     note: 'Memory 是 NON_AUTHORITATIVE;它不会修改 Rule/State,浏览器也不会接触 Hindsight 凭据。',
   },
   validation: {
@@ -81,6 +82,7 @@ const SPECS: Record<string, PendingSpec> = {
 }
 
 export function PendingView({ pendingKey }: { pendingKey: string }): JSX.Element {
+  if (pendingKey === 'backup') return <LocalBackupStatus />
   const spec = SPECS[pendingKey]
   if (spec === undefined) {
     return (
