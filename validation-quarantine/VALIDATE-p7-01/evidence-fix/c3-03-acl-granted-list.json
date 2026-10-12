@@ -1,0 +1,56 @@
+{
+  "complete": true,
+  "corrupt_count": 0,
+  "count": 1,
+  "discovery": {
+    "capped": false,
+    "max_depth": 4,
+    "root_present": true,
+    "run_shaped_files": 1,
+    "scanned_dirs": 10,
+    "scanned_files": 7,
+    "unreadable_entries": 0
+  },
+  "duplicate_count": 0,
+  "has_more": false,
+  "ignored_entries": 3,
+  "ignored_samples": [],
+  "limit": 100,
+  "offset": 0,
+  "runs": [
+    {
+      "attribution": {
+        "projects": [
+          "prj_01M4E6VCCQBS71XGKA6KB03V74"
+        ],
+        "status": "attributed"
+      },
+      "case_counts": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 1,
+        "total": 1
+      },
+      "commit": "0000000000000000000000000000000000000000",
+      "core_version": "0.1.0",
+      "created_at": "2026-10-08T00:00:01.000000Z",
+      "evidence_grade": "simulated",
+      "grade_downgraded_by": [
+        "T-1"
+      ],
+      "manifest_status": "frozen",
+      "mode": "real",
+      "mode_basis": "declared real with recorder provenance and project attribution",
+      "record_sha256": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+      "record_status": "ok",
+      "run_id": "run-20261008T000001Z",
+      "schema_version": 11,
+      "stage": "P7",
+      "synthetic": false,
+      "verdict": "PASS",
+      "verdict_consistent": true
+    }
+  ],
+  "total": 1,
+  "visibility": "grant_filtered"
+}

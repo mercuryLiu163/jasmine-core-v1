@@ -1,0 +1,149 @@
+{
+  "all": [
+    {
+      "actual": 200,
+      "name": "real root list is 200",
+      "ok": true
+    },
+    {
+      "actual": 9,
+      "name": "real root total is 9",
+      "ok": true
+    },
+    {
+      "name": "no real run serves verdict FAIL",
+      "ok": true
+    },
+    {
+      "name": "no real case carries a FAIL verdict",
+      "ok": true
+    },
+    {
+      "actual": [
+        3,
+        6
+      ],
+      "name": "3 PASS / 6 BLOCKED at run level",
+      "ok": true
+    },
+    {
+      "actual": 404,
+      "name": "the fixture run id 404s under the real root",
+      "ok": true
+    },
+    {
+      "actual": "validation_run_not_found",
+      "name": "that refusal is validation_run_not_found",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "fixture root list is 200",
+      "ok": true
+    },
+    {
+      "name": "the fixture run is listed",
+      "ok": true
+    },
+    {
+      "actual": "FAIL",
+      "name": "the fixture run serves verdict FAIL (the FAIL code path)",
+      "ok": true
+    },
+    {
+      "actual": true,
+      "name": "the fixture row marks itself synthetic",
+      "ok": true
+    },
+    {
+      "actual": "unknown",
+      "name": "the fixture row is never graded real",
+      "ok": true
+    },
+    {
+      "actual": "unknown",
+      "name": "the fixture row's run grade is the documented min with the absent-manifest 'unknown' mode",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 0,
+        "fail": 1,
+        "pass": 0,
+        "total": 1
+      },
+      "name": "the fixture row counts one FAIL case",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "fixture detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "FAIL",
+      "name": "recorded run verdict served unchanged (FAIL)",
+      "ok": true
+    },
+    {
+      "name": "synthetic=true surfaced in detail",
+      "ok": true
+    },
+    {
+      "name": "synthetic_note surfaced verbatim",
+      "ok": true
+    },
+    {
+      "actual": "FAIL",
+      "name": "case verdict served unchanged (FAIL)",
+      "ok": true
+    },
+    {
+      "actual": "UI_FAILURE",
+      "name": "failure_class traceable to the record",
+      "ok": true
+    },
+    {
+      "actual": "expected 200 got 500",
+      "name": "failure_output traceable to the record",
+      "ok": true
+    },
+    {
+      "actual": "simulated",
+      "name": "the failing case is graded simulated",
+      "ok": true
+    },
+    {
+      "actual": "the run record marks itself synthetic",
+      "name": "grade_basis names the synthetic run",
+      "ok": true
+    },
+    {
+      "actual": true,
+      "name": "verdict_consistent is reported, not enforced",
+      "ok": true
+    },
+    {
+      "name": "the fixture file lives outside the operator run root",
+      "ok": true
+    },
+    {
+      "actual": 9,
+      "name": "the operator run root is unchanged (9 files)",
+      "ok": true
+    },
+    {
+      "name": "fixture record is self-labelled synthetic in the file",
+      "ok": true
+    },
+    {
+      "actual": "P7",
+      "name": "fixture record declares stage P7 (not P0)",
+      "ok": true
+    }
+  ],
+  "checks": 28,
+  "failed": 0,
+  "failures": [],
+  "label": "criterion 1"
+}

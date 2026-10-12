@@ -1,0 +1,130 @@
+[ok] nine real records present
+[ok] run-20260929T162925Z: detail case count matches the file
+[ok] run-20260929T162925Z/P0-T01: reason-only context
+[ok] run-20260929T162925Z/P0-T01: reason served verbatim
+[ok] run-20260929T162925Z/P0-T02: reason-only context
+[ok] run-20260929T162925Z/P0-T02: reason served verbatim
+[ok] run-20260929T162925Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162925Z/P0-T04: reason-only context
+[ok] run-20260929T162925Z/P0-T04: reason served verbatim
+[ok] run-20260929T162925Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162925Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162925Z/P0-T07: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162307Z: detail case count matches the file
+[ok] run-20260929T162307Z/P0-T01: reason-only context
+[ok] run-20260929T162307Z/P0-T01: reason served verbatim
+[ok] run-20260929T162307Z/P0-T02: reason-only context
+[ok] run-20260929T162307Z/P0-T02: reason served verbatim
+[ok] run-20260929T162307Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162307Z/P0-T04: reason-only context
+[ok] run-20260929T162307Z/P0-T04: reason served verbatim
+[ok] run-20260929T162307Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162307Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162307Z/P0-T07: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T145257Z: detail case count matches the file
+[ok] run-20260929T145257Z/P0-T01: reason-only context
+[ok] run-20260929T145257Z/P0-T01: reason served verbatim
+[ok] run-20260929T145257Z/P0-T02: reason-only context
+[ok] run-20260929T145257Z/P0-T02: reason served verbatim
+[ok] run-20260929T145257Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T145257Z/P0-T04: reason-only context
+[ok] run-20260929T145257Z/P0-T04: reason served verbatim
+[ok] run-20260929T145257Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T145257Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T145257Z/P0-T07: sentinel context
+[ok] run-20260929T145257Z: agent missing in every case of a BLOCKED run
+[ok] run-20260929T161915Z: detail case count matches the file
+[ok] run-20260929T161915Z/P0-T01: reason-only context
+[ok] run-20260929T161915Z/P0-T01: reason served verbatim
+[ok] run-20260929T161915Z/P0-T02: reason-only context
+[ok] run-20260929T161915Z/P0-T02: reason served verbatim
+[ok] run-20260929T161915Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T161915Z/P0-T04: reason-only context
+[ok] run-20260929T161915Z/P0-T04: reason served verbatim
+[ok] run-20260929T161915Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T161915Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T161915Z/P0-T07: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T144539Z: detail case count matches the file
+[ok] run-20260929T144539Z/P0-T01: reason-only context
+[ok] run-20260929T144539Z/P0-T01: reason served verbatim
+[ok] run-20260929T144539Z/P0-T02: reason-only context
+[ok] run-20260929T144539Z/P0-T02: reason served verbatim
+[ok] run-20260929T144539Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T144539Z/P0-T04: reason-only context
+[ok] run-20260929T144539Z/P0-T04: reason served verbatim
+[ok] run-20260929T144539Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T144539Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T144539Z/P0-T07: sentinel context
+[ok] run-20260929T144539Z: agent missing in every case of a BLOCKED run
+[ok] run-20260929T143845Z: detail case count matches the file
+[ok] run-20260929T143845Z/P0-T01: reason-only context
+[ok] run-20260929T143845Z/P0-T01: reason served verbatim
+[ok] run-20260929T143845Z/P0-T02: reason-only context
+[ok] run-20260929T143845Z/P0-T02: reason served verbatim
+[ok] run-20260929T143845Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143845Z/P0-T04: reason-only context
+[ok] run-20260929T143845Z/P0-T04: reason served verbatim
+[ok] run-20260929T143845Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143845Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143845Z/P0-T07: sentinel context
+[ok] run-20260929T143845Z: agent missing in every case of a BLOCKED run
+[ok] run-20260929T142847Z: detail case count matches the file
+[ok] run-20260929T142847Z/P0-T01: reason-only context
+[ok] run-20260929T142847Z/P0-T01: reason served verbatim
+[ok] run-20260929T142847Z/P0-T02: reason-only context
+[ok] run-20260929T142847Z/P0-T02: reason served verbatim
+[ok] run-20260929T142847Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T142847Z/P0-T04: reason-only context
+[ok] run-20260929T142847Z/P0-T04: reason served verbatim
+[ok] run-20260929T142847Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T142847Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T142847Z/P0-T07: sentinel context
+[ok] run-20260929T142847Z: agent missing in every case of a BLOCKED run
+[ok] run-20260929T143156Z: detail case count matches the file
+[ok] run-20260929T143156Z/P0-T01: reason-only context
+[ok] run-20260929T143156Z/P0-T01: reason served verbatim
+[ok] run-20260929T143156Z/P0-T02: reason-only context
+[ok] run-20260929T143156Z/P0-T02: reason served verbatim
+[ok] run-20260929T143156Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143156Z/P0-T04: reason-only context
+[ok] run-20260929T143156Z/P0-T04: reason served verbatim
+[ok] run-20260929T143156Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143156Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143156Z/P0-T07: sentinel context
+[ok] run-20260929T143156Z: agent missing in every case of a BLOCKED run
+[ok] run-20260929T173423Z: detail case count matches the file
+[ok] run-20260929T173423Z/P0-T01: reason-only context
+[ok] run-20260929T173423Z/P0-T01: reason served verbatim
+[ok] run-20260929T173423Z/P0-T02: reason-only context
+[ok] run-20260929T173423Z/P0-T02: reason served verbatim
+[ok] run-20260929T173423Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T173423Z/P0-T04: reason-only context
+[ok] run-20260929T173423Z/P0-T04: reason served verbatim
+[ok] run-20260929T173423Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T173423Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T173423Z/P0-T07: sentinel context
+[ok] run-20260929T173423Z: agent missing in every case of a BLOCKED run
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-revalidation/c2-01-real-details.json
+[ok] served run verdict == recorded run verdict for all nine
+[ok] all nine real runs report verdict_consistent=true (a report, not a rewrite)
+[ok] 63 real cases walked
+[ok] no real case has a context pack
+[ok] the three frozen Context missing_reasons are all exercised
+[ok] context present_kind census is 6 sentinel / 27 reason_only / 30 value
+[ok] 6 BLOCKED runs have agent missing in all 7 cases
+[ok] 3 PASS runs have agent_response present in at least one case
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-revalidation/c2-02-inconsistent-verdict-detail.json
+[ok] an inconsistent record is still served (200)
+[ok] the recorded verdict is served unchanged (PASS), not corrected
+[ok] verdict_consistent=false is reported for the inconsistency
+[ok] the case verdict is served unchanged (BLOCKED)
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-revalidation/c2-07-absent-fields-detail.json
+[ok] absent context section is named absent, fabricating no value
+[ok] absent context chain link is missing with a named reason
+[ok] absent agent_response is named absent
+[ok] absent agent chain link is missing with a named reason
+[ok] the absent-field record's verdict is still served as recorded
+[ok] the inconsistent fixture is absent from the real root
+[ok] the absent-field fixture is absent from the real root
+[ok] the real root still lists exactly nine
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-revalidation/c2-03-criterion2-report.json

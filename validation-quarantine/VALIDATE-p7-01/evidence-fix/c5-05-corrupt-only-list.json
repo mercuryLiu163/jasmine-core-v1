@@ -1,0 +1,50 @@
+{
+  "complete": true,
+  "corrupt_count": 1,
+  "count": 1,
+  "discovery": {
+    "capped": false,
+    "max_depth": 4,
+    "root_present": true,
+    "run_shaped_files": 1,
+    "scanned_dirs": 3,
+    "scanned_files": 1,
+    "unreadable_entries": 0
+  },
+  "duplicate_count": 0,
+  "has_more": false,
+  "ignored_entries": 0,
+  "ignored_samples": [],
+  "limit": 20,
+  "offset": 0,
+  "runs": [
+    {
+      "attribution": null,
+      "case_counts": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 0,
+        "total": 0
+      },
+      "commit": null,
+      "core_version": null,
+      "corrupt_reason": "unparseable: JSONDecodeError",
+      "created_at": null,
+      "evidence_grade": null,
+      "grade_downgraded_by": [],
+      "manifest_status": null,
+      "mode": null,
+      "mode_basis": null,
+      "record_sha256": "5904a5cacb8ec3ce7ae0f5a0382bf9c628f4b1e98eac8f93c4e7071d62eb729b",
+      "record_status": "corrupt",
+      "run_id": "run-20261008T000004Z",
+      "schema_version": null,
+      "stage": null,
+      "synthetic": false,
+      "verdict": null,
+      "verdict_consistent": null
+    }
+  ],
+  "total": 1,
+  "visibility": "all"
+}

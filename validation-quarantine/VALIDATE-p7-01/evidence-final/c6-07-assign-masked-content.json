@@ -1,0 +1,13 @@
+{
+  "artifact_id": "art_assign",
+  "bytes": 55,
+  "content": "2026-10-08 INFO db_password=[REDACTED] in the log line\n",
+  "content_is_original": false,
+  "form": "masked",
+  "mask_algorithm": "canonical.redact_text",
+  "mask_version": "1",
+  "masked_sha256": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+  "media_type": "text/plain",
+  "original_sha256": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+  "served_sha256": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d"
+}

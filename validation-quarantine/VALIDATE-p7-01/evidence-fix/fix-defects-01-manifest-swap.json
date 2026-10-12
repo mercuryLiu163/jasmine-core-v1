@@ -1,0 +1,45 @@
+{
+  "a_text": "AAA-CONTENT-SERVED-FROM-MANIFEST-A",
+  "after_swap_back_to_a": {
+    "seconds": 0.0019,
+    "status": 200
+  },
+  "after_swap_to_b": {
+    "content": {
+      "code": "validation_run_not_found",
+      "seconds": 0.0015,
+      "status": 404
+    },
+    "manifest": {
+      "code": "validation_run_not_found",
+      "status": 404
+    }
+  },
+  "b_text": "BBB-CONTENT-SERVED-FROM-MANIFEST-B",
+  "grant_check_exercised": {
+    "content": {
+      "content": "AAA-CONTENT-SERVED-FROM-MANIFEST-A",
+      "seconds": 0.0018,
+      "status": 200
+    },
+    "manifest": {
+      "manifest_sha256": "b84957e1661da50bc338780a17097d500cc86a7184566d18e60ef41b8326b0ae",
+      "seconds": 0.0016,
+      "status": 200
+    }
+  },
+  "granted_project": "prj_01M4E6VDEBKBYEF4P6KYE5P6CM",
+  "manifest_a_sha256": "b84957e1661da50bc338780a17097d500cc86a7184566d18e60ef41b8326b0ae",
+  "manifest_b_sha256": "447c53e7259c6c24c738d87895a02407c9b54e4cb79afaea5e744c6b5d61053c",
+  "race": {
+    "content_200": 28,
+    "content_404": 32,
+    "manifest_200": 36,
+    "manifest_404": 24,
+    "max_seconds": 0.005,
+    "mixed": [],
+    "requests": 120,
+    "swaps": 1274
+  },
+  "ungranted_project": "prj_01M4E6VDEDPA9KYZXXRQB2JWNE"
+}

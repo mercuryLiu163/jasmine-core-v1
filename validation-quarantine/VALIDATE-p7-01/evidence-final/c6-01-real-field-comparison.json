@@ -1,0 +1,56 @@
+{
+  "run-20260929T142847Z": {
+    "detail_verdict": "BLOCKED",
+    "list_record_sha256": "294d9fb5962956585b7bb57892371c079667c55b09e6026ae7fecbfb4b000de0",
+    "source_path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs/p0-takeover-20260929T142645Z/acceptance/run-20260929T142847Z.json",
+    "source_sha256": "294d9fb5962956585b7bb57892371c079667c55b09e6026ae7fecbfb4b000de0"
+  },
+  "run-20260929T143156Z": {
+    "detail_verdict": "BLOCKED",
+    "list_record_sha256": "b42e3c2985bc35f45a870930501bd88ec4e4fa49b8e47dfdcd3cbaf68afb67a4",
+    "source_path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs/p0-takeover-20260929T142645Z/committed-acceptance/run-20260929T143156Z.json",
+    "source_sha256": "b42e3c2985bc35f45a870930501bd88ec4e4fa49b8e47dfdcd3cbaf68afb67a4"
+  },
+  "run-20260929T143845Z": {
+    "detail_verdict": "BLOCKED",
+    "list_record_sha256": "18dfa9066828cd6d5cb82c57a08bc60a0788f538691195d7a24110f4152d88eb",
+    "source_path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs/p0-resume-20260929T143554Z/p003-final-acceptance/run-20260929T143845Z.json",
+    "source_sha256": "18dfa9066828cd6d5cb82c57a08bc60a0788f538691195d7a24110f4152d88eb"
+  },
+  "run-20260929T144539Z": {
+    "detail_verdict": "BLOCKED",
+    "list_record_sha256": "201d3711301d462e89b02a9e2567ed3f94620b3ec0a6c83b98b3b873b5f86860",
+    "source_path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs/p0-resume-20260929T143554Z/p003-9dfc855-acceptance/run-20260929T144539Z.json",
+    "source_sha256": "201d3711301d462e89b02a9e2567ed3f94620b3ec0a6c83b98b3b873b5f86860"
+  },
+  "run-20260929T145257Z": {
+    "detail_verdict": "BLOCKED",
+    "list_record_sha256": "ee61f802151dfc0a791dd3dbaf11e2a033d944b5e0ed69b0bd1f89e4439154f2",
+    "source_path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs/p0-resume-20260929T143554Z/p003-6dd2cc4-acceptance/run-20260929T145257Z.json",
+    "source_sha256": "ee61f802151dfc0a791dd3dbaf11e2a033d944b5e0ed69b0bd1f89e4439154f2"
+  },
+  "run-20260929T161915Z": {
+    "detail_verdict": "PASS",
+    "list_record_sha256": "df079d9e8e10fa5eedc36af561dcab3df9b978f27a5937685c108fa1a0a582e2",
+    "source_path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs/p0-resume-20260929T143554Z/p003-6dd2cc4-real-acceptance/run-20260929T161915Z.json",
+    "source_sha256": "df079d9e8e10fa5eedc36af561dcab3df9b978f27a5937685c108fa1a0a582e2"
+  },
+  "run-20260929T162307Z": {
+    "detail_verdict": "PASS",
+    "list_record_sha256": "a6c4462f7691e309fba945ef9571c28766355743ea8cd0b37611aa15fbb68cac",
+    "source_path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs/p0-resume-20260929T143554Z/p003-59ee8c4-real-acceptance/run-20260929T162307Z.json",
+    "source_sha256": "a6c4462f7691e309fba945ef9571c28766355743ea8cd0b37611aa15fbb68cac"
+  },
+  "run-20260929T162925Z": {
+    "detail_verdict": "PASS",
+    "list_record_sha256": "90e97041c61ad53adab25cea5a537cd685f8a7c9e40218decaaa3da4ab8b0f8c",
+    "source_path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs/p0-resume-20260929T143554Z/main-46cf99f-real-acceptance/run-20260929T162925Z.json",
+    "source_sha256": "90e97041c61ad53adab25cea5a537cd685f8a7c9e40218decaaa3da4ab8b0f8c"
+  },
+  "run-20260929T173423Z": {
+    "detail_verdict": "BLOCKED",
+    "list_record_sha256": "80b130e6c2783905e1569ef604b59278f0a958a7077416e757d2c60c45ff9aa2",
+    "source_path": "/Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs/p1-implementation/p1-02-67bdbfc/p0-regression/run-20260929T173423Z.json",
+    "source_sha256": "80b130e6c2783905e1569ef604b59278f0a958a7077416e757d2c60c45ff9aa2"
+  }
+}

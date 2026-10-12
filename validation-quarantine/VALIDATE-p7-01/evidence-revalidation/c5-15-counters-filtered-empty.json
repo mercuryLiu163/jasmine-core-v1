@@ -1,0 +1,24 @@
+{
+  "complete": true,
+  "corrupt_count": 0,
+  "count": 0,
+  "discovery": {
+    "capped": false,
+    "max_depth": 4,
+    "root_present": true,
+    "run_shaped_files": 7,
+    "scanned_dirs": 15,
+    "scanned_files": 7,
+    "unreadable_entries": 0
+  },
+  "duplicate_count": 0,
+  "empty_reason": "all_filtered_out",
+  "has_more": false,
+  "ignored_entries": 0,
+  "ignored_samples": [],
+  "limit": 20,
+  "offset": 0,
+  "runs": [],
+  "total": 0,
+  "visibility": "all"
+}

@@ -1,0 +1,84 @@
+{
+  "complete": true,
+  "corrupt_count": 1,
+  "count": 2,
+  "discovery": {
+    "capped": false,
+    "max_depth": 4,
+    "root_present": true,
+    "run_shaped_files": 2,
+    "scanned_dirs": 5,
+    "scanned_files": 3,
+    "unreadable_entries": 0
+  },
+  "duplicate_count": 0,
+  "has_more": false,
+  "ignored_entries": 1,
+  "ignored_samples": [
+    {
+      "reason": "not_run_shaped",
+      "relative_path": "big-manifest/run-20261008T000301Z/manifest.json"
+    }
+  ],
+  "limit": 100,
+  "offset": 0,
+  "runs": [
+    {
+      "attribution": {
+        "projects": [],
+        "reason": "manifest_corrupt",
+        "status": "unattributed"
+      },
+      "case_counts": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 1,
+        "total": 1
+      },
+      "commit": "0000000000000000000000000000000000000000",
+      "core_version": "0.1.0",
+      "created_at": "2026-10-08T00:00:01.000000Z",
+      "evidence_grade": "unknown",
+      "grade_downgraded_by": [],
+      "manifest_status": "corrupt",
+      "mode": "unknown",
+      "mode_basis": "the bundle manifest is corrupt",
+      "record_sha256": "1405c679ab75955f1856c3db044f5b84714432b8b379d1cfbeb6d87598fc33f6",
+      "record_status": "ok",
+      "run_id": "run-20261008T000301Z",
+      "schema_version": 11,
+      "stage": "P7",
+      "synthetic": false,
+      "verdict": "PASS",
+      "verdict_consistent": true
+    },
+    {
+      "attribution": null,
+      "case_counts": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 0,
+        "total": 0
+      },
+      "commit": null,
+      "core_version": null,
+      "corrupt_reason": "record exceeds 16777216 bytes",
+      "created_at": null,
+      "evidence_grade": null,
+      "grade_downgraded_by": [],
+      "manifest_status": null,
+      "mode": null,
+      "mode_basis": null,
+      "record_sha256": "",
+      "record_status": "corrupt",
+      "run_id": "run-20261008T000302Z",
+      "schema_version": null,
+      "stage": null,
+      "synthetic": false,
+      "verdict": null,
+      "verdict_consistent": null
+    }
+  ],
+  "total": 2,
+  "visibility": "all"
+}

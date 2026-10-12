@@ -555,3 +555,91 @@ and receipt. The resulting Evidence is `USER_CONFIRMATION/INFO` and does not
 change State. The legacy `/v1/evidence/confirm` human prompt contract is unchanged.
 See [ADR 0015](../adr/0015-web-human-confirmation.md) for the trust boundary and
 transaction/scanning rules.
+## P7-01 Validation read extension
+
+See [ADR 0015](../adr/0016-p7-validation-read-contract.md). This slice **reads**
+the run records `validation.recorder` already wrote: it serves the recorded
+verdict unchanged, names what each case is missing, reports the evidence grade
+and, when a bundle manifest exists, serves declared text artifacts safely. It
+never runs a scenario and never writes; the root is operator configuration only
+and a request can never name a path.
+
+The run root is `JASMINE_CORE_VALIDATION_RUNS` (absolute or relative, no
+default). Unset, missing, not a directory, symlinked or unreadable is
+`503 validation_not_configured` with a branchable `error.details.reason`; a
+knowingly incomplete walk is the same 503 with `reason: "index_incomplete"`, so a
+page can never silently omit rows. A malformed id never reads a record file, and
+an unreadable artifact never blocks a different one.
+
+New scopes: `validation:read` (read-only, any actor) and
+`validation:unattributed` (refused at key issuance for `agent` keys). Grants
+reuse the P4 `memory_project_actors` mechanism: `single_user` serves every run;
+`acl` checks **every** declared project and reports a run the caller may not read
+exactly like a run that does not exist (`404 validation_run_not_found`), so no
+Validation route ever emits `project_not_found`. An unattributed run (all nine
+real records are unattributed) additionally needs `validation:unattributed` in
+`acl` mode.
+
+| Method | Path | Scope | Purpose |
+| --- | --- | --- | --- |
+| GET | `/v1/validation/runs` | `validation:read` | List runs; `limit`, `offset`, `verdict`, `stage`, `mode`, `attribution`, `project`; also `total`, `corrupt_count`, `duplicate_count`, `ignored_entries`, `ignored_samples[]`, `discovery`, `complete`, `visibility` and `empty_reason` |
+| GET | `/v1/validation/runs/{run_id}` | `validation:read` | Recorded detail, case by case, with `sections`, `chain`, `evidence_grade`, `grade_basis` and run-level `warnings[]` |
+| GET | `/v1/validation/runs/{run_id}/manifest` | `validation:read` | Manifest `status` (`frozen`/`absent`/`corrupt`), derived `mode`, `projects`, `sources`, declared `files[]` with `integrity`, and `manifest_sha256` |
+| GET | `/v1/validation/runs/{run_id}/artifacts/{artifact_id}` | `validation:read` | Declared metadata: `bytes`, `declared_sha256`, `declared_bytes`, `integrity`, `media_type`, `forms`, separate `digests: {original, masked}`, `content_scan` |
+| GET | `/v1/validation/runs/{run_id}/artifacts/{artifact_id}/content` | `validation:read` | Text content; `form=masked` (default) or `form=original`, optional `download=1` |
+
+`run_id` matches `^run-[0-9]{8}T[0-9]{6}Z$` and `artifact_id` matches
+`^art_[a-z0-9][a-z0-9_.-]{0,63}$`; both are anchored against the raw,
+non-percent-decoded route capture. Unknown query keys are `400 invalid_request`.
+
+A run-shaped record that cannot be parsed is listed as `record_status:
+"corrupt"` (never as an empty list) and refused by id with
+`409 validation_run_corrupt`; two run-shaped files sharing a stem are both listed
+and refused with `409 validation_run_ambiguous`. A malformed manifest is
+`409 validation_manifest_corrupt` on the manifest route, and makes its artifacts
+unaddressable (`404 artifact_not_found`, `reason: "manifest_corrupt"`). A
+declared file whose bytes disagree with `sha256`/`bytes` is `409
+artifact_modified`, one over 8 MiB is `413 payload_too_large`, a symlinked file or
+symlinked intermediate directory is `404 artifact_not_found` with `reason:
+"symlink_refused"`, and a non-text artifact is `415 unsupported_media_type`.
+
+**Content.** Text only. `form=masked` serves `canonical.redact_text(text)` with
+`mask_algorithm: "canonical.redact_text"` and
+`mask_version: canonical.REDACT_TEXT_VERSION`, so `masked_sha256` is reproducible
+from `(algorithm, version, input)`. `form=original` is served only when the bytes
+were read once under the cap and hash to the declared digest, decode as strict
+UTF-8, the manifest does not declare `credential_shaped: true`, **and** the
+masker is a no-op (`redact_text(text) == text`); otherwise `403
+original_withheld` with `details.reason ∈ {credential_shaped_declared,
+mask_not_noop, not_utf8}` and `details.masked_sha256`. The shared writer always
+sends JSON, so the content route returns a JSON envelope
+`{artifact_id, form, media_type, bytes, served_sha256, original_sha256,
+masked_sha256, mask_algorithm?, mask_version?, content, content_is_original}`
+(note `served_sha256`, never a bare `sha256`) and sets `X-Content-Type-Options:
+nosniff`, `Content-Security-Policy: default-src 'none'; sandbox`,
+`X-Validation-Form`, `X-Validation-Sha256`, `X-Validation-Original-Sha256` and
+`Content-Disposition` for `download=1`. HTML or script therefore cannot be served
+as a renderable page. A raw-byte download route would need a change to the shared
+`server.py` and is out of this slice.
+
+**Manifest.** `manifest_authentication: "unauthenticated"` states in the API
+itself that `frozen_at`, `mode` and `credential_shaped` are self-declared and
+unsigned; the reader never calls them verified. `mode` is derived: `real`
+requires non-empty `projects` and recorder provenance, `component`/`simulated`
+are as declared, and anything else is `unknown`. `attribution.status` is
+`attributed` iff the effective `projects` list is non-empty, otherwise
+`unattributed` with a `reason` (`declared_empty`, `manifest_absent` or
+`manifest_corrupt`).
+
+**Errors (new):** `503 validation_not_configured`, `503
+validation_index_too_large`, `409 validation_run_corrupt`, `409
+validation_run_ambiguous`, `409 validation_manifest_corrupt`, `409
+artifact_modified`, `403 original_withheld`, plus the `404
+validation_run_not_found` and `404 artifact_not_found` the `NotFound` shape
+already produces.
+
+**Acceptance criterion 1 is BLOCKED.** No real P7-format FAIL run exists on disk,
+so the FAIL path is only exercised on a clearly-labelled `synthetic: true`
+fixture under `tests/fixtures/p7/`; a fixture is never evidence. The unblock
+action is for the P7 owner to record one genuinely failing scenario with
+`recorder.py` into the configured run root.

@@ -1,0 +1,11 @@
+{
+  "artifact_id": "art_good",
+  "bytes": 13,
+  "content": "hello bundle\n",
+  "content_is_original": true,
+  "form": "original",
+  "masked_sha256": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+  "media_type": "text/plain",
+  "original_sha256": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+  "served_sha256": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+}

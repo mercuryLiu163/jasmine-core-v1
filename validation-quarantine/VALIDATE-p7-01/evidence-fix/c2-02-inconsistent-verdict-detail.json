@@ -1,0 +1,135 @@
+{
+  "cases": [
+    {
+      "agent_response": "mocked: fixture response",
+      "case_id": "F-1",
+      "chain": {
+        "agent": {
+          "present": true,
+          "source": "case.agent_response"
+        },
+        "context": {
+          "missing_reason": "the case records a reason, not a context pack",
+          "present": false,
+          "source": "case.context"
+        },
+        "evidence": {
+          "missing_reason": "the case records no evidence",
+          "present": false,
+          "source": "case.evidence"
+        },
+        "extraction": {
+          "missing_reason": "the recorder records no Extraction section",
+          "present": false,
+          "source": null
+        },
+        "raw": {
+          "present": true,
+          "source": "case.user_raw"
+        },
+        "resolution": {
+          "missing_reason": "the recorder records no Resolution section",
+          "present": false,
+          "source": null
+        },
+        "state": {
+          "missing_reason": "neither state_before nor state_after records a value",
+          "present": false,
+          "source": "case.state_before + case.state_after"
+        },
+        "tool": {
+          "missing_reason": "the case records no tool call",
+          "present": false,
+          "source": "case.tools"
+        }
+      },
+      "context": {
+        "reason": "no context pack"
+      },
+      "evidence": [],
+      "evidence_grade": "simulated",
+      "failure_class": "UI_FAILURE",
+      "failure_output": "expected 200 got 500",
+      "grade_basis": "the run record marks itself synthetic",
+      "interpretation": "N/A (P0 not implemented)",
+      "name": "a clearly failing case",
+      "not_applied_reason": null,
+      "reproduction": [
+        "GET /x"
+      ],
+      "sections": {
+        "agent_response": {
+          "evidence_grade": "simulated",
+          "present": true,
+          "present_kind": "value",
+          "value": "mocked: fixture response"
+        },
+        "context": {
+          "context_pack_present": false,
+          "evidence_grade": "simulated",
+          "present": false,
+          "present_kind": "reason_only",
+          "recorded_reason": "no context pack"
+        },
+        "interpretation": {
+          "evidence_grade": "simulated",
+          "missing_reason": "recorded as N/A (P0 not implemented)",
+          "present": false,
+          "present_kind": "sentinel"
+        },
+        "state_after": {
+          "evidence_grade": "simulated",
+          "present": false,
+          "present_kind": "reason_only",
+          "recorded_reason": null
+        },
+        "state_before": {
+          "evidence_grade": "simulated",
+          "present": false,
+          "present_kind": "reason_only",
+          "recorded_reason": null
+        },
+        "tools": {
+          "evidence_grade": "simulated",
+          "missing_reason": "recorded as empty",
+          "present": false,
+          "present_kind": "absent"
+        },
+        "user_raw": {
+          "evidence_grade": "simulated",
+          "present": true,
+          "present_kind": "value",
+          "value": "go"
+        }
+      },
+      "state_after": {},
+      "state_before": {},
+      "tools": [],
+      "user_raw": "go",
+      "verdict": "BLOCKED"
+    }
+  ],
+  "commit": "0000000000000000000000000000000000000000",
+  "core_version": "0.1.0",
+  "created_at": "2026-10-08T00:00:02.000000Z",
+  "environment": {
+    "platform": "fixture",
+    "python": "3.11"
+  },
+  "evidence_grade": "unknown",
+  "executor": "fixture",
+  "grade_downgraded_by": [],
+  "not_implemented": [],
+  "notes": [],
+  "reviewer": "fixture",
+  "run_id": "run-20261008T000101Z",
+  "schema_version": 11,
+  "stage": "P7",
+  "synthetic": true,
+  "synthetic_note": "NOT EVIDENCE: inconsistent-verdict fixture",
+  "unknown_record_keys": [],
+  "verdict": "PASS",
+  "verdict_consistent": false,
+  "verifier": "fixture",
+  "warnings": []
+}

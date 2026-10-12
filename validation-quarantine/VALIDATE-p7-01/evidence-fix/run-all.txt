@@ -1,0 +1,1512 @@
+########## analysis_real_records (read-only census)
+ROOT: /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs
+RUN-SHAPED FILES: 9
+{"agent_response_kinds": {"sentinel": 6, "value": 1}, "bytes": 43682, "case_count": 7, "case_verdicts": {"PASS": 7}, "commit": "46cf99f295f86e1db8104c9c17f703e8cba3c389", "context_kinds": {"reason_only": 3, "run_details(no pack)": 4}, "context_pack_present": 0, "core_version": "0.1.0", "created_at": "2026-09-29T16:29:25.135065Z", "evidence_entries": 5, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "record_sha256": "90e97041c61ad53adab25cea5a537cd685f8a7c9e40218decaaa3da4ab8b0f8c", "relative_path": "p0-resume-20260929T143554Z/main-46cf99f-real-acceptance/run-20260929T162925Z.json", "run_id": "run-20260929T162925Z", "schema_version": 2, "stage": "P0", "status_field": null, "stem": "run-20260929T162925Z", "synthetic": false, "top_level_keys": ["cases", "commit", "core_version", "created_at", "environment", "executor", "not_implemented", "notes", "redactions", "reviewer", "run_id", "schema_version", "stage", "verdict", "verifier"], "verdict": "PASS"}
+{"agent_response_kinds": {"sentinel": 6, "value": 1}, "bytes": 43659, "case_count": 7, "case_verdicts": {"PASS": 7}, "commit": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64", "context_kinds": {"reason_only": 3, "run_details(no pack)": 4}, "context_pack_present": 0, "core_version": "0.1.0", "created_at": "2026-09-29T16:23:07.302917Z", "evidence_entries": 5, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "record_sha256": "a6c4462f7691e309fba945ef9571c28766355743ea8cd0b37611aa15fbb68cac", "relative_path": "p0-resume-20260929T143554Z/p003-59ee8c4-real-acceptance/run-20260929T162307Z.json", "run_id": "run-20260929T162307Z", "schema_version": 2, "stage": "P0", "status_field": null, "stem": "run-20260929T162307Z", "synthetic": false, "top_level_keys": ["cases", "commit", "core_version", "created_at", "environment", "executor", "not_implemented", "notes", "redactions", "reviewer", "run_id", "schema_version", "stage", "verdict", "verifier"], "verdict": "PASS"}
+{"agent_response_kinds": {"sentinel": 7}, "bytes": 41407, "case_count": 7, "case_verdicts": {"BLOCKED": 1, "PASS": 6}, "commit": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6", "context_kinds": {"reason_only": 3, "run_details(no pack)": 3, "sentinel": 1}, "context_pack_present": 0, "core_version": "0.1.0", "created_at": "2026-09-29T14:52:57.450292Z", "evidence_entries": 1, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "record_sha256": "ee61f802151dfc0a791dd3dbaf11e2a033d944b5e0ed69b0bd1f89e4439154f2", "relative_path": "p0-resume-20260929T143554Z/p003-6dd2cc4-acceptance/run-20260929T145257Z.json", "run_id": "run-20260929T145257Z", "schema_version": 2, "stage": "P0", "status_field": null, "stem": "run-20260929T145257Z", "synthetic": false, "top_level_keys": ["cases", "commit", "core_version", "created_at", "environment", "executor", "not_implemented", "notes", "redactions", "reviewer", "run_id", "schema_version", "stage", "verdict", "verifier"], "verdict": "BLOCKED"}
+{"agent_response_kinds": {"sentinel": 6, "value": 1}, "bytes": 43579, "case_count": 7, "case_verdicts": {"PASS": 7}, "commit": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6", "context_kinds": {"reason_only": 3, "run_details(no pack)": 4}, "context_pack_present": 0, "core_version": "0.1.0", "created_at": "2026-09-29T16:19:15.513570Z", "evidence_entries": 5, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "record_sha256": "df079d9e8e10fa5eedc36af561dcab3df9b978f27a5937685c108fa1a0a582e2", "relative_path": "p0-resume-20260929T143554Z/p003-6dd2cc4-real-acceptance/run-20260929T161915Z.json", "run_id": "run-20260929T161915Z", "schema_version": 2, "stage": "P0", "status_field": null, "stem": "run-20260929T161915Z", "synthetic": false, "top_level_keys": ["cases", "commit", "core_version", "created_at", "environment", "executor", "not_implemented", "notes", "redactions", "reviewer", "run_id", "schema_version", "stage", "verdict", "verifier"], "verdict": "PASS"}
+{"agent_response_kinds": {"sentinel": 7}, "bytes": 41407, "case_count": 7, "case_verdicts": {"BLOCKED": 1, "PASS": 6}, "commit": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294", "context_kinds": {"reason_only": 3, "run_details(no pack)": 3, "sentinel": 1}, "context_pack_present": 0, "core_version": "0.1.0", "created_at": "2026-09-29T14:45:39.604744Z", "evidence_entries": 1, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "record_sha256": "201d3711301d462e89b02a9e2567ed3f94620b3ec0a6c83b98b3b873b5f86860", "relative_path": "p0-resume-20260929T143554Z/p003-9dfc855-acceptance/run-20260929T144539Z.json", "run_id": "run-20260929T144539Z", "schema_version": 2, "stage": "P0", "status_field": null, "stem": "run-20260929T144539Z", "synthetic": false, "top_level_keys": ["cases", "commit", "core_version", "created_at", "environment", "executor", "not_implemented", "notes", "redactions", "reviewer", "run_id", "schema_version", "stage", "verdict", "verifier"], "verdict": "BLOCKED"}
+{"agent_response_kinds": {"sentinel": 7}, "bytes": 41380, "case_count": 7, "case_verdicts": {"BLOCKED": 1, "PASS": 6}, "commit": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4", "context_kinds": {"reason_only": 3, "run_details(no pack)": 3, "sentinel": 1}, "context_pack_present": 0, "core_version": "0.1.0", "created_at": "2026-09-29T14:38:45.371633Z", "evidence_entries": 1, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "record_sha256": "18dfa9066828cd6d5cb82c57a08bc60a0788f538691195d7a24110f4152d88eb", "relative_path": "p0-resume-20260929T143554Z/p003-final-acceptance/run-20260929T143845Z.json", "run_id": "run-20260929T143845Z", "schema_version": 2, "stage": "P0", "status_field": null, "stem": "run-20260929T143845Z", "synthetic": false, "top_level_keys": ["cases", "commit", "core_version", "created_at", "environment", "executor", "not_implemented", "notes", "redactions", "reviewer", "run_id", "schema_version", "stage", "verdict", "verifier"], "verdict": "BLOCKED"}
+{"agent_response_kinds": {"sentinel": 7}, "bytes": 41437, "case_count": 7, "case_verdicts": {"BLOCKED": 1, "PASS": 6}, "commit": "84e6357c7beff8384254c394793d162e7fd13b11", "context_kinds": {"reason_only": 3, "run_details(no pack)": 3, "sentinel": 1}, "context_pack_present": 0, "core_version": "0.1.0", "created_at": "2026-09-29T14:28:47.910084Z", "evidence_entries": 1, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "record_sha256": "294d9fb5962956585b7bb57892371c079667c55b09e6026ae7fecbfb4b000de0", "relative_path": "p0-takeover-20260929T142645Z/acceptance/run-20260929T142847Z.json", "run_id": "run-20260929T142847Z", "schema_version": 2, "stage": "P0", "status_field": null, "stem": "run-20260929T142847Z", "synthetic": false, "top_level_keys": ["cases", "commit", "core_version", "created_at", "environment", "executor", "not_implemented", "notes", "redactions", "reviewer", "run_id", "schema_version", "stage", "verdict", "verifier"], "verdict": "BLOCKED"}
+{"agent_response_kinds": {"sentinel": 7}, "bytes": 41567, "case_count": 7, "case_verdicts": {"BLOCKED": 1, "PASS": 6}, "commit": "160393cad180e56f6aefd2f55d84808fecf42172", "context_kinds": {"reason_only": 3, "run_details(no pack)": 3, "sentinel": 1}, "context_pack_present": 0, "core_version": "0.1.0", "created_at": "2026-09-29T14:31:56.826382Z", "evidence_entries": 1, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "record_sha256": "b42e3c2985bc35f45a870930501bd88ec4e4fa49b8e47dfdcd3cbaf68afb67a4", "relative_path": "p0-takeover-20260929T142645Z/committed-acceptance/run-20260929T143156Z.json", "run_id": "run-20260929T143156Z", "schema_version": 2, "stage": "P0", "status_field": null, "stem": "run-20260929T143156Z", "synthetic": false, "top_level_keys": ["cases", "commit", "core_version", "created_at", "environment", "executor", "not_implemented", "notes", "redactions", "reviewer", "run_id", "schema_version", "stage", "verdict", "verifier"], "verdict": "BLOCKED"}
+{"agent_response_kinds": {"sentinel": 7}, "bytes": 42398, "case_count": 7, "case_verdicts": {"BLOCKED": 1, "PASS": 6}, "commit": "67bdbfc2479d8e1767a058e06ab826de57d3c919", "context_kinds": {"reason_only": 3, "run_details(no pack)": 3, "sentinel": 1}, "context_pack_present": 0, "core_version": "0.1.0", "created_at": "2026-09-29T17:34:23.759223Z", "evidence_entries": 1, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "record_sha256": "80b130e6c2783905e1569ef604b59278f0a958a7077416e757d2c60c45ff9aa2", "relative_path": "p1-implementation/p1-02-67bdbfc/p0-regression/run-20260929T173423Z.json", "run_id": "run-20260929T173423Z", "schema_version": 4, "stage": "P0", "status_field": null, "stem": "run-20260929T173423Z", "synthetic": false, "top_level_keys": ["cases", "commit", "core_version", "created_at", "environment", "executor", "not_implemented", "notes", "redactions", "reviewer", "run_id", "schema_version", "stage", "verdict", "verifier"], "verdict": "BLOCKED"}
+AGGREGATE: {"agent_sentinel": 60, "agent_value": 3, "cases": 63, "context_reason_only": 27, "context_run_details(no pack)": 30, "context_sentinel": 6, "fail_cases": 0, "failure_class_present": 0, "failure_output_present": 0, "records": 9, "verdict_BLOCKED": 6, "verdict_PASS": 3}
+EXIT_analysis=0
+########## c1_fail
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-02-labelled-fail-fixture-record.json
+[timing] #1 GET /v1/validation/runs?limit=100 0.013s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-03-real-root-list.json
+[ok] real root list is 200
+[ok] real root total is 9
+[ok] no real run serves verdict FAIL
+[ok] no real case carries a FAIL verdict
+[ok] 3 PASS / 6 BLOCKED at run level
+[timing] #2 GET /v1/validation/runs/run-20261008T000002Z 0.004s status=404
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-04-fixture-id-under-real-root.json
+[ok] the fixture run id 404s under the real root
+[ok] that refusal is validation_run_not_found
+[timing] #3 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-05-fixture-root-list.json
+[ok] fixture root list is 200
+[ok] the fixture run is listed
+[ok] the fixture run serves verdict FAIL (the FAIL code path)
+[ok] the fixture row marks itself synthetic
+[ok] the fixture row is never graded real
+[ok] the fixture row's run grade is the documented min with the absent-manifest 'unknown' mode
+[ok] the fixture row counts one FAIL case
+[timing] #4 GET /v1/validation/runs/run-20261008T000002Z 0.001s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-06-labelled-fail-detail.json
+[ok] fixture detail is 200
+[ok] recorded run verdict served unchanged (FAIL)
+[ok] synthetic=true surfaced in detail
+[ok] synthetic_note surfaced verbatim
+[ok] case verdict served unchanged (FAIL)
+[ok] failure_class traceable to the record
+[ok] failure_output traceable to the record
+[ok] the failing case is graded simulated
+[ok] grade_basis names the synthetic run
+[ok] verdict_consistent is reported, not enforced
+[ok] the fixture file lives outside the operator run root
+[ok] the operator run root is unchanged (9 files)
+[ok] fixture record is self-labelled synthetic in the file
+[ok] fixture record declares stage P7 (not P0)
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-07-criterion1-report.json
+[timing-summary] {"max_seconds": 0.013, "over_10s": [], "over_5s": [], "requests": 4, "requests_without_status": [], "total_seconds": 0.0201, "transport_retries": 0}
+EXIT_c1_fail=0
+########## c2_missing
+[ok] nine real records present
+[timing] #1 GET /v1/validation/runs/run-20260929T162925Z 0.010s status=200
+[ok] run-20260929T162925Z: detail case count matches the file
+[ok] run-20260929T162925Z/P0-T01: reason-only context
+[ok] run-20260929T162925Z/P0-T01: reason served verbatim
+[ok] run-20260929T162925Z/P0-T02: reason-only context
+[ok] run-20260929T162925Z/P0-T02: reason served verbatim
+[ok] run-20260929T162925Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162925Z/P0-T04: reason-only context
+[ok] run-20260929T162925Z/P0-T04: reason served verbatim
+[ok] run-20260929T162925Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162925Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162925Z/P0-T07: run-details context served verbatim, not treated as a pack
+[timing] #2 GET /v1/validation/runs/run-20260929T162307Z 0.004s status=200
+[ok] run-20260929T162307Z: detail case count matches the file
+[ok] run-20260929T162307Z/P0-T01: reason-only context
+[ok] run-20260929T162307Z/P0-T01: reason served verbatim
+[ok] run-20260929T162307Z/P0-T02: reason-only context
+[ok] run-20260929T162307Z/P0-T02: reason served verbatim
+[ok] run-20260929T162307Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162307Z/P0-T04: reason-only context
+[ok] run-20260929T162307Z/P0-T04: reason served verbatim
+[ok] run-20260929T162307Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162307Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T162307Z/P0-T07: run-details context served verbatim, not treated as a pack
+[timing] #3 GET /v1/validation/runs/run-20260929T145257Z 0.004s status=200
+[ok] run-20260929T145257Z: detail case count matches the file
+[ok] run-20260929T145257Z/P0-T01: reason-only context
+[ok] run-20260929T145257Z/P0-T01: reason served verbatim
+[ok] run-20260929T145257Z/P0-T02: reason-only context
+[ok] run-20260929T145257Z/P0-T02: reason served verbatim
+[ok] run-20260929T145257Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T145257Z/P0-T04: reason-only context
+[ok] run-20260929T145257Z/P0-T04: reason served verbatim
+[ok] run-20260929T145257Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T145257Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T145257Z/P0-T07: sentinel context
+[ok] run-20260929T145257Z: agent missing in every case of a BLOCKED run
+[timing] #4 GET /v1/validation/runs/run-20260929T161915Z 0.005s status=200
+[ok] run-20260929T161915Z: detail case count matches the file
+[ok] run-20260929T161915Z/P0-T01: reason-only context
+[ok] run-20260929T161915Z/P0-T01: reason served verbatim
+[ok] run-20260929T161915Z/P0-T02: reason-only context
+[ok] run-20260929T161915Z/P0-T02: reason served verbatim
+[ok] run-20260929T161915Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T161915Z/P0-T04: reason-only context
+[ok] run-20260929T161915Z/P0-T04: reason served verbatim
+[ok] run-20260929T161915Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T161915Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T161915Z/P0-T07: run-details context served verbatim, not treated as a pack
+[timing] #5 GET /v1/validation/runs/run-20260929T144539Z 0.005s status=200
+[ok] run-20260929T144539Z: detail case count matches the file
+[ok] run-20260929T144539Z/P0-T01: reason-only context
+[ok] run-20260929T144539Z/P0-T01: reason served verbatim
+[ok] run-20260929T144539Z/P0-T02: reason-only context
+[ok] run-20260929T144539Z/P0-T02: reason served verbatim
+[ok] run-20260929T144539Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T144539Z/P0-T04: reason-only context
+[ok] run-20260929T144539Z/P0-T04: reason served verbatim
+[ok] run-20260929T144539Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T144539Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T144539Z/P0-T07: sentinel context
+[ok] run-20260929T144539Z: agent missing in every case of a BLOCKED run
+[timing] #6 GET /v1/validation/runs/run-20260929T143845Z 0.004s status=200
+[ok] run-20260929T143845Z: detail case count matches the file
+[ok] run-20260929T143845Z/P0-T01: reason-only context
+[ok] run-20260929T143845Z/P0-T01: reason served verbatim
+[ok] run-20260929T143845Z/P0-T02: reason-only context
+[ok] run-20260929T143845Z/P0-T02: reason served verbatim
+[ok] run-20260929T143845Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143845Z/P0-T04: reason-only context
+[ok] run-20260929T143845Z/P0-T04: reason served verbatim
+[ok] run-20260929T143845Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143845Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143845Z/P0-T07: sentinel context
+[ok] run-20260929T143845Z: agent missing in every case of a BLOCKED run
+[timing] #7 GET /v1/validation/runs/run-20260929T142847Z 0.005s status=200
+[ok] run-20260929T142847Z: detail case count matches the file
+[ok] run-20260929T142847Z/P0-T01: reason-only context
+[ok] run-20260929T142847Z/P0-T01: reason served verbatim
+[ok] run-20260929T142847Z/P0-T02: reason-only context
+[ok] run-20260929T142847Z/P0-T02: reason served verbatim
+[ok] run-20260929T142847Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T142847Z/P0-T04: reason-only context
+[ok] run-20260929T142847Z/P0-T04: reason served verbatim
+[ok] run-20260929T142847Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T142847Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T142847Z/P0-T07: sentinel context
+[ok] run-20260929T142847Z: agent missing in every case of a BLOCKED run
+[timing] #8 GET /v1/validation/runs/run-20260929T143156Z 0.005s status=200
+[ok] run-20260929T143156Z: detail case count matches the file
+[ok] run-20260929T143156Z/P0-T01: reason-only context
+[ok] run-20260929T143156Z/P0-T01: reason served verbatim
+[ok] run-20260929T143156Z/P0-T02: reason-only context
+[ok] run-20260929T143156Z/P0-T02: reason served verbatim
+[ok] run-20260929T143156Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143156Z/P0-T04: reason-only context
+[ok] run-20260929T143156Z/P0-T04: reason served verbatim
+[ok] run-20260929T143156Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143156Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T143156Z/P0-T07: sentinel context
+[ok] run-20260929T143156Z: agent missing in every case of a BLOCKED run
+[timing] #9 GET /v1/validation/runs/run-20260929T173423Z 0.004s status=200
+[ok] run-20260929T173423Z: detail case count matches the file
+[ok] run-20260929T173423Z/P0-T01: reason-only context
+[ok] run-20260929T173423Z/P0-T01: reason served verbatim
+[ok] run-20260929T173423Z/P0-T02: reason-only context
+[ok] run-20260929T173423Z/P0-T02: reason served verbatim
+[ok] run-20260929T173423Z/P0-T03: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T173423Z/P0-T04: reason-only context
+[ok] run-20260929T173423Z/P0-T04: reason served verbatim
+[ok] run-20260929T173423Z/P0-T05: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T173423Z/P0-T06: run-details context served verbatim, not treated as a pack
+[ok] run-20260929T173423Z/P0-T07: sentinel context
+[ok] run-20260929T173423Z: agent missing in every case of a BLOCKED run
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c2-01-real-details.json
+[ok] served run verdict == recorded run verdict for all nine
+[ok] all nine real runs report verdict_consistent=true (a report, not a rewrite)
+[ok] 63 real cases walked
+[ok] no real case has a context pack
+[ok] the three frozen Context missing_reasons are all exercised
+[ok] context present_kind census is 6 sentinel / 27 reason_only / 30 value
+[ok] 6 BLOCKED runs have agent missing in all 7 cases
+[ok] 3 PASS runs have agent_response present in at least one case
+[timing] #10 GET /v1/validation/runs/run-20261008T000101Z 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c2-02-inconsistent-verdict-detail.json
+[ok] an inconsistent record is still served (200)
+[ok] the recorded verdict is served unchanged (PASS), not corrected
+[ok] verdict_consistent=false is reported for the inconsistency
+[ok] the case verdict is served unchanged (BLOCKED)
+[timing] #11 GET /v1/validation/runs/run-20261008T000201Z 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c2-07-absent-fields-detail.json
+[ok] absent context section is named absent, fabricating no value
+[ok] absent context chain link is missing with a named reason
+[ok] absent agent_response is named absent
+[ok] absent agent chain link is missing with a named reason
+[ok] the absent-field record's verdict is still served as recorded
+[timing] #12 GET /v1/validation/runs?limit=100 0.007s status=200
+[ok] the inconsistent fixture is absent from the real root
+[ok] the absent-field fixture is absent from the real root
+[ok] the real root still lists exactly nine
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c2-03-criterion2-report.json
+[timing-summary] {"max_seconds": 0.0101, "over_10s": [], "over_5s": [], "requests": 12, "requests_without_status": [], "total_seconds": 0.0559, "transport_retries": 0}
+EXIT_c2_missing=0
+########## c3_authz
+[timing] #1 GET /v1/validation/runs 0.003s status=200
+[ok] single_user granted key 200 on /v1/validation/runs
+[timing] #2 GET /v1/validation/runs 0.001s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs
+[ok] scope-less code is forbidden_scope on /v1/validation/runs
+[ok] scope-less details.required names validation:read on /v1/validation/runs
+[timing] #3 GET /v1/validation/runs/run-20261008T000001Z 0.002s status=200
+[ok] single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z
+[timing] #4 GET /v1/validation/runs/run-20261008T000001Z 0.001s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z
+[ok] scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z
+[ok] scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z
+[timing] #5 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.002s status=200
+[ok] single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z/manifest
+[timing] #6 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.001s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/manifest
+[ok] scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z/manifest
+[ok] scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z/manifest
+[timing] #7 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.002s status=200
+[ok] single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[timing] #8 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.001s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[ok] scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[ok] scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[timing] #9 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content 0.002s status=200
+[ok] single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[timing] #10 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content 0.001s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[ok] scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[ok] scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c3-01-single-user-pairs.json
+[timing] #11 GET /v1/validation/runs 0.001s status=401
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c3-02-no-token.json
+[ok] no token is 401 unauthenticated
+[ok] no-token code is unauthenticated
+[timing] #12 GET /v1/validation/runs 0.002s status=200
+[ok] acl granted key 200 on /v1/validation/runs
+[timing] #13 GET /v1/validation/runs 0.001s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs
+[timing] #14 GET /v1/validation/runs/run-20261008T000001Z 0.001s status=200
+[ok] acl granted key 200 on /v1/validation/runs/run-20261008T000001Z
+[timing] #15 GET /v1/validation/runs/run-20261008T000001Z 0.001s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z
+[timing] #16 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.002s status=200
+[ok] acl granted key 200 on /v1/validation/runs/run-20261008T000001Z/manifest
+[timing] #17 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.001s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/manifest
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z/manifest
+[timing] #18 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.002s status=200
+[ok] acl granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[timing] #19 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.001s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[timing] #20 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content 0.002s status=200
+[ok] acl granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[timing] #21 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content 0.001s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[timing] #22 GET /v1/validation/runs/run-20261008T000002Z 0.002s status=404
+[ok] acl non-granted project detail is 404
+[ok] acl non-granted project refuses validation_run_not_found
+[ok] acl non-granted project never emits project_not_found
+[timing] #23 GET /v1/validation/runs/run-20261008T000003Z 0.002s status=404
+[ok] acl unattributed run without validation:unattributed is 404
+[ok] acl unattributed refusal is validation_run_not_found
+[timing] #24 GET /v1/validation/runs/run-20261008T000003Z 0.004s status=200
+[ok] acl unattributed run with validation:unattributed is 200
+[timing] #25 GET /v1/validation/runs/run-20261008T000001Z 0.002s status=404
+[ok] acl ungranted actor is 404 on a granted project's run
+[ok] acl ungranted actor refusal is validation_run_not_found
+[timing] #26 GET /v1/validation/runs/run-20261008T000004Z 0.001s status=404
+[ok] acl corrupt record fails closed (404) for a granted key
+[timing] #27 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c3-03-acl-granted-list.json
+[ok] acl granted list is 200
+[ok] acl list reports visibility=grant_filtered
+[ok] acl granted list contains only the granted run
+[ok] acl granted list total counts only what the key may read
+[ok] the ungranted project's run is absent from runs[]
+[ok] the unattributed run is absent from runs[]
+[ok] the corrupt run is absent from the granted key's runs[]
+[ok] discovery.run_shaped_files counts visible runs
+[ok] acl list ignored_samples[] is empty
+[ok] acl granted corrupt_count excludes the invisible corrupt record
+[timing] #28 GET /v1/validation/runs?limit=100&project=prj_01M4E6VCCS2A1KGGHXD4Z6HA0Q 0.002s status=200
+[ok] a project filter naming the ungranted project cannot reach it
+[timing] #29 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c3-04-acl-unattributed-list.json
+[ok] acl unattributed key sees the attributed, unattributed and fail-closed corrupt runs
+[ok] acl unattributed list total is 3
+[ok] the fail-closed corrupt row is listed, not turned into an empty list
+[ok] the corrupt row serves a null verdict and a named corrupt_reason
+[timing] #30 GET /v1/validation/runs?limit=100 0.001s status=403
+[ok] acl list with a scope-less key is 403
+[ok] no acl response carries project_not_found
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c3-05-acl-pairs.json
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c3-06-criterion3-report.json
+[timing-summary] {"max_seconds": 0.0037, "over_10s": [], "over_5s": [], "requests": 30, "requests_without_status": [], "total_seconds": 0.0497, "transport_retries": 0}
+EXIT_c3_authz=0
+########## c4_artifacts
+[timing] #1 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_good 0.007s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-01-good-artifact-metadata.json
+[ok] good artifact metadata is 200
+[ok] good artifact integrity=match
+[ok] good declared_sha256 equals the validator's own hash
+[ok] good digests.original equals the validator's own hash
+[ok] good declared_bytes equals the file size
+[timing] #2 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_good/content 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-02-good-artifact-content.json
+[ok] good content is 200
+[ok] good served_sha256 matches the validator's own hash
+[ok] good masked==original when the masker is a no-op
+[timing] #3 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_missing 0.002s status=404
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-03-missing-artifact.json
+[ok] missing artifact is 404
+[ok] missing artifact code artifact_not_found
+[ok] missing artifact reason is 'missing'
+[timing] #4 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_tampered 0.002s status=409
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-04-tampered-artifact.json
+[ok] tampered artifact is 409
+[ok] tampered artifact code artifact_modified
+[timing] #5 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_tampered/content 0.002s status=409
+[ok] tampered content is refused too (409)
+[timing] #6 GET /v1/validation/runs/run-20261008T000004Z/manifest 0.003s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-05-manifest-integrity.json
+[ok] manifest reports the tampered file as mismatch
+[ok] manifest reports the missing file as missing
+[timing] #7 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_symfile 0.002s status=404
+[ok] symlink art_symfile artifact is 404
+[ok] symlink art_symfile reason is symlink_refused
+[timing] #8 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_symfile/content 0.002s status=404
+[ok] symlink art_symfile content is refused (404)
+[ok] manifest integrity art_symfile is symlink_refused
+[timing] #9 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_symdir 0.002s status=404
+[ok] symlink art_symdir artifact is 404
+[ok] symlink art_symdir reason is symlink_refused
+[timing] #10 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_symdir/content 0.002s status=404
+[ok] symlink art_symdir content is refused (404)
+[ok] manifest integrity art_symdir is symlink_refused
+[ok] canonical.looks_like_credential is False for db_password=...
+[ok] api_key JSON original is withheld whether or not looks_like_credential flags it
+[ok] canonical.redact_text actually masks the assignment
+[ok] mask_version is canonical.REDACT_TEXT_VERSION
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-06-validator-mask-computation.json
+[timing] #11 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_assign/content 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-07-assign-masked.json
+[ok] assign masked form is 200
+[ok] assign masked form reports form=masked
+[ok] assign masked content_is_original is false
+[ok] assign masked content equals the validator's redact_text
+[ok] assign masked_sha256 equals the validator's own digest
+[ok] assign served_sha256 equals masked_sha256
+[ok] assign masked content withholds the secret
+[ok] assign mask_algorithm is canonical.redact_text
+[timing] #12 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_assign/content?form=original 0.002s status=403
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-08-assign-original-withheld.json
+[ok] assign original form is 403
+[ok] assign original code is original_withheld
+[ok] assign original reason is mask_not_noop
+[ok] assign withheld details carry the masked_sha256
+[timing] #13 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_apikey/content 0.001s status=200
+[ok] api_key JSON is masked by form=masked
+[ok] api_key JSON masked content withholds the value
+[timing] #14 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_apikey/content?form=original 0.002s status=403
+[ok] api_key JSON original form is withheld (403)
+[timing] #15 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_html/content?download=1 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-09-html-download-response.json
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-10-html-download-headers.json
+[ok] html content request is 200
+[ok] html response Content-Type is JSON, not text/html
+[ok] html response sets X-Content-Type-Options: nosniff
+[ok] html response sets a default-src 'none' CSP
+[ok] html download sets attachment Content-Disposition
+[ok] raw response bytes are a JSON envelope, not an HTML page
+[ok] the HTML is carried as a JSON string field, not rendered
+[timing] #16 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_html/content?form=original&download=1 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-17-html-original-headers.json
+[ok] html original form is 200
+[ok] html original form Content-Type is still JSON
+[ok] html original form still sets nosniff
+[ok] html original form is a JSON envelope, not an HTML page
+[timing] #17 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_declared_secret/content 0.002s status=200
+[ok] declared-credential masked form is 200
+[timing] #18 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_declared_secret/content?form=original 0.002s status=403
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-18-declared-credential-withheld.json
+[ok] declared-credential original form is 403
+[ok] declared-credential reason is credential_shaped_declared
+[timing] #19 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_binary/content 0.002s status=415
+[ok] binary content is 415 unsupported_media_type
+[timing] #20 GET /v1/validation/runs/run-20261008T000100Z/manifest 0.002s status=409
+[ok] escape art_dotdot refuses the manifest (409)
+[ok] escape art_dotdot names validation_manifest_corrupt
+[ok] escape art_dotdot names the offending entry in rule
+[timing] #21 GET /v1/validation/runs/run-20261008T000100Z/artifacts/art_dotdot 0.001s status=404
+[ok] escape art_dotdot makes the artifact unaddressable (404)
+[ok] escape art_dotdot artifact reason is manifest_corrupt
+[timing] #22 GET /v1/validation/runs/run-20261008T000101Z/manifest 0.001s status=409
+[ok] escape art_nested_dotdot refuses the manifest (409)
+[ok] escape art_nested_dotdot names validation_manifest_corrupt
+[ok] escape art_nested_dotdot names the offending entry in rule
+[timing] #23 GET /v1/validation/runs/run-20261008T000101Z/artifacts/art_nested_dotdot 0.001s status=404
+[ok] escape art_nested_dotdot makes the artifact unaddressable (404)
+[ok] escape art_nested_dotdot artifact reason is manifest_corrupt
+[timing] #24 GET /v1/validation/runs/run-20261008T000102Z/manifest 0.002s status=409
+[ok] escape art_absolute refuses the manifest (409)
+[ok] escape art_absolute names validation_manifest_corrupt
+[ok] escape art_absolute names the offending entry in rule
+[timing] #25 GET /v1/validation/runs/run-20261008T000102Z/artifacts/art_absolute 0.001s status=404
+[ok] escape art_absolute makes the artifact unaddressable (404)
+[ok] escape art_absolute artifact reason is manifest_corrupt
+[timing] #26 GET /v1/validation/runs/run-20261008T000103Z/manifest 0.001s status=409
+[ok] escape art_drive refuses the manifest (409)
+[ok] escape art_drive names validation_manifest_corrupt
+[ok] escape art_drive names the offending entry in rule
+[timing] #27 GET /v1/validation/runs/run-20261008T000103Z/artifacts/art_drive 0.003s status=404
+[ok] escape art_drive makes the artifact unaddressable (404)
+[ok] escape art_drive artifact reason is manifest_corrupt
+[timing] #28 GET /v1/validation/runs/run-20261008T000104Z/manifest 0.002s status=409
+[ok] escape art_unc refuses the manifest (409)
+[ok] escape art_unc names validation_manifest_corrupt
+[ok] escape art_unc names the offending entry in rule
+[timing] #29 GET /v1/validation/runs/run-20261008T000104Z/artifacts/art_unc 0.001s status=404
+[ok] escape art_unc makes the artifact unaddressable (404)
+[ok] escape art_unc artifact reason is manifest_corrupt
+[timing] #30 GET /v1/validation/runs/run-20261008T000105Z/manifest 0.001s status=409
+[ok] escape art_url refuses the manifest (409)
+[ok] escape art_url names validation_manifest_corrupt
+[ok] escape art_url names the offending entry in rule
+[timing] #31 GET /v1/validation/runs/run-20261008T000105Z/artifacts/art_url 0.001s status=404
+[ok] escape art_url makes the artifact unaddressable (404)
+[ok] escape art_url artifact reason is manifest_corrupt
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-11-escape-attempts.json
+[timing] #32 GET /v1/validation/runs/run-20261008T000300Z/manifest 0.002s status=409
+[ok] raw declared path empty_component ('a//b') refuses the manifest (409)
+[ok] raw declared path empty_component names validation_manifest_corrupt
+[ok] raw declared path empty_component names the path rule (rule mentions 'path')
+[timing] #33 GET /v1/validation/runs/run-20261008T000300Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path empty_component makes the artifact unaddressable (404)
+[ok] raw declared path empty_component reason is manifest_corrupt
+[timing] #34 GET /v1/validation/runs/run-20261008T000301Z/manifest 0.001s status=409
+[ok] raw declared path dot_component ('a/./b') refuses the manifest (409)
+[ok] raw declared path dot_component names validation_manifest_corrupt
+[ok] raw declared path dot_component names the path rule (rule mentions 'path')
+[timing] #35 GET /v1/validation/runs/run-20261008T000301Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dot_component makes the artifact unaddressable (404)
+[ok] raw declared path dot_component reason is manifest_corrupt
+[timing] #36 GET /v1/validation/runs/run-20261008T000302Z/manifest 0.001s status=409
+[ok] raw declared path trailing_slash ('a/b/') refuses the manifest (409)
+[ok] raw declared path trailing_slash names validation_manifest_corrupt
+[ok] raw declared path trailing_slash names the path rule (rule mentions 'path')
+[timing] #37 GET /v1/validation/runs/run-20261008T000302Z/artifacts/art_raw 0.002s status=404
+[ok] raw declared path trailing_slash makes the artifact unaddressable (404)
+[ok] raw declared path trailing_slash reason is manifest_corrupt
+[timing] #38 GET /v1/validation/runs/run-20261008T000303Z/manifest 0.002s status=409
+[ok] raw declared path leading_dot_slash ('./a') refuses the manifest (409)
+[ok] raw declared path leading_dot_slash names validation_manifest_corrupt
+[ok] raw declared path leading_dot_slash names the path rule (rule mentions 'path')
+[timing] #39 GET /v1/validation/runs/run-20261008T000303Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path leading_dot_slash makes the artifact unaddressable (404)
+[ok] raw declared path leading_dot_slash reason is manifest_corrupt
+[timing] #40 GET /v1/validation/runs/run-20261008T000304Z/manifest 0.001s status=409
+[ok] raw declared path dot_alone ('.') refuses the manifest (409)
+[ok] raw declared path dot_alone names validation_manifest_corrupt
+[ok] raw declared path dot_alone names the path rule (rule mentions 'path')
+[timing] #41 GET /v1/validation/runs/run-20261008T000304Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dot_alone makes the artifact unaddressable (404)
+[ok] raw declared path dot_alone reason is manifest_corrupt
+[timing] #42 GET /v1/validation/runs/run-20261008T000305Z/manifest 0.001s status=409
+[ok] raw declared path dotdot_substring_name ('artifacts/note..txt') refuses the manifest (409)
+[ok] raw declared path dotdot_substring_name names validation_manifest_corrupt
+[ok] raw declared path dotdot_substring_name names the path rule (rule mentions 'path')
+[timing] #43 GET /v1/validation/runs/run-20261008T000305Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dotdot_substring_name makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_substring_name reason is manifest_corrupt
+[timing] #44 GET /v1/validation/runs/run-20261008T000306Z/manifest 0.001s status=409
+[ok] raw declared path dotdot_substring_mid ('a..b') refuses the manifest (409)
+[ok] raw declared path dotdot_substring_mid names validation_manifest_corrupt
+[ok] raw declared path dotdot_substring_mid names the path rule (rule mentions 'path')
+[timing] #45 GET /v1/validation/runs/run-20261008T000306Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dotdot_substring_mid makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_substring_mid reason is manifest_corrupt
+[timing] #46 GET /v1/validation/runs/run-20261008T000307Z/manifest 0.001s status=409
+[ok] raw declared path dotdot_segment_name ('artifacts/..hidden') refuses the manifest (409)
+[ok] raw declared path dotdot_segment_name names validation_manifest_corrupt
+[ok] raw declared path dotdot_segment_name names the path rule (rule mentions 'path')
+[timing] #47 GET /v1/validation/runs/run-20261008T000307Z/artifacts/art_raw 0.002s status=404
+[ok] raw declared path dotdot_segment_name makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_segment_name reason is manifest_corrupt
+[timing] #48 GET /v1/validation/runs/run-20261008T000308Z/manifest 0.003s status=409
+[ok] raw declared path dotdot_segment ('artifacts/../loot.txt') refuses the manifest (409)
+[ok] raw declared path dotdot_segment names validation_manifest_corrupt
+[ok] raw declared path dotdot_segment names the path rule (rule mentions 'path')
+[timing] #49 GET /v1/validation/runs/run-20261008T000308Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dotdot_segment makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_segment reason is manifest_corrupt
+[timing] #50 GET /v1/validation/runs/run-20261008T000309Z/manifest 0.001s status=409
+[ok] raw declared path dotdot_encoded ('..%2Fb') refuses the manifest (409)
+[ok] raw declared path dotdot_encoded names validation_manifest_corrupt
+[ok] raw declared path dotdot_encoded names the path rule (rule mentions 'path')
+[timing] #51 GET /v1/validation/runs/run-20261008T000309Z/artifacts/art_raw 0.002s status=404
+[ok] raw declared path dotdot_encoded makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_encoded reason is manifest_corrupt
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-19-raw-declared-paths.json
+[timing] #52 GET /v1/validation/runs/run-20261008T000401Z/manifest 0.002s status=200
+[ok] legit nested bundle manifest is 200
+[ok] legit declared path artifacts/name.txt is served match
+[ok] legit nested path artifacts/sub/name.txt is served match
+[timing] #53 GET /v1/validation/runs/run-20261008T000401Z/artifacts/art_flat 0.002s status=200
+[ok] legit art_flat metadata is 200
+[timing] #54 GET /v1/validation/runs/run-20261008T000401Z/artifacts/art_flat/content 0.002s status=200
+[ok] legit art_flat content is 200 with the right digest
+[timing] #55 GET /v1/validation/runs/run-20261008T000401Z/artifacts/art_nested 0.002s status=200
+[ok] legit art_nested metadata is 200
+[timing] #56 GET /v1/validation/runs/run-20261008T000401Z/artifacts/art_nested/content 0.002s status=200
+[ok] legit art_nested content is 200 with the right digest
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-12-validator-file-digests.json
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-13-criterion4-report.json
+[timing-summary] {"max_seconds": 0.0068, "over_10s": [], "over_5s": [], "requests": 56, "requests_without_status": [], "total_seconds": 0.0964, "transport_retries": 0}
+EXIT_c4_artifacts=0
+########## c5_pages
+[timing] #1 GET /v1/validation/runs?limit=2&offset=0 0.013s status=200
+[timing] #2 GET /v1/validation/runs?limit=2&offset=2 0.006s status=200
+[timing] #3 GET /v1/validation/runs?limit=2&offset=4 0.006s status=200
+[timing] #4 GET /v1/validation/runs?limit=2&offset=6 0.006s status=200
+[timing] #5 GET /v1/validation/runs?limit=2&offset=8 0.006s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-01-real-root-pages.json
+[ok] real root page walk with limit=2 covers all nine
+[ok] real root page walk has no repeats
+[ok] real root total is stable at 9 across pages
+[ok] real root corrupt_count is 0 on every page
+[ok] real root duplicate_count is 0 on every page
+[ok] page 0 count == len(runs)
+[ok] page 0 has_more arithmetic
+[ok] page 0 offset is n*limit
+[ok] page 1 count == len(runs)
+[ok] page 1 has_more arithmetic
+[ok] page 1 offset is n*limit
+[ok] page 2 count == len(runs)
+[ok] page 2 has_more arithmetic
+[ok] page 2 offset is n*limit
+[ok] page 3 count == len(runs)
+[ok] page 3 has_more arithmetic
+[ok] page 3 offset is n*limit
+[ok] page 4 count == len(runs)
+[ok] page 4 has_more arithmetic
+[ok] page 4 offset is n*limit
+[ok] the union equals the 9 files by run_id, exactly once each
+[timing] #6 GET /v1/validation/runs?limit=100 0.005s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-02-fixture-full-list.json
+[ok] fixture full list is 200
+[ok] fixture total is 12 (9 real + 1 corrupt + 2 duplicate rows)
+[ok] fixture count is 12
+[ok] corrupt_count is 1
+[ok] duplicate_count is 2
+[ok] one corrupt row is listed
+[ok] two duplicate rows are listed
+[ok] corrupt row serves verdict null
+[ok] corrupt row names a corrupt_reason
+[ok] corrupt row is never disguised as an empty list
+[ok] duplicate rows name a duplicate_reason
+[ok] the two duplicate rows are distinguishable by record_sha256
+[timing] #7 GET /v1/validation/runs?limit=4&offset=0 0.004s status=200
+[timing] #8 GET /v1/validation/runs?limit=4&offset=4 0.005s status=200
+[timing] #9 GET /v1/validation/runs?limit=4&offset=8 0.004s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-03-fixture-pages.json
+[ok] fixture page walk covers all 12 rows exactly once
+[ok] fixture page walk union equals the single 100-limit page
+[ok] fixture page 0 has_more arithmetic
+[ok] fixture page 0 count == len(runs)
+[ok] fixture page 1 has_more arithmetic
+[ok] fixture page 1 count == len(runs)
+[ok] fixture page 2 has_more arithmetic
+[ok] fixture page 2 count == len(runs)
+[timing] #10 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-12-depth-boundary.json
+[ok] depth root list is 200
+[ok] a record 3 directory levels below the root is found
+[ok] a record whose directory is 4 levels below the root is found
+[ok] a record 5 directory levels below the root is pruned
+[ok] exactly the two inside-cap records are served
+[ok] the pruned directory is counted once as depth_cap
+[ok] an ignored sample names the depth_cap reason
+[ok] the depth_cap sample names the pruned directory (d4)
+[ok] discovery.max_depth is 4
+[ok] validator's non-regular entry is a real FIFO on disk
+[timing] #11 GET /v1/validation/runs?limit=100 0.002s status=200
+[timing] #12 GET /v1/validation/runs/run-20261008T000402Z 0.001s status=404
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-20-fifo-not-regular-file.json
+[ok] a FIFO named run-*.json does NOT hang the list reader
+[ok] the FIFO is not served as a run row
+[ok] the one regular sibling record is still served
+[ok] the FIFO is counted in ignored_entries
+[ok] exactly one ignored sample carries reason not_regular_file
+[ok] the not_regular_file sample names the FIFO
+[ok] a by-id read of the FIFO stem does NOT hang and is 404 validation_run_not_found
+[ok] validator's second non-regular entry is a real socket on disk
+[timing] #13 GET /v1/validation/runs?limit=100 0.001s status=200
+[ok] a Unix socket named run-*.json does NOT hang the list reader
+[ok] the socket is counted with reason not_regular_file
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-23-non-regular-socket.json
+[timing] #14 GET /v1/validation/runs?limit=100 0.003s status=200
+[ok] single_user: combo list is 200
+[ok] single_user: total == count == 7
+[ok] single_user: the list's corrupt_count is 3
+[ok] single_user: the list's duplicate_count is 2
+[ok] single_user run-20261008T000101Z: list row statuses are ['corrupt', 'ok']
+[timing] #15 GET /v1/validation/runs/run-20261008T000101Z 0.002s status=200
+[ok] single_user run-20261008T000101Z: detail status is 200
+[ok] single_user run-20261008T000101Z: detail serves run_id run-20261008T000101Z
+[ok] single_user run-20261008T000101Z: an ok list row implies detail 200
+[ok] single_user run-20261008T000101Z: an ok row carries the parseable digest
+[ok] single_user run-20261008T000101Z: a corrupt row carries the corrupt digest
+[ok] single_user run-20261008T000102Z: list row statuses are ['duplicate', 'duplicate']
+[timing] #16 GET /v1/validation/runs/run-20261008T000102Z 0.002s status=409
+[ok] single_user run-20261008T000102Z: detail status is 409
+[ok] single_user run-20261008T000102Z: detail code is validation_run_ambiguous
+[ok] single_user run-20261008T000102Z: duplicate rows imply 409 ambiguous
+[ok] single_user run-20261008T000103Z: list row statuses are ['corrupt', 'corrupt']
+[timing] #17 GET /v1/validation/runs/run-20261008T000103Z 0.002s status=409
+[ok] single_user run-20261008T000103Z: detail status is 409
+[ok] single_user run-20261008T000103Z: detail code is validation_run_corrupt
+[ok] single_user run-20261008T000103Z: corrupt-only rows imply 409 corrupt
+[ok] single_user run-20261008T000104Z: list row statuses are ['ok']
+[timing] #18 GET /v1/validation/runs/run-20261008T000104Z 0.002s status=200
+[ok] single_user run-20261008T000104Z: detail status is 200
+[ok] single_user run-20261008T000104Z: detail serves run_id run-20261008T000104Z
+[ok] single_user run-20261008T000104Z: an ok list row implies detail 200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-13-duplicate-combos-single-user.json
+[timing] #19 GET /v1/validation/runs?verdict=PASS 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-14-counters-verdict-pass.json
+[ok] verdict=PASS list is 200
+[ok] verdict=PASS serves only parseable rows
+[ok] verdict=PASS total/count/rows agree at 4
+[ok] verdict=PASS corrupt_count is 0 on the served set
+[ok] verdict=PASS duplicate_count counts only served duplicates
+[ok] verdict=PASS corrupt_count matches the rows actually present
+[timing] #20 GET /v1/validation/runs?verdict=BLOCKED 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-15-counters-filtered-empty.json
+[ok] a filter matching nothing is 200 with total 0
+[ok] a filter matching nothing reports corrupt_count 0
+[ok] a filter matching nothing reports duplicate_count 0
+[ok] a filter matching nothing reports all_filtered_out
+[timing] #21 GET /v1/validation/runs?stage=P7 0.002s status=200
+[ok] stage=P7 serves four parseable rows and counts 0 corrupt
+[timing] #22 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] acl read-only key sees no unattributed combo row
+[timing] #23 GET /v1/validation/runs/run-20261008T000101Z 0.002s status=404
+[ok] acl read-only key gets 404 for the S1 parseable record
+[timing] #24 GET /v1/validation/runs/run-20261008T000103Z 0.002s status=404
+[ok] acl read-only key gets 404 for the corrupt S3 record
+[timing] #25 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] acl unattributed key sees all 7 combo rows
+[ok] acl unattributed list counts the visible corrupt rows
+[ok] acl unattributed list counts the visible duplicate rows
+[timing] #26 GET /v1/validation/runs/run-20261008T000101Z 0.002s status=200
+[ok] acl+unattributed S1 detail is 200 (parseable sibling wins)
+[timing] #27 GET /v1/validation/runs/run-20261008T000102Z 0.004s status=409
+[ok] acl+unattributed S2 detail is 409 ambiguous
+[timing] #28 GET /v1/validation/runs/run-20261008T000103Z 0.002s status=409
+[ok] acl+unattributed S3 detail is 409 corrupt
+[timing] #29 GET /v1/validation/runs?limit=2&offset=0 0.006s status=200
+[timing] #30 GET /v1/validation/runs?limit=2&offset=2 0.006s status=200
+[timing] #31 GET /v1/validation/runs?limit=2&offset=4 0.006s status=200
+[timing] #32 GET /v1/validation/runs?limit=2&offset=6 0.006s status=200
+[timing] #33 GET /v1/validation/runs?limit=2&offset=8 0.006s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-24-acl-real-root-pages.json
+[ok] acl real-root page walk with limit=2 covers all nine
+[ok] acl real-root page walk has no repeats
+[ok] acl real-root total is stable at 9
+[ok] acl real-root every page arithmetic holds
+[timing] #34 GET /v1/validation/runs?limit=100 0.006s status=200
+[ok] acl read-only key sees no unattributed real record
+[timing] #35 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-21-acl-fifo-not-regular-file.json
+[ok] acl: a FIFO named run-*.json does NOT hang the list reader
+[ok] acl: the FIFO is counted in ignored_entries
+[ok] acl: ignored_samples[] is empty by design (AD2), so the reason is withheld and only the count is reported
+[ok] acl: the FIFO is not served as a run row
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-16-acl-combos.json
+[ok] validator's oversize manifest is over 1 MiB on disk
+[ok] validator's oversize record is over 16 MiB on disk
+[timing] #36 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-17-bounded-reads-list.json
+[ok] oversize bundle root list is 200
+[ok] the oversize manifest is reported corrupt on the list row
+[ok] the oversize record is reported corrupt on the list row
+[ok] the oversize record reports no digest (it was not read)
+[ok] the oversize record's reason names the size bound
+[ok] the oversize record counts as corrupt
+[timing] #37 GET /v1/validation/runs/run-20261008T000302Z 0.001s status=409
+[ok] oversize record detail is 409 validation_run_corrupt
+[timing] #38 GET /v1/validation/runs/run-20261008T000301Z/manifest 0.002s status=409
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-18-oversize-manifest.json
+[ok] oversize manifest is refused with 409 validation_manifest_corrupt
+[ok] oversize manifest rule names the size bound
+[ok] no digest is reported for a manifest that was never read
+[timing] #39 GET /v1/validation/runs/run-20261008T000301Z/artifacts/art_missing 0.001s status=404
+[ok] an oversize manifest makes its artifacts unaddressable (404)
+[timing] #40 GET /v1/validation/runs 0.001s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-05-corrupt-only-list.json
+[ok] a corrupt-only root still lists the corrupt row
+[ok] a corrupt-only root is not reported as 'no_run_shaped_files'
+[timing] #41 GET /v1/validation/runs/run-20261008T000004Z 0.001s status=409
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-07-corrupt-detail.json
+[ok] a corrupt record refuses detail with 409 validation_run_corrupt
+[timing] #42 GET /v1/validation/runs 0.001s status=200
+[ok] a truly empty root reports no_run_shaped_files
+[timing] #43 GET /v1/validation/runs 0.001s status=503
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-08-unreadable-subtree.json
+[ok] an unreadable subtree refuses the list (503)
+[ok] the refusal code is validation_not_configured
+[ok] the refusal reason is index_incomplete
+[ok] the refusal counts the unreadable entry
+[ok] the refusal names at most 20 samples
+[ok] the refusal names the unreadable path
+[timing] #44 GET /v1/validation/runs/run-20261008T000001Z 0.002s status=200
+[ok] a by-id read of a known sibling still works while a sibling subtree is unreadable
+[timing] #45 GET /v1/validation/runs/run-20261008T999999Z 0.001s status=503
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-19-byid-unknown-under-unreadable.json
+[ok] by-id of an id that cannot be ruled out refuses 503 index_incomplete rather than asserting 404 (F5/ADR 5.0)
+[timing] #46 GET /v1/validation/runs?limit=100 0.007s status=200
+[ok] real root still lists exactly nine
+[ok] real root corrupt_count is still 0
+[ok] real root duplicate_count is still 0
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-22-request-timings.json
+[timing-summary] {"max_seconds": 0.0128, "over_10s": [], "over_5s": [], "requests": 46, "requests_without_status": [], "total_seconds": 0.1499, "transport_retries": 0}
+[ok] criterion 5 issued a non-trivial number of requests
+[ok] every criterion 5 request completed inside its client timeout (no request hung)
+[ok] no criterion 5 request exceeded 10 s
+[ok] no transport-level retry was needed in the recorded run
+[ok] the FIFO list request was answered in well under the client timeout
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c5-09-criterion5-report.json
+[timing-summary] {"max_seconds": 0.0128, "over_10s": [], "over_5s": [], "requests": 46, "requests_without_status": [], "total_seconds": 0.1499, "transport_retries": 0}
+EXIT_c5_pages=0
+########## c6_values
+[timing] #1 GET /v1/validation/runs?limit=100 0.011s status=200
+[ok] real list is 200
+[ok] real list has the nine rows
+[ok] run-20260929T162925Z: list.run_id matches
+[ok] run-20260929T162925Z: list.stage matches
+[ok] run-20260929T162925Z: list.created_at matches
+[ok] run-20260929T162925Z: list.commit matches
+[ok] run-20260929T162925Z: list.schema_version matches
+[ok] run-20260929T162925Z: list.core_version matches
+[ok] run-20260929T162925Z: list.verdict matches
+[ok] run-20260929T162925Z: list.case_counts matches
+[ok] run-20260929T162925Z: list.record_sha256 matches
+[ok] run-20260929T162925Z: list.synthetic matches
+[ok] run-20260929T162925Z: list.manifest_status matches
+[ok] run-20260929T162925Z: no manifest.json exists on disk
+[timing] #2 GET /v1/validation/runs/run-20260929T162925Z 0.005s status=200
+[ok] run-20260929T162925Z: detail is 200
+[ok] run-20260929T162925Z: detail.run_id matches
+[ok] run-20260929T162925Z: detail.stage matches
+[ok] run-20260929T162925Z: detail.created_at matches
+[ok] run-20260929T162925Z: detail.commit matches
+[ok] run-20260929T162925Z: detail.schema_version matches
+[ok] run-20260929T162925Z: detail.core_version matches
+[ok] run-20260929T162925Z: detail.verdict matches
+[ok] run-20260929T162925Z/P0-T01: verdict matches
+[ok] run-20260929T162925Z/P0-T01: failure_class matches
+[ok] run-20260929T162925Z/P0-T01: failure_output matches
+[ok] run-20260929T162925Z/P0-T02: verdict matches
+[ok] run-20260929T162925Z/P0-T02: failure_class matches
+[ok] run-20260929T162925Z/P0-T02: failure_output matches
+[ok] run-20260929T162925Z/P0-T03: verdict matches
+[ok] run-20260929T162925Z/P0-T03: failure_class matches
+[ok] run-20260929T162925Z/P0-T03: failure_output matches
+[ok] run-20260929T162925Z/P0-T04: verdict matches
+[ok] run-20260929T162925Z/P0-T04: failure_class matches
+[ok] run-20260929T162925Z/P0-T04: failure_output matches
+[ok] run-20260929T162925Z/P0-T05: verdict matches
+[ok] run-20260929T162925Z/P0-T05: failure_class matches
+[ok] run-20260929T162925Z/P0-T05: failure_output matches
+[ok] run-20260929T162925Z/P0-T06: verdict matches
+[ok] run-20260929T162925Z/P0-T06: failure_class matches
+[ok] run-20260929T162925Z/P0-T06: failure_output matches
+[ok] run-20260929T162925Z/P0-T07: verdict matches
+[ok] run-20260929T162925Z/P0-T07: failure_class matches
+[ok] run-20260929T162925Z/P0-T07: failure_output matches
+[ok] run-20260929T162307Z: list.run_id matches
+[ok] run-20260929T162307Z: list.stage matches
+[ok] run-20260929T162307Z: list.created_at matches
+[ok] run-20260929T162307Z: list.commit matches
+[ok] run-20260929T162307Z: list.schema_version matches
+[ok] run-20260929T162307Z: list.core_version matches
+[ok] run-20260929T162307Z: list.verdict matches
+[ok] run-20260929T162307Z: list.case_counts matches
+[ok] run-20260929T162307Z: list.record_sha256 matches
+[ok] run-20260929T162307Z: list.synthetic matches
+[ok] run-20260929T162307Z: list.manifest_status matches
+[ok] run-20260929T162307Z: no manifest.json exists on disk
+[timing] #3 GET /v1/validation/runs/run-20260929T162307Z 0.004s status=200
+[ok] run-20260929T162307Z: detail is 200
+[ok] run-20260929T162307Z: detail.run_id matches
+[ok] run-20260929T162307Z: detail.stage matches
+[ok] run-20260929T162307Z: detail.created_at matches
+[ok] run-20260929T162307Z: detail.commit matches
+[ok] run-20260929T162307Z: detail.schema_version matches
+[ok] run-20260929T162307Z: detail.core_version matches
+[ok] run-20260929T162307Z: detail.verdict matches
+[ok] run-20260929T162307Z/P0-T01: verdict matches
+[ok] run-20260929T162307Z/P0-T01: failure_class matches
+[ok] run-20260929T162307Z/P0-T01: failure_output matches
+[ok] run-20260929T162307Z/P0-T02: verdict matches
+[ok] run-20260929T162307Z/P0-T02: failure_class matches
+[ok] run-20260929T162307Z/P0-T02: failure_output matches
+[ok] run-20260929T162307Z/P0-T03: verdict matches
+[ok] run-20260929T162307Z/P0-T03: failure_class matches
+[ok] run-20260929T162307Z/P0-T03: failure_output matches
+[ok] run-20260929T162307Z/P0-T04: verdict matches
+[ok] run-20260929T162307Z/P0-T04: failure_class matches
+[ok] run-20260929T162307Z/P0-T04: failure_output matches
+[ok] run-20260929T162307Z/P0-T05: verdict matches
+[ok] run-20260929T162307Z/P0-T05: failure_class matches
+[ok] run-20260929T162307Z/P0-T05: failure_output matches
+[ok] run-20260929T162307Z/P0-T06: verdict matches
+[ok] run-20260929T162307Z/P0-T06: failure_class matches
+[ok] run-20260929T162307Z/P0-T06: failure_output matches
+[ok] run-20260929T162307Z/P0-T07: verdict matches
+[ok] run-20260929T162307Z/P0-T07: failure_class matches
+[ok] run-20260929T162307Z/P0-T07: failure_output matches
+[ok] run-20260929T145257Z: list.run_id matches
+[ok] run-20260929T145257Z: list.stage matches
+[ok] run-20260929T145257Z: list.created_at matches
+[ok] run-20260929T145257Z: list.commit matches
+[ok] run-20260929T145257Z: list.schema_version matches
+[ok] run-20260929T145257Z: list.core_version matches
+[ok] run-20260929T145257Z: list.verdict matches
+[ok] run-20260929T145257Z: list.case_counts matches
+[ok] run-20260929T145257Z: list.record_sha256 matches
+[ok] run-20260929T145257Z: list.synthetic matches
+[ok] run-20260929T145257Z: list.manifest_status matches
+[ok] run-20260929T145257Z: no manifest.json exists on disk
+[timing] #4 GET /v1/validation/runs/run-20260929T145257Z 0.005s status=200
+[ok] run-20260929T145257Z: detail is 200
+[ok] run-20260929T145257Z: detail.run_id matches
+[ok] run-20260929T145257Z: detail.stage matches
+[ok] run-20260929T145257Z: detail.created_at matches
+[ok] run-20260929T145257Z: detail.commit matches
+[ok] run-20260929T145257Z: detail.schema_version matches
+[ok] run-20260929T145257Z: detail.core_version matches
+[ok] run-20260929T145257Z: detail.verdict matches
+[ok] run-20260929T145257Z/P0-T01: verdict matches
+[ok] run-20260929T145257Z/P0-T01: failure_class matches
+[ok] run-20260929T145257Z/P0-T01: failure_output matches
+[ok] run-20260929T145257Z/P0-T02: verdict matches
+[ok] run-20260929T145257Z/P0-T02: failure_class matches
+[ok] run-20260929T145257Z/P0-T02: failure_output matches
+[ok] run-20260929T145257Z/P0-T03: verdict matches
+[ok] run-20260929T145257Z/P0-T03: failure_class matches
+[ok] run-20260929T145257Z/P0-T03: failure_output matches
+[ok] run-20260929T145257Z/P0-T04: verdict matches
+[ok] run-20260929T145257Z/P0-T04: failure_class matches
+[ok] run-20260929T145257Z/P0-T04: failure_output matches
+[ok] run-20260929T145257Z/P0-T05: verdict matches
+[ok] run-20260929T145257Z/P0-T05: failure_class matches
+[ok] run-20260929T145257Z/P0-T05: failure_output matches
+[ok] run-20260929T145257Z/P0-T06: verdict matches
+[ok] run-20260929T145257Z/P0-T06: failure_class matches
+[ok] run-20260929T145257Z/P0-T06: failure_output matches
+[ok] run-20260929T145257Z/P0-T07: verdict matches
+[ok] run-20260929T145257Z/P0-T07: failure_class matches
+[ok] run-20260929T145257Z/P0-T07: failure_output matches
+[ok] run-20260929T161915Z: list.run_id matches
+[ok] run-20260929T161915Z: list.stage matches
+[ok] run-20260929T161915Z: list.created_at matches
+[ok] run-20260929T161915Z: list.commit matches
+[ok] run-20260929T161915Z: list.schema_version matches
+[ok] run-20260929T161915Z: list.core_version matches
+[ok] run-20260929T161915Z: list.verdict matches
+[ok] run-20260929T161915Z: list.case_counts matches
+[ok] run-20260929T161915Z: list.record_sha256 matches
+[ok] run-20260929T161915Z: list.synthetic matches
+[ok] run-20260929T161915Z: list.manifest_status matches
+[ok] run-20260929T161915Z: no manifest.json exists on disk
+[timing] #5 GET /v1/validation/runs/run-20260929T161915Z 0.004s status=200
+[ok] run-20260929T161915Z: detail is 200
+[ok] run-20260929T161915Z: detail.run_id matches
+[ok] run-20260929T161915Z: detail.stage matches
+[ok] run-20260929T161915Z: detail.created_at matches
+[ok] run-20260929T161915Z: detail.commit matches
+[ok] run-20260929T161915Z: detail.schema_version matches
+[ok] run-20260929T161915Z: detail.core_version matches
+[ok] run-20260929T161915Z: detail.verdict matches
+[ok] run-20260929T161915Z/P0-T01: verdict matches
+[ok] run-20260929T161915Z/P0-T01: failure_class matches
+[ok] run-20260929T161915Z/P0-T01: failure_output matches
+[ok] run-20260929T161915Z/P0-T02: verdict matches
+[ok] run-20260929T161915Z/P0-T02: failure_class matches
+[ok] run-20260929T161915Z/P0-T02: failure_output matches
+[ok] run-20260929T161915Z/P0-T03: verdict matches
+[ok] run-20260929T161915Z/P0-T03: failure_class matches
+[ok] run-20260929T161915Z/P0-T03: failure_output matches
+[ok] run-20260929T161915Z/P0-T04: verdict matches
+[ok] run-20260929T161915Z/P0-T04: failure_class matches
+[ok] run-20260929T161915Z/P0-T04: failure_output matches
+[ok] run-20260929T161915Z/P0-T05: verdict matches
+[ok] run-20260929T161915Z/P0-T05: failure_class matches
+[ok] run-20260929T161915Z/P0-T05: failure_output matches
+[ok] run-20260929T161915Z/P0-T06: verdict matches
+[ok] run-20260929T161915Z/P0-T06: failure_class matches
+[ok] run-20260929T161915Z/P0-T06: failure_output matches
+[ok] run-20260929T161915Z/P0-T07: verdict matches
+[ok] run-20260929T161915Z/P0-T07: failure_class matches
+[ok] run-20260929T161915Z/P0-T07: failure_output matches
+[ok] run-20260929T144539Z: list.run_id matches
+[ok] run-20260929T144539Z: list.stage matches
+[ok] run-20260929T144539Z: list.created_at matches
+[ok] run-20260929T144539Z: list.commit matches
+[ok] run-20260929T144539Z: list.schema_version matches
+[ok] run-20260929T144539Z: list.core_version matches
+[ok] run-20260929T144539Z: list.verdict matches
+[ok] run-20260929T144539Z: list.case_counts matches
+[ok] run-20260929T144539Z: list.record_sha256 matches
+[ok] run-20260929T144539Z: list.synthetic matches
+[ok] run-20260929T144539Z: list.manifest_status matches
+[ok] run-20260929T144539Z: no manifest.json exists on disk
+[timing] #6 GET /v1/validation/runs/run-20260929T144539Z 0.004s status=200
+[ok] run-20260929T144539Z: detail is 200
+[ok] run-20260929T144539Z: detail.run_id matches
+[ok] run-20260929T144539Z: detail.stage matches
+[ok] run-20260929T144539Z: detail.created_at matches
+[ok] run-20260929T144539Z: detail.commit matches
+[ok] run-20260929T144539Z: detail.schema_version matches
+[ok] run-20260929T144539Z: detail.core_version matches
+[ok] run-20260929T144539Z: detail.verdict matches
+[ok] run-20260929T144539Z/P0-T01: verdict matches
+[ok] run-20260929T144539Z/P0-T01: failure_class matches
+[ok] run-20260929T144539Z/P0-T01: failure_output matches
+[ok] run-20260929T144539Z/P0-T02: verdict matches
+[ok] run-20260929T144539Z/P0-T02: failure_class matches
+[ok] run-20260929T144539Z/P0-T02: failure_output matches
+[ok] run-20260929T144539Z/P0-T03: verdict matches
+[ok] run-20260929T144539Z/P0-T03: failure_class matches
+[ok] run-20260929T144539Z/P0-T03: failure_output matches
+[ok] run-20260929T144539Z/P0-T04: verdict matches
+[ok] run-20260929T144539Z/P0-T04: failure_class matches
+[ok] run-20260929T144539Z/P0-T04: failure_output matches
+[ok] run-20260929T144539Z/P0-T05: verdict matches
+[ok] run-20260929T144539Z/P0-T05: failure_class matches
+[ok] run-20260929T144539Z/P0-T05: failure_output matches
+[ok] run-20260929T144539Z/P0-T06: verdict matches
+[ok] run-20260929T144539Z/P0-T06: failure_class matches
+[ok] run-20260929T144539Z/P0-T06: failure_output matches
+[ok] run-20260929T144539Z/P0-T07: verdict matches
+[ok] run-20260929T144539Z/P0-T07: failure_class matches
+[ok] run-20260929T144539Z/P0-T07: failure_output matches
+[ok] run-20260929T143845Z: list.run_id matches
+[ok] run-20260929T143845Z: list.stage matches
+[ok] run-20260929T143845Z: list.created_at matches
+[ok] run-20260929T143845Z: list.commit matches
+[ok] run-20260929T143845Z: list.schema_version matches
+[ok] run-20260929T143845Z: list.core_version matches
+[ok] run-20260929T143845Z: list.verdict matches
+[ok] run-20260929T143845Z: list.case_counts matches
+[ok] run-20260929T143845Z: list.record_sha256 matches
+[ok] run-20260929T143845Z: list.synthetic matches
+[ok] run-20260929T143845Z: list.manifest_status matches
+[ok] run-20260929T143845Z: no manifest.json exists on disk
+[timing] #7 GET /v1/validation/runs/run-20260929T143845Z 0.005s status=200
+[ok] run-20260929T143845Z: detail is 200
+[ok] run-20260929T143845Z: detail.run_id matches
+[ok] run-20260929T143845Z: detail.stage matches
+[ok] run-20260929T143845Z: detail.created_at matches
+[ok] run-20260929T143845Z: detail.commit matches
+[ok] run-20260929T143845Z: detail.schema_version matches
+[ok] run-20260929T143845Z: detail.core_version matches
+[ok] run-20260929T143845Z: detail.verdict matches
+[ok] run-20260929T143845Z/P0-T01: verdict matches
+[ok] run-20260929T143845Z/P0-T01: failure_class matches
+[ok] run-20260929T143845Z/P0-T01: failure_output matches
+[ok] run-20260929T143845Z/P0-T02: verdict matches
+[ok] run-20260929T143845Z/P0-T02: failure_class matches
+[ok] run-20260929T143845Z/P0-T02: failure_output matches
+[ok] run-20260929T143845Z/P0-T03: verdict matches
+[ok] run-20260929T143845Z/P0-T03: failure_class matches
+[ok] run-20260929T143845Z/P0-T03: failure_output matches
+[ok] run-20260929T143845Z/P0-T04: verdict matches
+[ok] run-20260929T143845Z/P0-T04: failure_class matches
+[ok] run-20260929T143845Z/P0-T04: failure_output matches
+[ok] run-20260929T143845Z/P0-T05: verdict matches
+[ok] run-20260929T143845Z/P0-T05: failure_class matches
+[ok] run-20260929T143845Z/P0-T05: failure_output matches
+[ok] run-20260929T143845Z/P0-T06: verdict matches
+[ok] run-20260929T143845Z/P0-T06: failure_class matches
+[ok] run-20260929T143845Z/P0-T06: failure_output matches
+[ok] run-20260929T143845Z/P0-T07: verdict matches
+[ok] run-20260929T143845Z/P0-T07: failure_class matches
+[ok] run-20260929T143845Z/P0-T07: failure_output matches
+[ok] run-20260929T142847Z: list.run_id matches
+[ok] run-20260929T142847Z: list.stage matches
+[ok] run-20260929T142847Z: list.created_at matches
+[ok] run-20260929T142847Z: list.commit matches
+[ok] run-20260929T142847Z: list.schema_version matches
+[ok] run-20260929T142847Z: list.core_version matches
+[ok] run-20260929T142847Z: list.verdict matches
+[ok] run-20260929T142847Z: list.case_counts matches
+[ok] run-20260929T142847Z: list.record_sha256 matches
+[ok] run-20260929T142847Z: list.synthetic matches
+[ok] run-20260929T142847Z: list.manifest_status matches
+[ok] run-20260929T142847Z: no manifest.json exists on disk
+[timing] #8 GET /v1/validation/runs/run-20260929T142847Z 0.005s status=200
+[ok] run-20260929T142847Z: detail is 200
+[ok] run-20260929T142847Z: detail.run_id matches
+[ok] run-20260929T142847Z: detail.stage matches
+[ok] run-20260929T142847Z: detail.created_at matches
+[ok] run-20260929T142847Z: detail.commit matches
+[ok] run-20260929T142847Z: detail.schema_version matches
+[ok] run-20260929T142847Z: detail.core_version matches
+[ok] run-20260929T142847Z: detail.verdict matches
+[ok] run-20260929T142847Z/P0-T01: verdict matches
+[ok] run-20260929T142847Z/P0-T01: failure_class matches
+[ok] run-20260929T142847Z/P0-T01: failure_output matches
+[ok] run-20260929T142847Z/P0-T02: verdict matches
+[ok] run-20260929T142847Z/P0-T02: failure_class matches
+[ok] run-20260929T142847Z/P0-T02: failure_output matches
+[ok] run-20260929T142847Z/P0-T03: verdict matches
+[ok] run-20260929T142847Z/P0-T03: failure_class matches
+[ok] run-20260929T142847Z/P0-T03: failure_output matches
+[ok] run-20260929T142847Z/P0-T04: verdict matches
+[ok] run-20260929T142847Z/P0-T04: failure_class matches
+[ok] run-20260929T142847Z/P0-T04: failure_output matches
+[ok] run-20260929T142847Z/P0-T05: verdict matches
+[ok] run-20260929T142847Z/P0-T05: failure_class matches
+[ok] run-20260929T142847Z/P0-T05: failure_output matches
+[ok] run-20260929T142847Z/P0-T06: verdict matches
+[ok] run-20260929T142847Z/P0-T06: failure_class matches
+[ok] run-20260929T142847Z/P0-T06: failure_output matches
+[ok] run-20260929T142847Z/P0-T07: verdict matches
+[ok] run-20260929T142847Z/P0-T07: failure_class matches
+[ok] run-20260929T142847Z/P0-T07: failure_output matches
+[ok] run-20260929T143156Z: list.run_id matches
+[ok] run-20260929T143156Z: list.stage matches
+[ok] run-20260929T143156Z: list.created_at matches
+[ok] run-20260929T143156Z: list.commit matches
+[ok] run-20260929T143156Z: list.schema_version matches
+[ok] run-20260929T143156Z: list.core_version matches
+[ok] run-20260929T143156Z: list.verdict matches
+[ok] run-20260929T143156Z: list.case_counts matches
+[ok] run-20260929T143156Z: list.record_sha256 matches
+[ok] run-20260929T143156Z: list.synthetic matches
+[ok] run-20260929T143156Z: list.manifest_status matches
+[ok] run-20260929T143156Z: no manifest.json exists on disk
+[timing] #9 GET /v1/validation/runs/run-20260929T143156Z 0.004s status=200
+[ok] run-20260929T143156Z: detail is 200
+[ok] run-20260929T143156Z: detail.run_id matches
+[ok] run-20260929T143156Z: detail.stage matches
+[ok] run-20260929T143156Z: detail.created_at matches
+[ok] run-20260929T143156Z: detail.commit matches
+[ok] run-20260929T143156Z: detail.schema_version matches
+[ok] run-20260929T143156Z: detail.core_version matches
+[ok] run-20260929T143156Z: detail.verdict matches
+[ok] run-20260929T143156Z/P0-T01: verdict matches
+[ok] run-20260929T143156Z/P0-T01: failure_class matches
+[ok] run-20260929T143156Z/P0-T01: failure_output matches
+[ok] run-20260929T143156Z/P0-T02: verdict matches
+[ok] run-20260929T143156Z/P0-T02: failure_class matches
+[ok] run-20260929T143156Z/P0-T02: failure_output matches
+[ok] run-20260929T143156Z/P0-T03: verdict matches
+[ok] run-20260929T143156Z/P0-T03: failure_class matches
+[ok] run-20260929T143156Z/P0-T03: failure_output matches
+[ok] run-20260929T143156Z/P0-T04: verdict matches
+[ok] run-20260929T143156Z/P0-T04: failure_class matches
+[ok] run-20260929T143156Z/P0-T04: failure_output matches
+[ok] run-20260929T143156Z/P0-T05: verdict matches
+[ok] run-20260929T143156Z/P0-T05: failure_class matches
+[ok] run-20260929T143156Z/P0-T05: failure_output matches
+[ok] run-20260929T143156Z/P0-T06: verdict matches
+[ok] run-20260929T143156Z/P0-T06: failure_class matches
+[ok] run-20260929T143156Z/P0-T06: failure_output matches
+[ok] run-20260929T143156Z/P0-T07: verdict matches
+[ok] run-20260929T143156Z/P0-T07: failure_class matches
+[ok] run-20260929T143156Z/P0-T07: failure_output matches
+[ok] run-20260929T173423Z: list.run_id matches
+[ok] run-20260929T173423Z: list.stage matches
+[ok] run-20260929T173423Z: list.created_at matches
+[ok] run-20260929T173423Z: list.commit matches
+[ok] run-20260929T173423Z: list.schema_version matches
+[ok] run-20260929T173423Z: list.core_version matches
+[ok] run-20260929T173423Z: list.verdict matches
+[ok] run-20260929T173423Z: list.case_counts matches
+[ok] run-20260929T173423Z: list.record_sha256 matches
+[ok] run-20260929T173423Z: list.synthetic matches
+[ok] run-20260929T173423Z: list.manifest_status matches
+[ok] run-20260929T173423Z: no manifest.json exists on disk
+[timing] #10 GET /v1/validation/runs/run-20260929T173423Z 0.004s status=200
+[ok] run-20260929T173423Z: detail is 200
+[ok] run-20260929T173423Z: detail.run_id matches
+[ok] run-20260929T173423Z: detail.stage matches
+[ok] run-20260929T173423Z: detail.created_at matches
+[ok] run-20260929T173423Z: detail.commit matches
+[ok] run-20260929T173423Z: detail.schema_version matches
+[ok] run-20260929T173423Z: detail.core_version matches
+[ok] run-20260929T173423Z: detail.verdict matches
+[ok] run-20260929T173423Z/P0-T01: verdict matches
+[ok] run-20260929T173423Z/P0-T01: failure_class matches
+[ok] run-20260929T173423Z/P0-T01: failure_output matches
+[ok] run-20260929T173423Z/P0-T02: verdict matches
+[ok] run-20260929T173423Z/P0-T02: failure_class matches
+[ok] run-20260929T173423Z/P0-T02: failure_output matches
+[ok] run-20260929T173423Z/P0-T03: verdict matches
+[ok] run-20260929T173423Z/P0-T03: failure_class matches
+[ok] run-20260929T173423Z/P0-T03: failure_output matches
+[ok] run-20260929T173423Z/P0-T04: verdict matches
+[ok] run-20260929T173423Z/P0-T04: failure_class matches
+[ok] run-20260929T173423Z/P0-T04: failure_output matches
+[ok] run-20260929T173423Z/P0-T05: verdict matches
+[ok] run-20260929T173423Z/P0-T05: failure_class matches
+[ok] run-20260929T173423Z/P0-T05: failure_output matches
+[ok] run-20260929T173423Z/P0-T06: verdict matches
+[ok] run-20260929T173423Z/P0-T06: failure_class matches
+[ok] run-20260929T173423Z/P0-T06: failure_output matches
+[ok] run-20260929T173423Z/P0-T07: verdict matches
+[ok] run-20260929T173423Z/P0-T07: failure_class matches
+[ok] run-20260929T173423Z/P0-T07: failure_output matches
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-01-real-field-comparison.json
+[timing] #11 GET /v1/validation/runs/run-20260929T173423Z/manifest 0.004s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-02-real-manifest-absent.json
+[ok] a real run's manifest status is absent
+[ok] an absent manifest carries no manifest_sha256
+[timing] #12 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-03-fixture-manifest.json
+[ok] fixture manifest is 200
+[ok] manifest: manifest_sha256 matches
+[ok] manifest_authentication is unauthenticated
+[timing] #13 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-04-good-metadata.json
+[ok] art_good: declared_sha256 matches
+[ok] art_good: declared_bytes matches
+[ok] art_good: bytes matches
+[ok] art_good: digests.original matches
+[ok] art_good: integrity matches
+[timing] #14 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content?form=original 0.001s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-05-good-original-content.json
+[ok] art_good content: original_sha256 matches
+[ok] art_good content: masked_sha256 matches
+[ok] art_good content: served_sha256 matches
+[ok] art_good content: content matches
+[ok] art_good content: bytes matches
+[timing] #15 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_assign 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-06-assign-metadata.json
+[ok] art_assign: declared_sha256 matches
+[ok] art_assign: digests.original matches
+[ok] art_assign: digests.masked matches
+[ok] art_assign: integrity matches
+[timing] #16 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_assign/content 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-07-assign-masked-content.json
+[ok] art_assign content: original_sha256 matches
+[ok] art_assign content: masked_sha256 matches
+[ok] art_assign content: served_sha256 matches
+[ok] art_assign content: content matches
+[ok] art_assign content: mask_algorithm matches
+[ok] art_assign content: mask_version matches
+[timing] #17 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] fixture run: list.record_sha256 matches
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-08-field-comparison-table.json
+compared 373 fields; 0 mismatches
+fields compared: art_assign content.content, art_assign content.mask_algorithm, art_assign content.mask_version, art_assign content.masked_sha256, art_assign content.original_sha256, art_assign content.served_sha256, art_assign.declared_sha256, art_assign.digests.masked, art_assign.digests.original, art_assign.integrity, art_good content.bytes, art_good content.content, art_good content.masked_sha256, art_good content.original_sha256, art_good content.served_sha256, art_good.bytes, art_good.declared_bytes, art_good.declared_sha256, art_good.digests.original, art_good.integrity, fixture run.list.record_sha256, manifest.manifest_sha256, run-20260929T142847Z.detail.commit, run-20260929T142847Z.detail.core_version, run-20260929T142847Z.detail.created_at, run-20260929T142847Z.detail.run_id, run-20260929T142847Z.detail.schema_version, run-20260929T142847Z.detail.stage, run-20260929T142847Z.detail.verdict, run-20260929T142847Z.list.case_counts, run-20260929T142847Z.list.commit, run-20260929T142847Z.list.core_version, run-20260929T142847Z.list.created_at, run-20260929T142847Z.list.manifest_status, run-20260929T142847Z.list.record_sha256, run-20260929T142847Z.list.run_id, run-20260929T142847Z.list.schema_version, run-20260929T142847Z.list.stage, run-20260929T142847Z.list.synthetic, run-20260929T142847Z.list.verdict, run-20260929T142847Z/P0-T01.failure_class, run-20260929T142847Z/P0-T01.failure_output, run-20260929T142847Z/P0-T01.verdict, run-20260929T142847Z/P0-T02.failure_class, run-20260929T142847Z/P0-T02.failure_output, run-20260929T142847Z/P0-T02.verdict, run-20260929T142847Z/P0-T03.failure_class, run-20260929T142847Z/P0-T03.failure_output, run-20260929T142847Z/P0-T03.verdict, run-20260929T142847Z/P0-T04.failure_class, run-20260929T142847Z/P0-T04.failure_output, run-20260929T142847Z/P0-T04.verdict, run-20260929T142847Z/P0-T05.failure_class, run-20260929T142847Z/P0-T05.failure_output, run-20260929T142847Z/P0-T05.verdict, run-20260929T142847Z/P0-T06.failure_class, run-20260929T142847Z/P0-T06.failure_output, run-20260929T142847Z/P0-T06.verdict, run-20260929T142847Z/P0-T07.failure_class, run-20260929T142847Z/P0-T07.failure_output, run-20260929T142847Z/P0-T07.verdict, run-20260929T143156Z.detail.commit, run-20260929T143156Z.detail.core_version, run-20260929T143156Z.detail.created_at, run-20260929T143156Z.detail.run_id, run-20260929T143156Z.detail.schema_version, run-20260929T143156Z.detail.stage, run-20260929T143156Z.detail.verdict, run-20260929T143156Z.list.case_counts, run-20260929T143156Z.list.commit, run-20260929T143156Z.list.core_version, run-20260929T143156Z.list.created_at, run-20260929T143156Z.list.manifest_status, run-20260929T143156Z.list.record_sha256, run-20260929T143156Z.list.run_id, run-20260929T143156Z.list.schema_version, run-20260929T143156Z.list.stage, run-20260929T143156Z.list.synthetic, run-20260929T143156Z.list.verdict, run-20260929T143156Z/P0-T01.failure_class, run-20260929T143156Z/P0-T01.failure_output, run-20260929T143156Z/P0-T01.verdict, run-20260929T143156Z/P0-T02.failure_class, run-20260929T143156Z/P0-T02.failure_output, run-20260929T143156Z/P0-T02.verdict, run-20260929T143156Z/P0-T03.failure_class, run-20260929T143156Z/P0-T03.failure_output, run-20260929T143156Z/P0-T03.verdict, run-20260929T143156Z/P0-T04.failure_class, run-20260929T143156Z/P0-T04.failure_output, run-20260929T143156Z/P0-T04.verdict, run-20260929T143156Z/P0-T05.failure_class, run-20260929T143156Z/P0-T05.failure_output, run-20260929T143156Z/P0-T05.verdict, run-20260929T143156Z/P0-T06.failure_class, run-20260929T143156Z/P0-T06.failure_output, run-20260929T143156Z/P0-T06.verdict, run-20260929T143156Z/P0-T07.failure_class, run-20260929T143156Z/P0-T07.failure_output, run-20260929T143156Z/P0-T07.verdict, run-20260929T143845Z.detail.commit, run-20260929T143845Z.detail.core_version, run-20260929T143845Z.detail.created_at, run-20260929T143845Z.detail.run_id, run-20260929T143845Z.detail.schema_version, run-20260929T143845Z.detail.stage, run-20260929T143845Z.detail.verdict, run-20260929T143845Z.list.case_counts, run-20260929T143845Z.list.commit, run-20260929T143845Z.list.core_version, run-20260929T143845Z.list.created_at, run-20260929T143845Z.list.manifest_status, run-20260929T143845Z.list.record_sha256, run-20260929T143845Z.list.run_id, run-20260929T143845Z.list.schema_version, run-20260929T143845Z.list.stage, run-20260929T143845Z.list.synthetic, run-20260929T143845Z.list.verdict, run-20260929T143845Z/P0-T01.failure_class, run-20260929T143845Z/P0-T01.failure_output, run-20260929T143845Z/P0-T01.verdict, run-20260929T143845Z/P0-T02.failure_class, run-20260929T143845Z/P0-T02.failure_output, run-20260929T143845Z/P0-T02.verdict, run-20260929T143845Z/P0-T03.failure_class, run-20260929T143845Z/P0-T03.failure_output, run-20260929T143845Z/P0-T03.verdict, run-20260929T143845Z/P0-T04.failure_class, run-20260929T143845Z/P0-T04.failure_output, run-20260929T143845Z/P0-T04.verdict, run-20260929T143845Z/P0-T05.failure_class, run-20260929T143845Z/P0-T05.failure_output, run-20260929T143845Z/P0-T05.verdict, run-20260929T143845Z/P0-T06.failure_class, run-20260929T143845Z/P0-T06.failure_output, run-20260929T143845Z/P0-T06.verdict, run-20260929T143845Z/P0-T07.failure_class, run-20260929T143845Z/P0-T07.failure_output, run-20260929T143845Z/P0-T07.verdict, run-20260929T144539Z.detail.commit, run-20260929T144539Z.detail.core_version, run-20260929T144539Z.detail.created_at, run-20260929T144539Z.detail.run_id, run-20260929T144539Z.detail.schema_version, run-20260929T144539Z.detail.stage, run-20260929T144539Z.detail.verdict, run-20260929T144539Z.list.case_counts, run-20260929T144539Z.list.commit, run-20260929T144539Z.list.core_version, run-20260929T144539Z.list.created_at, run-20260929T144539Z.list.manifest_status, run-20260929T144539Z.list.record_sha256, run-20260929T144539Z.list.run_id, run-20260929T144539Z.list.schema_version, run-20260929T144539Z.list.stage, run-20260929T144539Z.list.synthetic, run-20260929T144539Z.list.verdict, run-20260929T144539Z/P0-T01.failure_class, run-20260929T144539Z/P0-T01.failure_output, run-20260929T144539Z/P0-T01.verdict, run-20260929T144539Z/P0-T02.failure_class, run-20260929T144539Z/P0-T02.failure_output, run-20260929T144539Z/P0-T02.verdict, run-20260929T144539Z/P0-T03.failure_class, run-20260929T144539Z/P0-T03.failure_output, run-20260929T144539Z/P0-T03.verdict, run-20260929T144539Z/P0-T04.failure_class, run-20260929T144539Z/P0-T04.failure_output, run-20260929T144539Z/P0-T04.verdict, run-20260929T144539Z/P0-T05.failure_class, run-20260929T144539Z/P0-T05.failure_output, run-20260929T144539Z/P0-T05.verdict, run-20260929T144539Z/P0-T06.failure_class, run-20260929T144539Z/P0-T06.failure_output, run-20260929T144539Z/P0-T06.verdict, run-20260929T144539Z/P0-T07.failure_class, run-20260929T144539Z/P0-T07.failure_output, run-20260929T144539Z/P0-T07.verdict, run-20260929T145257Z.detail.commit, run-20260929T145257Z.detail.core_version, run-20260929T145257Z.detail.created_at, run-20260929T145257Z.detail.run_id, run-20260929T145257Z.detail.schema_version, run-20260929T145257Z.detail.stage, run-20260929T145257Z.detail.verdict, run-20260929T145257Z.list.case_counts, run-20260929T145257Z.list.commit, run-20260929T145257Z.list.core_version, run-20260929T145257Z.list.created_at, run-20260929T145257Z.list.manifest_status, run-20260929T145257Z.list.record_sha256, run-20260929T145257Z.list.run_id, run-20260929T145257Z.list.schema_version, run-20260929T145257Z.list.stage, run-20260929T145257Z.list.synthetic, run-20260929T145257Z.list.verdict, run-20260929T145257Z/P0-T01.failure_class, run-20260929T145257Z/P0-T01.failure_output, run-20260929T145257Z/P0-T01.verdict, run-20260929T145257Z/P0-T02.failure_class, run-20260929T145257Z/P0-T02.failure_output, run-20260929T145257Z/P0-T02.verdict, run-20260929T145257Z/P0-T03.failure_class, run-20260929T145257Z/P0-T03.failure_output, run-20260929T145257Z/P0-T03.verdict, run-20260929T145257Z/P0-T04.failure_class, run-20260929T145257Z/P0-T04.failure_output, run-20260929T145257Z/P0-T04.verdict, run-20260929T145257Z/P0-T05.failure_class, run-20260929T145257Z/P0-T05.failure_output, run-20260929T145257Z/P0-T05.verdict, run-20260929T145257Z/P0-T06.failure_class, run-20260929T145257Z/P0-T06.failure_output, run-20260929T145257Z/P0-T06.verdict, run-20260929T145257Z/P0-T07.failure_class, run-20260929T145257Z/P0-T07.failure_output, run-20260929T145257Z/P0-T07.verdict, run-20260929T161915Z.detail.commit, run-20260929T161915Z.detail.core_version, run-20260929T161915Z.detail.created_at, run-20260929T161915Z.detail.run_id, run-20260929T161915Z.detail.schema_version, run-20260929T161915Z.detail.stage, run-20260929T161915Z.detail.verdict, run-20260929T161915Z.list.case_counts, run-20260929T161915Z.list.commit, run-20260929T161915Z.list.core_version, run-20260929T161915Z.list.created_at, run-20260929T161915Z.list.manifest_status, run-20260929T161915Z.list.record_sha256, run-20260929T161915Z.list.run_id, run-20260929T161915Z.list.schema_version, run-20260929T161915Z.list.stage, run-20260929T161915Z.list.synthetic, run-20260929T161915Z.list.verdict, run-20260929T161915Z/P0-T01.failure_class, run-20260929T161915Z/P0-T01.failure_output, run-20260929T161915Z/P0-T01.verdict, run-20260929T161915Z/P0-T02.failure_class, run-20260929T161915Z/P0-T02.failure_output, run-20260929T161915Z/P0-T02.verdict, run-20260929T161915Z/P0-T03.failure_class, run-20260929T161915Z/P0-T03.failure_output, run-20260929T161915Z/P0-T03.verdict, run-20260929T161915Z/P0-T04.failure_class, run-20260929T161915Z/P0-T04.failure_output, run-20260929T161915Z/P0-T04.verdict, run-20260929T161915Z/P0-T05.failure_class, run-20260929T161915Z/P0-T05.failure_output, run-20260929T161915Z/P0-T05.verdict, run-20260929T161915Z/P0-T06.failure_class, run-20260929T161915Z/P0-T06.failure_output, run-20260929T161915Z/P0-T06.verdict, run-20260929T161915Z/P0-T07.failure_class, run-20260929T161915Z/P0-T07.failure_output, run-20260929T161915Z/P0-T07.verdict, run-20260929T162307Z.detail.commit, run-20260929T162307Z.detail.core_version, run-20260929T162307Z.detail.created_at, run-20260929T162307Z.detail.run_id, run-20260929T162307Z.detail.schema_version, run-20260929T162307Z.detail.stage, run-20260929T162307Z.detail.verdict, run-20260929T162307Z.list.case_counts, run-20260929T162307Z.list.commit, run-20260929T162307Z.list.core_version, run-20260929T162307Z.list.created_at, run-20260929T162307Z.list.manifest_status, run-20260929T162307Z.list.record_sha256, run-20260929T162307Z.list.run_id, run-20260929T162307Z.list.schema_version, run-20260929T162307Z.list.stage, run-20260929T162307Z.list.synthetic, run-20260929T162307Z.list.verdict, run-20260929T162307Z/P0-T01.failure_class, run-20260929T162307Z/P0-T01.failure_output, run-20260929T162307Z/P0-T01.verdict, run-20260929T162307Z/P0-T02.failure_class, run-20260929T162307Z/P0-T02.failure_output, run-20260929T162307Z/P0-T02.verdict, run-20260929T162307Z/P0-T03.failure_class, run-20260929T162307Z/P0-T03.failure_output, run-20260929T162307Z/P0-T03.verdict, run-20260929T162307Z/P0-T04.failure_class, run-20260929T162307Z/P0-T04.failure_output, run-20260929T162307Z/P0-T04.verdict, run-20260929T162307Z/P0-T05.failure_class, run-20260929T162307Z/P0-T05.failure_output, run-20260929T162307Z/P0-T05.verdict, run-20260929T162307Z/P0-T06.failure_class, run-20260929T162307Z/P0-T06.failure_output, run-20260929T162307Z/P0-T06.verdict, run-20260929T162307Z/P0-T07.failure_class, run-20260929T162307Z/P0-T07.failure_output, run-20260929T162307Z/P0-T07.verdict, run-20260929T162925Z.detail.commit, run-20260929T162925Z.detail.core_version, run-20260929T162925Z.detail.created_at, run-20260929T162925Z.detail.run_id, run-20260929T162925Z.detail.schema_version, run-20260929T162925Z.detail.stage, run-20260929T162925Z.detail.verdict, run-20260929T162925Z.list.case_counts, run-20260929T162925Z.list.commit, run-20260929T162925Z.list.core_version, run-20260929T162925Z.list.created_at, run-20260929T162925Z.list.manifest_status, run-20260929T162925Z.list.record_sha256, run-20260929T162925Z.list.run_id, run-20260929T162925Z.list.schema_version, run-20260929T162925Z.list.stage, run-20260929T162925Z.list.synthetic, run-20260929T162925Z.list.verdict, run-20260929T162925Z/P0-T01.failure_class, run-20260929T162925Z/P0-T01.failure_output, run-20260929T162925Z/P0-T01.verdict, run-20260929T162925Z/P0-T02.failure_class, run-20260929T162925Z/P0-T02.failure_output, run-20260929T162925Z/P0-T02.verdict, run-20260929T162925Z/P0-T03.failure_class, run-20260929T162925Z/P0-T03.failure_output, run-20260929T162925Z/P0-T03.verdict, run-20260929T162925Z/P0-T04.failure_class, run-20260929T162925Z/P0-T04.failure_output, run-20260929T162925Z/P0-T04.verdict, run-20260929T162925Z/P0-T05.failure_class, run-20260929T162925Z/P0-T05.failure_output, run-20260929T162925Z/P0-T05.verdict, run-20260929T162925Z/P0-T06.failure_class, run-20260929T162925Z/P0-T06.failure_output, run-20260929T162925Z/P0-T06.verdict, run-20260929T162925Z/P0-T07.failure_class, run-20260929T162925Z/P0-T07.failure_output, run-20260929T162925Z/P0-T07.verdict, run-20260929T173423Z.detail.commit, run-20260929T173423Z.detail.core_version, run-20260929T173423Z.detail.created_at, run-20260929T173423Z.detail.run_id, run-20260929T173423Z.detail.schema_version, run-20260929T173423Z.detail.stage, run-20260929T173423Z.detail.verdict, run-20260929T173423Z.list.case_counts, run-20260929T173423Z.list.commit, run-20260929T173423Z.list.core_version, run-20260929T173423Z.list.created_at, run-20260929T173423Z.list.manifest_status, run-20260929T173423Z.list.record_sha256, run-20260929T173423Z.list.run_id, run-20260929T173423Z.list.schema_version, run-20260929T173423Z.list.stage, run-20260929T173423Z.list.synthetic, run-20260929T173423Z.list.verdict, run-20260929T173423Z/P0-T01.failure_class, run-20260929T173423Z/P0-T01.failure_output, run-20260929T173423Z/P0-T01.verdict, run-20260929T173423Z/P0-T02.failure_class, run-20260929T173423Z/P0-T02.failure_output, run-20260929T173423Z/P0-T02.verdict, run-20260929T173423Z/P0-T03.failure_class, run-20260929T173423Z/P0-T03.failure_output, run-20260929T173423Z/P0-T03.verdict, run-20260929T173423Z/P0-T04.failure_class, run-20260929T173423Z/P0-T04.failure_output, run-20260929T173423Z/P0-T04.verdict, run-20260929T173423Z/P0-T05.failure_class, run-20260929T173423Z/P0-T05.failure_output, run-20260929T173423Z/P0-T05.verdict, run-20260929T173423Z/P0-T06.failure_class, run-20260929T173423Z/P0-T06.failure_output, run-20260929T173423Z/P0-T06.verdict, run-20260929T173423Z/P0-T07.failure_class, run-20260929T173423Z/P0-T07.failure_output, run-20260929T173423Z/P0-T07.verdict
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c6-10-criterion6-report.json
+[timing-summary] {"max_seconds": 0.0112, "over_10s": [], "over_5s": [], "requests": 17, "requests_without_status": [], "total_seconds": 0.0656, "transport_retries": 0}
+EXIT_c6_values=0
+########## extra_probes
+[timing] #1 GET /v1/validation/runs 0.006s status=503
+[ok] unset root is 503 validation_not_configured
+[ok] unset root reason is 'unset'
+[timing] #2 GET /v1/validation/runs 0.002s status=503
+[ok] symlinked root is 503
+[ok] symlinked root reason is 'symlinked_root'
+[timing] #3 GET /v1/validation/runs/not-a-run-id 0.002s status=400
+[ok] malformed run id is 400 invalid_request
+[ok] malformed run id code is invalid_request
+[timing] #4 GET /v1/validation/runs?bogus=1 0.002s status=400
+[ok] unknown query key is 400 invalid_request
+[timing] #5 POST /v1/validation/runs 0.002s status=405
+[ok] POST to the list route is 405 method_not_allowed
+[ok] the allowed method list is [GET]
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/extra-01-probes.json
+[timing-summary] {"max_seconds": 0.0064, "over_10s": [], "over_5s": [], "requests": 5, "requests_without_status": [], "total_seconds": 0.0132, "transport_retries": 0}
+EXIT_extra_probes=0
+########## defects (the four fixed classes, filesystem changing under the server)
+
+########## PART A — manifest swapped after the grant check (acl)
+[timing] #1 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[ok] A granted content (manifest A): answered inside 3.0s with an HTTP status (no hang)
+[ok] A (manifest A): granted content is 200 and serves A's bytes
+[ok] A (manifest A): served digest is A's, header agrees
+[timing] #2 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[ok] A granted manifest (manifest A): answered inside 3.0s with an HTTP status (no hang)
+[ok] A (manifest A): manifest route serves A (sha + path agree)
+[timing] #3 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[ok] A content after swap to B: answered inside 3.0s with an HTTP status (no hang)
+[ok] A after swap to B: content is refused 404 validation_run_not_found
+[ok] A after swap to B: the refusal serves nothing from manifest B
+[timing] #4 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=404
+[ok] A after swap to B: manifest route is refused 404 too
+[timing] #5 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[ok] A after swapping back to A: granted content is 200 with A's bytes
+[timing] #6 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #7 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #8 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.003s status=200
+[timing] #9 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #10 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #11 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #12 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #13 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #14 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #15 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #16 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #17 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=200
+[timing] #18 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #19 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #20 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #21 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #22 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #23 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #24 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #25 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #26 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #27 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #28 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #29 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #30 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.005s status=200
+[timing] #31 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #32 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #33 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #34 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #35 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #36 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #37 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #38 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #39 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #40 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #41 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=200
+[timing] #42 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #43 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #44 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #45 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #46 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #47 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #48 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #49 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=404
+[timing] #50 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #51 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=404
+[timing] #52 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #53 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.005s status=200
+[timing] #54 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #55 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #56 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #57 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=404
+[timing] #58 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #59 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=200
+[timing] #60 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #61 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #62 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #63 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #64 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #65 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=404
+[timing] #66 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=200
+[timing] #67 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #68 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #69 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=200
+[timing] #70 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #71 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=404
+[timing] #72 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #73 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #74 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #75 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #76 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.003s status=404
+[timing] #77 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #78 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #79 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=404
+[timing] #80 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=200
+[timing] #81 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #82 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #83 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #84 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #85 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #86 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #87 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #88 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #89 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=200
+[timing] #90 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #91 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #92 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #93 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #94 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #95 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #96 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #97 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #98 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #99 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.004s status=200
+[timing] #100 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #101 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #102 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #103 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #104 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #105 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #106 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #107 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #108 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #109 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=200
+[timing] #110 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #111 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #112 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #113 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #114 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=404
+[timing] #115 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #116 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=404
+[timing] #117 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=200
+[timing] #118 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #119 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.001s status=404
+[timing] #120 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #121 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=404
+[timing] #122 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.004s status=404
+[timing] #123 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[timing] #124 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.002s status=200
+[timing] #125 GET /v1/validation/runs/run-20261008T000501Z/manifest 0.002s status=200
+[ok] A rapid swap race: no response ever mixes A's permission with B's payload (or B's with A's)
+[ok] A rapid swap race: both the granted (200) and refused (404) branches were exercised
+[ok] A rapid swap race: every request answered well inside the timeout
+[timing] #126 GET /v1/validation/runs/run-20261008T000501Z/artifacts/art_good/content 0.001s status=200
+[ok] A after the race: manifest A restored and content is 200 with A
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/fix-defects-01-manifest-swap.json
+
+########## PART B — FIFO at a record path, manifest.json, artifact
+[ok] B: the record-path entry is a real FIFO on disk
+[ok] B: the manifest.json entry is a real FIFO on disk
+[ok] B: the artifact entry is a real FIFO on disk
+[timing] #127 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] B list over a root with a FIFO record: answered inside 3.0s with an HTTP status (no hang)
+[ok] B list: the FIFO record is not served as a run row
+[ok] B list: the three regular records are still served
+[ok] B list: the FIFO record is counted not_regular_file
+[timing] #128 GET /v1/validation/runs/run-20261008T000402Z 0.001s status=404
+[ok] B detail of the FIFO record stem: answered inside 3.0s with an HTTP status (no hang)
+[ok] B detail of the FIFO record stem: 404 validation_run_not_found
+[timing] #129 GET /v1/validation/runs/run-20261008T000403Z/manifest 0.002s status=409
+[ok] B manifest route with a FIFO manifest.json: answered inside 3.0s with an HTTP status (no hang)
+[ok] B manifest route with a FIFO manifest.json: 409 manifest_corrupt naming not_regular_file
+[timing] #130 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] B list: the FIFO manifest is reported manifest_status corrupt
+[timing] #131 GET /v1/validation/runs/run-20261008T000404Z/artifacts/art_fifo 0.002s status=503
+[ok] B artifact metadata with a FIFO artifact path: answered inside 3.0s with an HTTP status (no hang)
+[ok] B artifact metadata with a FIFO artifact path: refused 503 artifact_unreadable (never blocked)
+[timing] #132 GET /v1/validation/runs/run-20261008T000404Z/artifacts/art_fifo/content 0.001s status=503
+[ok] B artifact content with a FIFO artifact path: answered inside 3.0s with an HTTP status (no hang)
+[ok] B artifact content with a FIFO artifact path: refused 503 artifact_unreadable (never blocked)
+[timing] #133 GET /v1/validation/runs/run-20261008T000404Z/manifest 0.001s status=200
+[ok] B manifest route listing a FIFO artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] B manifest route: the FIFO artifact is listed integrity unreadable
+[timing] #134 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #135 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #136 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #137 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #138 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #139 GET /v1/validation/runs?limit=100 0.002s status=200
+[timing] #140 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #141 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #142 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #143 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #144 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #145 GET /v1/validation/runs?limit=100 0.002s status=200
+[timing] #146 GET /v1/validation/runs?limit=100 0.003s status=200
+[timing] #147 GET /v1/validation/runs?limit=100 0.002s status=200
+[timing] #148 GET /v1/validation/runs?limit=100 0.001s status=200
+[ok] B regular<->FIFO record swap race: no request blocked (all answered)
+[ok] B regular<->FIFO record swap race: every response was inside the hang threshold
+[ok] B swap race: a swapped-in FIFO is refused as not a regular file, never read
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/fix-defects-02-fifo.json
+
+########## PART C — record/manifest growth past the caps
+[timing] #149 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] C before growth: the record is a normal ok row
+[ok] C the record on disk is now over MAX_RECORD_BYTES
+[timing] #150 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] C grown record: listed corrupt, not served
+[ok] C grown record: reports no digest because it was never read whole
+[ok] C grown record: the reason names the size bound
+[timing] #151 GET /v1/validation/runs/run-20261008T000601Z 0.001s status=409
+[ok] C grown record detail: answered inside 3.0s with an HTTP status (no hang)
+[ok] C grown record: detail is 409 validation_run_corrupt
+[timing] #152 GET /v1/validation/runs/run-20261008T000602Z/manifest 0.001s status=200
+[ok] C before growth: the manifest is frozen and served
+[ok] C the manifest on disk is now over MAX_MANIFEST_BYTES
+[timing] #153 GET /v1/validation/runs/run-20261008T000602Z/manifest 0.001s status=409
+[ok] C grown manifest route: answered inside 3.0s with an HTTP status (no hang)
+[ok] C grown manifest: 409 validation_manifest_corrupt naming the bound
+[ok] C grown manifest: no digest is reported (never read whole)
+[timing] #154 GET /v1/validation/runs?limit=100 0.001s status=200
+[ok] C grown manifest: the list row is manifest_status corrupt
+[timing] #155 GET /v1/validation/runs?limit=100 0.001s status=200
+[ok] C after restoring: the record is a normal ok row again
+[timing] #156 GET /v1/validation/runs/run-20261008T000602Z/manifest 0.001s status=200
+[ok] C after restoring: the manifest is frozen again
+[ok] C in-loop primitive: a descriptor grown past the cap is refused too_large, not read whole
+[ok] C in-loop primitive: a file exactly at the cap is still read normally
+[timing] #157 GET /v1/validation/runs?limit=100 0.001s status=200
+[timing] #158 GET /v1/validation/runs?limit=100 0.018s status=200
+[timing] #159 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #160 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #161 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #162 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #163 GET /v1/validation/runs?limit=100 0.002s status=200
+[timing] #164 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #165 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #166 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #167 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #168 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #169 GET /v1/validation/runs?limit=100 0.002s status=200
+[timing] #170 GET /v1/validation/runs?limit=100 0.004s status=200
+[timing] #171 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #172 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #173 GET /v1/validation/runs?limit=100 0.017s status=200
+[timing] #174 GET /v1/validation/runs?limit=100 0.017s status=200
+[ok] C grow-during-read race: no request ever served a grown record (an ok row always carries the pre-growth digest; an over-cap row carries no digest and names the bound)
+[ok] C grow-during-read race: every request answered inside the hang threshold
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/fix-defects-03-cap-growth.json
+
+########## PART D — root replaced by a symlink to an outside directory
+[timing] #175 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] D before swap: the inside run is served from the real root
+[timing] #176 GET /v1/validation/runs/run-20261008T000701Z 0.001s status=200
+[ok] D before swap: inside detail is 200 (grant check exercised)
+[ok] D the configured root is now a symlink to the outside directory
+[timing] #177 GET /v1/validation/runs?limit=100 0.001s status=503
+[ok] D symlinked root, list: answered inside 3.0s with an HTTP status (no hang)
+[ok] D symlinked root, list: refused 503 symlinked_root and serves nothing from outside
+[timing] #178 GET /v1/validation/runs/run-20261008T000701Z 0.001s status=503
+[ok] D symlinked root, inside detail: answered inside 3.0s with an HTTP status (no hang)
+[ok] D symlinked root, inside detail: refused 503 symlinked_root and serves nothing from outside
+[timing] #179 GET /v1/validation/runs/run-20261008T000702Z 0.001s status=503
+[ok] D symlinked root, outside detail: answered inside 3.0s with an HTTP status (no hang)
+[ok] D symlinked root, outside detail: refused 503 symlinked_root and serves nothing from outside
+[timing] #180 GET /v1/validation/runs/run-20261008T000702Z/manifest 0.001s status=503
+[ok] D symlinked root, outside manifest: answered inside 3.0s with an HTTP status (no hang)
+[ok] D symlinked root, outside manifest: refused 503 symlinked_root and serves nothing from outside
+[timing] #181 GET /v1/validation/runs/run-20261008T000702Z/artifacts/art_loot/content 0.001s status=503
+[ok] D symlinked root, outside artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] D symlinked root, outside artifact: refused 503 symlinked_root and serves nothing from outside
+[ok] D the root is a real directory again
+[timing] #182 GET /v1/validation/runs?limit=100 0.001s status=200
+[ok] D after restore: the list serves the inside run again and nothing from outside
+[timing] #183 GET /v1/validation/runs/run-20261008T000701Z 0.001s status=200
+[ok] D after restore: inside detail is 200 with the inside record
+[timing] #184 GET /v1/validation/runs/run-20261008T000701Z/artifacts/art_note/content 0.001s status=200
+[ok] D after restore: the inside artifact content is 200 and correct
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/fix-defects-04-root-symlink.json
+
+########## PART E — masked output measured against MAX_ARTIFACT_BYTES
+[ok] E the validator's raw artifact is under MAX_ARTIFACT_BYTES
+[ok] E the validator's masked artifact is over MAX_ARTIFACT_BYTES
+[timing] #185 GET /v1/validation/runs/run-20261008T000801Z/artifacts/art_mask 1.725s status=200
+[ok] E artifact metadata for the expanding artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] E artifact metadata: 200 integrity match, declared bytes agree
+[ok] E artifact metadata: digests.masked is our recomputed masked digest
+[timing] #186 GET /v1/validation/runs/run-20261008T000801Z/artifacts/art_mask/content 1.053s status=413
+[ok] E content route for the expanding artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] E masked content: refused 413 payload_too_large
+[ok] E masked content: details name the masked form, the limit and the original size
+[ok] E masked content: the over-cap masked text was NOT returned
+[timing] #187 GET /v1/validation/runs/run-20261008T000801Z/artifacts/art_mask/content?form=original 1.053s status=403
+[ok] E original form for the expanding artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] E original form: withheld 403 original_withheld (mask not a no-op)
+[timing] #188 GET /v1/validation/runs/run-20261008T000801Z/artifacts/art_small/content 0.002s status=200
+[ok] E control small expanding artifact: answered inside 3.0s with an HTTP status (no hang)
+[ok] E control: a masked artifact under the cap is still served 200
+[ok] E control: the served content is the masked text and its digest agrees
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/fix-defects-05-masked-cap.json
+
+########## PART F — legitimate deep record and artifact paths
+[timing] #189 GET /v1/validation/runs?limit=100 0.002s status=200
+[ok] F a record three directory levels below the root is served
+[ok] F a record one directory level below the root is served
+[timing] #190 GET /v1/validation/runs/run-20261008T000901Z 0.002s status=200
+[ok] F deep record detail is 200
+[timing] #191 GET /v1/validation/runs/run-20261008T000901Z/manifest 0.002s status=200
+[ok] F deep manifest serves the nested declared path
+[timing] #192 GET /v1/validation/runs/run-20261008T000901Z/artifacts/art_deep/content 0.002s status=200
+[ok] F deep nested artifact content: answered inside 3.0s with an HTTP status (no hang)
+[ok] F deep nested artifact content is 200 with the exact bytes
+[timing] #193 GET /v1/validation/runs/run-20261008T000902Z 0.004s status=200
+[ok] F shallow record detail is 200
+[timing] #194 GET /v1/validation/runs/run-20261008T000902Z/manifest 0.002s status=200
+[ok] F shallow manifest serves the nested declared path
+[timing] #195 GET /v1/validation/runs/run-20261008T000902Z/artifacts/art_deep/content 0.002s status=200
+[ok] F shallow nested artifact content: answered inside 3.0s with an HTTP status (no hang)
+[ok] F shallow nested artifact content is 200 with the exact bytes
+[ok] F the nested artifact path is genuinely two directories deep on disk
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/fix-defects-06-legit-deep.json
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/fix-defects-07-request-timings.json
+[timing-summary] {"max_seconds": 1.7246, "over_10s": [], "over_5s": [], "requests": 195, "requests_without_status": [], "total_seconds": 4.378, "transport_retries": 0}
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/fix-defects-08-timing-summary.json
+[ok] all defect probes: every request completed inside its client timeout (no request hung)
+[ok] all defect probes: no request exceeded 10 s
+[ok] all defect probes: no request exceeded 5 s
+[ok] all defect probes: no transport-level retry was needed
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/fix-defects-report.json
+[timing-summary] {"max_seconds": 1.7246, "over_10s": [], "over_5s": [], "requests": 195, "requests_without_status": [], "total_seconds": 4.378, "transport_retries": 0}
+EXIT_defects=0
+=== summaries
+c1-07-criterion1-report.json 28 checks 0 failed
+c2-03-criterion2-report.json 126 checks 0 failed
+c3-06-criterion3-report.json 63 checks 0 failed
+c4-13-criterion4-report.json 145 checks 0 failed
+c5-09-criterion5-report.json 145 checks 0 failed
+c6-10-criterion6-report.json 397 checks 0 failed
+extra-01-probes.json 9 checks 0 failed
+fix-defects-report.json 100 checks 0 failed

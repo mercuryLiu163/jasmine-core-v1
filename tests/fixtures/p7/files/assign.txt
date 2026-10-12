@@ -1,0 +1,1 @@
+2026-10-08 INFO db_password=hunter2hunter2 in the log line

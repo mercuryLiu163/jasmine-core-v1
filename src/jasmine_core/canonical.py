@@ -60,6 +60,13 @@ _JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{
 
 REDACTED = "[REDACTED]"
 
+#: Revision of the `redact_text` pattern tables above. Bump this whenever any
+#: pattern is added, removed or changed: `validation.reads` serves
+#: `mask_version: canonical.REDACT_TEXT_VERSION` beside a masked artifact, so a
+#: caller can tell which masker revision produced `masked_sha256`. It is not the
+#: package version, which does not track this file.
+REDACT_TEXT_VERSION = "1"
+
 
 def canonical_json(value: Any) -> str:
     """Deterministic JSON: sorted keys, no padding, non-ASCII preserved."""

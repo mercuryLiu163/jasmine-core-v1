@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "manifest_authentication": "unauthenticated",
+  "manifest_sha256": null,
+  "mode": "unknown",
+  "mode_basis": "no bundle manifest on disk",
+  "projects": [],
+  "reason": "the record predates the bundle convention and its history is not reconstructed",
+  "run_id": "run-20260929T173423Z",
+  "sources": {},
+  "status": "absent"
+}

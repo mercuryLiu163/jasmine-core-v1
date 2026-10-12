@@ -1,0 +1,17 @@
+{
+  "masked_bytes": 10200000,
+  "masked_content_refusal": {
+    "code": "payload_too_large",
+    "details": {
+      "form": "masked",
+      "limit": 8388608,
+      "original_bytes": 4800000
+    },
+    "response_bytes": 216,
+    "seconds": 1.053,
+    "status": 413
+  },
+  "masked_sha256": "5277f541ce0a56bee2389f2280d49143096066ded08ae1dd1b0603e984796d61",
+  "max_artifact_bytes": 8388608,
+  "raw_bytes": 4800000
+}

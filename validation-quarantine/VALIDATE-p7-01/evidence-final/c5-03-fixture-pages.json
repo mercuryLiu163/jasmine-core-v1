@@ -1,0 +1,413 @@
+[
+  {
+    "complete": true,
+    "corrupt_count": 1,
+    "count": 4,
+    "discovery": {
+      "capped": false,
+      "max_depth": 4,
+      "root_present": true,
+      "run_shaped_files": 12,
+      "scanned_dirs": 25,
+      "scanned_files": 12,
+      "unreadable_entries": 0
+    },
+    "duplicate_count": 2,
+    "has_more": true,
+    "ignored_entries": 0,
+    "ignored_samples": [],
+    "limit": 4,
+    "offset": 0,
+    "runs": [
+      {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 1,
+          "fail": 0,
+          "pass": 6,
+          "total": 7
+        },
+        "commit": "67bdbfc2479d8e1767a058e06ab826de57d3c919",
+        "core_version": "0.1.0",
+        "created_at": "2026-09-29T17:34:23.759223Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "80b130e6c2783905e1569ef604b59278f0a958a7077416e757d2c60c45ff9aa2",
+        "record_status": "ok",
+        "run_id": "run-20260929T173423Z",
+        "schema_version": 4,
+        "stage": "P0",
+        "synthetic": false,
+        "verdict": "BLOCKED",
+        "verdict_consistent": true
+      },
+      {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 0,
+          "fail": 0,
+          "pass": 7,
+          "total": 7
+        },
+        "commit": "46cf99f295f86e1db8104c9c17f703e8cba3c389",
+        "core_version": "0.1.0",
+        "created_at": "2026-09-29T16:29:25.135065Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "90e97041c61ad53adab25cea5a537cd685f8a7c9e40218decaaa3da4ab8b0f8c",
+        "record_status": "ok",
+        "run_id": "run-20260929T162925Z",
+        "schema_version": 2,
+        "stage": "P0",
+        "synthetic": false,
+        "verdict": "PASS",
+        "verdict_consistent": true
+      },
+      {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 0,
+          "fail": 0,
+          "pass": 7,
+          "total": 7
+        },
+        "commit": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64",
+        "core_version": "0.1.0",
+        "created_at": "2026-09-29T16:23:07.302917Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "a6c4462f7691e309fba945ef9571c28766355743ea8cd0b37611aa15fbb68cac",
+        "record_status": "ok",
+        "run_id": "run-20260929T162307Z",
+        "schema_version": 2,
+        "stage": "P0",
+        "synthetic": false,
+        "verdict": "PASS",
+        "verdict_consistent": true
+      },
+      {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 0,
+          "fail": 0,
+          "pass": 7,
+          "total": 7
+        },
+        "commit": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+        "core_version": "0.1.0",
+        "created_at": "2026-09-29T16:19:15.513570Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "df079d9e8e10fa5eedc36af561dcab3df9b978f27a5937685c108fa1a0a582e2",
+        "record_status": "ok",
+        "run_id": "run-20260929T161915Z",
+        "schema_version": 2,
+        "stage": "P0",
+        "synthetic": false,
+        "verdict": "PASS",
+        "verdict_consistent": true
+      }
+    ],
+    "total": 12,
+    "visibility": "all"
+  },
+  {
+    "complete": true,
+    "corrupt_count": 1,
+    "count": 4,
+    "discovery": {
+      "capped": false,
+      "max_depth": 4,
+      "root_present": true,
+      "run_shaped_files": 12,
+      "scanned_dirs": 25,
+      "scanned_files": 12,
+      "unreadable_entries": 0
+    },
+    "duplicate_count": 2,
+    "has_more": true,
+    "ignored_entries": 0,
+    "ignored_samples": [],
+    "limit": 4,
+    "offset": 4,
+    "runs": [
+      {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 1,
+          "fail": 0,
+          "pass": 6,
+          "total": 7
+        },
+        "commit": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+        "core_version": "0.1.0",
+        "created_at": "2026-09-29T14:52:57.450292Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "ee61f802151dfc0a791dd3dbaf11e2a033d944b5e0ed69b0bd1f89e4439154f2",
+        "record_status": "ok",
+        "run_id": "run-20260929T145257Z",
+        "schema_version": 2,
+        "stage": "P0",
+        "synthetic": false,
+        "verdict": "BLOCKED",
+        "verdict_consistent": true
+      },
+      {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 1,
+          "fail": 0,
+          "pass": 6,
+          "total": 7
+        },
+        "commit": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294",
+        "core_version": "0.1.0",
+        "created_at": "2026-09-29T14:45:39.604744Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "201d3711301d462e89b02a9e2567ed3f94620b3ec0a6c83b98b3b873b5f86860",
+        "record_status": "ok",
+        "run_id": "run-20260929T144539Z",
+        "schema_version": 2,
+        "stage": "P0",
+        "synthetic": false,
+        "verdict": "BLOCKED",
+        "verdict_consistent": true
+      },
+      {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 1,
+          "fail": 0,
+          "pass": 6,
+          "total": 7
+        },
+        "commit": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4",
+        "core_version": "0.1.0",
+        "created_at": "2026-09-29T14:38:45.371633Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "18dfa9066828cd6d5cb82c57a08bc60a0788f538691195d7a24110f4152d88eb",
+        "record_status": "ok",
+        "run_id": "run-20260929T143845Z",
+        "schema_version": 2,
+        "stage": "P0",
+        "synthetic": false,
+        "verdict": "BLOCKED",
+        "verdict_consistent": true
+      },
+      {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 1,
+          "fail": 0,
+          "pass": 6,
+          "total": 7
+        },
+        "commit": "160393cad180e56f6aefd2f55d84808fecf42172",
+        "core_version": "0.1.0",
+        "created_at": "2026-09-29T14:31:56.826382Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "b42e3c2985bc35f45a870930501bd88ec4e4fa49b8e47dfdcd3cbaf68afb67a4",
+        "record_status": "ok",
+        "run_id": "run-20260929T143156Z",
+        "schema_version": 2,
+        "stage": "P0",
+        "synthetic": false,
+        "verdict": "BLOCKED",
+        "verdict_consistent": true
+      }
+    ],
+    "total": 12,
+    "visibility": "all"
+  },
+  {
+    "complete": true,
+    "corrupt_count": 1,
+    "count": 4,
+    "discovery": {
+      "capped": false,
+      "max_depth": 4,
+      "root_present": true,
+      "run_shaped_files": 12,
+      "scanned_dirs": 25,
+      "scanned_files": 12,
+      "unreadable_entries": 0
+    },
+    "duplicate_count": 2,
+    "has_more": false,
+    "ignored_entries": 0,
+    "ignored_samples": [],
+    "limit": 4,
+    "offset": 8,
+    "runs": [
+      {
+        "attribution": {
+          "projects": [],
+          "reason": "manifest_absent",
+          "status": "unattributed"
+        },
+        "case_counts": {
+          "blocked": 1,
+          "fail": 0,
+          "pass": 6,
+          "total": 7
+        },
+        "commit": "84e6357c7beff8384254c394793d162e7fd13b11",
+        "core_version": "0.1.0",
+        "created_at": "2026-09-29T14:28:47.910084Z",
+        "evidence_grade": "unknown",
+        "grade_downgraded_by": [],
+        "manifest_status": "absent",
+        "mode": "unknown",
+        "mode_basis": "no bundle manifest on disk",
+        "record_sha256": "294d9fb5962956585b7bb57892371c079667c55b09e6026ae7fecbfb4b000de0",
+        "record_status": "ok",
+        "run_id": "run-20260929T142847Z",
+        "schema_version": 2,
+        "stage": "P0",
+        "synthetic": false,
+        "verdict": "BLOCKED",
+        "verdict_consistent": true
+      },
+      {
+        "attribution": null,
+        "case_counts": {
+          "blocked": 0,
+          "fail": 0,
+          "pass": 1,
+          "total": 1
+        },
+        "commit": "0000000000000000000000000000000000000000",
+        "core_version": "0.1.0",
+        "created_at": "2026-10-08T00:00:01.000000Z",
+        "duplicate_reason": "2 files share this stem",
+        "evidence_grade": null,
+        "grade_downgraded_by": [],
+        "manifest_status": null,
+        "mode": null,
+        "mode_basis": null,
+        "record_sha256": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+        "record_status": "duplicate",
+        "run_id": "run-20261008T000001Z",
+        "schema_version": 11,
+        "stage": "P7",
+        "synthetic": false,
+        "verdict": "PASS",
+        "verdict_consistent": null
+      },
+      {
+        "attribution": null,
+        "case_counts": {
+          "blocked": 0,
+          "fail": 0,
+          "pass": 1,
+          "total": 1
+        },
+        "commit": "0000000000000000000000000000000000000000",
+        "core_version": "0.1.0",
+        "created_at": "2026-10-08T00:00:01.000000Z",
+        "duplicate_reason": "2 files share this stem",
+        "evidence_grade": null,
+        "grade_downgraded_by": [],
+        "manifest_status": null,
+        "mode": null,
+        "mode_basis": null,
+        "record_sha256": "729ab7d7b3eddb74f7551a6d10d072333eb280123c61ccdbd0caafee93a198bf",
+        "record_status": "duplicate",
+        "run_id": "run-20261008T000001Z",
+        "schema_version": 11,
+        "stage": "P7",
+        "synthetic": false,
+        "verdict": "PASS",
+        "verdict_consistent": null
+      },
+      {
+        "attribution": null,
+        "case_counts": {
+          "blocked": 0,
+          "fail": 0,
+          "pass": 0,
+          "total": 0
+        },
+        "commit": null,
+        "core_version": null,
+        "corrupt_reason": "unparseable: JSONDecodeError",
+        "created_at": null,
+        "evidence_grade": null,
+        "grade_downgraded_by": [],
+        "manifest_status": null,
+        "mode": null,
+        "mode_basis": null,
+        "record_sha256": "5904a5cacb8ec3ce7ae0f5a0382bf9c628f4b1e98eac8f93c4e7071d62eb729b",
+        "record_status": "corrupt",
+        "run_id": "run-20261008T000004Z",
+        "schema_version": null,
+        "stage": null,
+        "synthetic": false,
+        "verdict": null,
+        "verdict_consistent": null
+      }
+    ],
+    "total": 12,
+    "visibility": "all"
+  }
+]

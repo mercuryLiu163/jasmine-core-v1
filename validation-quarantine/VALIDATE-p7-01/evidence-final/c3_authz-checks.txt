@@ -1,0 +1,100 @@
+[timing] #1 GET /v1/validation/runs 0.002s status=200
+[ok] single_user granted key 200 on /v1/validation/runs
+[timing] #2 GET /v1/validation/runs 0.001s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs
+[ok] scope-less code is forbidden_scope on /v1/validation/runs
+[ok] scope-less details.required names validation:read on /v1/validation/runs
+[timing] #3 GET /v1/validation/runs/run-20261008T000001Z 0.002s status=200
+[ok] single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z
+[timing] #4 GET /v1/validation/runs/run-20261008T000001Z 0.001s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z
+[ok] scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z
+[ok] scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z
+[timing] #5 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.002s status=200
+[ok] single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z/manifest
+[timing] #6 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.001s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/manifest
+[ok] scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z/manifest
+[ok] scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z/manifest
+[timing] #7 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.002s status=200
+[ok] single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[timing] #8 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.002s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[ok] scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[ok] scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[timing] #9 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content 0.002s status=200
+[ok] single_user granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[timing] #10 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content 0.001s status=403
+[ok] single_user scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[ok] scope-less code is forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[ok] scope-less details.required names validation:read on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-final/c3-01-single-user-pairs.json
+[timing] #11 GET /v1/validation/runs 0.001s status=401
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-final/c3-02-no-token.json
+[ok] no token is 401 unauthenticated
+[ok] no-token code is unauthenticated
+[timing] #12 GET /v1/validation/runs 0.002s status=200
+[ok] acl granted key 200 on /v1/validation/runs
+[timing] #13 GET /v1/validation/runs 0.001s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs
+[timing] #14 GET /v1/validation/runs/run-20261008T000001Z 0.002s status=200
+[ok] acl granted key 200 on /v1/validation/runs/run-20261008T000001Z
+[timing] #15 GET /v1/validation/runs/run-20261008T000001Z 0.001s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z
+[timing] #16 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.002s status=200
+[ok] acl granted key 200 on /v1/validation/runs/run-20261008T000001Z/manifest
+[timing] #17 GET /v1/validation/runs/run-20261008T000001Z/manifest 0.002s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/manifest
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z/manifest
+[timing] #18 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.002s status=200
+[ok] acl granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[timing] #19 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good 0.001s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good
+[timing] #20 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content 0.002s status=200
+[ok] acl granted key 200 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[timing] #21 GET /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content 0.001s status=403
+[ok] acl scope-less key 403 on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[ok] acl scope-less code forbidden_scope on /v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content
+[timing] #22 GET /v1/validation/runs/run-20261008T000002Z 0.002s status=404
+[ok] acl non-granted project detail is 404
+[ok] acl non-granted project refuses validation_run_not_found
+[ok] acl non-granted project never emits project_not_found
+[timing] #23 GET /v1/validation/runs/run-20261008T000003Z 0.002s status=404
+[ok] acl unattributed run without validation:unattributed is 404
+[ok] acl unattributed refusal is validation_run_not_found
+[timing] #24 GET /v1/validation/runs/run-20261008T000003Z 0.004s status=200
+[ok] acl unattributed run with validation:unattributed is 200
+[timing] #25 GET /v1/validation/runs/run-20261008T000001Z 0.002s status=404
+[ok] acl ungranted actor is 404 on a granted project's run
+[ok] acl ungranted actor refusal is validation_run_not_found
+[timing] #26 GET /v1/validation/runs/run-20261008T000004Z 0.002s status=404
+[ok] acl corrupt record fails closed (404) for a granted key
+[timing] #27 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-final/c3-03-acl-granted-list.json
+[ok] acl granted list is 200
+[ok] acl list reports visibility=grant_filtered
+[ok] acl granted list contains only the granted run
+[ok] acl granted list total counts only what the key may read
+[ok] the ungranted project's run is absent from runs[]
+[ok] the unattributed run is absent from runs[]
+[ok] the corrupt run is absent from the granted key's runs[]
+[ok] discovery.run_shaped_files counts visible runs
+[ok] acl list ignored_samples[] is empty
+[ok] acl granted corrupt_count excludes the invisible corrupt record
+[timing] #28 GET /v1/validation/runs?limit=100&project=prj_01M4E090A2RXAQH3WDNE8BY6MC 0.002s status=200
+[ok] a project filter naming the ungranted project cannot reach it
+[timing] #29 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-final/c3-04-acl-unattributed-list.json
+[ok] acl unattributed key sees the attributed, unattributed and fail-closed corrupt runs
+[ok] acl unattributed list total is 3
+[ok] the fail-closed corrupt row is listed, not turned into an empty list
+[ok] the corrupt row serves a null verdict and a named corrupt_reason
+[timing] #30 GET /v1/validation/runs?limit=100 0.001s status=403
+[ok] acl list with a scope-less key is 403
+[ok] no acl response carries project_not_found
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-final/c3-05-acl-pairs.json
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-final/c3-06-criterion3-report.json
+[timing-summary] {"max_seconds": 0.0037, "over_10s": [], "over_5s": [], "requests": 30, "requests_without_status": [], "total_seconds": 0.0533, "transport_retries": 0}

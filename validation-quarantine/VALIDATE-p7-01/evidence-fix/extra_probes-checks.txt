@@ -1,0 +1,16 @@
+[timing] #1 GET /v1/validation/runs 0.006s status=503
+[ok] unset root is 503 validation_not_configured
+[ok] unset root reason is 'unset'
+[timing] #2 GET /v1/validation/runs 0.002s status=503
+[ok] symlinked root is 503
+[ok] symlinked root reason is 'symlinked_root'
+[timing] #3 GET /v1/validation/runs/not-a-run-id 0.002s status=400
+[ok] malformed run id is 400 invalid_request
+[ok] malformed run id code is invalid_request
+[timing] #4 GET /v1/validation/runs?bogus=1 0.002s status=400
+[ok] unknown query key is 400 invalid_request
+[timing] #5 POST /v1/validation/runs 0.002s status=405
+[ok] POST to the list route is 405 method_not_allowed
+[ok] the allowed method list is [GET]
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/extra-01-probes.json
+[timing-summary] {"max_seconds": 0.0064, "over_10s": [], "over_5s": [], "requests": 5, "requests_without_status": [], "total_seconds": 0.0132, "transport_retries": 0}

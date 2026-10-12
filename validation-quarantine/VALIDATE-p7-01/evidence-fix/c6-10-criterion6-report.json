@@ -1,0 +1,2194 @@
+{
+  "all": [
+    {
+      "actual": 200,
+      "name": "real list is 200",
+      "ok": true
+    },
+    {
+      "actual": 9,
+      "name": "real list has the nine rows",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T162925Z",
+      "expected": "run-20260929T162925Z",
+      "name": "run-20260929T162925Z: list.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T162925Z: list.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T16:29:25.135065Z",
+      "expected": "2026-09-29T16:29:25.135065Z",
+      "name": "run-20260929T162925Z: list.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "46cf99f295f86e1db8104c9c17f703e8cba3c389",
+      "expected": "46cf99f295f86e1db8104c9c17f703e8cba3c389",
+      "name": "run-20260929T162925Z: list.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T162925Z: list.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T162925Z: list.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162925Z: list.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 7,
+        "total": 7
+      },
+      "expected": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 7,
+        "total": 7
+      },
+      "name": "run-20260929T162925Z: list.case_counts matches",
+      "ok": true
+    },
+    {
+      "actual": "90e97041c61ad53adab25cea5a537cd685f8a7c9e40218decaaa3da4ab8b0f8c",
+      "expected": "90e97041c61ad53adab25cea5a537cd685f8a7c9e40218decaaa3da4ab8b0f8c",
+      "name": "run-20260929T162925Z: list.record_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "run-20260929T162925Z: list.synthetic matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "run-20260929T162925Z: list.manifest_status matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z: no manifest.json exists on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "run-20260929T162925Z: detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T162925Z",
+      "expected": "run-20260929T162925Z",
+      "name": "run-20260929T162925Z: detail.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T162925Z: detail.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T16:29:25.135065Z",
+      "expected": "2026-09-29T16:29:25.135065Z",
+      "name": "run-20260929T162925Z: detail.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "46cf99f295f86e1db8104c9c17f703e8cba3c389",
+      "expected": "46cf99f295f86e1db8104c9c17f703e8cba3c389",
+      "name": "run-20260929T162925Z: detail.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T162925Z: detail.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T162925Z: detail.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162925Z: detail.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162925Z/P0-T01: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T01: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T01: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162925Z/P0-T02: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T02: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T02: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162925Z/P0-T03: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T03: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T03: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162925Z/P0-T04: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T04: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T04: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162925Z/P0-T05: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T05: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T05: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162925Z/P0-T06: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T06: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T06: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162925Z/P0-T07: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T07: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162925Z/P0-T07: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T162307Z",
+      "expected": "run-20260929T162307Z",
+      "name": "run-20260929T162307Z: list.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T162307Z: list.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T16:23:07.302917Z",
+      "expected": "2026-09-29T16:23:07.302917Z",
+      "name": "run-20260929T162307Z: list.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64",
+      "expected": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64",
+      "name": "run-20260929T162307Z: list.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T162307Z: list.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T162307Z: list.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162307Z: list.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 7,
+        "total": 7
+      },
+      "expected": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 7,
+        "total": 7
+      },
+      "name": "run-20260929T162307Z: list.case_counts matches",
+      "ok": true
+    },
+    {
+      "actual": "a6c4462f7691e309fba945ef9571c28766355743ea8cd0b37611aa15fbb68cac",
+      "expected": "a6c4462f7691e309fba945ef9571c28766355743ea8cd0b37611aa15fbb68cac",
+      "name": "run-20260929T162307Z: list.record_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "run-20260929T162307Z: list.synthetic matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "run-20260929T162307Z: list.manifest_status matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z: no manifest.json exists on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "run-20260929T162307Z: detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T162307Z",
+      "expected": "run-20260929T162307Z",
+      "name": "run-20260929T162307Z: detail.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T162307Z: detail.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T16:23:07.302917Z",
+      "expected": "2026-09-29T16:23:07.302917Z",
+      "name": "run-20260929T162307Z: detail.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64",
+      "expected": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64",
+      "name": "run-20260929T162307Z: detail.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T162307Z: detail.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T162307Z: detail.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162307Z: detail.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162307Z/P0-T01: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T01: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T01: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162307Z/P0-T02: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T02: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T02: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162307Z/P0-T03: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T03: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T03: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162307Z/P0-T04: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T04: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T04: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162307Z/P0-T05: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T05: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T05: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162307Z/P0-T06: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T06: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T06: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T162307Z/P0-T07: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T07: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T162307Z/P0-T07: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T145257Z",
+      "expected": "run-20260929T145257Z",
+      "name": "run-20260929T145257Z: list.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T145257Z: list.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:52:57.450292Z",
+      "expected": "2026-09-29T14:52:57.450292Z",
+      "name": "run-20260929T145257Z: list.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+      "expected": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+      "name": "run-20260929T145257Z: list.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T145257Z: list.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T145257Z: list.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T145257Z: list.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "expected": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "name": "run-20260929T145257Z: list.case_counts matches",
+      "ok": true
+    },
+    {
+      "actual": "ee61f802151dfc0a791dd3dbaf11e2a033d944b5e0ed69b0bd1f89e4439154f2",
+      "expected": "ee61f802151dfc0a791dd3dbaf11e2a033d944b5e0ed69b0bd1f89e4439154f2",
+      "name": "run-20260929T145257Z: list.record_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "run-20260929T145257Z: list.synthetic matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "run-20260929T145257Z: list.manifest_status matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z: no manifest.json exists on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "run-20260929T145257Z: detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T145257Z",
+      "expected": "run-20260929T145257Z",
+      "name": "run-20260929T145257Z: detail.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T145257Z: detail.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:52:57.450292Z",
+      "expected": "2026-09-29T14:52:57.450292Z",
+      "name": "run-20260929T145257Z: detail.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+      "expected": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+      "name": "run-20260929T145257Z: detail.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T145257Z: detail.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T145257Z: detail.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T145257Z: detail.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T145257Z/P0-T01: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T01: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T01: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T145257Z/P0-T02: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T02: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T02: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T145257Z/P0-T03: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T03: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T03: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T145257Z/P0-T04: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T04: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T04: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T145257Z/P0-T05: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T05: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T05: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T145257Z/P0-T06: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T06: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T06: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T145257Z/P0-T07: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T07: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z/P0-T07: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T161915Z",
+      "expected": "run-20260929T161915Z",
+      "name": "run-20260929T161915Z: list.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T161915Z: list.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T16:19:15.513570Z",
+      "expected": "2026-09-29T16:19:15.513570Z",
+      "name": "run-20260929T161915Z: list.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+      "expected": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+      "name": "run-20260929T161915Z: list.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T161915Z: list.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T161915Z: list.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T161915Z: list.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 7,
+        "total": 7
+      },
+      "expected": {
+        "blocked": 0,
+        "fail": 0,
+        "pass": 7,
+        "total": 7
+      },
+      "name": "run-20260929T161915Z: list.case_counts matches",
+      "ok": true
+    },
+    {
+      "actual": "df079d9e8e10fa5eedc36af561dcab3df9b978f27a5937685c108fa1a0a582e2",
+      "expected": "df079d9e8e10fa5eedc36af561dcab3df9b978f27a5937685c108fa1a0a582e2",
+      "name": "run-20260929T161915Z: list.record_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "run-20260929T161915Z: list.synthetic matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "run-20260929T161915Z: list.manifest_status matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z: no manifest.json exists on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "run-20260929T161915Z: detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T161915Z",
+      "expected": "run-20260929T161915Z",
+      "name": "run-20260929T161915Z: detail.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T161915Z: detail.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T16:19:15.513570Z",
+      "expected": "2026-09-29T16:19:15.513570Z",
+      "name": "run-20260929T161915Z: detail.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+      "expected": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+      "name": "run-20260929T161915Z: detail.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T161915Z: detail.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T161915Z: detail.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T161915Z: detail.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T161915Z/P0-T01: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T01: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T01: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T161915Z/P0-T02: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T02: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T02: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T161915Z/P0-T03: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T03: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T03: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T161915Z/P0-T04: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T04: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T04: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T161915Z/P0-T05: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T05: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T05: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T161915Z/P0-T06: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T06: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T06: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T161915Z/P0-T07: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T07: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T161915Z/P0-T07: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T144539Z",
+      "expected": "run-20260929T144539Z",
+      "name": "run-20260929T144539Z: list.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T144539Z: list.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:45:39.604744Z",
+      "expected": "2026-09-29T14:45:39.604744Z",
+      "name": "run-20260929T144539Z: list.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294",
+      "expected": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294",
+      "name": "run-20260929T144539Z: list.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T144539Z: list.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T144539Z: list.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T144539Z: list.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "expected": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "name": "run-20260929T144539Z: list.case_counts matches",
+      "ok": true
+    },
+    {
+      "actual": "201d3711301d462e89b02a9e2567ed3f94620b3ec0a6c83b98b3b873b5f86860",
+      "expected": "201d3711301d462e89b02a9e2567ed3f94620b3ec0a6c83b98b3b873b5f86860",
+      "name": "run-20260929T144539Z: list.record_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "run-20260929T144539Z: list.synthetic matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "run-20260929T144539Z: list.manifest_status matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z: no manifest.json exists on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "run-20260929T144539Z: detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T144539Z",
+      "expected": "run-20260929T144539Z",
+      "name": "run-20260929T144539Z: detail.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T144539Z: detail.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:45:39.604744Z",
+      "expected": "2026-09-29T14:45:39.604744Z",
+      "name": "run-20260929T144539Z: detail.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294",
+      "expected": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294",
+      "name": "run-20260929T144539Z: detail.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T144539Z: detail.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T144539Z: detail.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T144539Z: detail.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T144539Z/P0-T01: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T01: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T01: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T144539Z/P0-T02: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T02: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T02: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T144539Z/P0-T03: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T03: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T03: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T144539Z/P0-T04: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T04: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T04: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T144539Z/P0-T05: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T05: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T05: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T144539Z/P0-T06: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T06: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T06: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T144539Z/P0-T07: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T07: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z/P0-T07: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T143845Z",
+      "expected": "run-20260929T143845Z",
+      "name": "run-20260929T143845Z: list.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T143845Z: list.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:38:45.371633Z",
+      "expected": "2026-09-29T14:38:45.371633Z",
+      "name": "run-20260929T143845Z: list.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4",
+      "expected": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4",
+      "name": "run-20260929T143845Z: list.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T143845Z: list.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T143845Z: list.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T143845Z: list.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "expected": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "name": "run-20260929T143845Z: list.case_counts matches",
+      "ok": true
+    },
+    {
+      "actual": "18dfa9066828cd6d5cb82c57a08bc60a0788f538691195d7a24110f4152d88eb",
+      "expected": "18dfa9066828cd6d5cb82c57a08bc60a0788f538691195d7a24110f4152d88eb",
+      "name": "run-20260929T143845Z: list.record_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "run-20260929T143845Z: list.synthetic matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "run-20260929T143845Z: list.manifest_status matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z: no manifest.json exists on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "run-20260929T143845Z: detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T143845Z",
+      "expected": "run-20260929T143845Z",
+      "name": "run-20260929T143845Z: detail.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T143845Z: detail.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:38:45.371633Z",
+      "expected": "2026-09-29T14:38:45.371633Z",
+      "name": "run-20260929T143845Z: detail.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4",
+      "expected": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4",
+      "name": "run-20260929T143845Z: detail.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T143845Z: detail.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T143845Z: detail.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T143845Z: detail.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143845Z/P0-T01: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T01: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T01: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143845Z/P0-T02: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T02: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T02: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143845Z/P0-T03: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T03: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T03: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143845Z/P0-T04: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T04: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T04: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143845Z/P0-T05: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T05: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T05: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143845Z/P0-T06: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T06: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T06: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T143845Z/P0-T07: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T07: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z/P0-T07: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T142847Z",
+      "expected": "run-20260929T142847Z",
+      "name": "run-20260929T142847Z: list.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T142847Z: list.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:28:47.910084Z",
+      "expected": "2026-09-29T14:28:47.910084Z",
+      "name": "run-20260929T142847Z: list.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "84e6357c7beff8384254c394793d162e7fd13b11",
+      "expected": "84e6357c7beff8384254c394793d162e7fd13b11",
+      "name": "run-20260929T142847Z: list.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T142847Z: list.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T142847Z: list.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T142847Z: list.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "expected": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "name": "run-20260929T142847Z: list.case_counts matches",
+      "ok": true
+    },
+    {
+      "actual": "294d9fb5962956585b7bb57892371c079667c55b09e6026ae7fecbfb4b000de0",
+      "expected": "294d9fb5962956585b7bb57892371c079667c55b09e6026ae7fecbfb4b000de0",
+      "name": "run-20260929T142847Z: list.record_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "run-20260929T142847Z: list.synthetic matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "run-20260929T142847Z: list.manifest_status matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z: no manifest.json exists on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "run-20260929T142847Z: detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T142847Z",
+      "expected": "run-20260929T142847Z",
+      "name": "run-20260929T142847Z: detail.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T142847Z: detail.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:28:47.910084Z",
+      "expected": "2026-09-29T14:28:47.910084Z",
+      "name": "run-20260929T142847Z: detail.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "84e6357c7beff8384254c394793d162e7fd13b11",
+      "expected": "84e6357c7beff8384254c394793d162e7fd13b11",
+      "name": "run-20260929T142847Z: detail.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T142847Z: detail.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T142847Z: detail.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T142847Z: detail.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T142847Z/P0-T01: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T01: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T01: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T142847Z/P0-T02: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T02: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T02: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T142847Z/P0-T03: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T03: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T03: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T142847Z/P0-T04: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T04: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T04: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T142847Z/P0-T05: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T05: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T05: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T142847Z/P0-T06: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T06: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T06: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T142847Z/P0-T07: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T07: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z/P0-T07: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T143156Z",
+      "expected": "run-20260929T143156Z",
+      "name": "run-20260929T143156Z: list.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T143156Z: list.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:31:56.826382Z",
+      "expected": "2026-09-29T14:31:56.826382Z",
+      "name": "run-20260929T143156Z: list.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "160393cad180e56f6aefd2f55d84808fecf42172",
+      "expected": "160393cad180e56f6aefd2f55d84808fecf42172",
+      "name": "run-20260929T143156Z: list.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T143156Z: list.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T143156Z: list.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T143156Z: list.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "expected": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "name": "run-20260929T143156Z: list.case_counts matches",
+      "ok": true
+    },
+    {
+      "actual": "b42e3c2985bc35f45a870930501bd88ec4e4fa49b8e47dfdcd3cbaf68afb67a4",
+      "expected": "b42e3c2985bc35f45a870930501bd88ec4e4fa49b8e47dfdcd3cbaf68afb67a4",
+      "name": "run-20260929T143156Z: list.record_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "run-20260929T143156Z: list.synthetic matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "run-20260929T143156Z: list.manifest_status matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z: no manifest.json exists on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "run-20260929T143156Z: detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T143156Z",
+      "expected": "run-20260929T143156Z",
+      "name": "run-20260929T143156Z: detail.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T143156Z: detail.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T14:31:56.826382Z",
+      "expected": "2026-09-29T14:31:56.826382Z",
+      "name": "run-20260929T143156Z: detail.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "160393cad180e56f6aefd2f55d84808fecf42172",
+      "expected": "160393cad180e56f6aefd2f55d84808fecf42172",
+      "name": "run-20260929T143156Z: detail.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 2,
+      "expected": 2,
+      "name": "run-20260929T143156Z: detail.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T143156Z: detail.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T143156Z: detail.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143156Z/P0-T01: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T01: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T01: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143156Z/P0-T02: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T02: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T02: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143156Z/P0-T03: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T03: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T03: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143156Z/P0-T04: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T04: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T04: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143156Z/P0-T05: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T05: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T05: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T143156Z/P0-T06: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T06: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T06: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T143156Z/P0-T07: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T07: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z/P0-T07: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T173423Z",
+      "expected": "run-20260929T173423Z",
+      "name": "run-20260929T173423Z: list.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T173423Z: list.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T17:34:23.759223Z",
+      "expected": "2026-09-29T17:34:23.759223Z",
+      "name": "run-20260929T173423Z: list.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "67bdbfc2479d8e1767a058e06ab826de57d3c919",
+      "expected": "67bdbfc2479d8e1767a058e06ab826de57d3c919",
+      "name": "run-20260929T173423Z: list.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 4,
+      "expected": 4,
+      "name": "run-20260929T173423Z: list.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T173423Z: list.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T173423Z: list.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "expected": {
+        "blocked": 1,
+        "fail": 0,
+        "pass": 6,
+        "total": 7
+      },
+      "name": "run-20260929T173423Z: list.case_counts matches",
+      "ok": true
+    },
+    {
+      "actual": "80b130e6c2783905e1569ef604b59278f0a958a7077416e757d2c60c45ff9aa2",
+      "expected": "80b130e6c2783905e1569ef604b59278f0a958a7077416e757d2c60c45ff9aa2",
+      "name": "run-20260929T173423Z: list.record_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "expected": false,
+      "name": "run-20260929T173423Z: list.synthetic matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "expected": "absent",
+      "name": "run-20260929T173423Z: list.manifest_status matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z: no manifest.json exists on disk",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "run-20260929T173423Z: detail is 200",
+      "ok": true
+    },
+    {
+      "actual": "run-20260929T173423Z",
+      "expected": "run-20260929T173423Z",
+      "name": "run-20260929T173423Z: detail.run_id matches",
+      "ok": true
+    },
+    {
+      "actual": "P0",
+      "expected": "P0",
+      "name": "run-20260929T173423Z: detail.stage matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-09-29T17:34:23.759223Z",
+      "expected": "2026-09-29T17:34:23.759223Z",
+      "name": "run-20260929T173423Z: detail.created_at matches",
+      "ok": true
+    },
+    {
+      "actual": "67bdbfc2479d8e1767a058e06ab826de57d3c919",
+      "expected": "67bdbfc2479d8e1767a058e06ab826de57d3c919",
+      "name": "run-20260929T173423Z: detail.commit matches",
+      "ok": true
+    },
+    {
+      "actual": 4,
+      "expected": 4,
+      "name": "run-20260929T173423Z: detail.schema_version matches",
+      "ok": true
+    },
+    {
+      "actual": "0.1.0",
+      "expected": "0.1.0",
+      "name": "run-20260929T173423Z: detail.core_version matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T173423Z: detail.verdict matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T173423Z/P0-T01: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T01: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T01: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T173423Z/P0-T02: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T02: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T02: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T173423Z/P0-T03: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T03: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T03: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T173423Z/P0-T04: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T04: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T04: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T173423Z/P0-T05: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T05: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T05: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "expected": "PASS",
+      "name": "run-20260929T173423Z/P0-T06: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T06: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T06: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "expected": "BLOCKED",
+      "name": "run-20260929T173423Z/P0-T07: verdict matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T07: failure_class matches",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z/P0-T07: failure_output matches",
+      "ok": true
+    },
+    {
+      "actual": "absent",
+      "name": "a real run's manifest status is absent",
+      "ok": true
+    },
+    {
+      "name": "an absent manifest carries no manifest_sha256",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "fixture manifest is 200",
+      "ok": true
+    },
+    {
+      "actual": "19dfce54479f3a1966f526107e699c21e95d0a49a3e13c88df0fb7d745e32ade",
+      "expected": "19dfce54479f3a1966f526107e699c21e95d0a49a3e13c88df0fb7d745e32ade",
+      "name": "manifest: manifest_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": "unauthenticated",
+      "name": "manifest_authentication is unauthenticated",
+      "ok": true
+    },
+    {
+      "actual": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "expected": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "name": "art_good: declared_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": 13,
+      "expected": 13,
+      "name": "art_good: declared_bytes matches",
+      "ok": true
+    },
+    {
+      "actual": 13,
+      "expected": 13,
+      "name": "art_good: bytes matches",
+      "ok": true
+    },
+    {
+      "actual": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "expected": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "name": "art_good: digests.original matches",
+      "ok": true
+    },
+    {
+      "actual": "match",
+      "expected": "match",
+      "name": "art_good: integrity matches",
+      "ok": true
+    },
+    {
+      "actual": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "expected": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "name": "art_good content: original_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "expected": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "name": "art_good content: masked_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "expected": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "name": "art_good content: served_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": "hello bundle\n",
+      "expected": "hello bundle\n",
+      "name": "art_good content: content matches",
+      "ok": true
+    },
+    {
+      "actual": 13,
+      "expected": 13,
+      "name": "art_good content: bytes matches",
+      "ok": true
+    },
+    {
+      "actual": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+      "expected": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+      "name": "art_assign: declared_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+      "expected": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+      "name": "art_assign: digests.original matches",
+      "ok": true
+    },
+    {
+      "actual": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+      "expected": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+      "name": "art_assign: digests.masked matches",
+      "ok": true
+    },
+    {
+      "actual": "match",
+      "expected": "match",
+      "name": "art_assign: integrity matches",
+      "ok": true
+    },
+    {
+      "actual": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+      "expected": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+      "name": "art_assign content: original_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+      "expected": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+      "name": "art_assign content: masked_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+      "expected": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+      "name": "art_assign content: served_sha256 matches",
+      "ok": true
+    },
+    {
+      "actual": "2026-10-08 INFO db_password=[REDACTED] in the log line\n",
+      "expected": "2026-10-08 INFO db_password=[REDACTED] in the log line\n",
+      "name": "art_assign content: content matches",
+      "ok": true
+    },
+    {
+      "actual": "canonical.redact_text",
+      "expected": "canonical.redact_text",
+      "name": "art_assign content: mask_algorithm matches",
+      "ok": true
+    },
+    {
+      "actual": "1",
+      "expected": "1",
+      "name": "art_assign content: mask_version matches",
+      "ok": true
+    },
+    {
+      "actual": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+      "expected": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+      "name": "fixture run: list.record_sha256 matches",
+      "ok": true
+    }
+  ],
+  "checks": 397,
+  "failed": 0,
+  "failures": [],
+  "label": "criterion 6"
+}

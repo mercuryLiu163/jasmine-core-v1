@@ -1,0 +1,93 @@
+{
+  "client_timeout_seconds": 5.0,
+  "fifo_artifact": "/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-pp2s_zr5/B-fifo/art/artifacts/pipe.txt",
+  "fifo_artifact_content": {
+    "code": "validation_not_configured",
+    "details": {
+      "reason": "artifact_unreadable"
+    },
+    "seconds": 0.0018,
+    "status": 503
+  },
+  "fifo_artifact_metadata": {
+    "code": "validation_not_configured",
+    "details": {
+      "reason": "artifact_unreadable"
+    },
+    "seconds": 0.002,
+    "status": 503
+  },
+  "fifo_manifest": "/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-pp2s_zr5/B-fifo/man/manifest.json",
+  "fifo_manifest_route": {
+    "code": "validation_manifest_corrupt",
+    "rule": "manifest.json is not a regular file",
+    "seconds": 0.0018,
+    "status": 409
+  },
+  "fifo_record": "/var/folders/bd/n1gc6pb14cx4ghrgfm1x2xfw0000gn/T/validate-p7-01-pp2s_zr5/B-fifo/fifo-rec/run-20261008T000402Z.json",
+  "fifo_record_detail": {
+    "code": "validation_run_not_found",
+    "seconds": 0.0018,
+    "status": 404
+  },
+  "list": {
+    "ignored_entries": 4,
+    "ignored_samples": [
+      {
+        "reason": "not_run_shaped",
+        "relative_path": "man/manifest.json"
+      },
+      {
+        "reason": "not_run_shaped",
+        "relative_path": "art/manifest.json"
+      },
+      {
+        "reason": "not_run_shaped",
+        "relative_path": "art/artifacts/pipe.txt"
+      },
+      {
+        "reason": "not_regular_file",
+        "relative_path": "fifo-rec/run-20261008T000402Z.json"
+      }
+    ],
+    "run_ids": [
+      "run-20261008T000404Z",
+      "run-20261008T000403Z",
+      "run-20261008T000401Z"
+    ],
+    "seconds": 0.0021,
+    "status": 200,
+    "total": 3
+  },
+  "record_fifo_swap_race": {
+    "max_seconds": 5.0013,
+    "outcomes": [
+      {
+        "row_reason": null,
+        "row_status": "ok",
+        "seconds": 0.0016,
+        "status": 200
+      },
+      {
+        "row_reason": null,
+        "row_status": null,
+        "seconds": 0.0015,
+        "status": 200
+      },
+      {
+        "row_reason": null,
+        "row_status": "ok",
+        "seconds": 0.0015,
+        "status": 200
+      },
+      {
+        "error": "TimeoutError: timed out",
+        "seconds": 5.0013,
+        "status": null
+      }
+    ],
+    "requests": 4,
+    "swaps": 21497,
+    "timed_out": true
+  }
+}

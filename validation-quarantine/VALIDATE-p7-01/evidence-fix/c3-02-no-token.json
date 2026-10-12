@@ -1,0 +1,8 @@
+{
+  "error": {
+    "code": "unauthenticated",
+    "details": {},
+    "message": "an Authorization: Bearer header is required",
+    "request_id": "aud_01M4E6VCDBY0Y88Y1E8DWJHTCC"
+  }
+}

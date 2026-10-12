@@ -1,0 +1,71 @@
+{
+  "a_text": "AAA-CONTENT-SERVED-FROM-MANIFEST-A",
+  "after_swap_back_to_a": {
+    "seconds": 0.0023,
+    "status": 200
+  },
+  "after_swap_to_b": {
+    "content": {
+      "code": "validation_run_not_found",
+      "seconds": 0.0014,
+      "status": 404
+    },
+    "manifest": {
+      "code": "validation_run_not_found",
+      "status": 404
+    }
+  },
+  "b_text": "BBB-CONTENT-SERVED-FROM-MANIFEST-B",
+  "grant_check_exercised": {
+    "content": {
+      "content": "AAA-CONTENT-SERVED-FROM-MANIFEST-A",
+      "seconds": 0.0025,
+      "status": 200
+    },
+    "manifest": {
+      "manifest_sha256": "ba083ec7926d72d4f78568f24bbd779502dbd8bc36395b2a9fbe009d73ed9d39",
+      "seconds": 0.0016,
+      "status": 200
+    }
+  },
+  "granted_project": "prj_01M4E6T5SAA0NEWH1AE8TGVDR0",
+  "manifest_a_sha256": "ba083ec7926d72d4f78568f24bbd779502dbd8bc36395b2a9fbe009d73ed9d39",
+  "manifest_b_sha256": "f7ceb080bebeac41aa5fc522e14b9088cf2606a2f178f434b1d42a46939323ed",
+  "race": {
+    "content_200": 31,
+    "content_404": 29,
+    "manifest_200": 20,
+    "manifest_404": 40,
+    "max_seconds": 0.0052,
+    "mixed": [
+      [
+        "content-200-mixed",
+        "BBB-CONTENT-SERVED-FROM-MANIFEST-B",
+        "cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200"
+      ],
+      [
+        "content-200-mixed",
+        "BBB-CONTENT-SERVED-FROM-MANIFEST-B",
+        "cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200"
+      ],
+      [
+        "content-200-mixed",
+        "BBB-CONTENT-SERVED-FROM-MANIFEST-B",
+        "cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200"
+      ],
+      [
+        "content-200-mixed",
+        "BBB-CONTENT-SERVED-FROM-MANIFEST-B",
+        "cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200"
+      ],
+      [
+        "content-200-mixed",
+        "BBB-CONTENT-SERVED-FROM-MANIFEST-B",
+        "cc79ab50fa8bca398d67a2223fd386cfc4318ac36a36258883f0f228162b2200"
+      ]
+    ],
+    "requests": 120,
+    "swaps": 1272
+  },
+  "ungranted_project": "prj_01M4E6T5SCZCCWVXMTHTR9T4GG"
+}

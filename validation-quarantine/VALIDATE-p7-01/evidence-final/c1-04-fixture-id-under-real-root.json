@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "validation_run_not_found",
+    "details": {
+      "id": "run-20261008T000002Z",
+      "kind": "validation_run"
+    },
+    "message": "validation_run run-20261008T000002Z not found",
+    "request_id": "aud_01M4E084MPHYGEDJCXKBQM336B"
+  }
+}

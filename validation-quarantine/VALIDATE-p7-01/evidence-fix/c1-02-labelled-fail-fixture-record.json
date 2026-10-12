@@ -1,0 +1,43 @@
+{
+  "cases": [
+    {
+      "agent_response": "mocked: fixture response",
+      "case_id": "F-1",
+      "context": {
+        "reason": "no context pack"
+      },
+      "evidence": [],
+      "failure_class": "UI_FAILURE",
+      "failure_output": "expected 200 got 500",
+      "interpretation": "N/A (P0 not implemented)",
+      "name": "a clearly failing case",
+      "not_applied_reason": null,
+      "reproduction": [
+        "GET /x"
+      ],
+      "state_after": {},
+      "state_before": {},
+      "tools": [],
+      "user_raw": "go",
+      "verdict": "FAIL"
+    }
+  ],
+  "commit": "0000000000000000000000000000000000000000",
+  "core_version": "0.1.0",
+  "created_at": "2026-10-08T00:00:02.000000Z",
+  "environment": {
+    "platform": "fixture",
+    "python": "3.11"
+  },
+  "executor": "fixture",
+  "not_implemented": [],
+  "notes": [],
+  "reviewer": "fixture",
+  "run_id": "run-20261008T000002Z",
+  "schema_version": 11,
+  "stage": "P7",
+  "synthetic": true,
+  "synthetic_note": "NOT EVIDENCE: a labelled synthetic fixture; no real P7-format FAIL run exists",
+  "verdict": "FAIL",
+  "verifier": "fixture"
+}

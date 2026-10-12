@@ -1,0 +1,690 @@
+{
+  "all": [
+    {
+      "actual": 9,
+      "name": "nine real records present",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "run-20260929T162925Z: detail case count matches the file",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T162925Z/P0-T01: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "no Core API involvement in a migration-only case",
+      "name": "run-20260929T162925Z/P0-T01: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T162925Z/P0-T02: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "P0 has no Interpreter; the Core stores and returns only",
+      "name": "run-20260929T162925Z/P0-T02: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T162925Z/P0-T03: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T162925Z/P0-T04: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "idempotency is storage behaviour, not interpretation",
+      "name": "run-20260929T162925Z/P0-T04: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T162925Z/P0-T05: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T162925Z/P0-T06: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T162925Z/P0-T07: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "run-20260929T162307Z: detail case count matches the file",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T162307Z/P0-T01: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "no Core API involvement in a migration-only case",
+      "name": "run-20260929T162307Z/P0-T01: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T162307Z/P0-T02: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "P0 has no Interpreter; the Core stores and returns only",
+      "name": "run-20260929T162307Z/P0-T02: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T162307Z/P0-T03: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T162307Z/P0-T04: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "idempotency is storage behaviour, not interpretation",
+      "name": "run-20260929T162307Z/P0-T04: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T162307Z/P0-T05: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T162307Z/P0-T06: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T162307Z/P0-T07: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "run-20260929T145257Z: detail case count matches the file",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T145257Z/P0-T01: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "no Core API involvement in a migration-only case",
+      "name": "run-20260929T145257Z/P0-T01: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T145257Z/P0-T02: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "P0 has no Interpreter; the Core stores and returns only",
+      "name": "run-20260929T145257Z/P0-T02: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T145257Z/P0-T03: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T145257Z/P0-T04: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "idempotency is storage behaviour, not interpretation",
+      "name": "run-20260929T145257Z/P0-T04: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T145257Z/P0-T05: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T145257Z/P0-T06: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "sentinel",
+      "name": "run-20260929T145257Z/P0-T07: sentinel context",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T145257Z: agent missing in every case of a BLOCKED run",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "run-20260929T161915Z: detail case count matches the file",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T161915Z/P0-T01: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "no Core API involvement in a migration-only case",
+      "name": "run-20260929T161915Z/P0-T01: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T161915Z/P0-T02: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "P0 has no Interpreter; the Core stores and returns only",
+      "name": "run-20260929T161915Z/P0-T02: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T161915Z/P0-T03: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T161915Z/P0-T04: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "idempotency is storage behaviour, not interpretation",
+      "name": "run-20260929T161915Z/P0-T04: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T161915Z/P0-T05: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T161915Z/P0-T06: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T161915Z/P0-T07: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "run-20260929T144539Z: detail case count matches the file",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T144539Z/P0-T01: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "no Core API involvement in a migration-only case",
+      "name": "run-20260929T144539Z/P0-T01: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T144539Z/P0-T02: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "P0 has no Interpreter; the Core stores and returns only",
+      "name": "run-20260929T144539Z/P0-T02: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T144539Z/P0-T03: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T144539Z/P0-T04: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "idempotency is storage behaviour, not interpretation",
+      "name": "run-20260929T144539Z/P0-T04: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T144539Z/P0-T05: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T144539Z/P0-T06: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "sentinel",
+      "name": "run-20260929T144539Z/P0-T07: sentinel context",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T144539Z: agent missing in every case of a BLOCKED run",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "run-20260929T143845Z: detail case count matches the file",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T143845Z/P0-T01: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "no Core API involvement in a migration-only case",
+      "name": "run-20260929T143845Z/P0-T01: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T143845Z/P0-T02: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "P0 has no Interpreter; the Core stores and returns only",
+      "name": "run-20260929T143845Z/P0-T02: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T143845Z/P0-T03: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T143845Z/P0-T04: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "idempotency is storage behaviour, not interpretation",
+      "name": "run-20260929T143845Z/P0-T04: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T143845Z/P0-T05: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T143845Z/P0-T06: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "sentinel",
+      "name": "run-20260929T143845Z/P0-T07: sentinel context",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143845Z: agent missing in every case of a BLOCKED run",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "run-20260929T142847Z: detail case count matches the file",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T142847Z/P0-T01: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "no Core API involvement in a migration-only case",
+      "name": "run-20260929T142847Z/P0-T01: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T142847Z/P0-T02: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "P0 has no Interpreter; the Core stores and returns only",
+      "name": "run-20260929T142847Z/P0-T02: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T142847Z/P0-T03: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T142847Z/P0-T04: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "idempotency is storage behaviour, not interpretation",
+      "name": "run-20260929T142847Z/P0-T04: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T142847Z/P0-T05: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T142847Z/P0-T06: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "sentinel",
+      "name": "run-20260929T142847Z/P0-T07: sentinel context",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T142847Z: agent missing in every case of a BLOCKED run",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "run-20260929T143156Z: detail case count matches the file",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T143156Z/P0-T01: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "no Core API involvement in a migration-only case",
+      "name": "run-20260929T143156Z/P0-T01: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T143156Z/P0-T02: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "P0 has no Interpreter; the Core stores and returns only",
+      "name": "run-20260929T143156Z/P0-T02: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T143156Z/P0-T03: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T143156Z/P0-T04: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "idempotency is storage behaviour, not interpretation",
+      "name": "run-20260929T143156Z/P0-T04: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T143156Z/P0-T05: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T143156Z/P0-T06: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "sentinel",
+      "name": "run-20260929T143156Z/P0-T07: sentinel context",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T143156Z: agent missing in every case of a BLOCKED run",
+      "ok": true
+    },
+    {
+      "actual": [
+        7,
+        7
+      ],
+      "name": "run-20260929T173423Z: detail case count matches the file",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T173423Z/P0-T01: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "no Core API involvement in a migration-only case",
+      "name": "run-20260929T173423Z/P0-T01: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T173423Z/P0-T02: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "P0 has no Interpreter; the Core stores and returns only",
+      "name": "run-20260929T173423Z/P0-T02: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T173423Z/P0-T03: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "reason_only",
+      "name": "run-20260929T173423Z/P0-T04: reason-only context",
+      "ok": true
+    },
+    {
+      "actual": "idempotency is storage behaviour, not interpretation",
+      "name": "run-20260929T173423Z/P0-T04: reason served verbatim",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T173423Z/P0-T05: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "value",
+      "name": "run-20260929T173423Z/P0-T06: run-details context served verbatim, not treated as a pack",
+      "ok": true
+    },
+    {
+      "actual": "sentinel",
+      "name": "run-20260929T173423Z/P0-T07: sentinel context",
+      "ok": true
+    },
+    {
+      "name": "run-20260929T173423Z: agent missing in every case of a BLOCKED run",
+      "ok": true
+    },
+    {
+      "actual": [],
+      "name": "served run verdict == recorded run verdict for all nine",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "all nine real runs report verdict_consistent=true (a report, not a rewrite)",
+      "ok": true
+    },
+    {
+      "actual": 63,
+      "name": "63 real cases walked",
+      "ok": true
+    },
+    {
+      "actual": 0,
+      "name": "no real case has a context pack",
+      "ok": true
+    },
+    {
+      "actual": [
+        "recorded as N/A (P0 not implemented)",
+        "the case records a reason, not a context pack",
+        "the section records run details, not a context pack"
+      ],
+      "name": "the three frozen Context missing_reasons are all exercised",
+      "ok": true
+    },
+    {
+      "actual": {
+        "reason_only": 27,
+        "sentinel": 6,
+        "value": 30
+      },
+      "name": "context present_kind census is 6 sentinel / 27 reason_only / 30 value",
+      "ok": true
+    },
+    {
+      "actual": [
+        6,
+        42
+      ],
+      "name": "6 BLOCKED runs have agent missing in all 7 cases",
+      "ok": true
+    },
+    {
+      "actual": [
+        3,
+        3
+      ],
+      "name": "3 PASS runs have agent_response present in at least one case",
+      "ok": true
+    },
+    {
+      "actual": 200,
+      "name": "an inconsistent record is still served (200)",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "name": "the recorded verdict is served unchanged (PASS), not corrected",
+      "ok": true
+    },
+    {
+      "actual": false,
+      "name": "verdict_consistent=false is reported for the inconsistency",
+      "ok": true
+    },
+    {
+      "actual": "BLOCKED",
+      "name": "the case verdict is served unchanged (BLOCKED)",
+      "ok": true
+    },
+    {
+      "actual": {
+        "context_pack_present": false,
+        "evidence_grade": "simulated",
+        "missing_reason": "the record has no such field",
+        "present": false,
+        "present_kind": "absent"
+      },
+      "name": "absent context section is named absent, fabricating no value",
+      "ok": true
+    },
+    {
+      "actual": {
+        "missing_reason": "the record has no such field",
+        "present": false,
+        "source": "case.context"
+      },
+      "name": "absent context chain link is missing with a named reason",
+      "ok": true
+    },
+    {
+      "actual": {
+        "evidence_grade": "simulated",
+        "missing_reason": "the record has no such field",
+        "present": false,
+        "present_kind": "absent"
+      },
+      "name": "absent agent_response is named absent",
+      "ok": true
+    },
+    {
+      "actual": {
+        "missing_reason": "the record has no such field",
+        "present": false,
+        "source": "case.agent_response"
+      },
+      "name": "absent agent chain link is missing with a named reason",
+      "ok": true
+    },
+    {
+      "actual": "PASS",
+      "name": "the absent-field record's verdict is still served as recorded",
+      "ok": true
+    },
+    {
+      "name": "the inconsistent fixture is absent from the real root",
+      "ok": true
+    },
+    {
+      "name": "the absent-field fixture is absent from the real root",
+      "ok": true
+    },
+    {
+      "actual": 9,
+      "name": "the real root still lists exactly nine",
+      "ok": true
+    }
+  ],
+  "checks": 126,
+  "failed": 0,
+  "failures": [],
+  "label": "criterion 2"
+}

@@ -1,0 +1,29 @@
+# FIX-REVALIDATION environment record (VALIDATE-p7-01, candidate f0aea886186a)
+candidate_sha: f0aea886186a6c1e4704eceb2552c74845f333b2
+branch: p7-01-validation-read
+worktree: /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01
+captured_utc: 2026-10-08T16:51:14Z
+tracked_tree_status: 0 modified tracked files
+python: 3.13.15 at /opt/homebrew/opt/python@3.13/bin/python3.13
+platform: macOS-27.0.1-arm64-arm-64bit-Mach-O
+real_root: /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/jasmine-core-v1/validation-runs (read-only)
+modes_exercised: single_user and acl
+scope_sets_used (token values never recorded): validation:read; validation:read+validation:unattributed; admin+objects:read+objects:write (project creation only); objects:read (deliberately scope-less key)
+core_module: /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/src/jasmine_core/__init__.py
+core_version_attr: 0.1.0
+REDACT_TEXT_VERSION: 1
+schema_version_after_migrate_check_version: 11 (check_version(); PRAGMA user_version is not the schema counter)
+contract: p7-validation-read.v1 source.ref: 264163b9406bbb0921ff0edb8692f4d9c7d6dcc8
+contract_pin_is_ancestor_of_candidate: True
+real_run_shaped_files: 9
+  p0-resume-20260929T143554Z/main-46cf99f-real-acceptance/run-20260929T162925Z.json sha256=90e97041c61ad53adab25cea5a537cd685f8a7c9e40218decaaa3da4ab8b0f8c bytes=43682 mtime_utc=2026-09-29T16:29:27Z stage=P0 verdict=PASS cases=7 fail_cases=0 failure_class=0 failure_output=0 synthetic=False
+  p0-resume-20260929T143554Z/p003-59ee8c4-real-acceptance/run-20260929T162307Z.json sha256=a6c4462f7691e309fba945ef9571c28766355743ea8cd0b37611aa15fbb68cac bytes=43659 mtime_utc=2026-09-29T16:23:09Z stage=P0 verdict=PASS cases=7 fail_cases=0 failure_class=0 failure_output=0 synthetic=False
+  p0-resume-20260929T143554Z/p003-6dd2cc4-acceptance/run-20260929T145257Z.json sha256=ee61f802151dfc0a791dd3dbaf11e2a033d944b5e0ed69b0bd1f89e4439154f2 bytes=41407 mtime_utc=2026-09-29T14:52:59Z stage=P0 verdict=BLOCKED cases=7 fail_cases=0 failure_class=0 failure_output=0 synthetic=False
+  p0-resume-20260929T143554Z/p003-6dd2cc4-real-acceptance/run-20260929T161915Z.json sha256=df079d9e8e10fa5eedc36af561dcab3df9b978f27a5937685c108fa1a0a582e2 bytes=43579 mtime_utc=2026-09-29T16:19:17Z stage=P0 verdict=PASS cases=7 fail_cases=0 failure_class=0 failure_output=0 synthetic=False
+  p0-resume-20260929T143554Z/p003-9dfc855-acceptance/run-20260929T144539Z.json sha256=201d3711301d462e89b02a9e2567ed3f94620b3ec0a6c83b98b3b873b5f86860 bytes=41407 mtime_utc=2026-09-29T14:45:41Z stage=P0 verdict=BLOCKED cases=7 fail_cases=0 failure_class=0 failure_output=0 synthetic=False
+  p0-resume-20260929T143554Z/p003-final-acceptance/run-20260929T143845Z.json sha256=18dfa9066828cd6d5cb82c57a08bc60a0788f538691195d7a24110f4152d88eb bytes=41380 mtime_utc=2026-09-29T14:38:47Z stage=P0 verdict=BLOCKED cases=7 fail_cases=0 failure_class=0 failure_output=0 synthetic=False
+  p0-takeover-20260929T142645Z/acceptance/run-20260929T142847Z.json sha256=294d9fb5962956585b7bb57892371c079667c55b09e6026ae7fecbfb4b000de0 bytes=41437 mtime_utc=2026-09-29T14:28:49Z stage=P0 verdict=BLOCKED cases=7 fail_cases=0 failure_class=0 failure_output=0 synthetic=False
+  p0-takeover-20260929T142645Z/committed-acceptance/run-20260929T143156Z.json sha256=b42e3c2985bc35f45a870930501bd88ec4e4fa49b8e47dfdcd3cbaf68afb67a4 bytes=41567 mtime_utc=2026-09-29T14:31:58Z stage=P0 verdict=BLOCKED cases=7 fail_cases=0 failure_class=0 failure_output=0 synthetic=False
+  p1-implementation/p1-02-67bdbfc/p0-regression/run-20260929T173423Z.json sha256=80b130e6c2783905e1569ef604b59278f0a958a7077416e757d2c60c45ff9aa2 bytes=42398 mtime_utc=2026-09-29T17:34:25Z stage=P0 verdict=BLOCKED cases=7 fail_cases=0 failure_class=0 failure_output=0 synthetic=False
+fixture_roots: per-run TemporaryDirectory(prefix='validate-p7-01-') (validator-built); one short AF_UNIX root under /tmp (v7f-*)
+

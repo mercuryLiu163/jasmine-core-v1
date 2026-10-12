@@ -165,3 +165,63 @@ class InvalidInterpretationSource(CoreError):
 class InterpretationIdempotencyConflict(CoreError):
     status = 409
     code = "interpretation_idempotency_conflict"
+
+
+class ValidationNotConfigured(CoreError):
+    """The Validation run root is unset, unusable, or only partly readable.
+
+    503 rather than 5xx-by-accident: the operator has not configured
+    `JASMINE_CORE_VALIDATION_RUNS` (or it moved), so no Validation read can be
+    answered. `details.reason` is the stable branchable value; a knowingly
+    incomplete index also lands here with `reason: "index_incomplete"` so no page
+    can silently omit a record.
+    """
+
+    status = 503
+    code = "validation_not_configured"
+
+
+class ValidationIndexTooLarge(CoreError):
+    """A walk cap (`MAX_SCANNED_ENTRIES`/`MAX_RUN_SHAPED`) was exceeded.
+
+    Refused rather than truncated: a silently partial index would be a page walk
+    that omits records without saying so.
+    """
+
+    status = 503
+    code = "validation_index_too_large"
+
+
+class ValidationRunCorrupt(CoreError):
+    """A run-shaped record exists but is unparseable or missing required fields."""
+
+    status = 409
+    code = "validation_run_corrupt"
+
+
+class ValidationRunAmbiguous(CoreError):
+    """Two run-shaped files share this stem, so the run id names no single record."""
+
+    status = 409
+    code = "validation_run_ambiguous"
+
+
+class ValidationManifestCorrupt(CoreError):
+    """A bundle manifest is present but breaks a §3 rule; its artifacts are unaddressable."""
+
+    status = 409
+    code = "validation_manifest_corrupt"
+
+
+class ArtifactModified(CoreError):
+    """Served artifact bytes disagree with the manifest's declared `sha256`/`bytes`."""
+
+    status = 409
+    code = "artifact_modified"
+
+
+class OriginalWithheld(CoreError):
+    """`form=original` was requested but the masker is not a no-op on this content."""
+
+    status = 403
+    code = "original_withheld"

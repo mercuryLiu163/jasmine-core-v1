@@ -1,0 +1,36 @@
+{
+  "bind": "ok",
+  "body": {
+    "complete": true,
+    "corrupt_count": 0,
+    "count": 0,
+    "discovery": {
+      "capped": false,
+      "max_depth": 4,
+      "root_present": true,
+      "run_shaped_files": 0,
+      "scanned_dirs": 1,
+      "scanned_files": 1,
+      "unreadable_entries": 0
+    },
+    "duplicate_count": 0,
+    "empty_reason": "no_run_shaped_files",
+    "has_more": false,
+    "ignored_entries": 1,
+    "ignored_samples": [
+      {
+        "reason": "not_regular_file",
+        "relative_path": "run-20261008T000403Z.json"
+      }
+    ],
+    "limit": 100,
+    "offset": 0,
+    "runs": [],
+    "total": 0,
+    "visibility": "all"
+  },
+  "elapsed_seconds": 0.0015,
+  "error": null,
+  "sock_path": "/tmp/v7f-s9mo4hzl/run-20261008T000403Z.json",
+  "status": 200
+}

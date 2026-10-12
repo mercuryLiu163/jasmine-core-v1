@@ -1,0 +1,163 @@
+{
+  "cases": [
+    {
+      "case_id": "T-1",
+      "chain": {
+        "agent": {
+          "missing_reason": "the record has no such field",
+          "present": false,
+          "source": "case.agent_response"
+        },
+        "context": {
+          "missing_reason": "the record has no such field",
+          "present": false,
+          "source": "case.context"
+        },
+        "evidence": {
+          "present": true,
+          "source": "case.evidence"
+        },
+        "extraction": {
+          "missing_reason": "the recorder records no Extraction section",
+          "present": false,
+          "source": null
+        },
+        "raw": {
+          "present": true,
+          "source": "case.user_raw"
+        },
+        "resolution": {
+          "missing_reason": "the recorder records no Resolution section",
+          "present": false,
+          "source": null
+        },
+        "state": {
+          "present": true,
+          "source": "case.state_before + case.state_after"
+        },
+        "tool": {
+          "present": true,
+          "source": "case.tools"
+        }
+      },
+      "evidence": [
+        {
+          "reason": "recorded evidence is free-form data and is never resolved; artifacts are addressable only through a bundle manifest",
+          "recorded": "/absolute/host/path/stdout.txt",
+          "status": "unaddressable"
+        },
+        {
+          "reason": "recorded evidence is free-form data and is never resolved; artifacts are addressable only through a bundle manifest",
+          "recorded": "prose evidence",
+          "status": "unaddressable"
+        }
+      ],
+      "evidence_grade": "simulated",
+      "failure_class": null,
+      "failure_output": null,
+      "grade_basis": "run.executor",
+      "interpretation": "N/A (P0 not implemented)",
+      "name": "a passing case with a context pack",
+      "not_applied_reason": null,
+      "reproduction": [],
+      "sections": {
+        "agent_response": {
+          "evidence_grade": "simulated",
+          "missing_reason": "the record has no such field",
+          "present": false,
+          "present_kind": "absent"
+        },
+        "context": {
+          "context_pack_present": false,
+          "evidence_grade": "simulated",
+          "missing_reason": "the record has no such field",
+          "present": false,
+          "present_kind": "absent"
+        },
+        "interpretation": {
+          "evidence_grade": "simulated",
+          "missing_reason": "recorded as N/A (P0 not implemented)",
+          "present": false,
+          "present_kind": "sentinel"
+        },
+        "state_after": {
+          "evidence_grade": "simulated",
+          "present": true,
+          "present_kind": "value",
+          "value": {
+            "revision": 2
+          }
+        },
+        "state_before": {
+          "evidence_grade": "simulated",
+          "present": true,
+          "present_kind": "value",
+          "value": {
+            "revision": 1
+          }
+        },
+        "tools": {
+          "evidence_grade": "simulated",
+          "present": true,
+          "present_kind": "value",
+          "value": [
+            {
+              "name": "read",
+              "response": {
+                "project_id": "prj_00000000000000000000000000"
+              }
+            }
+          ]
+        },
+        "user_raw": {
+          "evidence_grade": "simulated",
+          "present": true,
+          "present_kind": "value",
+          "value": "hello"
+        }
+      },
+      "state_after": {
+        "revision": 2
+      },
+      "state_before": {
+        "revision": 1
+      },
+      "tools": [
+        {
+          "name": "read",
+          "response": {
+            "project_id": "prj_00000000000000000000000000"
+          }
+        }
+      ],
+      "user_raw": "hello",
+      "verdict": "PASS"
+    }
+  ],
+  "commit": "0000000000000000000000000000000000000000",
+  "core_version": "0.1.0",
+  "created_at": "2026-10-08T00:00:01.000000Z",
+  "environment": {
+    "platform": "fixture",
+    "python": "3.11"
+  },
+  "evidence_grade": "unknown",
+  "executor": "fixture",
+  "grade_downgraded_by": [],
+  "not_implemented": [],
+  "notes": [
+    "a syntactically complete fixture record"
+  ],
+  "reviewer": "fixture",
+  "run_id": "run-20261008T000201Z",
+  "schema_version": 11,
+  "stage": "P7",
+  "synthetic": false,
+  "unknown_record_keys": [
+    "extra_record_key"
+  ],
+  "verdict": "PASS",
+  "verdict_consistent": true,
+  "verifier": "fixture",
+  "warnings": []
+}

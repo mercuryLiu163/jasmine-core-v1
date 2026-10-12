@@ -1,0 +1,14 @@
+{
+  "Connection": "close",
+  "Content-Disposition": "attachment; filename=\"art_html.txt\"",
+  "Content-Length": "444",
+  "Content-Security-Policy": "default-src 'none'; sandbox",
+  "Content-Type": "application/json; charset=utf-8",
+  "Date": "Thu, 08 Oct 2026 16:51:53 GMT",
+  "Server": "jasmine-core ",
+  "X-Content-Type-Options": "nosniff",
+  "X-Request-Id": "aud_01M4E6VCKD659QD1A31DFV7Y1E",
+  "X-Validation-Form": "original",
+  "X-Validation-Original-Sha256": "c18d47f34bfbbca69491fa2e7cc9cbc8081677ba4002ecd5a0fec71b6b3e6ce6",
+  "X-Validation-Sha256": "c18d47f34bfbbca69491fa2e7cc9cbc8081677ba4002ecd5a0fec71b6b3e6ce6"
+}

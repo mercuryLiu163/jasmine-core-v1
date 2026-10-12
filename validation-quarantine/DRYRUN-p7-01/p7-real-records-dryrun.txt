@@ -1,0 +1,22 @@
+discovered run-shaped: 9   ignored: 179
+ignored reasons: ['depth_cap', 'excluded_dir', 'not_run_shaped']
+
+page order (rank, created_at desc, run_id desc, path asc):
+  run-20260929T173423Z  2026-09-29T17:34:23.759223Z  verdict=BLOCKED consistent=True  cases=7 {'PASS': 6, 'FAIL': 0, 'BLOCKED': 1} run_grade=unknown(mode=unknown, no manifest) missing_links=extraction,resolution,context,agent
+      context link missing for all 7 cases; forms={'reason_only': 3, 'recorded_no_pack': 3, 'sentinel': 1}
+  run-20260929T162925Z  2026-09-29T16:29:25.135065Z  verdict=PASS    consistent=True  cases=7 {'PASS': 7, 'FAIL': 0, 'BLOCKED': 0} run_grade=unknown(mode=unknown, no manifest) missing_links=extraction,resolution,context
+      context link missing for all 7 cases; forms={'reason_only': 3, 'recorded_no_pack': 4}
+  run-20260929T162307Z  2026-09-29T16:23:07.302917Z  verdict=PASS    consistent=True  cases=7 {'PASS': 7, 'FAIL': 0, 'BLOCKED': 0} run_grade=unknown(mode=unknown, no manifest) missing_links=extraction,resolution,context
+      context link missing for all 7 cases; forms={'reason_only': 3, 'recorded_no_pack': 4}
+  run-20260929T161915Z  2026-09-29T16:19:15.513570Z  verdict=PASS    consistent=True  cases=7 {'PASS': 7, 'FAIL': 0, 'BLOCKED': 0} run_grade=unknown(mode=unknown, no manifest) missing_links=extraction,resolution,context
+      context link missing for all 7 cases; forms={'reason_only': 3, 'recorded_no_pack': 4}
+  run-20260929T145257Z  2026-09-29T14:52:57.450292Z  verdict=BLOCKED consistent=True  cases=7 {'PASS': 6, 'FAIL': 0, 'BLOCKED': 1} run_grade=unknown(mode=unknown, no manifest) missing_links=extraction,resolution,context,agent
+      context link missing for all 7 cases; forms={'reason_only': 3, 'recorded_no_pack': 3, 'sentinel': 1}
+  run-20260929T144539Z  2026-09-29T14:45:39.604744Z  verdict=BLOCKED consistent=True  cases=7 {'PASS': 6, 'FAIL': 0, 'BLOCKED': 1} run_grade=unknown(mode=unknown, no manifest) missing_links=extraction,resolution,context,agent
+      context link missing for all 7 cases; forms={'reason_only': 3, 'recorded_no_pack': 3, 'sentinel': 1}
+  run-20260929T143845Z  2026-09-29T14:38:45.371633Z  verdict=BLOCKED consistent=True  cases=7 {'PASS': 6, 'FAIL': 0, 'BLOCKED': 1} run_grade=unknown(mode=unknown, no manifest) missing_links=extraction,resolution,context,agent
+      context link missing for all 7 cases; forms={'reason_only': 3, 'recorded_no_pack': 3, 'sentinel': 1}
+  run-20260929T143156Z  2026-09-29T14:31:56.826382Z  verdict=BLOCKED consistent=True  cases=7 {'PASS': 6, 'FAIL': 0, 'BLOCKED': 1} run_grade=unknown(mode=unknown, no manifest) missing_links=extraction,resolution,context,agent
+      context link missing for all 7 cases; forms={'reason_only': 3, 'recorded_no_pack': 3, 'sentinel': 1}
+  run-20260929T142847Z  2026-09-29T14:28:47.910084Z  verdict=BLOCKED consistent=True  cases=7 {'PASS': 6, 'FAIL': 0, 'BLOCKED': 1} run_grade=unknown(mode=unknown, no manifest) missing_links=extraction,resolution,context,agent
+      context link missing for all 7 cases; forms={'reason_only': 3, 'recorded_no_pack': 3, 'sentinel': 1}

@@ -1,0 +1,39 @@
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-02-labelled-fail-fixture-record.json
+[timing] #1 GET /v1/validation/runs?limit=100 0.013s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-03-real-root-list.json
+[ok] real root list is 200
+[ok] real root total is 9
+[ok] no real run serves verdict FAIL
+[ok] no real case carries a FAIL verdict
+[ok] 3 PASS / 6 BLOCKED at run level
+[timing] #2 GET /v1/validation/runs/run-20261008T000002Z 0.004s status=404
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-04-fixture-id-under-real-root.json
+[ok] the fixture run id 404s under the real root
+[ok] that refusal is validation_run_not_found
+[timing] #3 GET /v1/validation/runs?limit=100 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-05-fixture-root-list.json
+[ok] fixture root list is 200
+[ok] the fixture run is listed
+[ok] the fixture run serves verdict FAIL (the FAIL code path)
+[ok] the fixture row marks itself synthetic
+[ok] the fixture row is never graded real
+[ok] the fixture row's run grade is the documented min with the absent-manifest 'unknown' mode
+[ok] the fixture row counts one FAIL case
+[timing] #4 GET /v1/validation/runs/run-20261008T000002Z 0.001s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-06-labelled-fail-detail.json
+[ok] fixture detail is 200
+[ok] recorded run verdict served unchanged (FAIL)
+[ok] synthetic=true surfaced in detail
+[ok] synthetic_note surfaced verbatim
+[ok] case verdict served unchanged (FAIL)
+[ok] failure_class traceable to the record
+[ok] failure_output traceable to the record
+[ok] the failing case is graded simulated
+[ok] grade_basis names the synthetic run
+[ok] verdict_consistent is reported, not enforced
+[ok] the fixture file lives outside the operator run root
+[ok] the operator run root is unchanged (9 files)
+[ok] fixture record is self-labelled synthetic in the file
+[ok] fixture record declares stage P7 (not P0)
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c1-07-criterion1-report.json
+[timing-summary] {"max_seconds": 0.013, "over_10s": [], "over_5s": [], "requests": 4, "requests_without_status": [], "total_seconds": 0.0201, "transport_retries": 0}

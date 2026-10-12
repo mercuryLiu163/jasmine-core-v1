@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "validation_manifest_corrupt",
+    "details": {
+      "rule": "manifest exceeds 1048576 bytes",
+      "run_id": "run-20261008T000301Z"
+    },
+    "message": "manifest exceeds 1048576 bytes",
+    "request_id": "aud_01M4E6VCYRVNF1PCX993V8ZF7E"
+  }
+}

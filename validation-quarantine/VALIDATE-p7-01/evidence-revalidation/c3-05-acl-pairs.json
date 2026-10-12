@@ -1,0 +1,1058 @@
+{
+  "corrupt-detail-granted": {
+    "body": {
+      "error": {
+        "code": "validation_run_not_found",
+        "details": {
+          "id": "run-20261008T000004Z",
+          "kind": "validation_run"
+        },
+        "message": "validation_run run-20261008T000004Z not found",
+        "request_id": "aud_01M4DZZP5CDXHPWWN5KAZYDPB2"
+      }
+    },
+    "status": 404
+  },
+  "granted-list": {
+    "body": {
+      "complete": true,
+      "corrupt_count": 0,
+      "count": 1,
+      "discovery": {
+        "capped": false,
+        "max_depth": 4,
+        "root_present": true,
+        "run_shaped_files": 1,
+        "scanned_dirs": 10,
+        "scanned_files": 7,
+        "unreadable_entries": 0
+      },
+      "duplicate_count": 0,
+      "has_more": false,
+      "ignored_entries": 3,
+      "ignored_samples": [],
+      "limit": 100,
+      "offset": 0,
+      "runs": [
+        {
+          "attribution": {
+            "projects": [
+              "prj_01M4DZZP40NSZCFGFRHBMV4F93"
+            ],
+            "status": "attributed"
+          },
+          "case_counts": {
+            "blocked": 0,
+            "fail": 0,
+            "pass": 1,
+            "total": 1
+          },
+          "commit": "0000000000000000000000000000000000000000",
+          "core_version": "0.1.0",
+          "created_at": "2026-10-08T00:00:01.000000Z",
+          "evidence_grade": "simulated",
+          "grade_downgraded_by": [
+            "T-1"
+          ],
+          "manifest_status": "frozen",
+          "mode": "real",
+          "mode_basis": "declared real with recorder provenance and project attribution",
+          "record_sha256": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+          "record_status": "ok",
+          "run_id": "run-20261008T000001Z",
+          "schema_version": 11,
+          "stage": "P7",
+          "synthetic": false,
+          "verdict": "PASS",
+          "verdict_consistent": true
+        }
+      ],
+      "total": 1,
+      "visibility": "grant_filtered"
+    },
+    "status": 200
+  },
+  "granted-list-project-filter": {
+    "body": {
+      "complete": true,
+      "corrupt_count": 0,
+      "count": 0,
+      "discovery": {
+        "capped": false,
+        "max_depth": 4,
+        "root_present": true,
+        "run_shaped_files": 1,
+        "scanned_dirs": 10,
+        "scanned_files": 7,
+        "unreadable_entries": 0
+      },
+      "duplicate_count": 0,
+      "empty_reason": "all_filtered_out",
+      "has_more": false,
+      "ignored_entries": 3,
+      "ignored_samples": [],
+      "limit": 100,
+      "offset": 0,
+      "runs": [],
+      "total": 0,
+      "visibility": "grant_filtered"
+    },
+    "status": 200
+  },
+  "granted::/v1/validation/runs": {
+    "body": {
+      "complete": true,
+      "corrupt_count": 0,
+      "count": 1,
+      "discovery": {
+        "capped": false,
+        "max_depth": 4,
+        "root_present": true,
+        "run_shaped_files": 1,
+        "scanned_dirs": 10,
+        "scanned_files": 7,
+        "unreadable_entries": 0
+      },
+      "duplicate_count": 0,
+      "has_more": false,
+      "ignored_entries": 3,
+      "ignored_samples": [],
+      "limit": 20,
+      "offset": 0,
+      "runs": [
+        {
+          "attribution": {
+            "projects": [
+              "prj_01M4DZZP40NSZCFGFRHBMV4F93"
+            ],
+            "status": "attributed"
+          },
+          "case_counts": {
+            "blocked": 0,
+            "fail": 0,
+            "pass": 1,
+            "total": 1
+          },
+          "commit": "0000000000000000000000000000000000000000",
+          "core_version": "0.1.0",
+          "created_at": "2026-10-08T00:00:01.000000Z",
+          "evidence_grade": "simulated",
+          "grade_downgraded_by": [
+            "T-1"
+          ],
+          "manifest_status": "frozen",
+          "mode": "real",
+          "mode_basis": "declared real with recorder provenance and project attribution",
+          "record_sha256": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+          "record_status": "ok",
+          "run_id": "run-20261008T000001Z",
+          "schema_version": 11,
+          "stage": "P7",
+          "synthetic": false,
+          "verdict": "PASS",
+          "verdict_consistent": true
+        }
+      ],
+      "total": 1,
+      "visibility": "grant_filtered"
+    },
+    "status": 200
+  },
+  "granted::/v1/validation/runs/run-20261008T000001Z": {
+    "body": {
+      "cases": [
+        {
+          "agent_response": "world",
+          "case_id": "T-1",
+          "chain": {
+            "agent": {
+              "present": true,
+              "source": "case.agent_response"
+            },
+            "context": {
+              "present": true,
+              "source": "case.context"
+            },
+            "evidence": {
+              "present": true,
+              "source": "case.evidence"
+            },
+            "extraction": {
+              "missing_reason": "the recorder records no Extraction section",
+              "present": false,
+              "source": null
+            },
+            "raw": {
+              "present": true,
+              "source": "case.user_raw"
+            },
+            "resolution": {
+              "missing_reason": "the recorder records no Resolution section",
+              "present": false,
+              "source": null
+            },
+            "state": {
+              "present": true,
+              "source": "case.state_before + case.state_after"
+            },
+            "tool": {
+              "present": true,
+              "source": "case.tools"
+            }
+          },
+          "context": {
+            "context_id": "ctx_1",
+            "pack": {
+              "sections": []
+            }
+          },
+          "evidence": [
+            {
+              "reason": "recorded evidence is free-form data and is never resolved; artifacts are addressable only through a bundle manifest",
+              "recorded": "/absolute/host/path/stdout.txt",
+              "status": "unaddressable"
+            },
+            {
+              "reason": "recorded evidence is free-form data and is never resolved; artifacts are addressable only through a bundle manifest",
+              "recorded": "prose evidence",
+              "status": "unaddressable"
+            }
+          ],
+          "evidence_grade": "simulated",
+          "failure_class": null,
+          "failure_output": null,
+          "grade_basis": "run.executor",
+          "interpretation": "N/A (P0 not implemented)",
+          "name": "a passing case with a context pack",
+          "not_applied_reason": null,
+          "reproduction": [],
+          "sections": {
+            "agent_response": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": "world"
+            },
+            "context": {
+              "context_pack_present": true,
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "context_id": "ctx_1",
+                "pack": {
+                  "sections": []
+                }
+              }
+            },
+            "interpretation": {
+              "evidence_grade": "simulated",
+              "missing_reason": "recorded as N/A (P0 not implemented)",
+              "present": false,
+              "present_kind": "sentinel"
+            },
+            "state_after": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "revision": 2
+              }
+            },
+            "state_before": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "revision": 1
+              }
+            },
+            "tools": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": [
+                {
+                  "name": "read",
+                  "response": {
+                    "project_id": "prj_00000000000000000000000000"
+                  }
+                }
+              ]
+            },
+            "user_raw": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": "hello"
+            }
+          },
+          "state_after": {
+            "revision": 2
+          },
+          "state_before": {
+            "revision": 1
+          },
+          "tools": [
+            {
+              "name": "read",
+              "response": {
+                "project_id": "prj_00000000000000000000000000"
+              }
+            }
+          ],
+          "user_raw": "hello",
+          "verdict": "PASS"
+        }
+      ],
+      "commit": "0000000000000000000000000000000000000000",
+      "core_version": "0.1.0",
+      "created_at": "2026-10-08T00:00:01.000000Z",
+      "environment": {
+        "platform": "fixture",
+        "python": "3.11"
+      },
+      "evidence_grade": "simulated",
+      "executor": "fixture",
+      "grade_downgraded_by": [
+        "T-1"
+      ],
+      "not_implemented": [],
+      "notes": [
+        "a syntactically complete fixture record"
+      ],
+      "reviewer": "fixture",
+      "run_id": "run-20261008T000001Z",
+      "schema_version": 11,
+      "stage": "P7",
+      "synthetic": false,
+      "unknown_record_keys": [
+        "extra_record_key"
+      ],
+      "verdict": "PASS",
+      "verdict_consistent": true,
+      "verifier": "fixture",
+      "warnings": [
+        "manifest declares real but case T-1 is graded simulated"
+      ]
+    },
+    "status": 200
+  },
+  "granted::/v1/validation/runs/run-20261008T000001Z/artifacts/art_good": {
+    "body": {
+      "artifact_id": "art_good",
+      "bytes": 13,
+      "content_scan": {
+        "credential_shaped": false,
+        "mask_is_noop": true,
+        "performed": true
+      },
+      "credential_shaped": false,
+      "declared_bytes": 13,
+      "declared_sha256": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "digests": {
+        "masked": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+        "original": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+      },
+      "forms": [
+        "masked",
+        "original"
+      ],
+      "integrity": "match",
+      "media_type": "text/plain",
+      "path": "artifacts/good.txt"
+    },
+    "status": 200
+  },
+  "granted::/v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content": {
+    "body": {
+      "artifact_id": "art_good",
+      "bytes": 13,
+      "content": "hello bundle\n",
+      "content_is_original": false,
+      "form": "masked",
+      "mask_algorithm": "canonical.redact_text",
+      "mask_version": "1",
+      "masked_sha256": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "media_type": "text/plain",
+      "original_sha256": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+      "served_sha256": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+    },
+    "status": 200
+  },
+  "granted::/v1/validation/runs/run-20261008T000001Z/manifest": {
+    "body": {
+      "declared_mode": "real",
+      "files": [
+        {
+          "artifact_id": "art_good",
+          "bytes": 13,
+          "bytes_agree": true,
+          "credential_shaped": false,
+          "integrity": "match",
+          "media_type": "text/plain",
+          "path": "artifacts/good.txt",
+          "sha256": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+        }
+      ],
+      "frozen_at": null,
+      "manifest_authentication": "unauthenticated",
+      "manifest_sha256": "6fa5998ed81c5f043dd0e6b40f1cd7ef19fe6bdb0b2a05215e5739981983c066",
+      "mode": "real",
+      "mode_basis": "declared real with recorder provenance and project attribution",
+      "projects": [
+        "prj_01M4DZZP40NSZCFGFRHBMV4F93"
+      ],
+      "run_id": "run-20261008T000001Z",
+      "sources": {
+        "recorder": {
+          "path": "scripts/x.py",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      "status": "frozen"
+    },
+    "status": 200
+  },
+  "other-project-detail": {
+    "body": {
+      "error": {
+        "code": "validation_run_not_found",
+        "details": {
+          "id": "run-20261008T000002Z",
+          "kind": "validation_run"
+        },
+        "message": "validation_run run-20261008T000002Z not found",
+        "request_id": "aud_01M4DZZP53WSCZZYYSGK3EV6RN"
+      }
+    },
+    "status": 404
+  },
+  "scopeless-list": {
+    "body": {
+      "error": {
+        "code": "forbidden_scope",
+        "details": {
+          "granted": [
+            "objects:read"
+          ],
+          "required": "validation:read"
+        },
+        "message": "this key does not carry the validation:read scope",
+        "request_id": "aud_01M4DZZP5JBGAKXAZ4MQMZY583"
+      }
+    },
+    "status": 403
+  },
+  "scopeless::/v1/validation/runs": {
+    "body": {
+      "error": {
+        "code": "forbidden_scope",
+        "details": {
+          "granted": [
+            "objects:read"
+          ],
+          "required": "validation:read"
+        },
+        "message": "this key does not carry the validation:read scope",
+        "request_id": "aud_01M4DZZP4PS0TJFDHPYNYARBYQ"
+      }
+    },
+    "status": 403
+  },
+  "scopeless::/v1/validation/runs/run-20261008T000001Z": {
+    "body": {
+      "error": {
+        "code": "forbidden_scope",
+        "details": {
+          "granted": [
+            "objects:read"
+          ],
+          "required": "validation:read"
+        },
+        "message": "this key does not carry the validation:read scope",
+        "request_id": "aud_01M4DZZP4TSH9TGGR6F3S4HR4Y"
+      }
+    },
+    "status": 403
+  },
+  "scopeless::/v1/validation/runs/run-20261008T000001Z/artifacts/art_good": {
+    "body": {
+      "error": {
+        "code": "forbidden_scope",
+        "details": {
+          "granted": [
+            "objects:read"
+          ],
+          "required": "validation:read"
+        },
+        "message": "this key does not carry the validation:read scope",
+        "request_id": "aud_01M4DZZP4ZZXFCR8XXWCY6K8X5"
+      }
+    },
+    "status": 403
+  },
+  "scopeless::/v1/validation/runs/run-20261008T000001Z/artifacts/art_good/content": {
+    "body": {
+      "error": {
+        "code": "forbidden_scope",
+        "details": {
+          "granted": [
+            "objects:read"
+          ],
+          "required": "validation:read"
+        },
+        "message": "this key does not carry the validation:read scope",
+        "request_id": "aud_01M4DZZP52S8V4N87535FHX2HY"
+      }
+    },
+    "status": 403
+  },
+  "scopeless::/v1/validation/runs/run-20261008T000001Z/manifest": {
+    "body": {
+      "error": {
+        "code": "forbidden_scope",
+        "details": {
+          "granted": [
+            "objects:read"
+          ],
+          "required": "validation:read"
+        },
+        "message": "this key does not carry the validation:read scope",
+        "request_id": "aud_01M4DZZP4WA4BBNA0SPRG6HNAZ"
+      }
+    },
+    "status": 403
+  },
+  "unattributed-detail-with-scope": {
+    "body": {
+      "cases": [
+        {
+          "agent_response": "N/A (P0 not implemented)",
+          "case_id": "S-1",
+          "chain": {
+            "agent": {
+              "missing_reason": "recorded as N/A (P0 not implemented)",
+              "present": false,
+              "source": "case.agent_response"
+            },
+            "context": {
+              "missing_reason": "recorded as N/A (P0 not implemented)",
+              "present": false,
+              "source": "case.context"
+            },
+            "evidence": {
+              "present": true,
+              "source": "case.evidence"
+            },
+            "extraction": {
+              "missing_reason": "the recorder records no Extraction section",
+              "present": false,
+              "source": null
+            },
+            "raw": {
+              "present": true,
+              "source": "case.user_raw"
+            },
+            "resolution": {
+              "missing_reason": "the recorder records no Resolution section",
+              "present": false,
+              "source": null
+            },
+            "state": {
+              "present": true,
+              "source": "case.state_before + case.state_after"
+            },
+            "tool": {
+              "missing_reason": "the case records no tool call",
+              "present": false,
+              "source": "case.tools"
+            }
+          },
+          "context": "N/A (P0 not implemented)",
+          "evidence": [
+            {
+              "reason": "recorded evidence is free-form data and is never resolved; artifacts are addressable only through a bundle manifest",
+              "recorded": "recorded evidence",
+              "status": "unaddressable"
+            }
+          ],
+          "evidence_grade": "simulated",
+          "failure_class": null,
+          "failure_output": null,
+          "grade_basis": "run.executor",
+          "interpretation": "N/A (P0 not implemented)",
+          "name": "context is the sentinel",
+          "not_applied_reason": "the scenario did not run",
+          "reproduction": [],
+          "sections": {
+            "agent_response": {
+              "evidence_grade": "simulated",
+              "missing_reason": "recorded as N/A (P0 not implemented)",
+              "present": false,
+              "present_kind": "sentinel"
+            },
+            "context": {
+              "context_pack_present": false,
+              "evidence_grade": "simulated",
+              "missing_reason": "recorded as N/A (P0 not implemented)",
+              "present": false,
+              "present_kind": "sentinel"
+            },
+            "interpretation": {
+              "evidence_grade": "simulated",
+              "missing_reason": "recorded as N/A (P0 not implemented)",
+              "present": false,
+              "present_kind": "sentinel"
+            },
+            "state_after": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "revision": 1
+              }
+            },
+            "state_before": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "revision": 1
+              }
+            },
+            "tools": {
+              "evidence_grade": "simulated",
+              "missing_reason": "recorded as empty",
+              "present": false,
+              "present_kind": "absent"
+            },
+            "user_raw": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": "raw"
+            }
+          },
+          "state_after": {
+            "revision": 1
+          },
+          "state_before": {
+            "revision": 1
+          },
+          "tools": [],
+          "user_raw": "raw",
+          "verdict": "BLOCKED"
+        },
+        {
+          "agent_response": "answered",
+          "case_id": "S-2",
+          "chain": {
+            "agent": {
+              "present": true,
+              "source": "case.agent_response"
+            },
+            "context": {
+              "missing_reason": "the case records a reason, not a context pack",
+              "present": false,
+              "source": "case.context"
+            },
+            "evidence": {
+              "present": true,
+              "source": "case.evidence"
+            },
+            "extraction": {
+              "missing_reason": "the recorder records no Extraction section",
+              "present": false,
+              "source": null
+            },
+            "raw": {
+              "present": true,
+              "source": "case.user_raw"
+            },
+            "resolution": {
+              "missing_reason": "the recorder records no Resolution section",
+              "present": false,
+              "source": null
+            },
+            "state": {
+              "present": true,
+              "source": "case.state_before + case.state_after"
+            },
+            "tool": {
+              "missing_reason": "the case records no tool call",
+              "present": false,
+              "source": "case.tools"
+            }
+          },
+          "context": {
+            "reason": "no context pack was built for this case"
+          },
+          "evidence": [
+            {
+              "reason": "recorded evidence is free-form data and is never resolved; artifacts are addressable only through a bundle manifest",
+              "recorded": "recorded evidence",
+              "status": "unaddressable"
+            }
+          ],
+          "evidence_grade": "simulated",
+          "failure_class": null,
+          "failure_output": null,
+          "grade_basis": "run.executor",
+          "interpretation": "N/A (P0 not implemented)",
+          "name": "context is reason-only",
+          "not_applied_reason": null,
+          "reproduction": [],
+          "sections": {
+            "agent_response": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": "answered"
+            },
+            "context": {
+              "context_pack_present": false,
+              "evidence_grade": "simulated",
+              "present": false,
+              "present_kind": "reason_only",
+              "recorded_reason": "no context pack was built for this case"
+            },
+            "interpretation": {
+              "evidence_grade": "simulated",
+              "missing_reason": "recorded as N/A (P0 not implemented)",
+              "present": false,
+              "present_kind": "sentinel"
+            },
+            "state_after": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "revision": 1
+              }
+            },
+            "state_before": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "revision": 1
+              }
+            },
+            "tools": {
+              "evidence_grade": "simulated",
+              "missing_reason": "recorded as empty",
+              "present": false,
+              "present_kind": "absent"
+            },
+            "user_raw": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": "raw"
+            }
+          },
+          "state_after": {
+            "revision": 1
+          },
+          "state_before": {
+            "revision": 1
+          },
+          "tools": [],
+          "user_raw": "raw",
+          "verdict": "PASS"
+        },
+        {
+          "agent_response": "answered",
+          "case_id": "S-3",
+          "chain": {
+            "agent": {
+              "present": true,
+              "source": "case.agent_response"
+            },
+            "context": {
+              "missing_reason": "the section records run details, not a context pack",
+              "present": false,
+              "source": "case.context"
+            },
+            "evidence": {
+              "present": true,
+              "source": "case.evidence"
+            },
+            "extraction": {
+              "missing_reason": "the recorder records no Extraction section",
+              "present": false,
+              "source": null
+            },
+            "raw": {
+              "present": true,
+              "source": "case.user_raw"
+            },
+            "resolution": {
+              "missing_reason": "the recorder records no Resolution section",
+              "present": false,
+              "source": null
+            },
+            "state": {
+              "present": true,
+              "source": "case.state_before + case.state_after"
+            },
+            "tool": {
+              "missing_reason": "the case records no tool call",
+              "present": false,
+              "source": "case.tools"
+            }
+          },
+          "context": {
+            "db_path": "/tmp/core.db",
+            "processes": [
+              "core"
+            ],
+            "reason": "run details"
+          },
+          "evidence": [
+            {
+              "reason": "recorded evidence is free-form data and is never resolved; artifacts are addressable only through a bundle manifest",
+              "recorded": "recorded evidence",
+              "status": "unaddressable"
+            }
+          ],
+          "evidence_grade": "simulated",
+          "failure_class": null,
+          "failure_output": null,
+          "grade_basis": "run.executor",
+          "interpretation": "N/A (P0 not implemented)",
+          "name": "context holds run details but no pack",
+          "not_applied_reason": null,
+          "reproduction": [],
+          "sections": {
+            "agent_response": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": "answered"
+            },
+            "context": {
+              "context_pack_present": false,
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "db_path": "/tmp/core.db",
+                "processes": [
+                  "core"
+                ],
+                "reason": "run details"
+              }
+            },
+            "interpretation": {
+              "evidence_grade": "simulated",
+              "missing_reason": "recorded as N/A (P0 not implemented)",
+              "present": false,
+              "present_kind": "sentinel"
+            },
+            "state_after": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "revision": 1
+              }
+            },
+            "state_before": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": {
+                "revision": 1
+              }
+            },
+            "tools": {
+              "evidence_grade": "simulated",
+              "missing_reason": "recorded as empty",
+              "present": false,
+              "present_kind": "absent"
+            },
+            "user_raw": {
+              "evidence_grade": "simulated",
+              "present": true,
+              "present_kind": "value",
+              "value": "raw"
+            }
+          },
+          "state_after": {
+            "revision": 1
+          },
+          "state_before": {
+            "revision": 1
+          },
+          "tools": [],
+          "user_raw": "raw",
+          "verdict": "PASS"
+        }
+      ],
+      "commit": "0000000000000000000000000000000000000000",
+      "core_version": "0.1.0",
+      "created_at": "2026-10-08T00:00:03.000000Z",
+      "environment": {},
+      "evidence_grade": "unknown",
+      "executor": "fixture",
+      "grade_downgraded_by": [],
+      "not_implemented": [],
+      "notes": [],
+      "reviewer": "fixture",
+      "run_id": "run-20261008T000003Z",
+      "schema_version": 11,
+      "stage": "P7",
+      "synthetic": false,
+      "unknown_record_keys": [],
+      "verdict": "BLOCKED",
+      "verdict_consistent": true,
+      "verifier": "fixture",
+      "warnings": []
+    },
+    "status": 200
+  },
+  "unattributed-detail-without-scope": {
+    "body": {
+      "error": {
+        "code": "validation_run_not_found",
+        "details": {
+          "id": "run-20261008T000003Z",
+          "kind": "validation_run"
+        },
+        "message": "validation_run run-20261008T000003Z not found",
+        "request_id": "aud_01M4DZZP54KV18BFFHSBV3PR00"
+      }
+    },
+    "status": 404
+  },
+  "unattributed-list": {
+    "body": {
+      "complete": true,
+      "corrupt_count": 1,
+      "count": 3,
+      "discovery": {
+        "capped": false,
+        "max_depth": 4,
+        "root_present": true,
+        "run_shaped_files": 3,
+        "scanned_dirs": 10,
+        "scanned_files": 7,
+        "unreadable_entries": 0
+      },
+      "duplicate_count": 0,
+      "has_more": false,
+      "ignored_entries": 3,
+      "ignored_samples": [],
+      "limit": 100,
+      "offset": 0,
+      "runs": [
+        {
+          "attribution": {
+            "projects": [],
+            "reason": "manifest_absent",
+            "status": "unattributed"
+          },
+          "case_counts": {
+            "blocked": 1,
+            "fail": 0,
+            "pass": 2,
+            "total": 3
+          },
+          "commit": "0000000000000000000000000000000000000000",
+          "core_version": "0.1.0",
+          "created_at": "2026-10-08T00:00:03.000000Z",
+          "evidence_grade": "unknown",
+          "grade_downgraded_by": [],
+          "manifest_status": "absent",
+          "mode": "unknown",
+          "mode_basis": "no bundle manifest on disk",
+          "record_sha256": "f82e0d0f52b55d99e250112280cff80136f7c35c3a7708ed52f6956e99bd91ca",
+          "record_status": "ok",
+          "run_id": "run-20261008T000003Z",
+          "schema_version": 11,
+          "stage": "P7",
+          "synthetic": false,
+          "verdict": "BLOCKED",
+          "verdict_consistent": true
+        },
+        {
+          "attribution": {
+            "projects": [
+              "prj_01M4DZZP40NSZCFGFRHBMV4F93"
+            ],
+            "status": "attributed"
+          },
+          "case_counts": {
+            "blocked": 0,
+            "fail": 0,
+            "pass": 1,
+            "total": 1
+          },
+          "commit": "0000000000000000000000000000000000000000",
+          "core_version": "0.1.0",
+          "created_at": "2026-10-08T00:00:01.000000Z",
+          "evidence_grade": "simulated",
+          "grade_downgraded_by": [
+            "T-1"
+          ],
+          "manifest_status": "frozen",
+          "mode": "real",
+          "mode_basis": "declared real with recorder provenance and project attribution",
+          "record_sha256": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+          "record_status": "ok",
+          "run_id": "run-20261008T000001Z",
+          "schema_version": 11,
+          "stage": "P7",
+          "synthetic": false,
+          "verdict": "PASS",
+          "verdict_consistent": true
+        },
+        {
+          "attribution": null,
+          "case_counts": {
+            "blocked": 0,
+            "fail": 0,
+            "pass": 0,
+            "total": 0
+          },
+          "commit": null,
+          "core_version": null,
+          "corrupt_reason": "unparseable: JSONDecodeError",
+          "created_at": null,
+          "evidence_grade": null,
+          "grade_downgraded_by": [],
+          "manifest_status": null,
+          "mode": null,
+          "mode_basis": null,
+          "record_sha256": "92072df399cb74703f8e86f450d552bc0bb01eeeb98a90985a1b7772c8fd0016",
+          "record_status": "corrupt",
+          "run_id": "run-20261008T000004Z",
+          "schema_version": null,
+          "stage": null,
+          "synthetic": false,
+          "verdict": null,
+          "verdict_consistent": null
+        }
+      ],
+      "total": 3,
+      "visibility": "grant_filtered"
+    },
+    "status": 200
+  },
+  "ungranted-actor-detail": {
+    "body": {
+      "error": {
+        "code": "validation_run_not_found",
+        "details": {
+          "id": "run-20261008T000001Z",
+          "kind": "validation_run"
+        },
+        "message": "validation_run run-20261008T000001Z not found",
+        "request_id": "aud_01M4DZZP5AP2RS9MPFGWCASS2A"
+      }
+    },
+    "status": 404
+  }
+}

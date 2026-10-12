@@ -1,0 +1,393 @@
+test_every_declared_path_escape_refuses_the_manifest (test_validation_read.ArtifactNegatives.test_every_declared_path_escape_refuses_the_manifest) ... jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+ok
+test_missing_and_tampered_files (test_validation_read.ArtifactNegatives.test_missing_and_tampered_files) ... jasmine-core: GET -> 404
+jasmine-core: GET -> 409
+jasmine-core: GET -> 200
+ok
+test_symlinked_file_and_intermediate_directory_are_refused (test_validation_read.ArtifactNegatives.test_symlinked_file_and_intermediate_directory_are_refused) ... jasmine-core: GET -> 404
+jasmine-core: GET -> 404
+jasmine-core: GET -> 200
+ok
+test_absent_manifest_is_a_200_that_does_not_reconstruct_history (test_validation_read.ConfigurationAndGrammars.test_absent_manifest_is_a_200_that_does_not_reconstruct_history) ... jasmine-core: GET -> 200
+ok
+test_corrupt_manifest_is_409_and_artifacts_are_unaddressable (test_validation_read.ConfigurationAndGrammars.test_corrupt_manifest_is_409_and_artifacts_are_unaddressable) ... jasmine-core: GET -> 409
+jasmine-core: GET -> 404
+ok
+test_corrupt_record_is_409_and_duplicate_stem_is_ambiguous (test_validation_read.ConfigurationAndGrammars.test_corrupt_record_is_409_and_duplicate_stem_is_ambiguous) ... jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+ok
+test_declared_mode_real_without_provenance_is_unknown (test_validation_read.ConfigurationAndGrammars.test_declared_mode_real_without_provenance_is_unknown) ... jasmine-core: GET -> 200
+ok
+test_malformed_ids_and_unknown_query_keys_are_400 (test_validation_read.ConfigurationAndGrammars.test_malformed_ids_and_unknown_query_keys_are_400) ... /private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745aa70>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ac50>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ae30>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b010>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b3d0>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b1f0>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745be20>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745a890>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745bf10>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745bd30>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530310>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530130>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745a5c0>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530040>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530220>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530400>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/migrations/__init__.py:182: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107531e40>
+  conn.execute(statement)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+ok
+test_mirrored_walk_agrees_with_fingerprint_hash_workspace_file (test_validation_read.ConfigurationAndGrammars.test_mirrored_walk_agrees_with_fingerprint_hash_workspace_file) ... ok
+test_missing_and_symlinked_roots_are_refused (test_validation_read.ConfigurationAndGrammars.test_missing_and_symlinked_roots_are_refused) ... jasmine-core: GET -> 503
+jasmine-core: GET -> 503
+ok
+test_root_unset_is_503_validation_not_configured (test_validation_read.ConfigurationAndGrammars.test_root_unset_is_503_validation_not_configured) ... jasmine-core: GET -> 503
+ok
+test_unknown_run_id_is_404_validation_run_not_found (test_validation_read.ConfigurationAndGrammars.test_unknown_run_id_is_404_validation_run_not_found) ... jasmine-core: GET -> 404
+ok
+test_all_five_routes_are_registered_with_validation_read (test_validation_read.ContractSurface.test_all_five_routes_are_registered_with_validation_read) ... ok
+test_contract_check_exits_two_when_the_ref_is_absent (test_validation_read.ContractSurface.test_contract_check_exits_two_when_the_ref_is_absent) ... ok
+test_frozen_contract_snapshot_matches_reads_py (test_validation_read.ContractSurface.test_frozen_contract_snapshot_matches_reads_py) ... ok
+test_redact_text_version_is_declared (test_validation_read.ContractSurface.test_redact_text_version_is_declared) ... ok
+test_all_filtered_out_reports_empty_reason (test_validation_read.PaginationAndCorruptRows.test_all_filtered_out_reports_empty_reason) ... jasmine-core: GET -> 200
+ok
+test_by_id_reads_still_work_when_a_sibling_subtree_is_unreadable (test_validation_read.PaginationAndCorruptRows.test_by_id_reads_still_work_when_a_sibling_subtree_is_unreadable) ... jasmine-core: GET -> 200
+ok
+test_empty_root_reports_empty_reason (test_validation_read.PaginationAndCorruptRows.test_empty_root_reports_empty_reason) ... jasmine-core: GET -> 200
+ok
+test_filters_and_corrupt_rows (test_validation_read.PaginationAndCorruptRows.test_filters_and_corrupt_rows) ... /opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ba60>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745bb50>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b970>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b790>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b6a0>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b5b0>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b4c0>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b100>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b3d0>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745bc40>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b880>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b2e0>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745a980>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ab60>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745af20>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ae30>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ad40>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+ok
+test_page_walk_has_no_duplicates_or_omissions (test_validation_read.PaginationAndCorruptRows.test_page_walk_has_no_duplicates_or_omissions) ... jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+<frozen posixpath>:82: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ae30>
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+ok
+test_unreadable_subtree_yields_503_index_incomplete (test_validation_read.PaginationAndCorruptRows.test_unreadable_subtree_yields_503_index_incomplete) ... jasmine-core: GET -> 503
+ok
+test_walk_caps_return_503_index_too_large (test_validation_read.PaginationAndCorruptRows.test_walk_caps_return_503_index_too_large) ... jasmine-core: GET -> 503
+jasmine-core: GET -> 503
+ok
+test_acl_grant_filtering_and_isolation (test_validation_read.PairedAuthorisation.test_acl_grant_filtering_and_isolation) ... jasmine-core: POST -> 201
+jasmine-core: POST -> 201
+jasmine-core: GET -> 200
+jasmine-core: GET -> 403
+jasmine-core: GET -> 404
+jasmine-core: GET -> 404
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+ok
+test_acl_with_no_grants_at_all_is_not_ready (test_validation_read.PairedAuthorisation.test_acl_with_no_grants_at_all_is_not_ready) ... jasmine-core: GET -> 503
+ok
+test_agent_keys_cannot_carry_validation_unattributed (test_validation_read.PairedAuthorisation.test_agent_keys_cannot_carry_validation_unattributed) ... ok
+test_single_user_grants_and_scope_refusal_on_the_same_resource (test_validation_read.PairedAuthorisation.test_single_user_grants_and_scope_refusal_on_the_same_resource) ... jasmine-core: GET -> 200
+jasmine-core: GET -> 403
+jasmine-core: GET -> 200
+jasmine-core: GET -> 403
+jasmine-core: GET -> 200
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ad40>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b2e0>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745af20>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745aa70>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b010>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745bc40>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ae30>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b5b0>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b6a0>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b790>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b970>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745bb50>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ba60>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b3d0>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b880>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745a980>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107531e40>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530220>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530400>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/audit.py:124: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530f40>
+  def summarise_error(exc: errors.CoreError) -> dict[str, Any]:
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+jasmine-core: GET -> 403
+jasmine-core: GET -> 401
+ok
+test_f1_a_corrupt_sibling_does_not_hide_a_parseable_record (test_validation_read.ReviewRegression.test_f1_a_corrupt_sibling_does_not_hide_a_parseable_record) ... jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+ok
+test_f1_a_stem_with_only_corrupt_files_is_corrupt_not_ambiguous (test_validation_read.ReviewRegression.test_f1_a_stem_with_only_corrupt_files_is_corrupt_not_ambiguous) ... jasmine-core: GET -> 409
+ok
+test_f1_two_parseable_records_still_refuse_the_stem (test_validation_read.ReviewRegression.test_f1_two_parseable_records_still_refuse_the_stem) ... jasmine-core: GET -> 409
+ok
+test_f2_a_record_five_levels_below_the_root_is_pruned (test_validation_read.ReviewRegression.test_f2_a_record_five_levels_below_the_root_is_pruned) ... jasmine-core: GET -> 200
+ok
+test_f2_a_record_four_levels_below_the_root_is_found (test_validation_read.ReviewRegression.test_f2_a_record_four_levels_below_the_root_is_found) ... jasmine-core: GET -> 200
+ok
+test_f3_raw_declared_path_components_refuse_the_manifest (test_validation_read.ReviewRegression.test_f3_raw_declared_path_components_refuse_the_manifest) ... jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+jasmine-core: GET -> 409
+ok
+test_f4_an_oversize_manifest_is_refused_without_being_read (test_validation_read.ReviewRegression.test_f4_an_oversize_manifest_is_refused_without_being_read) ... jasmine-core: GET -> 409
+ok
+test_f4_an_oversize_record_is_corrupt_rather_than_read (test_validation_read.ReviewRegression.test_f4_an_oversize_record_is_corrupt_rather_than_read) ... jasmine-core: GET -> 200
+ok
+test_f7_counters_describe_the_served_filtered_set (test_validation_read.ReviewRegression.test_f7_counters_describe_the_served_filtered_set) ... jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+ok
+test_n3_a_non_regular_run_shaped_entry_is_ignored_not_opened (test_validation_read.ReviewRegression.test_n3_a_non_regular_run_shaped_entry_is_ignored_not_opened) ... jasmine-core: GET -> 200
+ok
+test_every_served_field_matches_the_record_and_the_files (test_validation_read.ServedValuesMatchTheSource.test_every_served_field_matches_the_record_and_the_files) ... jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745a980>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b880>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b3d0>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ba60>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745bb50>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b100>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b790>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b6a0>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ae30>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b010>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745ad40>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530400>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b2e0>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745aa70>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745af20>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b5b0>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745bc40>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b970>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530220>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107531e40>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/private/tmp/p7-01-final-clone/src/jasmine_core/auth.py:189: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x107530040>
+  if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+ok
+test_labelled_synthetic_fail_path_end_to_end (test_validation_read.SyntheticFailFixture.test_labelled_synthetic_fail_path_end_to_end) ... jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+ok
+test_content_response_headers_are_not_renderable (test_validation_read.TheFiveRoutes.test_content_response_headers_are_not_renderable) ... jasmine-core: GET -> 200
+ok
+test_declared_credential_shaped_withholds_the_original (test_validation_read.TheFiveRoutes.test_declared_credential_shaped_withholds_the_original) ... jasmine-core: GET -> 403
+ok
+test_detail_manifest_artifact_and_content (test_validation_read.TheFiveRoutes.test_detail_manifest_artifact_and_content) ... jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+ok
+test_list_over_a_fixture_root (test_validation_read.TheFiveRoutes.test_list_over_a_fixture_root) ... jasmine-core: GET -> 200
+ok
+test_masked_masks_assignment_secret_and_original_is_withheld (test_validation_read.TheFiveRoutes.test_masked_masks_assignment_secret_and_original_is_withheld) ... jasmine-core: GET -> 200
+jasmine-core: GET -> 403
+ok
+test_non_text_content_is_415 (test_validation_read.TheFiveRoutes.test_non_text_content_is_415) ... jasmine-core: GET -> 415
+ok
+test_original_is_served_when_the_masker_is_a_no_op (test_validation_read.TheFiveRoutes.test_original_is_served_when_the_masker_is_a_no_op) ... jasmine-core: GET -> 200
+ok
+test_acceptance_criterion_1_real_fail_run_is_blocked (test_validation_read.TheRealNineRecords.test_acceptance_criterion_1_real_fail_run_is_blocked) ... ok
+test_nine_run_ids_verdicts_counts_and_chain (test_validation_read.TheRealNineRecords.test_nine_run_ids_verdicts_counts_and_chain) ... /opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745aa70>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+/opt/homebrew/Cellar/python@3.13/3.13.15/Frameworks/Python.framework/Versions/3.13/lib/python3.13/json/decoder.py:361: ResourceWarning: unclosed database in <sqlite3.Connection object at 0x10745b010>
+  obj, end = self.scan_once(s, idx)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+jasmine-core: GET -> 200
+ok
+
+----------------------------------------------------------------------
+Ran 48 tests in 1.964s
+
+OK

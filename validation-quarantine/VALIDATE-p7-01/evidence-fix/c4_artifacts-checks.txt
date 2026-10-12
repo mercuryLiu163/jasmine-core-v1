@@ -1,0 +1,218 @@
+[timing] #1 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_good 0.007s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-01-good-artifact-metadata.json
+[ok] good artifact metadata is 200
+[ok] good artifact integrity=match
+[ok] good declared_sha256 equals the validator's own hash
+[ok] good digests.original equals the validator's own hash
+[ok] good declared_bytes equals the file size
+[timing] #2 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_good/content 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-02-good-artifact-content.json
+[ok] good content is 200
+[ok] good served_sha256 matches the validator's own hash
+[ok] good masked==original when the masker is a no-op
+[timing] #3 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_missing 0.002s status=404
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-03-missing-artifact.json
+[ok] missing artifact is 404
+[ok] missing artifact code artifact_not_found
+[ok] missing artifact reason is 'missing'
+[timing] #4 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_tampered 0.002s status=409
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-04-tampered-artifact.json
+[ok] tampered artifact is 409
+[ok] tampered artifact code artifact_modified
+[timing] #5 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_tampered/content 0.002s status=409
+[ok] tampered content is refused too (409)
+[timing] #6 GET /v1/validation/runs/run-20261008T000004Z/manifest 0.003s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-05-manifest-integrity.json
+[ok] manifest reports the tampered file as mismatch
+[ok] manifest reports the missing file as missing
+[timing] #7 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_symfile 0.002s status=404
+[ok] symlink art_symfile artifact is 404
+[ok] symlink art_symfile reason is symlink_refused
+[timing] #8 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_symfile/content 0.002s status=404
+[ok] symlink art_symfile content is refused (404)
+[ok] manifest integrity art_symfile is symlink_refused
+[timing] #9 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_symdir 0.002s status=404
+[ok] symlink art_symdir artifact is 404
+[ok] symlink art_symdir reason is symlink_refused
+[timing] #10 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_symdir/content 0.002s status=404
+[ok] symlink art_symdir content is refused (404)
+[ok] manifest integrity art_symdir is symlink_refused
+[ok] canonical.looks_like_credential is False for db_password=...
+[ok] api_key JSON original is withheld whether or not looks_like_credential flags it
+[ok] canonical.redact_text actually masks the assignment
+[ok] mask_version is canonical.REDACT_TEXT_VERSION
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-06-validator-mask-computation.json
+[timing] #11 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_assign/content 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-07-assign-masked.json
+[ok] assign masked form is 200
+[ok] assign masked form reports form=masked
+[ok] assign masked content_is_original is false
+[ok] assign masked content equals the validator's redact_text
+[ok] assign masked_sha256 equals the validator's own digest
+[ok] assign served_sha256 equals masked_sha256
+[ok] assign masked content withholds the secret
+[ok] assign mask_algorithm is canonical.redact_text
+[timing] #12 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_assign/content?form=original 0.002s status=403
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-08-assign-original-withheld.json
+[ok] assign original form is 403
+[ok] assign original code is original_withheld
+[ok] assign original reason is mask_not_noop
+[ok] assign withheld details carry the masked_sha256
+[timing] #13 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_apikey/content 0.001s status=200
+[ok] api_key JSON is masked by form=masked
+[ok] api_key JSON masked content withholds the value
+[timing] #14 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_apikey/content?form=original 0.002s status=403
+[ok] api_key JSON original form is withheld (403)
+[timing] #15 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_html/content?download=1 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-09-html-download-response.json
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-10-html-download-headers.json
+[ok] html content request is 200
+[ok] html response Content-Type is JSON, not text/html
+[ok] html response sets X-Content-Type-Options: nosniff
+[ok] html response sets a default-src 'none' CSP
+[ok] html download sets attachment Content-Disposition
+[ok] raw response bytes are a JSON envelope, not an HTML page
+[ok] the HTML is carried as a JSON string field, not rendered
+[timing] #16 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_html/content?form=original&download=1 0.002s status=200
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-17-html-original-headers.json
+[ok] html original form is 200
+[ok] html original form Content-Type is still JSON
+[ok] html original form still sets nosniff
+[ok] html original form is a JSON envelope, not an HTML page
+[timing] #17 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_declared_secret/content 0.002s status=200
+[ok] declared-credential masked form is 200
+[timing] #18 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_declared_secret/content?form=original 0.002s status=403
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-18-declared-credential-withheld.json
+[ok] declared-credential original form is 403
+[ok] declared-credential reason is credential_shaped_declared
+[timing] #19 GET /v1/validation/runs/run-20261008T000004Z/artifacts/art_binary/content 0.002s status=415
+[ok] binary content is 415 unsupported_media_type
+[timing] #20 GET /v1/validation/runs/run-20261008T000100Z/manifest 0.002s status=409
+[ok] escape art_dotdot refuses the manifest (409)
+[ok] escape art_dotdot names validation_manifest_corrupt
+[ok] escape art_dotdot names the offending entry in rule
+[timing] #21 GET /v1/validation/runs/run-20261008T000100Z/artifacts/art_dotdot 0.001s status=404
+[ok] escape art_dotdot makes the artifact unaddressable (404)
+[ok] escape art_dotdot artifact reason is manifest_corrupt
+[timing] #22 GET /v1/validation/runs/run-20261008T000101Z/manifest 0.001s status=409
+[ok] escape art_nested_dotdot refuses the manifest (409)
+[ok] escape art_nested_dotdot names validation_manifest_corrupt
+[ok] escape art_nested_dotdot names the offending entry in rule
+[timing] #23 GET /v1/validation/runs/run-20261008T000101Z/artifacts/art_nested_dotdot 0.001s status=404
+[ok] escape art_nested_dotdot makes the artifact unaddressable (404)
+[ok] escape art_nested_dotdot artifact reason is manifest_corrupt
+[timing] #24 GET /v1/validation/runs/run-20261008T000102Z/manifest 0.002s status=409
+[ok] escape art_absolute refuses the manifest (409)
+[ok] escape art_absolute names validation_manifest_corrupt
+[ok] escape art_absolute names the offending entry in rule
+[timing] #25 GET /v1/validation/runs/run-20261008T000102Z/artifacts/art_absolute 0.001s status=404
+[ok] escape art_absolute makes the artifact unaddressable (404)
+[ok] escape art_absolute artifact reason is manifest_corrupt
+[timing] #26 GET /v1/validation/runs/run-20261008T000103Z/manifest 0.001s status=409
+[ok] escape art_drive refuses the manifest (409)
+[ok] escape art_drive names validation_manifest_corrupt
+[ok] escape art_drive names the offending entry in rule
+[timing] #27 GET /v1/validation/runs/run-20261008T000103Z/artifacts/art_drive 0.003s status=404
+[ok] escape art_drive makes the artifact unaddressable (404)
+[ok] escape art_drive artifact reason is manifest_corrupt
+[timing] #28 GET /v1/validation/runs/run-20261008T000104Z/manifest 0.002s status=409
+[ok] escape art_unc refuses the manifest (409)
+[ok] escape art_unc names validation_manifest_corrupt
+[ok] escape art_unc names the offending entry in rule
+[timing] #29 GET /v1/validation/runs/run-20261008T000104Z/artifacts/art_unc 0.001s status=404
+[ok] escape art_unc makes the artifact unaddressable (404)
+[ok] escape art_unc artifact reason is manifest_corrupt
+[timing] #30 GET /v1/validation/runs/run-20261008T000105Z/manifest 0.001s status=409
+[ok] escape art_url refuses the manifest (409)
+[ok] escape art_url names validation_manifest_corrupt
+[ok] escape art_url names the offending entry in rule
+[timing] #31 GET /v1/validation/runs/run-20261008T000105Z/artifacts/art_url 0.001s status=404
+[ok] escape art_url makes the artifact unaddressable (404)
+[ok] escape art_url artifact reason is manifest_corrupt
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-11-escape-attempts.json
+[timing] #32 GET /v1/validation/runs/run-20261008T000300Z/manifest 0.002s status=409
+[ok] raw declared path empty_component ('a//b') refuses the manifest (409)
+[ok] raw declared path empty_component names validation_manifest_corrupt
+[ok] raw declared path empty_component names the path rule (rule mentions 'path')
+[timing] #33 GET /v1/validation/runs/run-20261008T000300Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path empty_component makes the artifact unaddressable (404)
+[ok] raw declared path empty_component reason is manifest_corrupt
+[timing] #34 GET /v1/validation/runs/run-20261008T000301Z/manifest 0.001s status=409
+[ok] raw declared path dot_component ('a/./b') refuses the manifest (409)
+[ok] raw declared path dot_component names validation_manifest_corrupt
+[ok] raw declared path dot_component names the path rule (rule mentions 'path')
+[timing] #35 GET /v1/validation/runs/run-20261008T000301Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dot_component makes the artifact unaddressable (404)
+[ok] raw declared path dot_component reason is manifest_corrupt
+[timing] #36 GET /v1/validation/runs/run-20261008T000302Z/manifest 0.001s status=409
+[ok] raw declared path trailing_slash ('a/b/') refuses the manifest (409)
+[ok] raw declared path trailing_slash names validation_manifest_corrupt
+[ok] raw declared path trailing_slash names the path rule (rule mentions 'path')
+[timing] #37 GET /v1/validation/runs/run-20261008T000302Z/artifacts/art_raw 0.002s status=404
+[ok] raw declared path trailing_slash makes the artifact unaddressable (404)
+[ok] raw declared path trailing_slash reason is manifest_corrupt
+[timing] #38 GET /v1/validation/runs/run-20261008T000303Z/manifest 0.002s status=409
+[ok] raw declared path leading_dot_slash ('./a') refuses the manifest (409)
+[ok] raw declared path leading_dot_slash names validation_manifest_corrupt
+[ok] raw declared path leading_dot_slash names the path rule (rule mentions 'path')
+[timing] #39 GET /v1/validation/runs/run-20261008T000303Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path leading_dot_slash makes the artifact unaddressable (404)
+[ok] raw declared path leading_dot_slash reason is manifest_corrupt
+[timing] #40 GET /v1/validation/runs/run-20261008T000304Z/manifest 0.001s status=409
+[ok] raw declared path dot_alone ('.') refuses the manifest (409)
+[ok] raw declared path dot_alone names validation_manifest_corrupt
+[ok] raw declared path dot_alone names the path rule (rule mentions 'path')
+[timing] #41 GET /v1/validation/runs/run-20261008T000304Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dot_alone makes the artifact unaddressable (404)
+[ok] raw declared path dot_alone reason is manifest_corrupt
+[timing] #42 GET /v1/validation/runs/run-20261008T000305Z/manifest 0.001s status=409
+[ok] raw declared path dotdot_substring_name ('artifacts/note..txt') refuses the manifest (409)
+[ok] raw declared path dotdot_substring_name names validation_manifest_corrupt
+[ok] raw declared path dotdot_substring_name names the path rule (rule mentions 'path')
+[timing] #43 GET /v1/validation/runs/run-20261008T000305Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dotdot_substring_name makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_substring_name reason is manifest_corrupt
+[timing] #44 GET /v1/validation/runs/run-20261008T000306Z/manifest 0.001s status=409
+[ok] raw declared path dotdot_substring_mid ('a..b') refuses the manifest (409)
+[ok] raw declared path dotdot_substring_mid names validation_manifest_corrupt
+[ok] raw declared path dotdot_substring_mid names the path rule (rule mentions 'path')
+[timing] #45 GET /v1/validation/runs/run-20261008T000306Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dotdot_substring_mid makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_substring_mid reason is manifest_corrupt
+[timing] #46 GET /v1/validation/runs/run-20261008T000307Z/manifest 0.001s status=409
+[ok] raw declared path dotdot_segment_name ('artifacts/..hidden') refuses the manifest (409)
+[ok] raw declared path dotdot_segment_name names validation_manifest_corrupt
+[ok] raw declared path dotdot_segment_name names the path rule (rule mentions 'path')
+[timing] #47 GET /v1/validation/runs/run-20261008T000307Z/artifacts/art_raw 0.002s status=404
+[ok] raw declared path dotdot_segment_name makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_segment_name reason is manifest_corrupt
+[timing] #48 GET /v1/validation/runs/run-20261008T000308Z/manifest 0.003s status=409
+[ok] raw declared path dotdot_segment ('artifacts/../loot.txt') refuses the manifest (409)
+[ok] raw declared path dotdot_segment names validation_manifest_corrupt
+[ok] raw declared path dotdot_segment names the path rule (rule mentions 'path')
+[timing] #49 GET /v1/validation/runs/run-20261008T000308Z/artifacts/art_raw 0.001s status=404
+[ok] raw declared path dotdot_segment makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_segment reason is manifest_corrupt
+[timing] #50 GET /v1/validation/runs/run-20261008T000309Z/manifest 0.001s status=409
+[ok] raw declared path dotdot_encoded ('..%2Fb') refuses the manifest (409)
+[ok] raw declared path dotdot_encoded names validation_manifest_corrupt
+[ok] raw declared path dotdot_encoded names the path rule (rule mentions 'path')
+[timing] #51 GET /v1/validation/runs/run-20261008T000309Z/artifacts/art_raw 0.002s status=404
+[ok] raw declared path dotdot_encoded makes the artifact unaddressable (404)
+[ok] raw declared path dotdot_encoded reason is manifest_corrupt
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-19-raw-declared-paths.json
+[timing] #52 GET /v1/validation/runs/run-20261008T000401Z/manifest 0.002s status=200
+[ok] legit nested bundle manifest is 200
+[ok] legit declared path artifacts/name.txt is served match
+[ok] legit nested path artifacts/sub/name.txt is served match
+[timing] #53 GET /v1/validation/runs/run-20261008T000401Z/artifacts/art_flat 0.002s status=200
+[ok] legit art_flat metadata is 200
+[timing] #54 GET /v1/validation/runs/run-20261008T000401Z/artifacts/art_flat/content 0.002s status=200
+[ok] legit art_flat content is 200 with the right digest
+[timing] #55 GET /v1/validation/runs/run-20261008T000401Z/artifacts/art_nested 0.002s status=200
+[ok] legit art_nested metadata is 200
+[timing] #56 GET /v1/validation/runs/run-20261008T000401Z/artifacts/art_nested/content 0.002s status=200
+[ok] legit art_nested content is 200 with the right digest
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-12-validator-file-digests.json
+--- wrote /Users/mercuryliu/Public/AgentApp/Jasmine Mesh/_worktrees/p7-01/validation-quarantine/VALIDATE-p7-01/evidence-fix/c4-13-criterion4-report.json
+[timing-summary] {"max_seconds": 0.0068, "over_10s": [], "over_5s": [], "requests": 56, "requests_without_status": [], "total_seconds": 0.0964, "transport_retries": 0}

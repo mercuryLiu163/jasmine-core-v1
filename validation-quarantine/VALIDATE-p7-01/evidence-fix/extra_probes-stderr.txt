@@ -1,0 +1,5 @@
+jasmine-core: GET -> 503
+jasmine-core: GET -> 503
+jasmine-core: GET -> 400
+jasmine-core: GET -> 400
+jasmine-core: POST -> 405

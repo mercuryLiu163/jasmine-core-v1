@@ -1,0 +1,2703 @@
+[
+  {
+    "api": "run-20260929T162925Z",
+    "field": "list.run_id",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "run-20260929T162925Z"
+  },
+  {
+    "api": "P0",
+    "field": "list.stage",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T16:29:25.135065Z",
+    "field": "list.created_at",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "2026-09-29T16:29:25.135065Z"
+  },
+  {
+    "api": "46cf99f295f86e1db8104c9c17f703e8cba3c389",
+    "field": "list.commit",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "46cf99f295f86e1db8104c9c17f703e8cba3c389"
+  },
+  {
+    "api": 2,
+    "field": "list.schema_version",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "list.core_version",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "PASS",
+    "field": "list.verdict",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "PASS"
+  },
+  {
+    "api": {
+      "blocked": 0,
+      "fail": 0,
+      "pass": 7,
+      "total": 7
+    },
+    "field": "list.case_counts",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": {
+      "blocked": 0,
+      "fail": 0,
+      "pass": 7,
+      "total": 7
+    }
+  },
+  {
+    "api": "90e97041c61ad53adab25cea5a537cd685f8a7c9e40218decaaa3da4ab8b0f8c",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "90e97041c61ad53adab25cea5a537cd685f8a7c9e40218decaaa3da4ab8b0f8c"
+  },
+  {
+    "api": false,
+    "field": "list.synthetic",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": false
+  },
+  {
+    "api": "absent",
+    "field": "list.manifest_status",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "absent"
+  },
+  {
+    "api": "run-20260929T162925Z",
+    "field": "detail.run_id",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "run-20260929T162925Z"
+  },
+  {
+    "api": "P0",
+    "field": "detail.stage",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T16:29:25.135065Z",
+    "field": "detail.created_at",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "2026-09-29T16:29:25.135065Z"
+  },
+  {
+    "api": "46cf99f295f86e1db8104c9c17f703e8cba3c389",
+    "field": "detail.commit",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "46cf99f295f86e1db8104c9c17f703e8cba3c389"
+  },
+  {
+    "api": 2,
+    "field": "detail.schema_version",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "detail.core_version",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "PASS",
+    "field": "detail.verdict",
+    "ok": true,
+    "scope": "run-20260929T162925Z",
+    "source": "PASS"
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T01",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T02",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T03",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T04",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T05",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T06",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T07",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162925Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": "run-20260929T162307Z",
+    "field": "list.run_id",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "run-20260929T162307Z"
+  },
+  {
+    "api": "P0",
+    "field": "list.stage",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T16:23:07.302917Z",
+    "field": "list.created_at",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "2026-09-29T16:23:07.302917Z"
+  },
+  {
+    "api": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64",
+    "field": "list.commit",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64"
+  },
+  {
+    "api": 2,
+    "field": "list.schema_version",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "list.core_version",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "PASS",
+    "field": "list.verdict",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "PASS"
+  },
+  {
+    "api": {
+      "blocked": 0,
+      "fail": 0,
+      "pass": 7,
+      "total": 7
+    },
+    "field": "list.case_counts",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": {
+      "blocked": 0,
+      "fail": 0,
+      "pass": 7,
+      "total": 7
+    }
+  },
+  {
+    "api": "a6c4462f7691e309fba945ef9571c28766355743ea8cd0b37611aa15fbb68cac",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "a6c4462f7691e309fba945ef9571c28766355743ea8cd0b37611aa15fbb68cac"
+  },
+  {
+    "api": false,
+    "field": "list.synthetic",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": false
+  },
+  {
+    "api": "absent",
+    "field": "list.manifest_status",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "absent"
+  },
+  {
+    "api": "run-20260929T162307Z",
+    "field": "detail.run_id",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "run-20260929T162307Z"
+  },
+  {
+    "api": "P0",
+    "field": "detail.stage",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T16:23:07.302917Z",
+    "field": "detail.created_at",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "2026-09-29T16:23:07.302917Z"
+  },
+  {
+    "api": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64",
+    "field": "detail.commit",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "59ee8c449e53cd3d416b70e61cb168f18c1d8c64"
+  },
+  {
+    "api": 2,
+    "field": "detail.schema_version",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "detail.core_version",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "PASS",
+    "field": "detail.verdict",
+    "ok": true,
+    "scope": "run-20260929T162307Z",
+    "source": "PASS"
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T01",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T02",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T03",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T04",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T05",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T06",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T07",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T162307Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": "run-20260929T145257Z",
+    "field": "list.run_id",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "run-20260929T145257Z"
+  },
+  {
+    "api": "P0",
+    "field": "list.stage",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:52:57.450292Z",
+    "field": "list.created_at",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "2026-09-29T14:52:57.450292Z"
+  },
+  {
+    "api": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+    "field": "list.commit",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6"
+  },
+  {
+    "api": 2,
+    "field": "list.schema_version",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "list.core_version",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "list.verdict",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    },
+    "field": "list.case_counts",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    }
+  },
+  {
+    "api": "ee61f802151dfc0a791dd3dbaf11e2a033d944b5e0ed69b0bd1f89e4439154f2",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "ee61f802151dfc0a791dd3dbaf11e2a033d944b5e0ed69b0bd1f89e4439154f2"
+  },
+  {
+    "api": false,
+    "field": "list.synthetic",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": false
+  },
+  {
+    "api": "absent",
+    "field": "list.manifest_status",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "absent"
+  },
+  {
+    "api": "run-20260929T145257Z",
+    "field": "detail.run_id",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "run-20260929T145257Z"
+  },
+  {
+    "api": "P0",
+    "field": "detail.stage",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:52:57.450292Z",
+    "field": "detail.created_at",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "2026-09-29T14:52:57.450292Z"
+  },
+  {
+    "api": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+    "field": "detail.commit",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6"
+  },
+  {
+    "api": 2,
+    "field": "detail.schema_version",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "detail.core_version",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "detail.verdict",
+    "ok": true,
+    "scope": "run-20260929T145257Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T01",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T02",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T03",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T04",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T05",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T06",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": "BLOCKED",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T07",
+    "source": "BLOCKED"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T145257Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": "run-20260929T161915Z",
+    "field": "list.run_id",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "run-20260929T161915Z"
+  },
+  {
+    "api": "P0",
+    "field": "list.stage",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T16:19:15.513570Z",
+    "field": "list.created_at",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "2026-09-29T16:19:15.513570Z"
+  },
+  {
+    "api": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+    "field": "list.commit",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6"
+  },
+  {
+    "api": 2,
+    "field": "list.schema_version",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "list.core_version",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "PASS",
+    "field": "list.verdict",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "PASS"
+  },
+  {
+    "api": {
+      "blocked": 0,
+      "fail": 0,
+      "pass": 7,
+      "total": 7
+    },
+    "field": "list.case_counts",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": {
+      "blocked": 0,
+      "fail": 0,
+      "pass": 7,
+      "total": 7
+    }
+  },
+  {
+    "api": "df079d9e8e10fa5eedc36af561dcab3df9b978f27a5937685c108fa1a0a582e2",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "df079d9e8e10fa5eedc36af561dcab3df9b978f27a5937685c108fa1a0a582e2"
+  },
+  {
+    "api": false,
+    "field": "list.synthetic",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": false
+  },
+  {
+    "api": "absent",
+    "field": "list.manifest_status",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "absent"
+  },
+  {
+    "api": "run-20260929T161915Z",
+    "field": "detail.run_id",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "run-20260929T161915Z"
+  },
+  {
+    "api": "P0",
+    "field": "detail.stage",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T16:19:15.513570Z",
+    "field": "detail.created_at",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "2026-09-29T16:19:15.513570Z"
+  },
+  {
+    "api": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6",
+    "field": "detail.commit",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "6dd2cc4b8a5a7934961a10ebad2999713b3db8f6"
+  },
+  {
+    "api": 2,
+    "field": "detail.schema_version",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "detail.core_version",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "PASS",
+    "field": "detail.verdict",
+    "ok": true,
+    "scope": "run-20260929T161915Z",
+    "source": "PASS"
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T01",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T02",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T03",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T04",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T05",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T06",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T07",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T161915Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": "run-20260929T144539Z",
+    "field": "list.run_id",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "run-20260929T144539Z"
+  },
+  {
+    "api": "P0",
+    "field": "list.stage",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:45:39.604744Z",
+    "field": "list.created_at",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "2026-09-29T14:45:39.604744Z"
+  },
+  {
+    "api": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294",
+    "field": "list.commit",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294"
+  },
+  {
+    "api": 2,
+    "field": "list.schema_version",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "list.core_version",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "list.verdict",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    },
+    "field": "list.case_counts",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    }
+  },
+  {
+    "api": "201d3711301d462e89b02a9e2567ed3f94620b3ec0a6c83b98b3b873b5f86860",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "201d3711301d462e89b02a9e2567ed3f94620b3ec0a6c83b98b3b873b5f86860"
+  },
+  {
+    "api": false,
+    "field": "list.synthetic",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": false
+  },
+  {
+    "api": "absent",
+    "field": "list.manifest_status",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "absent"
+  },
+  {
+    "api": "run-20260929T144539Z",
+    "field": "detail.run_id",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "run-20260929T144539Z"
+  },
+  {
+    "api": "P0",
+    "field": "detail.stage",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:45:39.604744Z",
+    "field": "detail.created_at",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "2026-09-29T14:45:39.604744Z"
+  },
+  {
+    "api": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294",
+    "field": "detail.commit",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "9dfc855ca55f40fb20991a6d9c0df0bb9c338294"
+  },
+  {
+    "api": 2,
+    "field": "detail.schema_version",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "detail.core_version",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "detail.verdict",
+    "ok": true,
+    "scope": "run-20260929T144539Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T01",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T02",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T03",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T04",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T05",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T06",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": "BLOCKED",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T07",
+    "source": "BLOCKED"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T144539Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": "run-20260929T143845Z",
+    "field": "list.run_id",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "run-20260929T143845Z"
+  },
+  {
+    "api": "P0",
+    "field": "list.stage",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:38:45.371633Z",
+    "field": "list.created_at",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "2026-09-29T14:38:45.371633Z"
+  },
+  {
+    "api": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4",
+    "field": "list.commit",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4"
+  },
+  {
+    "api": 2,
+    "field": "list.schema_version",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "list.core_version",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "list.verdict",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    },
+    "field": "list.case_counts",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    }
+  },
+  {
+    "api": "18dfa9066828cd6d5cb82c57a08bc60a0788f538691195d7a24110f4152d88eb",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "18dfa9066828cd6d5cb82c57a08bc60a0788f538691195d7a24110f4152d88eb"
+  },
+  {
+    "api": false,
+    "field": "list.synthetic",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": false
+  },
+  {
+    "api": "absent",
+    "field": "list.manifest_status",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "absent"
+  },
+  {
+    "api": "run-20260929T143845Z",
+    "field": "detail.run_id",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "run-20260929T143845Z"
+  },
+  {
+    "api": "P0",
+    "field": "detail.stage",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:38:45.371633Z",
+    "field": "detail.created_at",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "2026-09-29T14:38:45.371633Z"
+  },
+  {
+    "api": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4",
+    "field": "detail.commit",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "a96531741babfb44b3ee3df4b2ae686b6cb0fbf4"
+  },
+  {
+    "api": 2,
+    "field": "detail.schema_version",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "detail.core_version",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "detail.verdict",
+    "ok": true,
+    "scope": "run-20260929T143845Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T01",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T02",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T03",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T04",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T05",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T06",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": "BLOCKED",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T07",
+    "source": "BLOCKED"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143845Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": "run-20260929T142847Z",
+    "field": "list.run_id",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "run-20260929T142847Z"
+  },
+  {
+    "api": "P0",
+    "field": "list.stage",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:28:47.910084Z",
+    "field": "list.created_at",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "2026-09-29T14:28:47.910084Z"
+  },
+  {
+    "api": "84e6357c7beff8384254c394793d162e7fd13b11",
+    "field": "list.commit",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "84e6357c7beff8384254c394793d162e7fd13b11"
+  },
+  {
+    "api": 2,
+    "field": "list.schema_version",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "list.core_version",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "list.verdict",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    },
+    "field": "list.case_counts",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    }
+  },
+  {
+    "api": "294d9fb5962956585b7bb57892371c079667c55b09e6026ae7fecbfb4b000de0",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "294d9fb5962956585b7bb57892371c079667c55b09e6026ae7fecbfb4b000de0"
+  },
+  {
+    "api": false,
+    "field": "list.synthetic",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": false
+  },
+  {
+    "api": "absent",
+    "field": "list.manifest_status",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "absent"
+  },
+  {
+    "api": "run-20260929T142847Z",
+    "field": "detail.run_id",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "run-20260929T142847Z"
+  },
+  {
+    "api": "P0",
+    "field": "detail.stage",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:28:47.910084Z",
+    "field": "detail.created_at",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "2026-09-29T14:28:47.910084Z"
+  },
+  {
+    "api": "84e6357c7beff8384254c394793d162e7fd13b11",
+    "field": "detail.commit",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "84e6357c7beff8384254c394793d162e7fd13b11"
+  },
+  {
+    "api": 2,
+    "field": "detail.schema_version",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "detail.core_version",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "detail.verdict",
+    "ok": true,
+    "scope": "run-20260929T142847Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T01",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T02",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T03",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T04",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T05",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T06",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": "BLOCKED",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T07",
+    "source": "BLOCKED"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T142847Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": "run-20260929T143156Z",
+    "field": "list.run_id",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "run-20260929T143156Z"
+  },
+  {
+    "api": "P0",
+    "field": "list.stage",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:31:56.826382Z",
+    "field": "list.created_at",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "2026-09-29T14:31:56.826382Z"
+  },
+  {
+    "api": "160393cad180e56f6aefd2f55d84808fecf42172",
+    "field": "list.commit",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "160393cad180e56f6aefd2f55d84808fecf42172"
+  },
+  {
+    "api": 2,
+    "field": "list.schema_version",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "list.core_version",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "list.verdict",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    },
+    "field": "list.case_counts",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    }
+  },
+  {
+    "api": "b42e3c2985bc35f45a870930501bd88ec4e4fa49b8e47dfdcd3cbaf68afb67a4",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "b42e3c2985bc35f45a870930501bd88ec4e4fa49b8e47dfdcd3cbaf68afb67a4"
+  },
+  {
+    "api": false,
+    "field": "list.synthetic",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": false
+  },
+  {
+    "api": "absent",
+    "field": "list.manifest_status",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "absent"
+  },
+  {
+    "api": "run-20260929T143156Z",
+    "field": "detail.run_id",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "run-20260929T143156Z"
+  },
+  {
+    "api": "P0",
+    "field": "detail.stage",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T14:31:56.826382Z",
+    "field": "detail.created_at",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "2026-09-29T14:31:56.826382Z"
+  },
+  {
+    "api": "160393cad180e56f6aefd2f55d84808fecf42172",
+    "field": "detail.commit",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "160393cad180e56f6aefd2f55d84808fecf42172"
+  },
+  {
+    "api": 2,
+    "field": "detail.schema_version",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": 2
+  },
+  {
+    "api": "0.1.0",
+    "field": "detail.core_version",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "detail.verdict",
+    "ok": true,
+    "scope": "run-20260929T143156Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T01",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T02",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T03",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T04",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T05",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T06",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": "BLOCKED",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T07",
+    "source": "BLOCKED"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T143156Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": "run-20260929T173423Z",
+    "field": "list.run_id",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "run-20260929T173423Z"
+  },
+  {
+    "api": "P0",
+    "field": "list.stage",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T17:34:23.759223Z",
+    "field": "list.created_at",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "2026-09-29T17:34:23.759223Z"
+  },
+  {
+    "api": "67bdbfc2479d8e1767a058e06ab826de57d3c919",
+    "field": "list.commit",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "67bdbfc2479d8e1767a058e06ab826de57d3c919"
+  },
+  {
+    "api": 4,
+    "field": "list.schema_version",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": 4
+  },
+  {
+    "api": "0.1.0",
+    "field": "list.core_version",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "list.verdict",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    },
+    "field": "list.case_counts",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": {
+      "blocked": 1,
+      "fail": 0,
+      "pass": 6,
+      "total": 7
+    }
+  },
+  {
+    "api": "80b130e6c2783905e1569ef604b59278f0a958a7077416e757d2c60c45ff9aa2",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "80b130e6c2783905e1569ef604b59278f0a958a7077416e757d2c60c45ff9aa2"
+  },
+  {
+    "api": false,
+    "field": "list.synthetic",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": false
+  },
+  {
+    "api": "absent",
+    "field": "list.manifest_status",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "absent"
+  },
+  {
+    "api": "run-20260929T173423Z",
+    "field": "detail.run_id",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "run-20260929T173423Z"
+  },
+  {
+    "api": "P0",
+    "field": "detail.stage",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "P0"
+  },
+  {
+    "api": "2026-09-29T17:34:23.759223Z",
+    "field": "detail.created_at",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "2026-09-29T17:34:23.759223Z"
+  },
+  {
+    "api": "67bdbfc2479d8e1767a058e06ab826de57d3c919",
+    "field": "detail.commit",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "67bdbfc2479d8e1767a058e06ab826de57d3c919"
+  },
+  {
+    "api": 4,
+    "field": "detail.schema_version",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": 4
+  },
+  {
+    "api": "0.1.0",
+    "field": "detail.core_version",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "0.1.0"
+  },
+  {
+    "api": "BLOCKED",
+    "field": "detail.verdict",
+    "ok": true,
+    "scope": "run-20260929T173423Z",
+    "source": "BLOCKED"
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T01",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T01",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T02",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T02",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T03",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T03",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T04",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T04",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T05",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T05",
+    "source": null
+  },
+  {
+    "api": "PASS",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T06",
+    "source": "PASS"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T06",
+    "source": null
+  },
+  {
+    "api": "BLOCKED",
+    "field": "verdict",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T07",
+    "source": "BLOCKED"
+  },
+  {
+    "api": null,
+    "field": "failure_class",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": null,
+    "field": "failure_output",
+    "ok": true,
+    "scope": "run-20260929T173423Z/P0-T07",
+    "source": null
+  },
+  {
+    "api": "19dfce54479f3a1966f526107e699c21e95d0a49a3e13c88df0fb7d745e32ade",
+    "field": "manifest_sha256",
+    "ok": true,
+    "scope": "manifest",
+    "source": "19dfce54479f3a1966f526107e699c21e95d0a49a3e13c88df0fb7d745e32ade"
+  },
+  {
+    "api": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+    "field": "declared_sha256",
+    "ok": true,
+    "scope": "art_good",
+    "source": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+  },
+  {
+    "api": 13,
+    "field": "declared_bytes",
+    "ok": true,
+    "scope": "art_good",
+    "source": 13
+  },
+  {
+    "api": 13,
+    "field": "bytes",
+    "ok": true,
+    "scope": "art_good",
+    "source": 13
+  },
+  {
+    "api": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+    "field": "digests.original",
+    "ok": true,
+    "scope": "art_good",
+    "source": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+  },
+  {
+    "api": "match",
+    "field": "integrity",
+    "ok": true,
+    "scope": "art_good",
+    "source": "match"
+  },
+  {
+    "api": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+    "field": "original_sha256",
+    "ok": true,
+    "scope": "art_good content",
+    "source": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+  },
+  {
+    "api": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+    "field": "masked_sha256",
+    "ok": true,
+    "scope": "art_good content",
+    "source": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+  },
+  {
+    "api": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772",
+    "field": "served_sha256",
+    "ok": true,
+    "scope": "art_good content",
+    "source": "a0145b5ca231a2598e9eea29cd9ca0dc95f5df9bcb2bb39b6462cf6f523e0772"
+  },
+  {
+    "api": "hello bundle\n",
+    "field": "content",
+    "ok": true,
+    "scope": "art_good content",
+    "source": "hello bundle\n"
+  },
+  {
+    "api": 13,
+    "field": "bytes",
+    "ok": true,
+    "scope": "art_good content",
+    "source": 13
+  },
+  {
+    "api": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+    "field": "declared_sha256",
+    "ok": true,
+    "scope": "art_assign",
+    "source": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5"
+  },
+  {
+    "api": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+    "field": "digests.original",
+    "ok": true,
+    "scope": "art_assign",
+    "source": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5"
+  },
+  {
+    "api": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+    "field": "digests.masked",
+    "ok": true,
+    "scope": "art_assign",
+    "source": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d"
+  },
+  {
+    "api": "match",
+    "field": "integrity",
+    "ok": true,
+    "scope": "art_assign",
+    "source": "match"
+  },
+  {
+    "api": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5",
+    "field": "original_sha256",
+    "ok": true,
+    "scope": "art_assign content",
+    "source": "c1e2d7e3970ae92e50abc2c237c23e72ef70dad9c06aea4656f53952d3324ec5"
+  },
+  {
+    "api": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+    "field": "masked_sha256",
+    "ok": true,
+    "scope": "art_assign content",
+    "source": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d"
+  },
+  {
+    "api": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d",
+    "field": "served_sha256",
+    "ok": true,
+    "scope": "art_assign content",
+    "source": "a0d5c88f0e06484f93f8ed66caa3609a3ed9ff86574204b73c837fe79b32082d"
+  },
+  {
+    "api": "2026-10-08 INFO db_password=[REDACTED] in the log line\n",
+    "field": "content",
+    "ok": true,
+    "scope": "art_assign content",
+    "source": "2026-10-08 INFO db_password=[REDACTED] in the log line\n"
+  },
+  {
+    "api": "canonical.redact_text",
+    "field": "mask_algorithm",
+    "ok": true,
+    "scope": "art_assign content",
+    "source": "canonical.redact_text"
+  },
+  {
+    "api": "1",
+    "field": "mask_version",
+    "ok": true,
+    "scope": "art_assign content",
+    "source": "1"
+  },
+  {
+    "api": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55",
+    "field": "list.record_sha256",
+    "ok": true,
+    "scope": "fixture run",
+    "source": "2b3a1456d6417789377e58ff7e473a311085829aaa247ff8e50480c77eb5cc55"
+  }
+]
