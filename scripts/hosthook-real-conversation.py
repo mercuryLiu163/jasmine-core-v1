@@ -366,8 +366,9 @@ def _run_turn(args: argparse.Namespace, manifest: dict[str, Any], run_dir: Path,
     command = _turn_command(args.agent, manifest["cli"]["path"], prompt, args, allow_bash=allow_bash)
     timed_out = False
     try:
+        # stdin must be closed: `codex exec` appends piped stdin to the prompt and otherwise waits for EOF forever.
         done = subprocess.run(command, cwd=manifest["project_dir"], capture_output=True, text=True,
-                              timeout=args.timeout, env=dict(os.environ))
+                              timeout=args.timeout, env=dict(os.environ), stdin=subprocess.DEVNULL)
         stdout, stderr, code = done.stdout, done.stderr, done.returncode
     except subprocess.TimeoutExpired as exc:
         timed_out, code = True, None
