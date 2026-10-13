@@ -52,8 +52,11 @@ Not handled (ignored, pass-through output): `PermissionRequest`, `SubagentStart/
 
 ## Config
 
-Installing the hooks (writing `.codex/hooks.json`, the trust review in `/hooks`) is not part of H1; the command line to
-register is `jasmine-core hook --agent codex --binding <project>/.jasmine/host-binding.json`. Hooks require explicit user trust in Codex.
+H2 added `jasmine-core hooks install --agent codex --project-dir <dir> --binding <file>`, which writes handlers for
+`SessionStart`, `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, `PreCompact`, `PostCompact`, `Stop` and `SessionEnd` into
+`<dir>/.codex/hooks.json` only (ADR 0017 section 16.1). Hooks still require explicit user trust in Codex (`/hooks`); the
+installer cannot grant it. Not verified: that Codex loads these entries or accepts the `SessionEnd`/`PostCompact` names.
+Before H2, the command line to register was `jasmine-core hook --agent codex --binding <project>/.jasmine/host-binding.json`.
 
 ## Unverified
 

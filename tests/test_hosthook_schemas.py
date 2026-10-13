@@ -97,6 +97,23 @@ class SchemaMatchesImplementation(unittest.TestCase):
         broken = {**codex.CAPABILITIES, "can_ask": "no"}
         self.assertTrue(validate(broken, load("host-hook-capabilities.schema.json")))
 
+    def test_the_claude_code_capability_declaration_validates_and_requests_conform(self) -> None:
+        from datetime import datetime, timezone
+        from jasmine_core import ids
+        from jasmine_core.hosthook.binding import Binding
+        from jasmine_core.hosthook.dialects import claude_code
+        from test_hosthook_dialect_claude_code import ALL_FIXTURES, fixture as cc_fixture
+        self.assertEqual(validate(claude_code.CAPABILITIES, load("host-hook-capabilities.schema.json")), [])
+        binding = Binding(path=Path("/x/.jasmine/host-binding.json"), core_url="http://127.0.0.1:1",
+                          host_id=ids.new_id("hst"), project_id=ids.new_id("prj"), task_id=ids.new_id("tsk"),
+                          step_id=None, api_key_file=Path("/x/k"), human_api_key_file=None,
+                          on_unavailable="deny", spool_dir=Path("/x/s"), timeout_seconds=None)
+        now = datetime(2026, 10, 12, 8, 30, 15, tzinfo=timezone.utc)
+        for name in ALL_FIXTURES:
+            with self.subTest(name):
+                request = runtime.build_request(claude_code, claude_code.translate_in(cc_fixture(name), now), binding, now)
+                self.assertEqual(validate(request, load("host-hook-request.schema.json")), [])
+
     def test_every_runtime_request_validates_and_bad_ones_do_not(self) -> None:
         from jasmine_core import ids
         from jasmine_core.hosthook.binding import Binding

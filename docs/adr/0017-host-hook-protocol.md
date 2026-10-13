@@ -205,7 +205,7 @@ resolved through the filesystem (`realpath` of the existing parent) and both for
 ## 9. Dialects and capability declaration
 
 Registry in `src/jasmine_core/hosthook/dialects/`; one module per agent exposing `NAME`, `CAPABILITIES`
-(also stored as `<name>.capabilities.json`), `translate_in(native, ctx)` and `translate_out(event, response, ctx)`.
+(also stored as `<module>.capabilities.json`; the module name is the agent name with `-` written as `_`), `translate_in(native, ctx)` and `translate_out(event, response, ctx)`.
 Capability fields: `agent`, `events`, `can_block_tool`, `can_ask`, `can_inject_context`, `inject_events`,
 `has_turn_id`, `has_call_id`, plus `dialect_version` and `documentation` (source URL, date read).
 `capabilities_sha256` = SHA-256 of the canonical JSON of that declaration, sent with every request and written
@@ -336,3 +336,57 @@ Questions 1-5 were answered by the user on 2026-10-12 (after H1). Item 6 stays o
 6. Non-loopback `core_url` / TLS: unsupported (open).
 7. `tool.before` when Core is unreachable: **decided by the user on 2026-10-12: default deny (fail-closed)**; see
    section 10 and D1.
+
+## 16. Project-level installer and the second dialect (H2)
+
+### 16.1 Installer
+
+`jasmine-core hooks install|uninstall|status --agent <name> --project-dir <dir> --binding <file> [--command PREFIX]`
+(code: `hosthook/install.py`; agent-specific data in each dialect's `INSTALL` dict).
+
+* Writes exactly one file, `<project-dir>/<INSTALL.config>` (`.codex/hooks.json` or `.claude/settings.json`), never a
+  user-global path. It refuses: a project directory equal to the user's home, a target that would resolve inside
+  `~/.claude` or `~/.codex`, a symlinked config file or directory, an existing file that is not a JSON object (or whose
+  `hooks` value has the wrong type), an unusable binding, and an unknown agent. Nothing is written on refusal.
+* Merge, not overwrite: all other keys and hook entries are preserved byte-for-byte as JSON values. `install` is
+  idempotent (it first removes its own handlers for that agent, then adds one handler per event) and replaces a handler
+  that points at another binding.
+* Ownership: a handler is the installer's iff its `command`, split as a shell command, contains
+  `<jasmine-core | jasmine_core.cli> hook --agent <name> --binding <path>` as its final words (a preceding `env VAR=...`
+  or interpreter prefix is allowed). `uninstall` removes
+  only those (optionally only for one binding); look-alikes and foreign handlers stay. `status` reports per event, other
+  entries, binding problems and states that native effect is not verified.
+* Command prefix: default `jasmine-core` resolved on PATH; `--command` supplies another prefix (the Gate script uses
+  `env PYTHONPATH=... python -m jasmine_core.cli`). The hook `timeout` written is 10 s for `PreToolUse`, 30 s otherwise
+  (seconds in both agents' documentation as read).
+* No matcher is written: handlers apply to every tool and source. Trust: Codex requires the user to review new hooks
+  (reported by `install` as a note); whether Claude Code applies a trust prompt to project hooks in `-p` mode is not
+  confirmed by the documentation read (see the dialect document).
+
+### 16.2 Claude Code dialect
+
+Registered as `claude-code` (module `claude_code`; the registry maps `-` to `_`). Details in
+`docs/hosthook-claude-code-dialect.md`. Decisions that bind the protocol:
+
+* `ask` is mapped natively (`permissionDecision: "ask"`), not downgraded; `can_ask: true`.
+* `allow` produces no output (never `permissionDecision: "allow"`, which would bypass the agent's own permission prompt).
+* Turn id: Claude Code documents a `prompt_id` (UUID of the user prompt being processed, absent before the first input).
+  The dialect uses it as `native.turn_id` where present. For `prompt.submit` without it, the substitute is
+  `cc-` + first 16 hex of SHA-256(session id, NUL, prompt text), stable under replay and re-run, identical for identical
+  prompts in a session. Other events without `prompt_id` carry no turn id. `delivery_id` for prompts, stops and
+  compactions uses `prompt_id` when present, else the invocation second (so repeating one prompt is two events, while a
+  spool replay, which resends the stored request, is exact).
+* Post-compaction injection: Claude Code has no PostCompact hook; compaction is followed by `SessionStart` with
+  `source: "compact"`, which the dialect maps to `session.start` (Context reason `SESSION_START`). `context.compact`
+  therefore only occurs with `phase: "before"` for this agent.
+* Native tool names are sent as `native_tool` and used by Guard (section 6.2, question 2 in section 15): file tools are
+  `Read`, `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Glob`, `Grep`, with `action` `read`/`write`/`edit` and the
+  operand from `file_path`/`notebook_path`/`path`.
+
+### 16.3 H2 deviations and notes
+
+* D7: the taskbook says Claude Code has no turn id; the documentation as read lists `prompt_id`. Used when present.
+* D8: H1's runtime test `test_deny_ask_and_allow_reach_the_native_output` passed only because the (then) fail-open default
+  hid a `409 host_hook_delivery_conflict` (it reused a call id with different input). Fixed in the test, not in code.
+* D9: `host_hook_namespace_reserved` is a new error code (section 11.1), implemented in `events.py` and `errors.py` (not
+  in the protected directories).

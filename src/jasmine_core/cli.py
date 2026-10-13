@@ -282,6 +282,29 @@ def cmd_hook(args: argparse.Namespace) -> int:
     return runtime.run_hook(args.hook_agent, sys.stdin.buffer.read(), binding_path=args.binding)
 
 
+def cmd_hooks(args: argparse.Namespace) -> int:
+    """Project-level hook registration (ADR 0017 section 16)."""
+    from .hosthook import install
+
+    try:
+        if args.hooks_action == "install":
+            if not args.binding:
+                _log("error: hooks install needs --binding FILE")
+                return 2
+            result = install.install(args.agent, Path(args.project_dir), Path(args.binding), args.command)
+        elif args.hooks_action == "uninstall":
+            result = install.uninstall(args.agent, Path(args.project_dir), Path(args.binding) if args.binding else None)
+        else:
+            result = install.status(args.agent, Path(args.project_dir))
+    except install.InstallError as exc:
+        _log(f"error: {exc}")
+        return 2
+    print(json.dumps(result, indent=2))
+    if args.hooks_action == "status":
+        return 0 if result.get("installed") else 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="jasmine-core", description="Jasmine Core V1 baseline")
     parser.add_argument("--version", action="version", version=f"jasmine-core {__version__} (schema v{SCHEMA_VERSION})")
@@ -381,6 +404,15 @@ def build_parser() -> argparse.ArgumentParser:
     hook_parser.add_argument("--spool-dir", help="replay only: spool directory (default: from the binding)")
     hook_parser.add_argument("--limit", type=int, help="replay only: maximum entries to send")
     hook_parser.set_defaults(func=cmd_hook)
+
+    hooks_parser = sub.add_parser(
+        "hooks", help="register/unregister host hooks in a project's agent config (project-level only)")
+    hooks_parser.add_argument("hooks_action", choices=["install", "uninstall", "status"])
+    hooks_parser.add_argument("--agent", required=True, help="dialect name, e.g. codex or claude-code")
+    hooks_parser.add_argument("--project-dir", required=True, help="project directory whose config file is edited")
+    hooks_parser.add_argument("--binding", help="host binding file (required for install; optional filter for uninstall)")
+    hooks_parser.add_argument("--command", help="executable written into the hook command (default: jasmine-core on PATH)")
+    hooks_parser.set_defaults(func=cmd_hooks)
     return parser
 
 

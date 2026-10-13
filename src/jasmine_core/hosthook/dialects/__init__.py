@@ -11,6 +11,9 @@ names may appear. A dialect module provides:
     translate_in(native: dict, now: datetime) -> Translated | None
     translate_out(tr: Translated, outcome: Outcome) -> (stdout: str, exit_code: int)
     passthrough(native: dict) -> (stdout, exit_code)    used when nothing can be done
+    INSTALL: dict                   project-level hook registration data (see install.py)
+
+The module file is NAME with `-` written as `_` (Python module names).
 """
 
 from __future__ import annotations
@@ -70,13 +73,14 @@ def names() -> list[str]:
     """Dialects are discovered by module, so the registry itself names no agent."""
     import pkgutil
 
-    return sorted(info.name for info in pkgutil.iter_modules(__path__) if not info.name.startswith("_"))
+    return sorted(info.name.replace("_", "-") for info in pkgutil.iter_modules(__path__)
+                  if not info.name.startswith("_"))
 
 
 def load(name: str):
     if name not in names():
         raise KeyError(name)
-    module = importlib.import_module(f"{__name__}.{name}")
+    module = importlib.import_module(f"{__name__}.{name.replace('-', '_')}")
     if getattr(module, "NAME", None) != name:
         raise KeyError(name)
     return module

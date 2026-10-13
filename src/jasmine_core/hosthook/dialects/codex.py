@@ -200,3 +200,18 @@ def translate_out(tr: Translated, outcome: Outcome) -> tuple[str, int]:
             hook = "SessionStart" if tr.event == "session.start" else "UserPromptSubmit"
             return _inject(hook, inject["text"]), 0
     return empty, 0
+
+
+#: Project-level registration data used by `jasmine-core hooks install` (hosthook/install.py).
+#: `config` is relative to the project directory. Matchers are omitted (all tools/sources).
+#: Hook timeouts are in seconds. Codex requires the user to review/trust new hooks (`/hooks`).
+INSTALL: dict[str, Any] = {
+    "global_dir": ".codex",
+    "config": ".codex/hooks.json",
+    "events": ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact",
+               "PostCompact", "Stop", "SessionEnd"],
+    "timeout_seconds": {"PreToolUse": 10, "default": 30},
+    "status_message": "Jasmine Host Hook",
+    "needs_user_trust": True,
+    "new_document": {"description": "Jasmine Host Hook Protocol hooks (project level)", "hooks": {}},
+}
