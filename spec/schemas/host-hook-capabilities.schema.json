@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trellis.invalid/schemas/host-hook-capabilities.schema.json",
+  "title": "Host Hook Protocol v1 dialect capability declaration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["agent", "dialect_version", "events", "can_block_tool", "can_ask", "can_inject_context", "inject_events", "has_turn_id", "has_call_id", "documentation"],
+  "properties": {
+    "agent": {"type": "string", "minLength": 1, "maxLength": 64},
+    "dialect_version": {"type": "string"},
+    "events": {"type": "array", "uniqueItems": true,
+               "items": {"enum": ["session.start", "prompt.submit", "tool.before", "tool.after", "context.compact", "turn.stop", "session.end"]}},
+    "can_block_tool": {"type": "boolean", "description": "The agent documents a way for a hook to stop a tool before it runs. A declaration, not a verification."},
+    "can_ask": {"type": "boolean", "description": "The agent documents an 'ask the user' output for tool.before."},
+    "can_inject_context": {"type": "boolean"},
+    "inject_events": {"type": "array", "uniqueItems": true,
+                      "items": {"enum": ["session.start", "prompt.submit", "context.compact"]},
+                      "description": "Events on which the agent documents context injection."},
+    "has_turn_id": {"type": "boolean"},
+    "has_call_id": {"type": "boolean"},
+    "documentation": {
+      "type": "object", "required": ["url", "read_on", "status"],
+      "properties": {"url": {"type": "string"}, "resolved_url": {"type": "string"},
+                     "read_on": {"type": "string", "format": "date"}, "status": {"type": "string"}}
+    }
+  }
+}

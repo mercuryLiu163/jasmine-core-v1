@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trellis.invalid/schemas/host-hook-request.schema.json",
+  "title": "Host Hook Protocol v1 request (POST /v1/host-hooks/events)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "event", "delivery_id", "agent", "adapter", "host_id", "binding", "native", "trust", "payload"],
+  "properties": {
+    "protocol_version": {"const": "1"},
+    "event": {"enum": ["session.start", "prompt.submit", "tool.before", "tool.after", "context.compact", "turn.stop", "session.end"]},
+    "delivery_id": {"type": "string", "pattern": "^[A-Za-z0-9_.:-]{1,200}$"},
+    "agent": {
+      "type": "object", "additionalProperties": false, "required": ["name"],
+      "properties": {"name": {"type": "string", "minLength": 1, "maxLength": 64},
+                     "version": {"type": "string", "minLength": 1, "maxLength": 64}}
+    },
+    "adapter": {
+      "type": "object", "additionalProperties": false, "required": ["name", "version", "capabilities_sha256"],
+      "properties": {"name": {"type": "string", "minLength": 1, "maxLength": 64},
+                     "version": {"type": "string", "minLength": 1, "maxLength": 64},
+                     "capabilities_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
+    },
+    "host_id": {"type": "string", "pattern": "^hst_[0-9A-HJKMNP-TV-Z]{26}$"},
+    "binding": {
+      "type": "object", "additionalProperties": false,
+      "properties": {"project_id": {"type": ["string", "null"], "pattern": "^prj_[0-9A-HJKMNP-TV-Z]{26}$"},
+                     "task_id": {"type": ["string", "null"], "pattern": "^tsk_[0-9A-HJKMNP-TV-Z]{26}$"},
+                     "step_id": {"type": ["string", "null"], "pattern": "^stp_[0-9A-HJKMNP-TV-Z]{26}$"}}
+    },
+    "native": {
+      "type": "object", "additionalProperties": false, "required": ["session_id"],
+      "properties": {"session_id": {"type": "string", "minLength": 1, "maxLength": 256},
+                     "turn_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 256},
+                     "call_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 256}}
+    },
+    "trust": {"enum": ["NATIVE_HOOK", "PROXY_OBSERVED", "AGENT_REPORTED"]},
+    "occurred_at": {"type": "string", "format": "date-time"},
+    "payload": {"type": "object"}
+  },
+  "allOf": [
+    {"if": {"properties": {"event": {"const": "session.start"}}},
+     "then": {"properties": {"payload": {"type": "object", "additionalProperties": false,
+              "properties": {"source": {"type": "string", "maxLength": 64}}}}}},
+    {"if": {"properties": {"event": {"const": "prompt.submit"}}},
+     "then": {"properties": {"payload": {"type": "object", "additionalProperties": false, "required": ["text"],
+              "properties": {"text": {"type": "string", "description": "Verbatim; at most 256 KiB UTF-8, never truncated."}}}}}},
+    {"if": {"properties": {"event": {"const": "tool.before"}}},
+     "then": {"properties": {"payload": {"type": "object", "additionalProperties": false, "required": ["tool", "native_tool", "input"],
+              "properties": {
+                "tool": {"enum": ["shell", "file.read", "file.write", "file.edit", "web", "mcp", "other"]},
+                "native_tool": {"type": "string", "minLength": 1, "maxLength": 256},
+                "input": {"type": "object"},
+                "action": {"type": "string", "minLength": 1, "maxLength": 256},
+                "path": {"type": "string", "pattern": "^/"},
+                "paths": {"type": "array", "maxItems": 8, "items": {"type": "string", "pattern": "^/"}}}}}}},
+    {"if": {"properties": {"event": {"const": "tool.after"}}},
+     "then": {"properties": {"payload": {"type": "object", "additionalProperties": false, "required": ["tool", "native_tool", "input", "response"],
+              "properties": {
+                "tool": {"enum": ["shell", "file.read", "file.write", "file.edit", "web", "mcp", "other"]},
+                "native_tool": {"type": "string", "minLength": 1, "maxLength": 256},
+                "input": {"type": "object"},
+                "response": {"not": {"type": "null"}},
+                "exit_code": {"type": "integer"},
+                "is_error": {"type": "boolean"}}}}}},
+    {"if": {"properties": {"event": {"const": "context.compact"}}},
+     "then": {"properties": {"payload": {"type": "object", "additionalProperties": false, "required": ["phase"],
+              "properties": {"phase": {"enum": ["before", "after"]}, "trigger": {"enum": ["auto", "manual"]},
+                             "deliver_context": {"type": "boolean"}}}}}},
+    {"if": {"properties": {"event": {"const": "turn.stop"}}},
+     "then": {"properties": {"payload": {"type": "object", "additionalProperties": false,
+              "properties": {"last_message_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}}}}},
+    {"if": {"properties": {"event": {"const": "session.end"}}},
+     "then": {"properties": {"payload": {"type": "object", "additionalProperties": false,
+              "properties": {"reason": {"type": "string", "maxLength": 64}}}}}}
+  ]
+}
