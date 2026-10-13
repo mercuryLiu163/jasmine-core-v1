@@ -1,6 +1,6 @@
 # ADR 0017: Host Hook Protocol (agent-neutral capture and guard events)
 
-Status: Proposed. Written before the implementation; the code in
+Status: Proposed (amended 2026-10-12 with the user decisions in section 15 and the H2 additions). Written before the implementation; the code in
 `src/jasmine_core/hosthook/` follows it. This ADR provides **no proof of native
 effect** (see section 12).
 Date: 2026-10-12. Schema: 12 -> 13 (one new forward-only migration, `m0013_host_hooks`).
@@ -242,10 +242,14 @@ actor, as ADR 0007's P1 path does), else the system key; all other events use `a
 actor). This keeps `hosthook:report` away from agents and avoids a system key minting human-attributed prompts.
 
 Unavailability (connection refused, timeout, HTTP 5xx/429): capture events go to the private spool (directory
-0700, files 0600, atomic rename) and the hook prints an empty native response; `tool.before` is **fail-open** by
-default (stderr line "tool call was not checked" plus a spool gap record holding only hashes), and
-`on_unavailable: "deny"` makes the dialect's deny output instead. A permanent 4xx is never spooled; it is logged
-on stderr, and `tool.before` treats it like unavailable under the same policy since no decision was obtained.
+0700, files 0600, atomic rename) and the hook prints an empty native response; `tool.before` is **fail-closed** by
+default (decided by the user on 2026-10-12, reversing the taskbook's fail-open default): the dialect emits its deny
+output, and a stderr line "tool call was not checked" plus a spool gap record holding only hashes record the gap.
+A binding that sets `on_unavailable: "allow"` explicitly opts into letting the tool run unchecked; the stderr line and
+the gap record are written either way. An unreadable or invalid binding file follows the same default (deny); only a
+*missing* binding file (hook not configured for the project) produces an empty response. A permanent 4xx is never spooled; it is logged
+on stderr, and `tool.before` treats it like unavailable under the same policy since no decision was obtained (so with the default, a Core refusal such as a
+delivery conflict makes the dialect deny).
 After a successful non-`tool.before` delivery the runtime opportunistically drains up to 10 spooled entries.
 Latency goal: `tool.before` p95 <= 300 ms including process start (not measured in H1); client timeout default
 2 s for `tool.before`, 5 s otherwise; the installer (H2) writes the native hook timeout.
@@ -256,6 +260,16 @@ New scope `hosthook:report` in `auth.SCOPES`; `issue_key` refuses it for `agent`
 (`403 forbidden_actor_kind`); `human` and `system` may hold it. The rule that agent keys cannot write evidence
 is untouched. `tool.after` requires a `system` actor. The actor's `home_host_id` must equal `host_id`.
 
+### 11.1 Reserved namespace (decided by the user on 2026-10-12)
+
+The `host.*` event types and the `host-hook-v1` `source_system` are written only by the host-hook endpoint. A client
+holding `events:write` (or any scope other than `hosthook:report` used on the endpoint) that tries to append
+an Event with such a type or source, on `POST /v1/events` or through any object route that takes a caller-chosen
+`source_system`, is refused with `403 host_hook_namespace_reserved` and nothing is written. Enforcement is in
+`EventStore.append` (every write path), using an in-process scope that only the endpoint handler sets; it is not a
+field of any request body. Without it, a holder of `events:write` could forge `trust: NATIVE_HOOK` payloads or turn
+Task-scoped Checkpoint sources. Not covered: forged payload contents inside event types that are not reserved.
+
 | Condition | Status / code |
 | --- | --- |
 | bad shape / field / enum / unknown field | 400 `invalid_request` |
@@ -265,6 +279,7 @@ is untouched. `tool.after` requires a `system` actor. The actor's `home_host_id`
 | actor kind not allowed for the event | 403 `forbidden_actor_kind` |
 | unknown host/project/task/step | 404 `<kind>_not_found` |
 | delivery id reused with different content | 409 `host_hook_delivery_conflict` |
+| `host.*` type or `host-hook-v1` source outside the endpoint | 403 `host_hook_namespace_reserved` |
 | database busy | 503 `database_busy` |
 
 Context/Checkpoint/Evidence failures that leave the Raw Event committed are not errors; they are `degraded`
@@ -282,15 +297,16 @@ not run. Core never reports `ENFORCED`.
 
 * 0005: Guard unchanged and advisory.
 * 0007: Evidence rules unchanged; additive parameters only (6.3). The P1 hooks' "Pre failures deny" belongs to
-  those bound hooks; this protocol's default for Core-unreachable `tool.before` is fail-open with explicit opt-in
-  deny (taskbook 4.4). Different adapter, different policy (D1).
+  those bound hooks; this protocol's default for Core-unreachable `tool.before` is now also deny (fail-closed), with
+  an explicit `on_unavailable: "allow"` opt-in (user decision 2026-10-12; see D1).
 * 0011/0012: Checkpoint/Context reused as-is, including `UNVERIFIED_REQUEST` and the "replay is not admission" caveat.
 * 0013: adapter lifecycle attestation is a different, stricter mechanism; not used, not relaxed.
 
 ## 14. Deviations from the taskbook (existing ADRs win)
 
-* D1: taskbook 4.4 fail-open `tool.before` differs from the P1 hooks' deny-on-failure (ADR 0007); kept as a
-  per-binding choice, default per taskbook.
+* D1: taskbook 4.4 specified a fail-open `tool.before` default. The user decided on 2026-10-12 to make the default
+  deny (fail-closed), consistent with the P1 hooks' deny-on-failure (ADR 0007); `on_unavailable: "allow"` remains
+  an explicit per-binding opt-in. This deviates from the taskbook, by user decision.
 * D2 (ADR 0012 + 0007): taskbook maps `prompt.submit` to Context `USER_PROMPT` with a system-held scope. ADR 0012
   requires a human-authored source and ADR 0007 keeps human attribution away from system keys. So the binding may hold
   a separate human key used only for `prompt.submit`, `hosthook:report` may be held by human or system actors, and
@@ -302,11 +318,21 @@ not run. Core never reports `ENFORCED`.
 * D5: two event types added (6.1).
 * D6: `deliver_context` and `occurred_at` added to the taskbook draft; `paths` plural for Guard.
 
-## 15. Open questions (conservative choice made)
+## 15. Open questions and decisions
 
-1. Map each native session to a Core `ses_` object? (H1: no.)
-2. Should Rules match the neutral category instead of the native tool name? (H1: native name.)
-3. Re-validate `inject_context` with `context/{id}/check-current` before delivery? (H1: no.)
-4. Trust-level acceptance thresholds: a later ADR.
-5. Should `events:write` clients be blocked from writing the `host.*` event types and `host-hook-v1` source? (H1: no, same as other types.)
-6. Non-loopback `core_url` / TLS: unsupported.
+Questions 1-5 were answered by the user on 2026-10-12 (after H1). Item 6 stays open.
+
+1. Map each native session to a Core `ses_` object? **Decided by the user on 2026-10-12: no, for now; revisit in P5.**
+2. Should Rules match the neutral category instead of the native tool name? **Decided by the user on 2026-10-12: keep
+   matching the native tool name for now. Switching to neutral-category matching is *required before a third agent is
+   added*:** native names differ per agent (`Bash`, `apply_patch`, `Write`, `Edit`, ...), so a rule written against one
+   agent's names does not constrain another. With only two dialects, a project must list the native names of each agent
+   in its rules (the Gate scripts do), and a rule that names only `Bash` will not match the other agent's file tools.
+3. Re-validate `inject_context` with `context/{id}/check-current` before delivery? **Decided by the user on
+   2026-10-12: not now.**
+4. Trust-level acceptance thresholds: **decided by the user on 2026-10-12: a separate future ADR.** `trust` stays recorded only.
+5. Block `events:write` clients from the `host.*` types and the `host-hook-v1` source? **Decided by the user on
+   2026-10-12: yes**; see section 11.1.
+6. Non-loopback `core_url` / TLS: unsupported (open).
+7. `tool.before` when Core is unreachable: **decided by the user on 2026-10-12: default deny (fail-closed)**; see
+   section 10 and D1.

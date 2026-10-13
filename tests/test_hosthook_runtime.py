@@ -51,7 +51,7 @@ class RuntimeBase(HostHookHttp):
         data = {"version": 1, "core_url": f"http://127.0.0.1:{self.port}", "host_id": HOST,
                 "project_id": self.project, "task_id": self.task, "step_id": self.step,
                 "api_key_file": str(self.system_key), "human_api_key_file": str(self.human_key),
-                "on_unavailable": "allow"}
+                "on_unavailable": "deny"}
         data.update(changes)
         data = {k: v for k, v in data.items() if v is not ...}
         self.binding_path.write_text(json.dumps(data))
@@ -90,8 +90,10 @@ class Flow(RuntimeBase):
         out, _, _ = self.hook("pre_tool_use_bash_compound")  # unresolved -> ask -> degraded to deny
         self.assertIn("cannot ask", json.loads(out)["hookSpecificOutput"]["permissionDecisionReason"])
         allowed = fixture("pre_tool_use_bash")
-        out, code, _ = self.hook("pre_tool_use_bash", tool_input={"command": "ls /elsewhere"})
-        self.assertEqual((out, code), ("", 0))
+        # a distinct call id: the fixture's id with other input would be a delivery conflict (409)
+        out, code, err = self.hook("pre_tool_use_bash", tool_input={"command": "ls /elsewhere"},
+                                   tool_use_id="call_other")
+        self.assertEqual((out, code), ("", 0), out + err)
 
     def test_post_tool_use_becomes_evidence_with_trust(self) -> None:
         out, code, err = self.hook("post_tool_use_bash")
@@ -153,20 +155,29 @@ class CoreUnavailable(RuntimeBase):
         self.assertEqual((out, code), ("", 0))
         self.assertEqual(len(self.spool.entries()), 3)
 
-    def test_tool_before_is_fail_open_by_default_and_leaves_a_gap_record(self) -> None:
+    def test_tool_before_is_fail_closed_by_default_and_leaves_a_gap_record(self) -> None:
+        self.write_binding(core_url=f"http://127.0.0.1:{self.dead_port()}", on_unavailable=...)  # key absent
+        self.assertNotIn("on_unavailable", self.binding_path.read_text())
         out, code, err = self.hook("pre_tool_use_bash")
-        self.assertEqual((out, code), ("", 0))
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["hookSpecificOutput"]["permissionDecision"], "deny")
         self.assertIn("was not checked", err)
         gap = self.spool.read(self.spool.entries()[0])
         self.assertEqual(gap["kind"], "unchecked_gap")
         self.assertNotIn("rm /protected", json.dumps(gap))  # hashes only
         self.assertEqual(len(gap["input_sha256"]), 64)
 
-    def test_on_unavailable_deny_blocks(self) -> None:
-        self.write_binding(core_url=f"http://127.0.0.1:{self.dead_port()}", on_unavailable="deny")
+    def test_on_unavailable_allow_is_an_explicit_opt_in_and_still_records_the_gap(self) -> None:
+        self.write_binding(core_url=f"http://127.0.0.1:{self.dead_port()}", on_unavailable="allow")
         out, code, err = self.hook("pre_tool_use_bash")
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(out)["hookSpecificOutput"]["permissionDecision"], "deny")
+        self.assertEqual((out, code), ("", 0))
+        self.assertIn("was not checked", err)
+        self.assertEqual(self.spool.read(self.spool.entries()[0])["kind"], "unchecked_gap")
+
+    def test_unusable_binding_defaults_to_deny(self) -> None:
+        self.binding_path.write_text("{not json")
+        out, _, _ = self.hook("pre_tool_use_bash")
+        self.assertIn("deny", out)
 
     def test_replay_is_idempotent_and_ordered(self) -> None:
         self.hook("user_prompt_submit")
@@ -226,7 +237,10 @@ class Rejections(RuntimeBase):
         self.assertIn("Core rejected tool.after: HTTP 404", err)
         self.assertEqual(Spool(self.binding_path.parent / "spool").entries(), [])
         out, _, _ = self.hook("pre_tool_use_bash")
-        self.assertEqual(out, "")  # no decision was obtained; default policy allow
+        self.assertIn("deny", out)  # no decision was obtained; default policy deny
+        self.write_binding(task_id=ids.new_id("tsk"), step_id=..., on_unavailable="allow")
+        out, _, _ = self.hook("pre_tool_use_bash")
+        self.assertEqual(out, "")  # explicit opt-in
         self.write_binding(task_id=ids.new_id("tsk"), step_id=..., on_unavailable="deny")
         out, _, _ = self.hook("pre_tool_use_bash")
         self.assertIn("deny", out)

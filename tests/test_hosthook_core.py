@@ -25,6 +25,30 @@ class Envelope(HostHookHttp):
             auth.Auth(conn).issue_key(actor_id=AGENT, label="x", scopes=["hosthook:report"])
         self.assertEqual(got.exception.code, "forbidden_actor_kind")
 
+    def test_events_write_clients_cannot_use_the_host_hook_namespace(self) -> None:
+        refused = [
+            self.event_body(event_type="host.turn_stopped", source_system="anything", payload={"text": ""}),
+            self.event_body(event_type="host.compaction_reported", source_system="anything", payload={"text": ""}),
+            self.event_body(source_system="host-hook-v1", source_event_id="forged-1"),
+        ]
+        for body in refused:
+            with self.subTest(body["event_type"], source=body["source_system"]):
+                code, refusal = self.call("POST", "/v1/events", body, token=self.manage)
+                self.assertEqual((code, refusal["error"]["code"]), (403, "host_hook_namespace_reserved"), refusal)
+        # also through object routes that accept a caller-chosen source_system
+        code, refusal = self.call("POST", "/v1/projects", {"name": "forged", "host_id": HOST,
+                                                           "source_system": "host-hook-v1"}, token=self.manage)
+        self.assertEqual((code, refusal["error"]["code"]), (403, "host_hook_namespace_reserved"), refusal)
+        self.assertEqual(self.db_rows("SELECT count(*) AS n FROM events WHERE source_system='host-hook-v1' "
+                                      "OR event_type LIKE 'host.%'")[0]["n"], 0)
+        # ordinary event writes are unaffected, and the endpoint itself still writes the namespace
+        code, _ = self.call("POST", "/v1/events", self.event_body(), token=self.manage)
+        self.assertEqual(code, 201)
+        code, body = self.send(self.request("turn.stop", {}))
+        self.assertEqual(code, 201, body)
+        self.assertEqual(self.db_rows("SELECT count(*) AS n FROM events WHERE event_type='host.turn_stopped' "
+                                      "AND source_system='host-hook-v1'")[0]["n"], 1)
+
     def test_missing_scope_and_missing_token(self) -> None:
         body = self.request("session.end", {})
         code, refusal = self.call("POST", "/v1/host-hooks/events", body, token=self.manage)

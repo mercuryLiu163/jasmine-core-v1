@@ -115,7 +115,7 @@ def load_binding(path: Path) -> Binding:
             continue
         if not isinstance(value, str) or not ids.is_id(value, prefix):
             raise BindingError(f"{name} must be a {prefix}_ id")
-    policy = data.get("on_unavailable", "allow")
+    policy = data.get("on_unavailable", "deny")
     if policy not in ("allow", "deny"):
         raise BindingError("on_unavailable must be allow or deny")
     timeout = data.get("timeout_seconds")

@@ -88,7 +88,7 @@ turn it into `deny` and say so in the reason. A `verify` Guard result is returne
 ## 4. Status codes
 
 `201` new, `200` replay; `400 invalid_request` / `host_hook_protocol_unsupported`;
-`401`, `403 forbidden_scope` / `forbidden_actor_kind` / `actor_mismatch`; `404 <kind>_not_found`;
+`401`, `403 forbidden_scope` / `forbidden_actor_kind` / `actor_mismatch` / `host_hook_namespace_reserved` (other clients writing `host.*` events or the `host-hook-v1` source); `404 <kind>_not_found`;
 `409 host_hook_delivery_conflict`; `413 payload_too_large`; `503 database_busy`.
 
 ## 5. Adapter behaviour when Core is unreachable
@@ -96,8 +96,8 @@ turn it into `deny` and say so in the reason. A `verify` Guard result is returne
 * Capture events (`prompt.submit`, `tool.after`, `session.*`, `turn.stop`, `context.compact`): store the
   exact request in a private spool (directory mode 0700, files 0600) and return an empty native response so
   the agent is not blocked. Re-send later unchanged; Core de-duplicates by `delivery_id`.
-* `tool.before`: **fail-open by default** (allow), write a visible line to stderr and a gap record that
-  holds only hashes; an adapter binding may choose `on_unavailable: "deny"`.
+* `tool.before`: **fail-closed by default** (the adapter emits its native deny), write a visible line to stderr and
+  a gap record that holds only hashes; a binding may opt in to letting the tool run with `on_unavailable: "allow"`.
 * Retry only on connection failure, timeout, 429 and 5xx. A 4xx is a permanent rejection.
 
 ## 6. Binding file (reference runtime)

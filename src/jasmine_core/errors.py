@@ -239,3 +239,10 @@ class HostHookDeliveryConflict(CoreError):
 
     status = 409
     code = "host_hook_delivery_conflict"
+
+
+class HostHookNamespaceReserved(CoreError):
+    """ADR 0017 section 11.1: host.* events / host-hook-v1 source only via the host-hook endpoint."""
+
+    status = 403
+    code = "host_hook_namespace_reserved"

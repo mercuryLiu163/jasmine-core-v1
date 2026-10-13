@@ -17,6 +17,8 @@ message twice.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
 import json
 import sqlite3
 from typing import Any
@@ -27,6 +29,22 @@ from .models import EVENT_TYPES, WEB_EVENT_TYPES, WEB_SOURCE_SYSTEM, NewEvent
 
 # An internal capability, never deserialized from an external body.
 _WEB_CONFIRMATION_CAPABILITY = object()
+
+#: ADR 0017 section 11.1: the host-hook namespace (`host.*` event types and the
+#: `host-hook-v1` source_system) may only be written while the host-hook
+#: endpoint handler is running. Set by `host_hook_scope()`, never by a body.
+_HOST_HOOK_ACTIVE: contextvars.ContextVar[bool] = contextvars.ContextVar("host_hook_active", default=False)
+HOST_HOOK_SOURCE_SYSTEM = "host-hook-v1"
+HOST_EVENT_PREFIX = "host."
+
+
+@contextlib.contextmanager
+def host_hook_scope():
+    token = _HOST_HOOK_ACTIVE.set(True)
+    try:
+        yield
+    finally:
+        _HOST_HOOK_ACTIVE.reset(token)
 
 #: table -> primary key column, used to resolve the caller's stated references
 #: before the database does it for us with an untyped error.
@@ -139,6 +157,11 @@ class EventStore:
                     spec.payload.get("confirmation_source_kind") == "WEB_STRUCTURED_V1")
         if reserved and _web_capability is not _WEB_CONFIRMATION_CAPABILITY:
             raise errors.InvalidRequest("Web confirmation namespace is reserved")
+        if ((spec.event_type.startswith(HOST_EVENT_PREFIX) or spec.source_system == HOST_HOOK_SOURCE_SYSTEM)
+                and not _HOST_HOOK_ACTIVE.get()):
+            raise errors.HostHookNamespaceReserved(
+                "host.* event types and the host-hook-v1 source_system can only be written through "
+                "POST /v1/host-hooks/events", event_type=spec.event_type, source_system=spec.source_system)
         with db.translate_lock_errors():
             return self._append(spec, event_id)
 

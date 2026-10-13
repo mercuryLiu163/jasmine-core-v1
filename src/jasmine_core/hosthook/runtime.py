@@ -217,9 +217,9 @@ def _policy_hint(path: Path) -> str:
     """Best-effort read of on_unavailable from a binding that failed full validation."""
     try:
         value = json.loads(path.read_bytes()).get("on_unavailable")
-        return value if value in ("allow", "deny") else "allow"
+        return value if value in ("allow", "deny") else "deny"
     except (OSError, ValueError, AttributeError):
-        return "allow"
+        return "deny"
 
 
 def run_replay(binding_path: str | None, spool_dir: str | None, limit: int | None,

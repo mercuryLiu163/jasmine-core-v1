@@ -657,7 +657,9 @@ a decision, optional context text, and what was recorded. The full contract is
 * Idempotent by `delivery_id` (new table `host_hook_deliveries`, append-only):
   first processing `201`, identical replay `200` with `replayed: true`, same id with
   different content `409 host_hook_delivery_conflict`.
-* New error code: `400 host_hook_protocol_unsupported`. Other refusals use the
+* New error codes: `400 host_hook_protocol_unsupported`, `403 host_hook_namespace_reserved` (a client other than the
+  endpoint tried to write a `host.*` Event type or the `host-hook-v1` `source_system`, on `POST /v1/events` or any
+  route taking `source_system`). Other refusals use the
   existing codes (`invalid_request`, `forbidden_scope`, `forbidden_actor_kind`,
   `actor_mismatch`, `<kind>_not_found`, `payload_too_large`).
 * `tool.before` reuses Guard (`capability` stays `ADVISORY`): deny -> `deny`,

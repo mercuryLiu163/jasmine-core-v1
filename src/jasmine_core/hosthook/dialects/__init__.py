@@ -49,8 +49,8 @@ class Outcome:
     #: ok | unavailable | rejected | no_binding | skipped
     status: str
     response: dict[str, Any] | None = None
-    #: allow | deny, from the binding, for a tool.before that was not checked.
-    on_unavailable: str = "allow"
+    #: allow | deny, from the binding (default deny, fail-closed), for a tool.before that was not checked.
+    on_unavailable: str = "deny"
     note: str | None = None
 
 

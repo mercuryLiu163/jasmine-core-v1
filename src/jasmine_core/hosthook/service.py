@@ -17,6 +17,7 @@ from typing import Any
 
 from .. import clock, db, errors
 from ..canonical import canonical_json, sha256_hex
+from ..events import host_hook_scope
 from ..models import NewEvent
 from .protocol import SOURCE_SYSTEM, HostHookRequest, empty_response, parse_request
 
@@ -67,7 +68,8 @@ class HostHookService:
         if stored is not None:
             return self._replay(stored, digest, req)
         project_id = self._check_binding(req)
-        response = self._dispatch(req, actor, project_id)
+        with host_hook_scope():
+            response = self._dispatch(req, actor, project_id)
         try:
             with db.translate_lock_errors(), db.transaction(self.conn):
                 self.conn.execute(
