@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -24,7 +25,7 @@ from jasmine_core.hosthook import install
 from jasmine_core.hosthook.install import InstallError
 
 ROOT = Path(__file__).resolve().parents[1]
-PYTHON_CLI = f"{sys.executable} -m jasmine_core.cli"
+PYTHON_CLI = shlex.join([sys.executable, "-m", "jasmine_core.cli"])
 FOREIGN = {"type": "command", "command": "/usr/local/bin/other-tool --flag", "timeout": 5}
 
 
