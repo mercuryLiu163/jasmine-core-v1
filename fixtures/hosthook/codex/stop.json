@@ -1,0 +1,11 @@
+{
+  "session_id": "thr_123",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/work/project",
+  "model": "gpt-6",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "turn_id": "turn_456",
+  "stop_hook_active": false,
+  "last_assistant_message": "Done."
+}

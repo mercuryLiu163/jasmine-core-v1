@@ -1,0 +1,9 @@
+{
+  "session_id": "thr_123",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/work/project",
+  "model": "gpt-6",
+  "permission_mode": "default",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}

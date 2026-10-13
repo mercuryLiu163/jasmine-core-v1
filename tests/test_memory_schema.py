@@ -43,7 +43,7 @@ class SchemaShape(MemoryTestCase):
         records = {row["name"]: row for row in applied_migrations(self.conn)}
         self.assertIn("m0011_memory", records)
         self.assertEqual(records["m0011_memory"]["version"], 11)
-        self.assertEqual(records["m0012_web_confirmations"]["version"], SCHEMA_VERSION)
+        self.assertEqual(records["m0012_web_confirmations"]["version"], 12)
         self.assertEqual(len(records["m0011_memory"]["checksum"]), 64)
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
 
@@ -282,7 +282,8 @@ class MigrationFromP1(MemoryTestCase):
         # well as P4's. This is the test that would catch a renumber done
         # without the migrations it renumbers past actually existing.
         self.assertEqual(applied, ["m0008_resolutions", "m0009_continuity",
-                                   "m0010_context", "m0011_memory", "m0012_web_confirmations"])
+                                   "m0010_context", "m0011_memory", "m0012_web_confirmations",
+                                   "m0013_host_hooks"])
         self.assertEqual(current_version(self.conn), SCHEMA_VERSION)
         self.assertEqual(
             self.conn.execute("SELECT display_name FROM hosts WHERE host_id=?",

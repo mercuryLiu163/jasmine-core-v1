@@ -1,0 +1,14 @@
+{
+  "session_id": "thr_123",
+  "transcript_path": "/tmp/transcript.jsonl",
+  "cwd": "/work/project",
+  "model": "gpt-6",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "turn_id": "turn_456",
+  "tool_name": "Bash",
+  "tool_use_id": "id_790",
+  "tool_input": {
+    "command": "ls && rm /protected/a.txt"
+  }
+}
