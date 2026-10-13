@@ -88,6 +88,9 @@ def deliver(binding: Binding, request: dict[str, Any], spool: Spool, stderr: Tex
     event = request["event"]
     try:
         response = post(binding, request)
+        if not binding.inject_context and response.get("inject_context") is not None:
+            # Core still builds and records the pack; the binding only withholds it from the agent.
+            response = {**response, "inject_context": None}
         return Outcome("ok", response=response, on_unavailable=binding.on_unavailable)
     except BindingError as exc:
         reason, transient = f"key unavailable: {exc}", True

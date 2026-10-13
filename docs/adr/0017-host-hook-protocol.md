@@ -230,7 +230,8 @@ upward search from the agent-reported `cwd`):
 {"version":1,"core_url":"http://127.0.0.1:PORT","host_id":"hst_..","project_id":"prj_..",
  "task_id":"tsk_.."|null,"step_id":"stp_.."|null,
  "api_key_file":"/abs/private/system.key","human_api_key_file":"/abs/private/human.key"|null,
- "on_unavailable":"allow"|"deny","spool_dir":"/abs/dir"|null,"timeout_seconds":number|null}
+ "on_unavailable":"allow"|"deny","spool_dir":"/abs/dir"|null,"timeout_seconds":number|null,
+ "inject_context":true|false}
 ```
 
 No token is stored in the file. Key files must be regular, owned by the user, with no group/other permission
@@ -240,6 +241,13 @@ later ADR). No binding file -> empty native output, exit 0, no error.
 Key use: `prompt.submit` uses `human_api_key_file` when present (so the prompt is attributed to the human
 actor, as ADR 0007's P1 path does), else the system key; all other events use `api_key_file` (a `system`
 actor). This keeps `hosthook:report` away from agents and avoids a system key minting human-attributed prompts.
+
+`inject_context` (optional boolean, default `true`): when `false` the runtime drops `inject_context` from every Core
+response before the dialect writes native output. Core still builds and records the Context Pack and still decides
+`tool.before`; only delivery to the agent is withheld. It exists for the real-conversation Gate (decided by the user on
+2026-10-13): the Context Pack shows an active rule to the model, a model that reads it may decline to attempt the denied
+call, and then the tool-layer deny (G-DENY) is never exercised. The Gate turns it off for the denied-command turn only.
+It is a test aid, not a security control.
 
 Unavailability (connection refused, timeout, HTTP 5xx/429): capture events go to the private spool (directory
 0700, files 0600, atomic rename) and the hook prints an empty native response; `tool.before` is **fail-closed** by

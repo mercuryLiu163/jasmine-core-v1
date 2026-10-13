@@ -95,6 +95,18 @@ class Flow(RuntimeBase):
                                    tool_use_id="call_other")
         self.assertEqual((out, code), ("", 0), out + err)
 
+    def test_inject_context_false_withholds_the_pack_but_keeps_recording_and_enforcing(self) -> None:
+        self.write_binding(inject_context=False)
+        self.assertFalse(load_binding(self.binding_path).inject_context)
+        out, code, err = self.hook("user_prompt_submit")
+        self.assertEqual((out, code, err), ("", 0, ""))  # nothing reaches the agent
+        self.assertEqual(self.db_rows("SELECT count(*) AS n FROM context_packs")[0]["n"], 1)  # Core still built it
+        self.assertEqual(self.db_rows("SELECT count(*) AS n FROM events WHERE event_type='user.prompt' "
+                                    "AND source_system='host-hook-v1'")[0]["n"], 1)
+        self.rule("no-rm", "DENY", {"tool": "Bash", "action": "rm", "path_prefix": "/protected"})
+        decision = json.loads(self.hook("pre_tool_use_bash")[0])["hookSpecificOutput"]
+        self.assertEqual(decision["permissionDecision"], "deny")  # enforcement is unaffected
+
     def test_post_tool_use_becomes_evidence_with_trust(self) -> None:
         out, code, err = self.hook("post_tool_use_bash")
         self.assertEqual((out, code, err), ("", 0, ""))
@@ -263,7 +275,7 @@ class BindingFile(RuntimeBase):
         self.assertIs(binding.key_file_for("tool.after"), binding.api_key_file)
         bad = [{"core_url": "http://example.com:80"}, {"core_url": "https://127.0.0.1:1"}, {"version": 2},
                {"on_unavailable": "maybe"}, {"api_key_file": "relative.key"}, {"unknown": 1},
-               {"task_id": "tsk_nope"}, {"timeout_seconds": 0}]
+               {"task_id": "tsk_nope"}, {"timeout_seconds": 0}, {"inject_context": "no"}]
         for change in bad:
             with self.subTest(change):
                 self.write_binding(**change)

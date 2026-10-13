@@ -21,7 +21,7 @@ BINDING_RELATIVE = Path(".jasmine") / "host-binding.json"
 ENV_BINDING = "JASMINE_HOST_BINDING"
 LOOPBACK_URL = re.compile(r"http://(?:127\.0\.0\.1|localhost|\[::1\]):[0-9]{1,5}\Z")
 ALLOWED = {"version", "core_url", "host_id", "project_id", "task_id", "step_id", "api_key_file",
-           "human_api_key_file", "on_unavailable", "spool_dir", "timeout_seconds"}
+           "human_api_key_file", "on_unavailable", "spool_dir", "timeout_seconds", "inject_context"}
 MAX_FILE_BYTES = 64 * 1024
 
 
@@ -42,6 +42,7 @@ class Binding:
     on_unavailable: str
     spool_dir: Path
     timeout_seconds: float | None
+    inject_context: bool = True
 
     def key_file_for(self, event: str) -> Path:
         if event == "prompt.submit" and self.human_api_key_file is not None:
@@ -121,6 +122,9 @@ def load_binding(path: Path) -> Binding:
     timeout = data.get("timeout_seconds")
     if timeout is not None and (isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or not 0 < timeout <= 10):
         raise BindingError("timeout_seconds must be in (0, 10]")
+    inject = data.get("inject_context", True)
+    if type(inject) is not bool:
+        raise BindingError("inject_context must be a boolean")
     spool = data.get("spool_dir")
     spool_dir = _abs_file(spool, "spool_dir") if spool else path.parent / "spool"
     human = data.get("human_api_key_file")
@@ -129,4 +133,4 @@ def load_binding(path: Path) -> Binding:
                    api_key_file=_abs_file(data.get("api_key_file"), "api_key_file"),
                    human_api_key_file=_abs_file(human, "human_api_key_file") if human else None,
                    on_unavailable=policy, spool_dir=spool_dir,
-                   timeout_seconds=float(timeout) if timeout is not None else None)
+                   timeout_seconds=float(timeout) if timeout is not None else None, inject_context=inject)

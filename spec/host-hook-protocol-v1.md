@@ -105,7 +105,9 @@ turn it into `deny` and say so in the reason. A `verify` Guard result is returne
 `<project>/.jasmine/host-binding.json`, found by `--binding`, `JASMINE_HOST_BINDING`, or an upward
 search from the agent-reported working directory. Fields: `version` (1), `core_url` (loopback
 `http://HOST:PORT`), `host_id`, `project_id`, optional `task_id`, `step_id`, `api_key_file`,
-optional `human_api_key_file`, `on_unavailable` (`allow`|`deny`), `spool_dir`, `timeout_seconds`.
+optional `human_api_key_file`, `on_unavailable` (`allow`|`deny`), `spool_dir`, `timeout_seconds`, and
+`inject_context` (boolean, default `true`; `false` withholds the Context Pack from the agent while Core still
+records it, for enforcement tests).
 It never holds a token; key files must be private (owner only, mode 0600). Without a binding the
 runtime prints an empty native response and exits 0.
 
