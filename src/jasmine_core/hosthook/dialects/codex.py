@@ -210,7 +210,7 @@ INSTALL: dict[str, Any] = {
     "config": ".codex/hooks.json",
     "events": ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact",
                "PostCompact", "Stop", "SessionEnd"],
-    "timeout_seconds": {"PreToolUse": 10, "default": 30},
+    "timeout_seconds": {"PreToolUse": 10, "SessionEnd": 3, "default": 30},
     "status_message": "Jasmine Host Hook",
     "needs_user_trust": True,
     "new_document": {"description": "Jasmine Host Hook Protocol hooks (project level)", "hooks": {}},
