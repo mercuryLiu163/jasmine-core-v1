@@ -439,7 +439,12 @@ def _check_evidence(obs: Observed, manifest: dict[str, Any]) -> dict[str, Any]:
     hits = []
     for row in rows:
         payload = json.loads(row["payload_json"])
-        if marker in json.dumps(payload.get("tool_input", {})):
+        tool_input = payload.get("tool_input")
+        if tool_input is None and payload.get("call_event_id"):
+            # The tool input lives on the linked tool.call Event, not on the tool.result source Event.
+            calls = obs.rows("SELECT payload_json FROM events WHERE event_id=?", (payload["call_event_id"],))
+            tool_input = json.loads(calls[0]["payload_json"]).get("tool_input") if calls else None
+        if marker in json.dumps(tool_input or {}):
             hits.append((row["status"], row["tool_name"], payload.get("host_hook", {}).get("trust")))
     if not hits:
         return _result("FAIL" if any(d["event"] == "tool.after" for d in obs.deliveries()) else "BLOCKED",
