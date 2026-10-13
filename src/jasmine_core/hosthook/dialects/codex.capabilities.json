@@ -1,0 +1,28 @@
+{
+  "agent": "codex",
+  "dialect_version": "1",
+  "events": [
+    "session.start",
+    "prompt.submit",
+    "tool.before",
+    "tool.after",
+    "context.compact",
+    "turn.stop",
+    "session.end"
+  ],
+  "can_block_tool": true,
+  "can_ask": false,
+  "can_inject_context": true,
+  "inject_events": [
+    "session.start",
+    "prompt.submit"
+  ],
+  "has_turn_id": true,
+  "has_call_id": true,
+  "documentation": {
+    "url": "https://developers.openai.com/codex/hooks",
+    "resolved_url": "https://learn.chatgpt.com/docs/hooks",
+    "read_on": "2026-10-12",
+    "status": "constructed from docs; no native verification"
+  }
+}

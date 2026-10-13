@@ -513,7 +513,19 @@ class EvidenceStore:
         return _PreparedToolResult(id(self.conn),body_hash(body),self._artifact(body.get("artifact_uri")),producer,snapshot)
 
     def record_tool_result(self, body: dict[str, Any], *, actor_id: str, unit_of_work=None,
-                           prepared=None, operation_provenance=None, evidence_id=None) -> dict[str, Any]:
+                           prepared=None, operation_provenance=None, evidence_id=None,
+                           source_system: str = "codex-posttool",
+                           payload_extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        # ADR 0017 additive parameters: `source_system` names the producing path
+        # in the stored Events; `payload_extra` adds neutral provenance (for the
+        # Host Hook Protocol: trust level, delivery id) to the three Events. Both
+        # default to the pre-existing behaviour. `native_session_id` is an alias
+        # of the historical `codex_session_id` field (same meaning, same stored key).
+        if "native_session_id" in body:
+            if "codex_session_id" in body:
+                raise errors.InvalidRequest("give native_session_id or codex_session_id, not both")
+            body = {**body, "codex_session_id": body["native_session_id"]}
+            del body["native_session_id"]
         _fields(body, {"task_id", "step_id", "host_id", "session_id", "codex_session_id",
                        "turn_id", "tool_use_id", "tool_name", "tool_input", "tool_response",
                        "kind", "artifact_uri"})
@@ -546,7 +558,7 @@ class EvidenceStore:
         else:
             if unit_of_work is not None or operation_provenance is not None or evidence_id is not None:raise RuntimeError('dynamic producer requires preparation')
             producer_config_sha256 = _producer_kind(kind, tool_name, command_sha256)
-            provenance_payload={}
+            provenance_payload=dict(payload_extra) if payload_extra else {}
         seed = ("codex-posttool-v1", codex_session_id, turn_id, tool_use_id)
         with db.translate_lock_errors(), db.transaction(self.conn,unit_of_work=unit_of_work):
             task, step = self._task_step(task_id, step_id)
@@ -563,7 +575,7 @@ class EvidenceStore:
             call_event, call_replay = self._event(
                 event_type="tool.call", actor_id=actor_id, actor_kind=actor_kind,
                 host_id=host_id, task=task, session_id=session_id,
-                source_system="codex-posttool", source_event_id=canonical_json([*seed, "call"]),
+                source_system=source_system, source_event_id=canonical_json([*seed, "call"]),
                 event_id=_deterministic_event_id(*seed, "call"),
                 payload={**provenance_payload,"codex_session_id": codex_session_id, "turn_id": turn_id,
                          "tool_use_id": tool_use_id, "tool_name": tool_name,
@@ -571,7 +583,7 @@ class EvidenceStore:
             result_event, result_replay = self._event(
                 event_type="tool.result", actor_id=actor_id, actor_kind=actor_kind,
                 host_id=host_id, task=task, session_id=session_id,
-                source_system="codex-posttool", source_event_id=canonical_json([*seed, "result"]),
+                source_system=source_system, source_event_id=canonical_json([*seed, "result"]),
                 event_id=_deterministic_event_id(*seed, "result"),
                 payload={**provenance_payload,"codex_session_id": codex_session_id, "turn_id": turn_id,
                          "tool_use_id": tool_use_id, "tool_name": tool_name,
@@ -592,7 +604,7 @@ class EvidenceStore:
             evidence_event, _ = self._event(
                 event_type="evidence.recorded", actor_id=actor_id, actor_kind=actor_kind,
                 host_id=host_id, task=task, session_id=session_id,
-                source_system="codex-posttool", source_event_id=canonical_json([*seed, "evidence"]),
+                source_system=source_system, source_event_id=canonical_json([*seed, "evidence"]),
                 event_id=_deterministic_event_id(*seed, "evidence"),
                 payload={**provenance_payload,"evidence_id": evidence_id, "source_event_id": result_event["event_id"],
                          "kind": kind, "status": status, "step_id": step_id,

@@ -643,3 +643,30 @@ so the FAIL path is only exercised on a clearly-labelled `synthetic: true`
 fixture under `tests/fixtures/p7/`; a fixture is never evidence. The unblock
 action is for the P7 owner to record one genuinely failing scenario with
 `recorder.py` into the configured run root.
+
+## Host Hook Protocol (ADR 0017, Schema 13)
+
+`POST /v1/host-hooks/events` (scope `hosthook:report`, human or system keys only;
+agent keys cannot carry the scope) accepts one agent-neutral hook event and returns
+a decision, optional context text, and what was recorded. The full contract is
+[ADR 0017](../adr/0017-host-hook-protocol.md) and the public
+[spec](../../spec/host-hook-protocol-v1.md); JSON Schemas are in `spec/schemas/`.
+
+* Events: `session.start`, `prompt.submit`, `tool.before`, `tool.after`,
+  `context.compact`, `turn.stop`, `session.end`.
+* Idempotent by `delivery_id` (new table `host_hook_deliveries`, append-only):
+  first processing `201`, identical replay `200` with `replayed: true`, same id with
+  different content `409 host_hook_delivery_conflict`.
+* New error code: `400 host_hook_protocol_unsupported`. Other refusals use the
+  existing codes (`invalid_request`, `forbidden_scope`, `forbidden_actor_kind`,
+  `actor_mismatch`, `<kind>_not_found`, `payload_too_large`).
+* `tool.before` reuses Guard (`capability` stays `ADVISORY`): deny -> `deny`,
+  confirm -> `ask`, verify/allow -> `allow`. `tool.after` reuses the tool-result
+  Evidence path (ADR 0007 exit-code rules) and requires a `system` actor. Prompts
+  are stored verbatim as `user.prompt`. Context Packs and Checkpoints reuse ADR 0012
+  and ADR 0011; failures there are reported in `degraded`, not as errors.
+* `trust` (`NATIVE_HOOK`, `PROXY_OBSERVED`, `AGENT_REPORTED`) is recorded in the
+  Event payloads and the receipt table only; no acceptance rule reads it.
+* New Raw Event types: `host.turn_stopped`, `host.compaction_reported`.
+* A 200/201 response is not evidence that any agent honoured a `deny`, showed
+  `inject_context` to a model, or fired a hook (ADR 0017 section 12).

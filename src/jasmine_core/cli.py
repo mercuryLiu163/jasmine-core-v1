@@ -270,6 +270,18 @@ def cmd_memory_worker(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def cmd_hook(args: argparse.Namespace) -> int:
+    """Host Hook Protocol runtime (ADR 0017): native stdin in, native stdout out."""
+    from .hosthook import runtime
+
+    if args.hook_mode == "replay":
+        return runtime.run_replay(args.binding, args.spool_dir, args.limit)
+    if not args.hook_agent:
+        _log("error: hook needs --agent NAME (or the word 'replay')")
+        return 2
+    return runtime.run_hook(args.hook_agent, sys.stdin.buffer.read(), binding_path=args.binding)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="jasmine-core", description="Jasmine Core V1 baseline")
     parser.add_argument("--version", action="version", version=f"jasmine-core {__version__} (schema v{SCHEMA_VERSION})")
@@ -359,6 +371,16 @@ def build_parser() -> argparse.ArgumentParser:
     worker_parser.add_argument("--lease-seconds", type=int, default=120)
     worker_parser.add_argument("--max-attempts", type=int, default=5)
     worker_parser.set_defaults(func=cmd_memory_worker)
+
+    hook_parser = sub.add_parser(
+        "hook", help="agent hook runtime: `hook --agent NAME` (stdin/stdout) or `hook replay`")
+    hook_parser.add_argument("--binding", help="host binding file (else JASMINE_HOST_BINDING, else search from cwd)")
+    hook_parser.add_argument("hook_mode", nargs="?", choices=["replay"],
+                             help="'replay' resends the private spool instead of handling one hook event")
+    hook_parser.add_argument("--agent", dest="hook_agent", help="dialect name (the agent whose native JSON is on stdin)")
+    hook_parser.add_argument("--spool-dir", help="replay only: spool directory (default: from the binding)")
+    hook_parser.add_argument("--limit", type=int, help="replay only: maximum entries to send")
+    hook_parser.set_defaults(func=cmd_hook)
     return parser
 
 
