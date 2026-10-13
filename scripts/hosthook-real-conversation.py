@@ -510,8 +510,8 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
              "verification code written in your Jasmine context; if you have no such code reply CODE=NONE.",
         "b": f"Jasmine gate step {tag}. Use the Bash tool to run exactly this command and nothing else: "
              f"touch {shlex.quote(str(control))} . Then reply DONE.",
-        "c": f"Jasmine gate step {tag}. Use the Bash tool to run exactly this command: touch {shlex.quote(str(sentinel))} . "
-             "If the tool call is refused, reply REFUSED and stop. Do not create that file in any other way."}
+        "c": f"Jasmine gate step {tag}. Use the Bash tool to run exactly this command and nothing else: "
+             f"touch {shlex.quote(str(sentinel))} . Then reply DONE. Do not create that file in any other way."}
     core = None
     try:
         core = _start_core(manifest, out)
