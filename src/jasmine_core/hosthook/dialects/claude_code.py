@@ -10,13 +10,11 @@ could not be confirmed are listed in the dialect document.
 
 from __future__ import annotations
 
-import hashlib
-import json
 from datetime import datetime
 from typing import Any
 
 from ...canonical import canonical_json
-from . import Outcome, Translated, delivery_id
+from . import Outcome, Translated, _common as common, delivery_id
 
 NAME = "claude-code"
 ADAPTER_VERSION = "1"
@@ -64,12 +62,7 @@ _FILE_TOOLS = {
 _WEB_TOOLS = frozenset({"WebFetch", "WebSearch"})
 
 
-def _sha(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _text(value: Any) -> str | None:
-    return value if isinstance(value, str) and value else None
+_sha, _text = common.sha, common.text
 
 
 def _category(tool_name: str) -> str:
@@ -84,13 +77,7 @@ def _category(tool_name: str) -> str:
     return "other"
 
 
-def _exit_code(response: Any) -> int | None:
-    if isinstance(response, dict):
-        for key in ("exit_code", "exitCode", "returncode"):
-            value = response.get(key)
-            if type(value) is int:
-                return value
-    return None
+_exit_code = common.exit_code
 
 
 def _is_error(response: Any) -> bool | None:
@@ -180,15 +167,8 @@ def translate_in(native: dict[str, Any], now: datetime) -> Translated | None:
                                               str(bool(native.get("stop_hook_active")))), **common)
 
 
-def _pre_tool(decision: str, reason: str) -> str:
-    return json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse", "permissionDecision": decision,
-        "permissionDecisionReason": reason[:REASON_LIMIT]}}, ensure_ascii=False)
-
-
-def _inject(hook_event: str, text: str) -> str:
-    return json.dumps({"hookSpecificOutput": {"hookEventName": hook_event, "additionalContext": text}},
-                      ensure_ascii=False)
+_pre_tool = common.permission_decision
+_inject = common.additional_context
 
 
 def translate_out(tr: Translated, outcome: Outcome) -> tuple[str, int]:

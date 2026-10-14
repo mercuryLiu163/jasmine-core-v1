@@ -55,6 +55,9 @@ class Outcome:
     #: allow | deny, from the binding (default deny, fail-closed), for a tool.before that was not checked.
     on_unavailable: str = "deny"
     note: str | None = None
+    #: A context pack the runtime kept for this session earlier and hands to a dialect whose
+    #: agent can only receive context at a later event (CAPABILITIES["inject_mode"] == "deferred").
+    deferred_context: str | None = None
 
 
 def capabilities_sha256(capabilities: dict[str, Any]) -> str:

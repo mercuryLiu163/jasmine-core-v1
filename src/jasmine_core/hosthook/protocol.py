@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any
 
 from .. import clock, errors, ids
+from ..authority import TOOL_CATEGORIES  # noqa: F401 - single definition (ADR 0018)
 
 PROTOCOL_VERSION = "1"
 SOURCE_SYSTEM = "host-hook-v1"
@@ -19,7 +20,6 @@ SOURCE_SYSTEM = "host-hook-v1"
 EVENTS = ("session.start", "prompt.submit", "tool.before", "tool.after",
           "context.compact", "turn.stop", "session.end")
 TRUST_LEVELS = ("NATIVE_HOOK", "PROXY_OBSERVED", "AGENT_REPORTED")
-TOOL_CATEGORIES = ("shell", "file.read", "file.write", "file.edit", "web", "mcp", "other")
 DECISIONS = ("allow", "deny", "ask", "none")
 
 DELIVERY_ID = re.compile(r"[A-Za-z0-9_.:-]{1,200}\Z")

@@ -81,6 +81,36 @@ class Spool:
             raise SpoolError("spool entry is malformed")
         return document
 
+    # Deferred context (dialect CAPABILITIES["inject_mode"] == "deferred"): at most one pending pack
+    # per native session, consumed once. It is the text Core already chose to inject, kept 0600.
+    DEFERRED_TTL_SECONDS = 3600
+
+    def _deferred_path(self, session_id: str) -> Path:
+        return self.directory / "deferred" / (sha256_hex(session_id)[:32] + ".json")
+
+    def put_deferred(self, session_id: str, text: str) -> None:
+        self._ensure()
+        path = self._deferred_path(session_id)
+        self._write(path.parent, path.name, {"kind": "deferred_context", "text": text, "saved_at_ns": time.time_ns()})
+
+    def take_deferred(self, session_id: str) -> str | None:
+        path = self._deferred_path(session_id)
+        try:
+            document = json.loads(path.read_bytes())
+        except (OSError, ValueError):
+            return None
+        try:
+            path.unlink()
+        except OSError:
+            return None  # another hook process took it first
+        text = document.get("text") if isinstance(document, dict) else None
+        saved = document.get("saved_at_ns") if isinstance(document, dict) else None
+        if not isinstance(text, str) or not text or type(saved) is not int:
+            return None
+        if time.time_ns() - saved > self.DEFERRED_TTL_SECONDS * 1_000_000_000:
+            return None
+        return text
+
     def remove(self, path: Path) -> None:
         try:
             path.unlink()

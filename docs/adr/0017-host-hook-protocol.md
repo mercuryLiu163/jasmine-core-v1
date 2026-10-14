@@ -4,7 +4,7 @@ Status: Proposed (amended 2026-10-12 with the user decisions in section 15 and t
 `src/jasmine_core/hosthook/` follows it. This ADR provides **no proof of native
 effect** (see section 12).
 Date: 2026-10-12. Schema: 12 -> 13 (one new forward-only migration, `m0013_host_hooks`).
-Related: ADR 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0011, 0012, 0013.
+Related: ADR 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0011, 0012, 0013; amended by ADR 0018.
 Inputs: `TRELLIS-HOST-HOOKS-TASKBOOK.md` (plan only), `JASMINE-MESH-OVERVIEW.md` section 4.
 
 ## 1. Purpose and boundary
@@ -207,7 +207,7 @@ resolved through the filesystem (`realpath` of the existing parent) and both for
 Registry in `src/jasmine_core/hosthook/dialects/`; one module per agent exposing `NAME`, `CAPABILITIES`
 (also stored as `<module>.capabilities.json`; the module name is the agent name with `-` written as `_`), `translate_in(native, ctx)` and `translate_out(event, response, ctx)`.
 Capability fields: `agent`, `events`, `can_block_tool`, `can_ask`, `can_inject_context`, `inject_events`,
-`has_turn_id`, `has_call_id`, plus `dialect_version` and `documentation` (source URL, date read).
+optional `inject_mode` (`direct`|`deferred`, ADR 0018), `has_turn_id`, `has_call_id`, plus `dialect_version` and `documentation` (source URL, date read).
 `capabilities_sha256` = SHA-256 of the canonical JSON of that declaration, sent with every request and written
 into the Raw Events. Core does not interpret it beyond format.
 
@@ -331,7 +331,7 @@ not run. Core never reports `ENFORCED`.
 Questions 1-5 were answered by the user on 2026-10-12 (after H1). Item 6 stays open.
 
 1. Map each native session to a Core `ses_` object? **Decided by the user on 2026-10-12: no, for now; revisit in P5.**
-2. Should Rules match the neutral category instead of the native tool name? **Decided by the user on 2026-10-12: keep
+2. Should Rules match the neutral category instead of the native tool name? **Superseded 2026-10-13 by ADR 0018: `matcher.tool_category` added (the third agent, Grok Build, triggered it).** Original decision, 2026-10-12: keep
    matching the native tool name for now. Switching to neutral-category matching is *required before a third agent is
    added*:** native names differ per agent (`Bash`, `apply_patch`, `Write`, `Edit`, ...), so a rule written against one
    agent's names does not constrain another. With only two dialects, a project must list the native names of each agent

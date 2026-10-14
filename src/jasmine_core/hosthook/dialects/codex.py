@@ -9,14 +9,12 @@ documentation states, not something observed.
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from datetime import datetime
 from typing import Any
 
 from ...canonical import canonical_json
-from . import Outcome, Translated, delivery_id
+from . import Outcome, Translated, _common as common, delivery_id
 
 NAME = "codex"
 ADAPTER_VERSION = "1"
@@ -58,12 +56,7 @@ _PATCH_FILE = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+?)\s*$|^\*\*\*
 REASON_LIMIT = 500
 
 
-def _sha(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _text(value: Any) -> str | None:
-    return value if isinstance(value, str) and value else None
+_sha, _text = common.sha, common.text
 
 
 def _category(tool_name: str) -> str:
@@ -76,21 +69,7 @@ def _category(tool_name: str) -> str:
     return "other"
 
 
-def _exit_code(response: Any) -> int | None:
-    if isinstance(response, dict):
-        for key in ("exit_code", "exitCode", "returncode"):
-            value = response.get(key)
-            if type(value) is int:
-                return value
-    return None
-
-
-def _is_error(response: Any) -> bool | None:
-    if isinstance(response, dict):
-        for key in ("is_error", "isError"):
-            if type(response.get(key)) is bool:
-                return response[key]
-    return None
+_exit_code, _is_error = common.exit_code, common.is_error
 
 
 def passthrough(native: dict[str, Any]) -> tuple[str, int]:
@@ -166,14 +145,10 @@ def translate_in(native: dict[str, Any], now: datetime) -> Translated | None:
 
 
 def _deny(reason: str) -> str:
-    return json.dumps({"hookSpecificOutput": {
-        "hookEventName": "PreToolUse", "permissionDecision": "deny",
-        "permissionDecisionReason": reason[:REASON_LIMIT]}}, ensure_ascii=False)
+    return common.permission_decision("deny", reason)
 
 
-def _inject(hook_event: str, text: str) -> str:
-    return json.dumps({"hookSpecificOutput": {"hookEventName": hook_event, "additionalContext": text}},
-                      ensure_ascii=False)
+_inject = common.additional_context
 
 
 def translate_out(tr: Translated, outcome: Outcome) -> tuple[str, int]:

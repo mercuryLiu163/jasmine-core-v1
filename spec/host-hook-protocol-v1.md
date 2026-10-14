@@ -124,7 +124,10 @@ pack: an adapter must not present it as a fresh decision about the current state
 A dialect translates one agent's native hook JSON to the events above and the response back to the
 agent's native stdout and exit code. It owns: native event names, field names, the tool-category
 mapping, `delivery_id` construction, the native deny/ask/inject output shapes, and the capability
-declaration. See `docs/hosthook-codex-dialect.md` for a worked example (constructed from the
+declaration. An agent that cannot take context at the event Core produces it on declares `inject_mode: "deferred"`:
+the runtime holds the pack per native session and delivers it once at the next `tool.after` (ADR 0018). Rules meant to
+hold across agents use `matcher.tool_category` (the neutral category from `payload.tool`), not the native `tool` name.
+See `docs/hosthook-codex-dialect.md` for a worked example (constructed from the
 agent's documentation, not verified natively).
 
 ## 9. What conformance does and does not show

@@ -64,7 +64,9 @@ function pathPrefixError(value: string): string | null {
 const KINDS = ['RULE', 'DECISION', 'ACCEPTANCE'] as const
 const SEVERITIES = ['HARD', 'NORMAL'] as const
 const ENFORCEMENTS = ['CONTEXT', 'DENY', 'CONFIRM', 'VERIFY'] as const
-const MATCHER_KEYS = ['tool', 'action', 'path_prefix'] as const
+const MATCHER_KEYS = ['tool', 'tool_category', 'action', 'path_prefix'] as const
+/** Mirrors `authority.TOOL_CATEGORIES` (ADR 0018). */
+const TOOL_CATEGORIES = ['shell', 'file.read', 'file.write', 'file.edit', 'web', 'mcp', 'other'] as const
 
 type Kind = (typeof KINDS)[number]
 type Enforcement = (typeof ENFORCEMENTS)[number]
@@ -155,7 +157,7 @@ function contentError(draft: ContentDraft, parsedMatcher: { value?: unknown; err
   if (parsedMatcher.error !== undefined) return parsedMatcher.error
   const matcher = parsedMatcher.value
   if (typeof matcher !== 'object' || matcher === null || Array.isArray(matcher)) {
-    return 'matcher 必须是对象(Core 的 matcher 只接受 tool/action/path_prefix)'
+    return 'matcher 必须是对象(Core 的 matcher 只接受 tool/tool_category/action/path_prefix)'
   }
   for (const key of Object.keys(matcher)) {
     if (!(MATCHER_KEYS as readonly string[]).includes(key)) {
@@ -168,6 +170,9 @@ function contentError(draft: ContentDraft, parsedMatcher: { value?: unknown; err
     if (key === 'path_prefix') {
       const problem = pathPrefixError(entry)
       if (problem !== null) return problem
+    }
+    if (key === 'tool_category' && !(TOOL_CATEGORIES as readonly string[]).includes(entry)) {
+      return `matcher.tool_category 必须是 ${TOOL_CATEGORIES.join('/')} 之一`
     }
   }
   if ((draft.enforcement === 'DENY' || draft.enforcement === 'CONFIRM') && Object.keys(matcher).length === 0) {
@@ -300,7 +305,7 @@ function ContentFields({
         />
       </label>
       <label className="write-field" htmlFor={matcherId}>
-        matcher(JSON 对象;键只允许 tool / action / path_prefix)
+        matcher(JSON 对象;键只允许 tool / tool_category / action / path_prefix;tool_category 取 shell、file.read、file.write、file.edit、web、mcp、other,与具体 Agent 无关)
         <textarea
           id={matcherId}
           value={draft.matcher}

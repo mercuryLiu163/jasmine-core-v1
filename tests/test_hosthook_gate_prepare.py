@@ -43,7 +43,8 @@ class Prepare(unittest.TestCase):
                                "--cli-bin", str(self.cli), *extra], text=True, capture_output=True, env=env, timeout=120)
 
     def test_prepare_builds_a_private_scratch_fixture_for_each_agent(self) -> None:
-        for agent, config in (("claude-code", ".claude/settings.json"), ("codex", ".codex/hooks.json")):
+        for agent, config in (("claude-code", ".claude/settings.json"), ("codex", ".codex/hooks.json"),
+                              ("grok-build", ".grok/hooks/jasmine-core.json")):
             with self.subTest(agent):
                 out = self.base / f"run-{agent}"
                 done = self.prepare(agent, out)
@@ -57,6 +58,8 @@ class Prepare(unittest.TestCase):
                 self.assertTrue(any("5. Run:" in step and "--run" in step for step in report["manual_steps"]))
                 if agent == "codex":
                     self.assertTrue(any("/hooks" in step for step in report["manual_steps"]))
+                if agent == "grok-build":
+                    self.assertTrue(any("/hooks-trust" in step for step in report["manual_steps"]))
                 # private files
                 for name in ("manifest.json", "prepare-report.json", "private/system.key", "private/human.key",
                              "project/.jasmine/host-binding.json"):
@@ -75,6 +78,10 @@ class Prepare(unittest.TestCase):
                 try:
                     self.assertEqual(conn.execute("SELECT count(*) FROM host_hook_deliveries").fetchone()[0], 0)
                     self.assertEqual(conn.execute("SELECT count(*) FROM rules").fetchone()[0], 1)
+                    # the gate rule is agent-neutral (ADR 0018): it must not name any agent's tool
+                    matcher = json.loads(conn.execute("SELECT matcher_json FROM rule_versions").fetchone()[0])
+                    self.assertEqual(matcher["tool_category"], "shell")
+                    self.assertNotIn("tool", matcher)
                 finally:
                     conn.close()
                 port = report["core_port"]
@@ -103,6 +110,8 @@ class Prepare(unittest.TestCase):
         self.assertEqual(json.loads(done.stdout)["verdict"], "BLOCKED")
         self.assertEqual(self.prepare("codex", "relative/dir").returncode, 2)
         (self.home / ".claude").mkdir()
+        (self.home / ".grok").mkdir()
+        self.assertEqual(self.prepare("grok-build", self.home / ".grok" / "gate").returncode, 2)
         self.assertEqual(self.prepare("claude-code", self.home / ".claude" / "gate").returncode, 2)
         self.assertEqual(self.prepare("claude-code", self.base / "x", "--cli-bin", str(self.base / "missing")).returncode, 2)
         self.assertFalse((self.home / ".claude" / "gate").exists())

@@ -14,8 +14,10 @@
     "can_ask": {"type": "boolean", "description": "The agent documents an 'ask the user' output for tool.before."},
     "can_inject_context": {"type": "boolean"},
     "inject_events": {"type": "array", "uniqueItems": true,
-                      "items": {"enum": ["session.start", "prompt.submit", "context.compact"]},
-                      "description": "Events on which the agent documents context injection."},
+                      "items": {"enum": ["session.start", "prompt.submit", "context.compact", "tool.after"]},
+                      "description": "Events whose native hook output the agent documents as reaching the model. With inject_mode 'deferred' these are the events the runtime delivers a held pack on, not the events that produced it."},
+    "inject_mode": {"enum": ["direct", "deferred"], "default": "direct",
+                    "description": "direct: the pack is returned on the event that produced it. deferred: the agent cannot take context there, so the runtime holds the pack per session and delivers it once on the next inject_events event (ADR 0018)."},
     "has_turn_id": {"type": "boolean"},
     "has_call_id": {"type": "boolean"},
     "documentation": {

@@ -52,7 +52,8 @@ class InstallBase(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
     def settings(self, agent: str) -> Path:
-        return self.project / (".claude/settings.json" if agent == "claude-code" else ".codex/hooks.json")
+        return self.project / {"claude-code": ".claude/settings.json", "codex": ".codex/hooks.json",
+                               "grok-build": ".grok/hooks/jasmine-core.json"}[agent]
 
     def load(self, agent: str) -> dict:
         return json.loads(self.settings(agent).read_text())
@@ -100,6 +101,25 @@ class Merge(InstallBase):
         self.assertEqual({e for e, _ in self.owned("codex")}, {"SessionStart", "UserPromptSubmit", "PreToolUse",
                          "PostToolUse", "PreCompact", "PostCompact", "Stop", "SessionEnd"})
         self.assertFalse(self.settings("claude-code").exists())
+
+    def test_grok_build_owns_one_file_and_writes_only_documented_handler_fields(self) -> None:
+        (self.project / ".grok" / "hooks").mkdir(parents=True)
+        mine = self.project / ".grok" / "hooks" / "mine.json"
+        mine.write_text(json.dumps({"hooks": {"Stop": [{"hooks": [FOREIGN]}]}}))
+        before = mine.read_bytes()
+        result = self.install("grok-build")
+        self.assertEqual(mine.read_bytes(), before)  # a neighbouring hook file is never touched
+        self.assertTrue(result["notes"][0].startswith("the agent requires"))
+        owned = self.owned("grok-build")
+        self.assertEqual({e for e, _ in owned}, {"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
+                                                  "PreCompact", "PostCompact", "Stop", "SessionEnd"})
+        for event, handler in owned:
+            self.assertEqual(set(handler), {"type", "command", "timeout"}, event)  # no statusMessage
+        timeouts = {e: h["timeout"] for e, h in owned}
+        self.assertEqual((timeouts["PreToolUse"], timeouts["SessionEnd"]), (10, 1))
+        self.assertFalse(self.settings("claude-code").exists() or self.settings("codex").exists())
+        self.assertEqual(install.uninstall("grok-build", self.project)["removed"], 8)
+        self.assertEqual(json.loads(self.settings("grok-build").read_text()), {"hooks": {}})
 
     def test_install_is_idempotent_and_replaces_a_changed_binding(self) -> None:
         self.install("claude-code")
@@ -209,9 +229,14 @@ class Refusals(InstallBase):
                 self.assertEqual(self.settings("claude-code").read_text(), content)
 
     def test_home_directory_and_global_dirs_are_refused(self) -> None:
-        for agent in ("claude-code", "codex"):
+        for agent in ("claude-code", "codex", "grok-build"):
             with self.subTest(agent), self.assertRaises(InstallError):
                 install.install(agent, self.home, self.binding, PYTHON_CLI)
+        (self.home / ".grok").mkdir()
+        with self.assertRaises(InstallError):
+            install.install("grok-build", self.home / ".grok", self.binding, PYTHON_CLI)
+        self.assertEqual(tree(self.home), [".grok"])
+        (self.home / ".grok").rmdir()
         (self.home / ".claude").mkdir()
         self.assertEqual(tree(self.home), [".claude"])
         # a project directory that is itself the global agent directory

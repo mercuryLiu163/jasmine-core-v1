@@ -1,0 +1,28 @@
+{
+  "agent": "grok-build",
+  "dialect_version": "1",
+  "events": [
+    "session.start",
+    "prompt.submit",
+    "tool.before",
+    "tool.after",
+    "context.compact",
+    "turn.stop",
+    "session.end"
+  ],
+  "can_block_tool": true,
+  "can_ask": true,
+  "can_inject_context": true,
+  "inject_mode": "deferred",
+  "inject_events": [
+    "tool.after"
+  ],
+  "has_turn_id": true,
+  "has_call_id": true,
+  "documentation": {
+    "url": "https://docs.x.ai/build/features/hooks",
+    "local": "grok 1.0.41 user guide 10-hooks.md",
+    "read_on": "2026-10-13",
+    "status": "constructed from docs; no native verification; tool input key names other than `command` are unconfirmed"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "hookEventName": "session_end",
+  "hook_event_name": "SessionEnd",
+  "sessionId": "grok-sess-1",
+  "cwd": "/work/project",
+  "workspaceRoot": "/work/project",
+  "permissionMode": "default",
+  "timestamp": "2026-10-13T08:30:15Z",
+  "reason": "exit"
+}

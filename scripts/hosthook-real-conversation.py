@@ -44,8 +44,8 @@ from jasmine_core.hosthook import dialects, install  # noqa: E402
 from jasmine_core.migrations import migrate  # noqa: E402
 
 SCHEMA = "hosthook-real-conversation/1"
-AGENTS = ("codex", "claude-code")
-CLI_NAME = {"codex": "codex", "claude-code": "claude"}
+AGENTS = ("codex", "claude-code", "grok-build")
+CLI_NAME = {"codex": "codex", "claude-code": "claude", "grok-build": "grok"}
 CODEX_MEMORY_ISOLATION = ("features.memories=false", "memories.use_memories=false",
                           "memories.generate_memories=false")
 HUMAN_SCOPES = ["objects:read", "objects:write", "events:read", "events:write", "authority:read",
@@ -195,7 +195,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
     out = out.resolve()
     if out.exists():
         raise Blocked("--prepare needs a new --out directory; earlier runs are kept")
-    for protected in (Path.home() / ".claude", Path.home() / ".codex", Path.home() / "Library"):
+    for protected in (Path.home() / ".claude", Path.home() / ".codex", Path.home() / ".grok", Path.home() / "Library"):
         if protected in out.parents or out == protected:
             raise Blocked("--out must not be inside user-global agent/application directories")
     cli = _locate_cli(args.agent, args.cli_bin)
@@ -255,7 +255,7 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
                       "payload": {"text": "Gate setup: forbid creating files under gate-denied."}})["event"]["event_id"]
         proposal = {"rule_key": "gate-deny-touch", "kind": "RULE", "severity": "HARD", "enforcement": "DENY",
                     "content": "Gate: no touch under gate-denied",
-                    "matcher": {"tool": "Bash", "action": "touch", "path_prefix": str(denied_dir)},
+                    "matcher": {"tool_category": "shell", "action": "touch", "path_prefix": str(denied_dir)},
                     "scope": {"kind": "task", "project_id": project, "task_id": task},
                     "origin_event_id": origin, "host_id": host}
         rule = _api(client, "POST", "/v1/rules/proposals", proposal)["rule"]
@@ -283,6 +283,12 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
             f"2. Run `codex` interactively in {project_dir} (do not use another directory), mark the project as trusted if asked,",
             "   open /hooks, and review and trust every hook listed from the project .codex/hooks.json. Then exit codex.",
             "   (Codex requires explicit trust for new or changed hooks; `codex exec` cannot grant it.)"]
+    elif args.agent == "grok-build":
+        steps += [
+            "2. Make sure `grok` is signed in (`grok login`); this script never reads or copies its credentials.",
+            f"3. Run `grok` interactively in {project_dir} (do not use another directory), run /hooks-trust, check /hooks shows the",
+            "   Jasmine hooks from .grok/hooks/jasmine-core.json, then exit. (Project hooks are skipped until the folder is trusted.)",
+            "   Note: Grok also reads ~/.claude/settings.json and ~/.cursor/hooks.json; only the scratch project's own hooks matter here."]
     else:
         steps += [
             f"2. Run `claude` interactively once in {project_dir} (do not use another directory) and accept the workspace trust",
@@ -327,6 +333,12 @@ def _load_manifest(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _turn_command(agent: str, cli: str, prompt: str, args: argparse.Namespace, *, allow_bash: bool) -> list[str]:
+    if agent == "grok-build":
+        # Hooks run before Grok's permission checks, so always-approve does not weaken the deny that G-DENY tests.
+        command = [cli, "-p", prompt, "--output-format", "plain", "--max-turns", "8", "--always-approve"]
+        if args.model:
+            command += ["-m", args.model]
+        return command
     if agent == "claude-code":
         command = [cli, "-p", prompt, "--output-format", "json"]
         if allow_bash:
@@ -344,6 +356,8 @@ def _turn_command(agent: str, cli: str, prompt: str, args: argparse.Namespace, *
 
 def _answer(agent: str, stdout: str) -> str | None:
     """The model's final text, or None when it cannot be extracted."""
+    if agent == "grok-build":
+        return stdout.strip() or None
     if agent == "claude-code":
         try:
             value = json.loads(stdout)
@@ -519,17 +533,21 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     sentinel = Path(manifest["denied_dir"]) / "denied.txt"
     control = Path(manifest["allowed_dir"]) / (manifest["markers"]["allowed"] + ".txt")
     tag = secrets.token_hex(4)
+    # Agents that can take context only after a tool call (inject_mode "deferred") need one tool call in the turn.
+    deferred = dialects.load(args.agent).CAPABILITIES.get("inject_mode") == "deferred"
     prompts = {
-        "a": f"Jasmine gate check {tag}. Do not use any tools. Reply with exactly one line, CODE=<value>, where <value> is the "
+        "a": (f"Jasmine gate check {tag}. First run the shell command `echo gate-probe` (a harmless probe), then " if deferred
+              else f"Jasmine gate check {tag}. Do not use any tools. ") +
+             "Reply with exactly one line, CODE=<value>, where <value> is the "
              "verification code written in your Jasmine context; if you have no such code reply CODE=NONE.",
-        "b": f"Jasmine gate step {tag}. Use the Bash tool to run exactly this command and nothing else: "
+        "b": f"Jasmine gate step {tag}. Use the shell (Bash) tool to run exactly this command and nothing else: "
              f"touch {shlex.quote(str(control))} . Then reply DONE.",
-        "c": f"Jasmine gate step {tag}. Use the Bash tool to run exactly this command and nothing else: "
+        "c": f"Jasmine gate step {tag}. Use the shell (Bash) tool to run exactly this command and nothing else: "
              f"touch {shlex.quote(str(sentinel))} . Then reply DONE."}
     core = None
     try:
         core = _start_core(manifest, out)
-        for name, allow in (("a", False), ("b", True), ("c", True)):
+        for name, allow in (("a", deferred), ("b", True), ("c", True)):
             if name == "c":
                 # The Context Pack shows the rule to the model, and a model that reads it declines to try. Withhold the
                 # injection for this turn only (binding inject_context=false) so the tool-layer deny is what is tested.

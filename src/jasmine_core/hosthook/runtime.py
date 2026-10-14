@@ -7,6 +7,7 @@ internal failure degrades to the dialect's pass-through output and a stderr line
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import os
 import sys
@@ -113,6 +114,32 @@ def deliver(binding: Binding, request: dict[str, Any], spool: Spool, stderr: Tex
     return Outcome("unavailable", on_unavailable=binding.on_unavailable, note=reason)
 
 
+_DEFER_SAVE_EVENTS = ("session.start", "prompt.submit", "context.compact")
+
+
+def apply_deferred(dialect: Any, tr: Translated, outcome: Outcome, spool: Spool, stderr: TextIO) -> Outcome:
+    """Bridge agents that can take context only at a later event (inject_mode "deferred").
+
+    The pack Core returns for session.start / prompt.submit / post-compact is kept (newest wins)
+    and handed to the next tool.after of the same session, once. Local files only; a Core outage
+    does not stop an already-held pack from being delivered.
+    """
+    if dialect.CAPABILITIES.get("inject_mode") != "deferred":
+        return outcome
+    try:
+        if tr.event in _DEFER_SAVE_EVENTS and outcome.status == "ok" and outcome.response:
+            inject = outcome.response.get("inject_context")
+            if inject and isinstance(inject.get("text"), str):
+                spool.put_deferred(tr.session_id, inject["text"])
+        elif tr.event == "tool.after":
+            text = spool.take_deferred(tr.session_id)
+            if text:
+                return dataclasses.replace(outcome, deferred_context=text)
+    except (SpoolError, OSError) as exc:
+        _warn(stderr, f"deferred context unavailable: {type(exc).__name__}")
+    return outcome
+
+
 def replay(spool: Spool, binding: Binding | None, stderr: TextIO, *, limit: int | None = None,
            budget: float | None = None) -> dict[str, int]:
     """Resend spooled requests oldest first. Stops at the first transient failure."""
@@ -205,7 +232,7 @@ def run_hook(agent: str, stdin_bytes: bytes, *, binding_path: str | None = None,
         return code
     request = build_request(dialect, tr, binding, moment)
     spool = Spool(binding.spool_dir)
-    outcome = deliver(binding, request, spool, stderr)
+    outcome = apply_deferred(dialect, tr, deliver(binding, request, spool, stderr), spool, stderr)
     text, code = dialect.translate_out(tr, outcome)
     stdout.write(text)
     if outcome.status == "ok" and tr.event != "tool.before" and spool.entries():

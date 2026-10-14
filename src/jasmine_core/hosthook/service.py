@@ -210,7 +210,7 @@ class HostHookService:
     def _on_tool_before(self, req, actor, project_id, res: _Result) -> None:
         p = req.payload
         paths = list(p.get("paths") or ([p["path"]] if p.get("path") else []))
-        base: dict[str, Any] = {"tool": p["native_tool"]}
+        base: dict[str, Any] = {"tool": p["native_tool"], "tool_category": p["tool"]}
         if project_id:
             base["project_id"] = project_id
         if req.task_id:

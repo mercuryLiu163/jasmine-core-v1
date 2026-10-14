@@ -114,6 +114,27 @@ class SchemaMatchesImplementation(unittest.TestCase):
                 request = runtime.build_request(claude_code, claude_code.translate_in(cc_fixture(name), now), binding, now)
                 self.assertEqual(validate(request, load("host-hook-request.schema.json")), [])
 
+    def test_the_grok_build_capability_declaration_validates_and_requests_conform(self) -> None:
+        from datetime import datetime, timezone
+        from jasmine_core import ids
+        from jasmine_core.hosthook.binding import Binding
+        from jasmine_core.hosthook.dialects import grok_build
+        from test_hosthook_dialect_grok_build import fixture as gb_fixture
+        schema = load("host-hook-capabilities.schema.json")
+        self.assertEqual(validate(grok_build.CAPABILITIES, schema), [])
+        self.assertTrue(validate({**grok_build.CAPABILITIES, "inject_mode": "later"}, schema))
+        binding = Binding(path=Path("/x/.jasmine/host-binding.json"), core_url="http://127.0.0.1:1",
+                          host_id=ids.new_id("hst"), project_id=ids.new_id("prj"), task_id=ids.new_id("tsk"),
+                          step_id=None, api_key_file=Path("/x/k"), human_api_key_file=None,
+                          on_unavailable="deny", spool_dir=Path("/x/s"), timeout_seconds=None)
+        now = datetime(2026, 10, 13, 8, 30, 15, tzinfo=timezone.utc)
+        for name in ("session_start", "user_prompt_submit", "pre_tool_use_bash", "pre_tool_use_edit",
+                     "pre_tool_use_mcp", "post_tool_use_bash", "post_tool_use_bash_failed", "pre_compact",
+                     "post_compact", "stop", "session_end"):
+            with self.subTest(name):
+                request = runtime.build_request(grok_build, grok_build.translate_in(gb_fixture(name), now), binding, now)
+                self.assertEqual(validate(request, load("host-hook-request.schema.json")), [])
+
     def test_every_runtime_request_validates_and_bad_ones_do_not(self) -> None:
         from jasmine_core import ids
         from jasmine_core.hosthook.binding import Binding

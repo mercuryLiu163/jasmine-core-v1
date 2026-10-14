@@ -158,8 +158,10 @@ def install(agent: str, project_dir: Path, binding_file: Path, executable: str |
     for event in spec["events"]:
         groups, _ = _strip_owned(_groups(document, event), agent, None)
         timeout = spec["timeout_seconds"].get(event, spec["timeout_seconds"]["default"])
-        groups.append({"hooks": [{"type": "command", "command": command, "timeout": timeout,
-                                  "statusMessage": spec["status_message"]}]})
+        handler = {"type": "command", "command": command, "timeout": timeout}
+        if spec.get("status_message"):
+            handler["statusMessage"] = spec["status_message"]
+        groups.append({"hooks": [handler]})
         document["hooks"][event] = groups
     _write(target, document)
     notes = []
