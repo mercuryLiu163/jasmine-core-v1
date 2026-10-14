@@ -3,7 +3,7 @@
 日期：2026-10-14。分支：`hosthook-grok`（未合并、未推送）。
 范围：用真实 `grok` CLI 与真实模型对话，验证 Grok Build 方言（项目级 hook）。脚本：`scripts/hosthook-real-conversation.py --agent grok-build`。
 运行在隔离目录（临时 Core 与临时 `core.db`）。没有改动 `~/.grok` 的任何配置；唯一写入是用户在 Grok 里执行 `/hooks-trust` 对临时项目目录的信任记录。
-设备级（`--scope user`）注册**没有**在真实 Agent 上验证，只有组件测试。
+设备级（`--scope user`）注册的真实验证见文末“设备级注册”一节。
 
 > 本文只记录这次具体运行观察到的事实。
 
@@ -49,10 +49,26 @@
 * 校验码在每次注入中相同，无法区分注入通道。
 * `ask` 决策在交互模式下的呈现未观察（压缩那次的两次 `ask` 发生在修复前，用户未报告异常）。
 * 项目级 hook 需要对目录做 `/hooks-trust`；全局 hook 不需要，但未实测。
-* 设备级注册（`hooks install --scope user`）对 Claude Code、Codex、Grok 均未用真实 Agent 验证。
 * 全套测试 1765 个，仅剩 `main` 上也失败的 `p6.test_p4_contract_snapshot…test_every_cited_web_case_exists_exactly` 基线失败。
 
 ## 结论
 
 Grok Build 方言在真实对话中通过了原话记录、强制拦截、延迟注入、带退出码的证据、Checkpoint 与压缩前后行为，均由原生 hook 触发。
 同一套中立协议和同一条中立规则现在已在三个 Agent（Claude Code、Codex、Grok Build）上各自跑通。
+
+## 设备级注册的真实验证（2026-10-14，用户同意后）
+
+方法：对每个 Agent 用 `--prepare --hook-scope user --confirm-user-scope` 把 hook 装进**真实**用户级配置，测试项目里不放任何 hook 文件，只放 `.jasmine/host-binding.json`；
+`--run` 跑同一组真实对话；再在一个没有项目文件的空目录里跑一轮；最后 `hooks uninstall --scope user`。Core、数据库和密钥都在隔离目录。
+
+| Agent | 版本 | G-PROMPT | G-DENY | G-INJECT | G-EVIDENCE | turn.stop | 无项目文件的目录 | 卸载还原 |
+|---|---|---|---|---|---|---|---|---|
+| Grok Build | 1.0.52 | PASS | PASS | PASS | PASS | PASS | 事件数 33→33，无暂存文件 | 只删自己的条目；原本不存在的文件留下空壳 `{"hooks": {}}` 和一个备份 |
+| Codex | 本机当时版本 | PASS | PASS | PASS | PASS | PASS | 事件数 31→31 | 与安装前的文件完全一致（`description` 等原有内容保留） |
+| Claude Code | 本机当时版本 | PASS | PASS | PASS | PASS | PASS | 事件数 30→30 | 语义一致；安装器留下空的 `"hooks": {}`（原文件没有该键），已用卸载前保存的副本精确还原 |
+
+* 压缩（需交互 `/compact`）在设备级形态下**未重测**；它与注册位置无关，已在项目级形态下验证过。
+* Codex 需要在 `/hooks` 里审核一次新 hook（用户完成）；Grok 的全局 hook 不需要信任步骤，实测如此。
+* 没有测：用户自己已有的 hook 与我们并存（这三个真实配置里都没有用户自己的 hook，该情形只有组件测试）；Grok 与 Claude Code 同时注册。
+* 卸载留下的东西：每个被改动的文件旁边有 `<file>.jasmine-backup-<UTC>`（Grok 一个、Codex 两个、Claude Code 两个）；Grok 的 `~/.grok/hooks/jasmine-core.json` 留下一个空壳。
+* 已知小缺陷：卸载后可能留下原本不存在的空 `hooks` 键或空文件；语义无影响，未修。
