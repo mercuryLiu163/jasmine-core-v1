@@ -51,11 +51,14 @@ class Spool:
     def _name(self, delivery_id: str) -> str:
         return f"{time.time_ns():020d}-{sha256_hex(delivery_id)[:12]}.json"
 
-    def put_request(self, request: dict[str, Any], binding_path: Path, reason: str) -> Path:
+    def put_request(self, request: dict[str, Any], binding_path: Path, reason: str,
+                    device_path: Path | None = None) -> Path:
         self._ensure()
-        return self._write(self.directory, self._name(request["delivery_id"]),
-                           {"kind": "request", "request": request, "binding_path": str(binding_path),
-                            "queued_at": clock.now_rfc3339(), "reason": reason})
+        document = {"kind": "request", "request": request, "binding_path": str(binding_path),
+                    "queued_at": clock.now_rfc3339(), "reason": reason}
+        if device_path is not None:
+            document["device_path"] = str(device_path)
+        return self._write(self.directory, self._name(request["delivery_id"]), document)
 
     def put_gap(self, request: dict[str, Any], reason: str) -> Path:
         self._ensure()

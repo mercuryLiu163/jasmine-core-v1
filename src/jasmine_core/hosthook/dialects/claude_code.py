@@ -203,6 +203,7 @@ INSTALL: dict[str, Any] = {
     "events": ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PreCompact", "Stop", "SessionEnd"],
     "timeout_seconds": {"PreToolUse": 10, "default": 30},
     "status_message": "Jasmine Host Hook",
+    "user": {"env": "CLAUDE_CONFIG_DIR", "default_dir": ".claude", "config": "settings.json"},
     "needs_user_trust": False,
     "new_document": {"hooks": {}},
 }

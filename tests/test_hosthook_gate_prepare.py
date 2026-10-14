@@ -92,6 +92,30 @@ class Prepare(unittest.TestCase):
         self.assertFalse(self.marker.exists(), "--prepare must not execute the agent CLI")
         self.assertEqual(list(self.home.iterdir()), [], "nothing may be written to HOME")
 
+    def test_user_scope_prepare_uses_a_device_binding_and_only_the_redirected_config(self) -> None:
+        config = self.base / "agent-config"
+        env = {"CODEX_HOME": str(config)}
+        base_env = {**os.environ, "HOME": str(self.home), "PYTHONPATH": str(ROOT / "src"), **env}
+        out = self.base / "run-user"
+        args = [sys.executable, str(SCRIPT), "--agent", "codex", "--prepare", "--out", str(out), "--cli-bin", str(self.cli),
+                "--hook-scope", "user"]
+        refused = subprocess.run(args, text=True, capture_output=True, env=base_env, timeout=120)
+        self.assertEqual(refused.returncode, 2)
+        self.assertIn("--confirm-user-scope", json.loads(refused.stdout)["reason"])
+        self.assertFalse(config.exists())
+        done = subprocess.run([*args, "--confirm-user-scope"], text=True, capture_output=True, env=base_env, timeout=120)
+        self.assertEqual(done.returncode, 0, done.stderr + done.stdout)
+        report = json.loads(done.stdout)
+        self.assertEqual(report["hook_config"], str(config / "hooks.json"))
+        self.assertTrue(any("USER-LEVEL" in step and "hooks uninstall" in step for step in report["manual_steps"]))
+        thin = json.loads((out / "project/.jasmine/host-binding.json").read_text())
+        self.assertEqual(set(thin), {"version", "project_id", "task_id", "step_id"})
+        device = json.loads((out / "device/device-binding.json").read_text())
+        self.assertNotIn("project_id", device)
+        self.assertEqual(stat.S_IMODE((out / "device/device-binding.json").stat().st_mode), 0o600)
+        self.assertIn("--device-binding", (config / "hooks.json").read_text())
+        self.assertEqual(list(self.home.iterdir()), [], "the real HOME must stay untouched")
+
     def test_the_nonce_is_only_in_the_database_and_manifest(self) -> None:
         out = self.base / "run"
         self.assertEqual(self.prepare("claude-code", out).returncode, 0)

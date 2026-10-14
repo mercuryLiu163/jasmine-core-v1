@@ -18,7 +18,7 @@ from typing import Any, Callable, TextIO
 
 from ..api.client import ApiError, CoreClient
 from . import dialects, resolve
-from .binding import Binding, BindingError, find_binding, load_binding, read_key
+from .binding import Binding, BindingError, find_binding, load_binding, load_device, read_key
 from .dialects import Outcome, Translated, capabilities_sha256
 from .protocol import PROTOCOL_VERSION
 from .spool import Spool, SpoolError
@@ -104,7 +104,7 @@ def deliver(binding: Binding, request: dict[str, Any], spool: Spool, stderr: Tex
         if event == "tool.before":
             spool.put_gap(request, reason)
         else:
-            spool.put_request(request, binding.path, reason)
+            spool.put_request(request, binding.path, reason, binding.device_path)
     except (SpoolError, OSError):
         _warn(stderr, f"could not write spool for {event}")
     if event == "tool.before":
@@ -164,9 +164,11 @@ def replay(spool: Spool, binding: Binding | None, stderr: TextIO, *, limit: int 
         use = binding
         if use is None:
             where = document.get("binding_path", "")
+            device = document.get("device_path")
             try:
-                use = cache.get(where) or load_binding(Path(where))
-                cache[where] = use
+                use = cache.get(where + "\0" + (device or "")) or load_binding(
+                    Path(where), Path(device) if device else None)
+                cache[where + "\0" + (device or "")] = use
             except BindingError as exc:
                 _warn(stderr, f"cannot replay {path.name}: {exc}")
                 counts["remaining"] += 1
@@ -190,7 +192,7 @@ def replay(spool: Spool, binding: Binding | None, stderr: TextIO, *, limit: int 
 
 
 def run_hook(agent: str, stdin_bytes: bytes, *, binding_path: str | None = None,
-             environ: dict[str, str] | None = None, stdout: TextIO | None = None,
+             device_binding: str | None = None, environ: dict[str, str] | None = None, stdout: TextIO | None = None,
              stderr: TextIO | None = None, now: Callable[[], datetime] | None = None) -> int:
     stdout = stdout or sys.stdout
     stderr = stderr or sys.stderr
@@ -221,12 +223,13 @@ def run_hook(agent: str, stdin_bytes: bytes, *, binding_path: str | None = None,
         text, code = dialect.translate_out(tr, Outcome("no_binding"))
         stdout.write(text)
         return code
+    device = Path(device_binding) if device_binding else None
     try:
-        binding = load_binding(path)
+        binding = load_binding(path, device)
     except BindingError as exc:
         _warn(stderr, f"binding unusable: {exc}")
         # An unusable binding is a Core-side gap like any other: policy decides.
-        text, code = dialect.translate_out(tr, Outcome("unavailable", on_unavailable=_policy_hint(path),
+        text, code = dialect.translate_out(tr, Outcome("unavailable", on_unavailable=_policy_hint(device or path),
                                                        note="binding unusable"))
         stdout.write(text)
         return code
@@ -253,19 +256,22 @@ def _policy_hint(path: Path) -> str:
 
 
 def run_replay(binding_path: str | None, spool_dir: str | None, limit: int | None,
-               environ: dict[str, str] | None = None, stdout: TextIO | None = None,
+               device_binding: str | None = None, environ: dict[str, str] | None = None, stdout: TextIO | None = None,
                stderr: TextIO | None = None) -> int:
     stdout = stdout or sys.stdout
     stderr = stderr or sys.stderr
     environ = os.environ if environ is None else environ
     path = find_binding(binding_path, environ, os.getcwd())
+    device = Path(device_binding) if device_binding else None
     binding = None
-    if path is not None:
-        try:
-            binding = load_binding(path)
-        except BindingError as exc:
-            _warn(stderr, f"binding unusable: {exc}")
-            return 2
+    try:
+        if path is not None:
+            binding = load_binding(path, device)
+        elif device is not None:
+            binding = load_device(device)
+    except BindingError as exc:
+        _warn(stderr, f"binding unusable: {exc}")
+        return 2
     directory = Path(spool_dir) if spool_dir else (binding.spool_dir if binding else None)
     if directory is None:
         _warn(stderr, "no binding and no --spool-dir; nothing to replay")

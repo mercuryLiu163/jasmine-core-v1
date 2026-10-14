@@ -1,8 +1,14 @@
-"""Project binding file for the hook runtime (ADR 0017 section 10).
+"""Binding files for the hook runtime (ADR 0017 section 10, ADR 0019).
 
-The binding names the Core, the ownership (project/task/step/host) and the
+A binding names the Core, the ownership (project/task/step/host) and the
 private key files. It never contains a token. Ownership comes only from here:
 neither the model nor tool arguments can select a Task.
+
+Two forms exist. A *full* binding (`<project>/.jasmine/host-binding.json`) holds everything and
+is what project-level hook registration uses. With a *device* binding (one per machine, named
+by the globally registered hook command) the project file shrinks to ownership data only
+(`project_id`, `task_id`, `step_id`, `inject_context`); the Core address, host id, key files
+and failure policy come from the device file and a project file may not set them.
 """
 
 from __future__ import annotations
@@ -22,6 +28,10 @@ ENV_BINDING = "JASMINE_HOST_BINDING"
 LOOPBACK_URL = re.compile(r"http://(?:127\.0\.0\.1|localhost|\[::1\]):[0-9]{1,5}\Z")
 ALLOWED = {"version", "core_url", "host_id", "project_id", "task_id", "step_id", "api_key_file",
            "human_api_key_file", "on_unavailable", "spool_dir", "timeout_seconds", "inject_context"}
+#: What a project file may say when a device binding applies (everything else is device-owned).
+PROJECT_FIELDS = {"version", "project_id", "task_id", "step_id", "inject_context"}
+DEVICE_FIELDS = {"version", "core_url", "host_id", "api_key_file", "human_api_key_file", "on_unavailable",
+                 "spool_dir", "timeout_seconds", "inject_context"}
 MAX_FILE_BYTES = 64 * 1024
 
 
@@ -43,6 +53,8 @@ class Binding:
     spool_dir: Path
     timeout_seconds: float | None
     inject_context: bool = True
+    #: Set when the device binding supplied the device-owned fields (ADR 0019).
+    device_path: Path | None = None
 
     def key_file_for(self, event: str) -> Path:
         if event == "prompt.submit" and self.human_api_key_file is not None:
@@ -95,16 +107,51 @@ def _abs_file(value: Any, name: str) -> Path:
     return Path(value)
 
 
-def load_binding(path: Path) -> Binding:
+def _read_json(path: Path, what: str) -> dict[str, Any]:
     try:
         raw = path.read_bytes()
         if len(raw) > MAX_FILE_BYTES:
-            raise BindingError("binding file is too large")
+            raise BindingError(f"{what} is too large")
         data = json.loads(raw)
     except (OSError, ValueError) as exc:
-        raise BindingError("binding file is unreadable or not JSON") from exc
-    if not isinstance(data, dict) or set(data) - ALLOWED:
+        raise BindingError(f"{what} is unreadable or not JSON") from exc
+    if not isinstance(data, dict):
+        raise BindingError(f"{what} must be a JSON object")
+    return data
+
+
+def load_binding(path: Path, device: Path | None = None) -> Binding:
+    """Load a full binding, or a project file merged onto the device binding `device`."""
+    data = _read_json(path, "binding file")
+    spool_base = path.parent
+    if device is not None:
+        base = _read_json(device, "device binding file")
+        if set(base) - DEVICE_FIELDS:
+            raise BindingError("device binding file has unknown fields")
+        extra = sorted(set(data) - PROJECT_FIELDS)
+        if extra:
+            raise BindingError("project binding may not set " + ", ".join(extra) + " when a device binding is used")
+        merged = dict(base)
+        for key in ("project_id", "task_id", "step_id"):
+            if data.get(key) is not None:
+                merged[key] = data[key]
+        if data.get("inject_context") is False:  # a project may withhold the pack, never force it on
+            merged["inject_context"] = False
+        data, spool_base = merged, device.parent
+    elif set(data) - ALLOWED:
         raise BindingError("binding file has unknown fields")
+    return _build(data, path, spool_base, device)
+
+
+def load_device(path: Path) -> Binding:
+    """The device binding on its own (replay, installer checks): no project ownership."""
+    data = _read_json(path, "device binding file")
+    if set(data) - DEVICE_FIELDS:
+        raise BindingError("device binding file has unknown fields")
+    return _build(data, path, path.parent, path)
+
+
+def _build(data: dict[str, Any], path: Path, spool_base: Path, device: Path | None) -> Binding:
     if data.get("version") != 1:
         raise BindingError("binding version must be 1")
     url = data.get("core_url")
@@ -126,11 +173,12 @@ def load_binding(path: Path) -> Binding:
     if type(inject) is not bool:
         raise BindingError("inject_context must be a boolean")
     spool = data.get("spool_dir")
-    spool_dir = _abs_file(spool, "spool_dir") if spool else path.parent / "spool"
+    spool_dir = _abs_file(spool, "spool_dir") if spool else spool_base / "spool"
     human = data.get("human_api_key_file")
     return Binding(path=path, core_url=url, host_id=data["host_id"], project_id=data.get("project_id"),
                    task_id=data.get("task_id"), step_id=data.get("step_id"),
                    api_key_file=_abs_file(data.get("api_key_file"), "api_key_file"),
                    human_api_key_file=_abs_file(human, "human_api_key_file") if human else None,
                    on_unavailable=policy, spool_dir=spool_dir,
-                   timeout_seconds=float(timeout) if timeout is not None else None, inject_context=inject)
+                   timeout_seconds=float(timeout) if timeout is not None else None, inject_context=inject,
+                   device_path=device)

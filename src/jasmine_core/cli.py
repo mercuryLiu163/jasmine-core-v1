@@ -275,27 +275,43 @@ def cmd_hook(args: argparse.Namespace) -> int:
     from .hosthook import runtime
 
     if args.hook_mode == "replay":
-        return runtime.run_replay(args.binding, args.spool_dir, args.limit)
+        return runtime.run_replay(args.binding, args.spool_dir, args.limit, args.device_binding)
     if not args.hook_agent:
         _log("error: hook needs --agent NAME (or the word 'replay')")
         return 2
-    return runtime.run_hook(args.hook_agent, sys.stdin.buffer.read(), binding_path=args.binding)
+    return runtime.run_hook(args.hook_agent, sys.stdin.buffer.read(), binding_path=args.binding,
+                            device_binding=args.device_binding)
 
 
 def cmd_hooks(args: argparse.Namespace) -> int:
-    """Project-level hook registration (ADR 0017 section 16)."""
+    """Hook registration, project scope or user scope (ADR 0017 section 16, ADR 0019)."""
     from .hosthook import install
 
     try:
-        if args.hooks_action == "install":
-            if not args.binding:
-                _log("error: hooks install needs --binding FILE")
-                return 2
-            result = install.install(args.agent, Path(args.project_dir), Path(args.binding), args.command)
-        elif args.hooks_action == "uninstall":
-            result = install.uninstall(args.agent, Path(args.project_dir), Path(args.binding) if args.binding else None)
+        if args.scope == "user":
+            if args.hooks_action == "install":
+                if not args.device_binding:
+                    _log("error: hooks install --scope user needs --device-binding FILE")
+                    return 2
+                result = install.install_user(args.agent, Path(args.device_binding), args.command,
+                                              confirmed=args.confirm_user_scope)
+            elif args.hooks_action == "uninstall":
+                result = install.uninstall_user(args.agent, Path(args.device_binding) if args.device_binding else None)
+            else:
+                result = install.status_user(args.agent)
         else:
-            result = install.status(args.agent, Path(args.project_dir))
+            if not args.project_dir:
+                _log("error: --project-dir is required for --scope project")
+                return 2
+            if args.hooks_action == "install":
+                if not args.binding:
+                    _log("error: hooks install needs --binding FILE")
+                    return 2
+                result = install.install(args.agent, Path(args.project_dir), Path(args.binding), args.command)
+            elif args.hooks_action == "uninstall":
+                result = install.uninstall(args.agent, Path(args.project_dir), Path(args.binding) if args.binding else None)
+            else:
+                result = install.status(args.agent, Path(args.project_dir))
     except install.InstallError as exc:
         _log(f"error: {exc}")
         return 2
@@ -398,6 +414,8 @@ def build_parser() -> argparse.ArgumentParser:
     hook_parser = sub.add_parser(
         "hook", help="agent hook runtime: `hook --agent NAME` (stdin/stdout) or `hook replay`")
     hook_parser.add_argument("--binding", help="host binding file (else JASMINE_HOST_BINDING, else search from cwd)")
+    hook_parser.add_argument("--device-binding", help="device binding file: Core address, keys and policy for this machine; "
+                             "the project file then holds ownership only (ADR 0019)")
     hook_parser.add_argument("hook_mode", nargs="?", choices=["replay"],
                              help="'replay' resends the private spool instead of handling one hook event")
     hook_parser.add_argument("--agent", dest="hook_agent", help="dialect name (the agent whose native JSON is on stdin)")
@@ -406,10 +424,15 @@ def build_parser() -> argparse.ArgumentParser:
     hook_parser.set_defaults(func=cmd_hook)
 
     hooks_parser = sub.add_parser(
-        "hooks", help="register/unregister host hooks in a project's agent config (project-level only)")
+        "hooks", help="register/unregister host hooks in a project's or this machine's agent config")
     hooks_parser.add_argument("hooks_action", choices=["install", "uninstall", "status"])
     hooks_parser.add_argument("--agent", required=True, help="dialect name, e.g. codex or claude-code")
-    hooks_parser.add_argument("--project-dir", required=True, help="project directory whose config file is edited")
+    hooks_parser.add_argument("--scope", choices=["project", "user"], default="project",
+                              help="project: one project's config (default). user: this machine's agent config, for every project")
+    hooks_parser.add_argument("--project-dir", help="--scope project: directory whose config file is edited")
+    hooks_parser.add_argument("--device-binding", help="--scope user: device binding file (install; optional filter for uninstall)")
+    hooks_parser.add_argument("--confirm-user-scope", action="store_true",
+                              help="--scope user install: confirm that your own agent configuration will be edited (a backup is kept)")
     hooks_parser.add_argument("--binding", help="host binding file (required for install; optional filter for uninstall)")
     hooks_parser.add_argument("--command", help="executable written into the hook command (default: jasmine-core on PATH)")
     hooks_parser.set_defaults(func=cmd_hooks)

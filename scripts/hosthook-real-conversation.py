@@ -189,6 +189,9 @@ def _tokenizer_readiness(cache: str | None) -> str:
 def _prepare(args: argparse.Namespace) -> dict[str, Any]:
     if sys.version_info < (3, 11):
         raise Blocked("Python 3.11+ is required (hook commands run this interpreter)")
+    if args.hook_scope == "user" and not args.confirm_user_scope:
+        raise Blocked("--hook-scope user edits your own agent configuration for every project on this machine "
+                      "(a backup is kept); add --confirm-user-scope to proceed")
     out = Path(args.out)
     if not out.is_absolute():
         raise Blocked("--out must be an absolute path")
@@ -266,17 +269,32 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
     manifest.update(project_id=project, task_id=task, step_id=step, rule_id=active["rule_id"])
     binding_path = project_dir / ".jasmine" / "host-binding.json"
     binding_path.parent.mkdir(mode=0o700)
-    _private_write(binding_path, {
-        "version": 1, "core_url": f"http://127.0.0.1:{port}", "host_id": host, "project_id": project,
-        "task_id": task, "step_id": step, "api_key_file": str(private / "system.key"),
+    device_fields = {
+        "version": 1, "core_url": f"http://127.0.0.1:{port}", "host_id": host, "api_key_file": str(private / "system.key"),
         "human_api_key_file": str(private / "human.key"), "on_unavailable": "deny",
-        "spool_dir": str(out / "spool"), "timeout_seconds": 5})
-    registration = install.install(args.agent, project_dir, binding_path, _hook_executable())
-    manifest.update(binding=str(binding_path), hook_config=registration["config"])
+        "spool_dir": str(out / "spool"), "timeout_seconds": 5}
+    ownership = {"project_id": project, "task_id": task, "step_id": step}
+    if args.hook_scope == "user":
+        # Device form (ADR 0019): the registered command names the device file; the project holds ownership only.
+        device_path = out / "device" / "device-binding.json"
+        device_path.parent.mkdir(mode=0o700)
+        _private_write(device_path, device_fields)
+        _private_write(binding_path, {"version": 1, **ownership})
+        registration = install.install_user(args.agent, device_path, _hook_executable(),
+                                            confirmed=args.confirm_user_scope)
+        manifest.update(device_binding=str(device_path))
+    else:
+        _private_write(binding_path, {**device_fields, **ownership})
+        registration = install.install(args.agent, project_dir, binding_path, _hook_executable())
+    manifest.update(hook_scope=args.hook_scope, binding=str(binding_path), hook_config=registration["config"])
     _private_write(out / "manifest.json", manifest)
     dialect = dialects.load(args.agent)
     steps = [
-        f"1. Review the generated hook config: {registration['config']} (project-level, scratch only).",
+        (f"1. Review the generated hook config: {registration['config']} (project-level, scratch only)."
+         if args.hook_scope == "project" else
+         f"1. USER-LEVEL registration was written to {registration['config']} (backup: {registration.get('backup', 'none: file was new')}). "
+         "It only acts in directories that contain .jasmine/host-binding.json. After the run remove it with: "
+         f"jasmine-core hooks uninstall --agent {args.agent} --scope user --device-binding {out / 'device' / 'device-binding.json'}"),
     ]
     if args.agent == "codex":
         steps += [
@@ -518,7 +536,8 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     out = Path(manifest["out"])
     if not args.user_reviewed_trust:
         raise Blocked("--user-reviewed-trust is required: confirm you completed the manual trust steps from --prepare")
-    status = install.status(args.agent, Path(manifest["project_dir"]))
+    status = (install.status_user(args.agent) if manifest.get("hook_scope") == "user"
+              else install.status(args.agent, Path(manifest["project_dir"])))
     if not status.get("installed"):
         raise Blocked("project hooks are not installed (re-run --prepare in a new directory)")
     cli = _locate_cli(args.agent, args.cli_bin or manifest["cli"]["path"])
@@ -596,6 +615,11 @@ def main() -> int:
     mode.add_argument("--prepare", action="store_true")
     mode.add_argument("--run", action="store_true")
     parser.add_argument("--out", required=True, help="absolute private run directory (new for --prepare)")
+    parser.add_argument("--hook-scope", choices=["project", "user"], default="project",
+                        help="--prepare: register the hooks in the scratch project (default) or in your user-level agent "
+                             "config (needs --confirm-user-scope; a backup is kept)")
+    parser.add_argument("--confirm-user-scope", action="store_true",
+                        help="--prepare --hook-scope user: confirm your own agent configuration may be edited")
     parser.add_argument("--cli-bin", help="path or name of the claude/codex executable")
     parser.add_argument("--model", help="explicit model for each turn")
     parser.add_argument("--timeout", type=int, default=300, help="seconds per turn")
@@ -605,6 +629,9 @@ def main() -> int:
     args = parser.parse_args()
     try:
         report = _prepare(args) if args.prepare else _run(args)
+    except install.InstallError as exc:
+        report = {"schema": SCHEMA, "mode": "prepare", "agent": args.agent, "verdict": "BLOCKED", "reason": str(exc),
+                  "checks": {}}
     except Blocked as exc:
         report = {"schema": SCHEMA, "mode": "prepare" if args.prepare else "run", "agent": args.agent,
                   "verdict": "BLOCKED", "reason": str(exc), "checks": {}}

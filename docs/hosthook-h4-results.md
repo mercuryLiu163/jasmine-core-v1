@@ -42,3 +42,22 @@ which of `run_terminal_command` / `run_terminal_cmd` the toolset uses).
 * Tool tables are per dialect; an unseen tool name falls to `other`.
 * Grok is fail-open on hook crashes/timeouts; only the explicit deny blocks.
 * `request_sha256` of host-hook Guard answers changed (adds `tool_category`).
+
+## Addendum: device-level registration ([ADR 0019](adr/0019-device-level-hook-registration.md))
+
+Requested by the user on 2026-10-13 (hooks per device, not per project). Built and component-tested:
+
+* `hook --device-binding FILE`; the project file shrinks to ownership data and cannot override the device's Core, keys or policy;
+  no project file means no action; replay goes through the device file.
+* `hooks install|uninstall|status --scope user [--device-binding FILE] --confirm-user-scope`: one owned entry set per agent in the
+  user-level file, the user's own hooks untouched, timestamped backup, redirectable through `CLAUDE_CONFIG_DIR` / `CODEX_HOME` /
+  `GROK_HOME`, note when Grok and Claude Code are both registered.
+* The gate script accepts `--hook-scope user --confirm-user-scope`.
+
+Tests (`tests/test_hosthook_device_scope.py`, gate-prepare): 22 cases on scratch directories with HOME and the config-dir variables
+redirected; the real home directory stays empty in every case. They cover coexistence with pre-existing user hooks, idempotence,
+backups, symlink refusal, a bare directory being left alone, fail-closed behaviour for a bound directory, the same device binding
+serving all three dialects against a real HTTP Core, and replay through the device file.
+
+Not done: no real agent was started with a user-level registration, and the real `~/.claude`, `~/.codex`, `~/.grok` were not touched.
+Whether each agent honours the config-dir variable and loads the user file is exactly what the first real run will show.

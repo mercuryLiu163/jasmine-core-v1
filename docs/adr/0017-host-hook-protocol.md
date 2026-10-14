@@ -4,7 +4,7 @@ Status: Proposed (amended 2026-10-12 with the user decisions in section 15 and t
 `src/jasmine_core/hosthook/` follows it. This ADR provides **no proof of native
 effect** (see section 12).
 Date: 2026-10-12. Schema: 12 -> 13 (one new forward-only migration, `m0013_host_hooks`).
-Related: ADR 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0011, 0012, 0013; amended by ADR 0018.
+Related: ADR 0001, 0002, 0003, 0004, 0005, 0006, 0007, 0011, 0012, 0013; amended by ADR 0018 and ADR 0019.
 Inputs: `TRELLIS-HOST-HOOKS-TASKBOOK.md` (plan only), `JASMINE-MESH-OVERVIEW.md` section 4.
 
 ## 1. Purpose and boundary

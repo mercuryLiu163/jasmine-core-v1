@@ -1,10 +1,13 @@
-"""Project-level hook registration (ADR 0017 section 16).
+"""Hook registration (ADR 0017 section 16, ADR 0019).
 
-Agent-neutral. Each dialect supplies `INSTALL` (config file relative to the project,
-native event names, timeouts); this module merges the hook entries into that one
-file and removes only entries it owns. It writes nothing outside
-`<project-dir>/<INSTALL["config"]>` and refuses any path that would land in a
-user-global configuration directory (each dialect's `INSTALL["global_dir"]`).
+Agent-neutral. Each dialect supplies `INSTALL` (config file, native event names, timeouts);
+this module merges the hook entries into that one file and removes only entries it owns.
+
+Two scopes. *Project* writes `<project-dir>/<INSTALL["config"]>` and refuses any path inside a
+user-global agent directory (each dialect's `INSTALL["global_dir"]`). *User* writes the one
+user-level file the dialect names (`INSTALL["user"]`, honouring the agent's own config-dir
+environment variable so tests can redirect it), only with an explicit confirmation, and first
+copies an existing file to a timestamped backup. Both scopes keep every entry they do not own.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from . import dialects
-from .binding import BindingError, load_binding
+from .binding import BindingError, load_binding, load_device
 
 
 class InstallError(Exception):
@@ -55,10 +58,13 @@ def target_path(dialect: Any, project_dir: Path) -> Path:
     return target
 
 
-def command_for(agent: str, binding: Path, executable: str | None = None) -> str:
+BINDING_FLAGS = ("--binding", "--device-binding")
+
+
+def command_for(agent: str, binding: Path, executable: str | None = None, flag: str = "--binding") -> str:
     """`executable` is a command prefix (shell words), e.g. `/venv/bin/python -m jasmine_core.cli`."""
     prefix = shlex.split(executable) if executable else [shutil.which("jasmine-core") or "jasmine-core"]
-    return " ".join(shlex.quote(part) for part in (*prefix, "hook", "--agent", agent, "--binding", str(binding)))
+    return " ".join(shlex.quote(part) for part in (*prefix, "hook", "--agent", agent, flag, str(binding)))
 
 
 def owns(command: Any, agent: str, binding: Path | None = None) -> bool:
@@ -75,7 +81,7 @@ def owns(command: Any, agent: str, binding: Path | None = None) -> bool:
             if not (os.path.basename(before) == "jasmine-core" or before == "jasmine_core.cli"):
                 return False
             rest = tokens[index + 3:]
-            if len(rest) != 2 or rest[0] != "--binding":
+            if len(rest) != 2 or rest[0] not in BINDING_FLAGS:
                 return False
             return binding is None or rest[1] == str(binding)
     return False
@@ -152,9 +158,14 @@ def install(agent: str, project_dir: Path, binding_file: Path, executable: str |
         loaded = load_binding(binding)
     except BindingError as exc:
         raise InstallError(f"binding file unusable: {exc}") from exc
-    document = _read(target, dialect)
-    command = command_for(agent, binding, executable)
+    return _install_at(dialect, agent, target, command_for(agent, binding, executable), binding, loaded.on_unavailable)
+
+
+def _install_at(dialect: Any, agent: str, target: Path, command: str, binding: Path, on_unavailable: str,
+                backup: bool = False) -> dict[str, Any]:
     spec = dialect.INSTALL
+    original = target.read_bytes() if target.exists() else None
+    document = _read(target, dialect)
     for event in spec["events"]:
         groups, _ = _strip_owned(_groups(document, event), agent, None)
         timeout = spec["timeout_seconds"].get(event, spec["timeout_seconds"]["default"])
@@ -163,19 +174,41 @@ def install(agent: str, project_dir: Path, binding_file: Path, executable: str |
             handler["statusMessage"] = spec["status_message"]
         groups.append({"hooks": [handler]})
         document["hooks"][event] = groups
+    backup_path = _backup(target, original) if backup else None
     _write(target, document)
     notes = []
     if spec.get("needs_user_trust"):
         notes.append("the agent requires the user to review and trust new hooks before they run")
-    if loaded.on_unavailable == "allow":
+    if on_unavailable == "allow":
         notes.append("binding sets on_unavailable=allow: tool calls run unchecked when Core is unreachable")
-    return {"result": "installed", "agent": agent, "config": str(target), "events": list(spec["events"]),
-            "binding": str(binding), "notes": notes}
+    result = {"result": "installed", "agent": agent, "config": str(target), "events": list(spec["events"]),
+              "binding": str(binding), "notes": notes}
+    if backup_path is not None:
+        result["backup"] = str(backup_path)
+    return result
+
+
+def _backup(target: Path, original: bytes | None) -> Path | None:
+    """Copy the file as it is now, once per install that will change it; None when there is nothing to save."""
+    if original is None:
+        return None
+    from datetime import datetime, timezone
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    path = target.with_name(f"{target.name}.jasmine-backup-{stamp}")
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(original)
+    return path
 
 
 def uninstall(agent: str, project_dir: Path, binding_file: Path | None = None) -> dict[str, Any]:
     dialect = _dialect(agent)
-    target = target_path(dialect, project_dir)
+    return _uninstall_at(dialect, agent, target_path(dialect, project_dir), binding_file)
+
+
+def _uninstall_at(dialect: Any, agent: str, target: Path, binding_file: Path | None,
+                  backup: bool = False) -> dict[str, Any]:
     if not target.exists():
         return {"result": "not_installed", "agent": agent, "config": str(target), "removed": 0}
     document = _read(target, dialect)
@@ -191,15 +224,23 @@ def uninstall(agent: str, project_dir: Path, binding_file: Path | None = None) -
             document["hooks"][event] = kept
         elif count:
             del document["hooks"][event]
+    result: dict[str, Any] = {"result": "uninstalled" if removed else "not_installed", "agent": agent,
+                              "config": str(target), "removed": removed}
     if removed:
+        if backup:
+            saved = _backup(target, target.read_bytes())
+            if saved is not None:
+                result["backup"] = str(saved)
         _write(target, document)
-    return {"result": "uninstalled" if removed else "not_installed", "agent": agent, "config": str(target),
-            "removed": removed}
+    return result
 
 
 def status(agent: str, project_dir: Path) -> dict[str, Any]:
     dialect = _dialect(agent)
-    target = target_path(dialect, project_dir)
+    return _status_at(dialect, agent, target_path(dialect, project_dir))
+
+
+def _status_at(dialect: Any, agent: str, target: Path) -> dict[str, Any]:
     spec = dialect.INSTALL
     report: dict[str, Any] = {"agent": agent, "config": str(target), "exists": target.exists(),
                               "events": {}, "bindings": [], "other_entries": 0}
@@ -209,13 +250,16 @@ def status(agent: str, project_dir: Path) -> dict[str, Any]:
         return report
     document = _read(target, dialect)
     bindings: set[str] = set()
+    flag_of: dict[str, str] = {}
     for event in spec["events"]:
         found = False
         for group in document["hooks"].get(event, []) if isinstance(document["hooks"].get(event), list) else []:
             for handler in (group.get("hooks") or []) if isinstance(group, dict) else []:
                 if isinstance(handler, dict) and owns(handler.get("command"), agent):
                     found = True
-                    bindings.add(shlex.split(handler["command"])[-1])
+                    words = shlex.split(handler["command"])
+                    bindings.add(words[-1])
+                    flag_of[words[-1]] = words[-2]
         report["events"][event] = found
     for event, groups in document["hooks"].items():
         for group in groups if isinstance(groups, list) else []:
@@ -228,9 +272,87 @@ def status(agent: str, project_dir: Path) -> dict[str, Any]:
     problems = []
     for path in report["bindings"]:
         try:
-            load_binding(Path(path))
+            load_device(Path(path)) if flag_of.get(path) == "--device-binding" else load_binding(Path(path))
         except BindingError as exc:
             problems.append(f"{path}: {exc}")
     report["binding_problems"] = problems
     report["native_effect"] = "not verified: status reads the config file only"
+    return report
+
+
+# -- user scope (ADR 0019) -------------------------------------------------------------
+
+
+def user_target(dialect: Any, environ: dict[str, str] | None = None) -> Path:
+    """The single user-level file this dialect's agent reads hooks from."""
+    spec = dialect.INSTALL.get("user")
+    if not spec:
+        raise InstallError("this agent has no user-level hook registration")
+    environ = os.environ if environ is None else environ
+    chosen = environ.get(spec["env"])
+    base = Path(chosen) if chosen else Path(os.path.expanduser("~")) / spec["default_dir"]
+    if not base.is_absolute():
+        raise InstallError(f"{spec['env']} must be an absolute path")
+    target = base / spec["config"]
+    for ancestor in (target, target.parent, base):
+        if ancestor.is_symlink():
+            raise InstallError(f"{ancestor} is a symlink; refusing")
+    return target
+
+
+def _device_binding(path: Path) -> Path:
+    device = Path(path)
+    if not device.is_absolute():
+        device = Path(os.path.abspath(device))
+    try:
+        load_device(device)
+    except BindingError as exc:
+        raise InstallError(f"device binding file unusable: {exc}") from exc
+    return device
+
+
+def install_user(agent: str, device_binding: Path, executable: str | None = None, *, confirmed: bool = False,
+                 environ: dict[str, str] | None = None) -> dict[str, Any]:
+    if not confirmed:
+        raise InstallError("user-level registration changes your own agent configuration for every project on this "
+                           "machine; pass --confirm-user-scope to proceed")
+    dialect = _dialect(agent)
+    target = user_target(dialect, environ)
+    device = _device_binding(device_binding)
+    loaded = load_device(device)
+    result = _install_at(dialect, agent, target, command_for(agent, device, executable, "--device-binding"),
+                         device, loaded.on_unavailable, backup=True)
+    result["scope"] = "user"
+    # An agent that also loads another agent's user hook file starts that agent's command too.
+    for reader in dialects.names():
+        for source in dialects.load(reader).INSTALL.get("reads_hooks_of", []):
+            if agent in (reader, source) and _registered(reader, environ) and _registered(source, environ):
+                result["notes"].append(f"{reader} also loads the {source} user hook file, so the {source} command "
+                                       f"starts there too; it does not understand {reader} payloads and records nothing")
+    return result
+
+
+def _registered(agent: str, environ: dict[str, str] | None) -> bool:
+    try:
+        module = dialects.load(agent)
+        return any(_status_at(module, agent, user_target(module, environ))["events"].values())
+    except (InstallError, KeyError):
+        return False
+
+
+def uninstall_user(agent: str, device_binding: Path | None = None, *, environ: dict[str, str] | None = None) -> dict[str, Any]:
+    dialect = _dialect(agent)
+    target = user_target(dialect, environ)
+    if not target.exists():
+        return {"result": "not_installed", "agent": agent, "config": str(target), "removed": 0, "scope": "user"}
+    result = _uninstall_at(dialect, agent, target, Path(os.path.abspath(device_binding)) if device_binding else None,
+                           backup=True)
+    result["scope"] = "user"
+    return result
+
+
+def status_user(agent: str, *, environ: dict[str, str] | None = None) -> dict[str, Any]:
+    dialect = _dialect(agent)
+    report = _status_at(dialect, agent, user_target(dialect, environ))
+    report["scope"] = "user"
     return report

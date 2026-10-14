@@ -108,6 +108,8 @@ search from the agent-reported working directory. Fields: `version` (1), `core_u
 optional `human_api_key_file`, `on_unavailable` (`allow`|`deny`), `spool_dir`, `timeout_seconds`, and
 `inject_context` (boolean, default `true`; `false` withholds the Context Pack from the agent while Core still
 records it, for enforcement tests).
+With a device binding (`hook --device-binding FILE`, ADR 0019) the project file holds only `project_id`, `task_id`,
+`step_id` and optionally `inject_context`; the rest comes from the device file. No project file means no action.
 It never holds a token; key files must be private (owner only, mode 0600). Without a binding the
 runtime prints an empty native response and exits 0.
 

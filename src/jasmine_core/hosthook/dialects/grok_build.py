@@ -222,6 +222,9 @@ INSTALL: dict[str, Any] = {
                "PostCompact", "Stop", "SessionEnd"],
     "timeout_seconds": {"PreToolUse": 10, "SessionEnd": 1, "default": 30},
     "status_message": None,
+    "user": {"env": "GROK_HOME", "default_dir": ".grok", "config": "hooks/jasmine-core.json"},
+    # Grok also loads these agents' user/project hook files (hooks guide, "Hook Locations")
+    "reads_hooks_of": ["claude-code"],
     "needs_user_trust": True,
     "new_document": {"hooks": {}},
 }
