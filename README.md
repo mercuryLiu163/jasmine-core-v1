@@ -2,7 +2,7 @@
 
 ## 本机可用版（2026-10-12）
 
-已完成的功能已整合供本机日常使用；Memory 与 Agent 自动接入未开放，完整 V1 验收仍未完成。见 [使用说明](docs/deployment/local-usable-release.md) 与 [本次部署结果](docs/deployment/local-usable-release-result.md)。
+已完成的功能已整合供本机日常使用；Memory 已接入本机日常服务（提交 778ffa1 起）；原生 Agent 自动采集/注入未开放，完整 V1 验收仍未完成。见 [使用说明](docs/deployment/local-usable-release.md) 与 [本次部署结果](docs/deployment/local-usable-release-result.md)。
 
 
 Repository for the Jasmine Core V1 implementation and validation.
@@ -18,7 +18,7 @@ does not establish the stage verdict.
 | Capability | Current state |
 | --- | --- |
 | Public ID contract, package boundary | implemented (ADR 0001) |
-| `core.db` versioned schema v8, WAL, forward-only migration | implemented (ADRs 0001–0010) |
+| `core.db` versioned schema v12 (migrations m0001–m0012 on `main`), WAL, forward-only migration | implemented (ADRs 0001–0016; per-migration scope in the phase results) |
 | Transaction / `revision` / atomicity contract | implemented (ADRs 0002, 0006) |
 | Core API, error and idempotency contract | implemented ([ADR 0003](docs/adr/0003-core-api-errors-and-idempotency.md), [API doc](docs/api/core-api-v1.md)) |
 | Raw text retention, bearer auth, append-only audit | implemented (ADR 0004) |

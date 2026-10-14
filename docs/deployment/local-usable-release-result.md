@@ -4,7 +4,7 @@
 - 首轮已验证产品提交：`5585849ee79037e2bbd45ffa51ed768e78d0f0c2`。后续只同步 Overview 的过期功能说明与交付文档，Core 未变；正式部署的精确提交与最终入口复验在私有 RELEASE-RESULT.md / runtime.json 中记录。
 - Dashboard：http://127.0.0.1:15180/ 。Core：http://127.0.0.1:18787/v1/health 。仅 loopback。
 - 运行：用户 launchd `com.jasminecore.v1.local.core` / `com.jasminecore.v1.local.dashboard`，登录自启、异常重启。
-- 人工确认：1；P3/P7 读取：开启；Memory/外部 worker：关闭。P4 实验未重启。
+- 人工确认：1；P3/P7 读取：开启；Memory/外部 worker：关闭（2026-10-12 首次部署时的记录；之后提交 778ffa1 已开启 Memory，见 [使用说明](local-usable-release.md)）。P4 实验未重启。
 
 ## 验证
 
