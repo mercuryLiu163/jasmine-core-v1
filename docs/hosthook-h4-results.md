@@ -30,6 +30,8 @@ Date: 2026-10-13. Branch `hosthook-grok` (from `hosthook-h2`; not pushed, not me
 
 ## What was NOT done: native verification
 
+> **Superseded 2026-10-14:** the first real Grok conversation has since been run; see [H5](hosthook-h5-results.md). The text below is kept as the state at the time of writing.
+
 `grok login` has not been done on this machine (`grok -p` answers "Not signed in"), so **no Grok Build conversation has been
 run**. All Gates for Grok Build (G-PROMPT, G-DENY, G-INJECT, G-EVIDENCE, G-CHECKPOINT, compaction) are **unrun**. The
 script is ready: `--agent grok-build --prepare` then `--run`; the first real run is also where the unconfirmed facts get

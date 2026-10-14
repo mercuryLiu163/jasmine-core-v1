@@ -11,6 +11,7 @@ import json
 import os
 import socket
 import stat
+from unittest import mock
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -212,6 +213,17 @@ class CoreUnavailable(RuntimeBase):
         counts = runtime.replay(self.spool, load_binding(self.binding_path), io.StringIO())
         self.assertEqual((counts["sent"], counts["replayed_by_core"]), (1, 1))
         self.assertEqual(self.db_rows("SELECT count(*) AS n FROM evidence")[0]["n"], 1)
+
+    def test_replay_skips_an_entry_a_concurrent_replay_already_took(self) -> None:
+        self.hook("post_tool_use_bash")
+        self.write_binding()
+        entry = self.spool.entries()[0]
+        listed = [entry]
+        entry.unlink()  # another hook process sent and removed it between listing and reading
+        with mock.patch.object(Spool, "entries", return_value=listed):
+            counts = runtime.replay(self.spool, load_binding(self.binding_path), io.StringIO())
+        self.assertEqual((counts["sent"], counts["rejected"]), (0, 0))
+        self.assertFalse((self.spool.directory / "rejected").exists())
 
     def test_replay_stops_while_core_is_still_down(self) -> None:
         self.hook("post_tool_use_bash")

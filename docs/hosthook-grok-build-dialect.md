@@ -45,7 +45,8 @@ Built from the open-source wire names; the toolset in use changes the spelling (
 MCP calls arrive as `server__tool`. The file operand is read from the first of `path`, `file_path`, `target_file`, `filePath`,
 `file` — **the hooks guide only shows `command` for the shell tool; the file keys are unconfirmed**. If none matches, no path is
 sent and Guard answers `confirm` for rules that need one (fail toward asking, not toward allowing). A real run must record the
-actual keys, and this table must then be corrected.
+actual keys, and this table must then be corrected. First real run (grok 1.0.52, [H5](hosthook-h5-results.md)): `grep` sends
+`{pattern, glob, head_limit}` with no path (the dialect then scopes it to the cwd); the keys of `read_file`/`write`/`edit` are still unobserved.
 
 ## Decisions and output
 

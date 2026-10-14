@@ -90,6 +90,11 @@ class TranslateIn(unittest.TestCase):
         self.assertEqual(one, claude_code.translate_in(fixture("session_start"), NOW).delivery_id)
         self.assertNotEqual(one, claude_code.translate_in(fixture("session_start"), LATER).delivery_id)
 
+    def test_grep_without_a_path_is_scoped_to_the_cwd(self) -> None:
+        native = {**fixture("pre_tool_use_bash"), "tool_name": "Grep", "tool_input": {"pattern": "x"}}
+        got = claude_code.translate_in(native, NOW)
+        self.assertEqual((got.files, got.file_action), (["."], "read"))
+
     def test_tool_categories_and_file_operands(self) -> None:
         cases = {"pre_tool_use_bash": ("shell", "Bash", None, None),
                  "pre_tool_use_write": ("file.write", "Write", ["/work/project/src/new.py"], "write"),

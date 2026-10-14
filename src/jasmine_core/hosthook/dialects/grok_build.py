@@ -80,6 +80,7 @@ _WEB = frozenset({"web_search", "web_fetch"})
 #: Input keys that may hold the file operand. The canonical vocabulary names `path`; the
 #: others are tolerated because raw tool arguments are not documented in the hooks guide.
 _PATH_KEYS = ("path", "file_path", "target_file", "filePath", "file")
+_SEARCH_TOOLS = frozenset({"grep", "glob", "list_dir"})
 _PATCH_KEYS = ("patch", "input", "command", "diff")
 
 
@@ -108,6 +109,8 @@ def _operands(tool: str, tool_input: dict[str, Any]) -> list[str]:
         value = tool_input.get(key)
         if isinstance(value, str) and value:
             return [value]
+    if tool in _SEARCH_TOOLS:
+        return ["."]  # observed: grep sends {pattern, glob} with no path; the search root is the cwd
     return []
 
 
@@ -157,6 +160,11 @@ def translate_in(native: dict[str, Any], now: datetime) -> Translated | None:
         files = action = None
         if event == "tool.after":
             response = common.pick(native, "toolResult", "tool_response")
+            if isinstance(response, dict) and isinstance(response.get("output_for_prompt"), str) \
+                    and isinstance(response.get("output"), list):
+                # Observed (grok 1.0.52): Bash results carry the raw output twice, once as a JSON array of
+                # byte values and once as text. Keep the text; record how many bytes were dropped.
+                response = {k: v for k, v in response.items() if k != "output"} | {"output_bytes_omitted": len(response["output"])}
             payload["response"] = response if response is not None else {}
             code, error = common.exit_code(response), common.is_error(response)
             if code is not None:

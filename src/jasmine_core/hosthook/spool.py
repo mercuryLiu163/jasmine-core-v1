@@ -22,6 +22,10 @@ class SpoolError(Exception):
     pass
 
 
+class SpoolEntryGone(SpoolError):
+    """The entry vanished between listing and reading: another hook process took it."""
+
+
 class Spool:
     def __init__(self, directory: Path) -> None:
         self.directory = directory
@@ -78,6 +82,8 @@ class Spool:
     def read(path: Path) -> dict[str, Any]:
         try:
             document = json.loads(path.read_bytes())
+        except FileNotFoundError as exc:
+            raise SpoolEntryGone("spool entry was taken by another process") from exc
         except (OSError, ValueError) as exc:
             raise SpoolError("spool entry is unreadable") from exc
         if not isinstance(document, dict) or document.get("kind") not in ("request", "unchecked_gap"):

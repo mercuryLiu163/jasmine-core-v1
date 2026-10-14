@@ -76,6 +76,22 @@ class TranslateIn(unittest.TestCase):
         got = grok_build.translate_in(native, NOW)
         self.assertEqual((got.files, got.file_action), (["a/b.py", "c.md"], "edit"))
 
+    def test_bash_result_byte_array_is_not_stored_twice(self) -> None:
+        native = fixture("post_tool_use_bash")
+        native["toolResult"]["output"] = [104, 105, 10]
+        out = grok_build.translate_in(native, NOW).payload["response"]
+        self.assertNotIn("output", out)
+        self.assertEqual((out["output_for_prompt"], out["output_bytes_omitted"]), ("hi\n", 3))
+
+    def test_search_without_a_path_is_scoped_to_the_cwd(self) -> None:
+        # Observed in a real session (grok 1.0.52): grep sends {pattern, glob} and no path.
+        native = fixture("pre_tool_use_edit")
+        native["toolName"], native["toolInput"] = "grep", {"pattern": "Jasmine", "glob": "*.md"}
+        got = grok_build.translate_in(native, NOW)
+        self.assertEqual((got.files, got.file_action), (["."], "read"))
+        native["toolInput"] = {"pattern": "x", "path": "/etc"}
+        self.assertEqual(grok_build.translate_in(native, NOW).files, ["/etc"])
+
     def test_post_tool_result_exit_code_is_carried_when_present(self) -> None:
         good = tr("post_tool_use_bash").payload
         self.assertEqual((good["exit_code"], good["response"]["output_for_prompt"]), (0, "hi\n"))

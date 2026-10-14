@@ -146,6 +146,8 @@ def translate_in(native: dict[str, Any], now: datetime) -> Translated | None:
                 payload["is_error"] = error
         elif tool in _FILE_TOOLS:
             operand = tool_input.get(_FILE_TOOLS[tool][1])
+            if operand is None and tool in ("Glob", "Grep"):
+                operand = "."  # no path given: the search root is the cwd
             if isinstance(operand, str) and operand:
                 files, action = [operand], _FILE_TOOLS[tool][2]
         return Translated(event=event, turn_id=prompt_id, call_id=call, payload=payload, files=files,

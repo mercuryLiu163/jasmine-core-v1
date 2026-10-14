@@ -21,7 +21,7 @@ from . import dialects, resolve
 from .binding import Binding, BindingError, find_binding, load_binding, load_device, read_key
 from .dialects import Outcome, Translated, capabilities_sha256
 from .protocol import PROTOCOL_VERSION
-from .spool import Spool, SpoolError
+from .spool import Spool, SpoolEntryGone, SpoolError
 
 HOOK_PATH = "/v1/host-hooks/events"
 DEFAULT_TIMEOUT = {"tool.before": 2.0}
@@ -151,6 +151,8 @@ def replay(spool: Spool, binding: Binding | None, stderr: TextIO, *, limit: int 
     for path in spool.entries():
         try:
             document = spool.read(path)
+        except SpoolEntryGone:
+            continue  # a concurrent replay already took (and sent) it
         except SpoolError:
             spool.reject(path, "malformed spool entry")
             counts["rejected"] += 1
