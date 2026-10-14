@@ -269,6 +269,30 @@ class UserScopeInstall(Scratch):
         self.assertTrue(Path(result["backup"]).exists())
         self.assertEqual(install.uninstall_user("codex", environ=dict(self.env))["result"], "not_installed")
 
+    def test_uninstall_leaves_no_empty_skeleton_behind(self) -> None:
+        # a settings file without any hooks goes back to exactly its own keys
+        claude = self.user_file("claude-code")
+        claude.parent.mkdir(parents=True)
+        claude.write_text(json.dumps({"model": "opus", "theme": "auto"}))
+        self.install("claude-code")
+        self.assertEqual(install.uninstall_user("claude-code", environ=dict(self.env))["removed"], 7)
+        self.assertEqual(self.load("claude-code"), {"model": "opus", "theme": "auto"})
+        # Codex keeps the user's own (empty) `hooks` key and description
+        codex = self.user_file("codex")
+        codex.parent.mkdir(parents=True)
+        original = {"description": "mine", "hooks": {}}
+        codex.write_text(json.dumps(original))
+        self.install("codex")
+        install.uninstall_user("codex", environ=dict(self.env))
+        self.assertEqual(self.load("codex"), original)
+        # a file that only we created disappears again
+        grok = self.user_file("grok-build")
+        self.install("grok-build")
+        self.assertTrue(grok.exists())
+        result = install.uninstall_user("grok-build", environ=dict(self.env))
+        self.assertTrue(result.get("file_removed"))
+        self.assertFalse(grok.exists())
+
     def test_grok_gets_its_own_file_and_other_files_are_untouched(self) -> None:
         hooks = self.user_file("grok-build").parent
         hooks.mkdir(parents=True)

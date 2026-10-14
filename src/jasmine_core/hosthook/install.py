@@ -231,7 +231,15 @@ def _uninstall_at(dialect: Any, agent: str, target: Path, binding_file: Path | N
             saved = _backup(target, target.read_bytes())
             if saved is not None:
                 result["backup"] = str(saved)
-        _write(target, document)
+        # User scope (`backup` is its marker) edits the user's real files: leave them as they were found.
+        if backup and not document["hooks"] and document == dialect.INSTALL["new_document"]:
+            # Nothing but the skeleton we would have created is left: this file was ours alone.
+            target.unlink()
+            result["file_removed"] = True
+        else:
+            if backup and not document["hooks"] and dialect.INSTALL.get("hooks_key_optional"):
+                del document["hooks"]  # `_read` added the empty key; the agent does not need it
+            _write(target, document)
     return result
 
 

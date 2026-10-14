@@ -207,5 +207,6 @@ INSTALL: dict[str, Any] = {
     "status_message": "Jasmine Host Hook",
     "user": {"env": "CLAUDE_CONFIG_DIR", "default_dir": ".claude", "config": "settings.json"},
     "needs_user_trust": False,
+    "hooks_key_optional": True,  # settings.json is the user's file; an emptied `hooks` key is removed again
     "new_document": {"hooks": {}},
 }

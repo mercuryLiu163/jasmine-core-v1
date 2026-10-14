@@ -71,4 +71,5 @@ Grok Build 方言在真实对话中通过了原话记录、强制拦截、延迟
 * Codex 需要在 `/hooks` 里审核一次新 hook（用户完成）；Grok 的全局 hook 不需要信任步骤，实测如此。
 * 没有测：用户自己已有的 hook 与我们并存（这三个真实配置里都没有用户自己的 hook，该情形只有组件测试）；Grok 与 Claude Code 同时注册。
 * 卸载留下的东西：每个被改动的文件旁边有 `<file>.jasmine-backup-<UTC>`（Grok 一个、Codex 两个、Claude Code 两个）；Grok 的 `~/.grok/hooks/jasmine-core.json` 留下一个空壳。
-* 已知小缺陷：卸载后可能留下原本不存在的空 `hooks` 键或空文件；语义无影响，未修。
+* 上述小缺陷（卸载留下空 `hooks` 键或空文件）随后已修，仅用户级卸载生效：只剩我们创建的骨架时删除整个文件（Grok）；Claude Code 的 `settings.json` 去掉被清空的 `hooks` 键；Codex 的 `hooks.json` 原样保留用户自己的键。有测试覆盖；修复后没有再对真实配置重跑。
+* 验证后的清理：用户确认后已删除所有 `*.jasmine-backup-*`（经核对：每个 Agent 一份等于当前原文件、一份是装着我们 hook 的安装态）和 Grok 的空壳文件及原本不存在的 `~/.grok/hooks/` 目录；三个 Agent 的真实配置回到验证前状态。

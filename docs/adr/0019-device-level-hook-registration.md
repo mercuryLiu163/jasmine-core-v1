@@ -30,7 +30,7 @@ Date: 2026-10-13. Schema: unchanged. Decided by the user on 2026-10-13: hooks ar
   (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `GROK_HOME`) so that tests and gate runs can redirect it. A symlinked file or
   directory is refused.
 * Before changing an existing file the installer copies it, byte for byte, to `<file>.jasmine-backup-<UTC stamp>`
-  (0600, never overwritten). Uninstall also leaves a backup. Grok's own file did not exist before: no backup.
+  (0600, never overwritten). Uninstall also leaves a backup; it removes a file that only holds our skeleton, and for Claude Code drops an emptied `hooks` key it had added. Grok's own file did not exist before: no backup.
 * Only entries the installer owns (command `... hook --agent <name> --binding|--device-binding <path>`) are added,
   replaced or removed. The user's own hooks, other tools' hooks and unrelated keys are untouched and keep their order;
   ours is appended.
