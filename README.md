@@ -1,4 +1,6 @@
-# Jasmine Core V1
+# Trellis (Jasmine Core V1)
+
+> **Naming:** the product is now called **Trellis**; the repository is `jasmine_trellis`. The Python package (`jasmine_core`), the CLI (`jasmine-core`), the `JASMINE_CORE_*` environment variables and the on-disk locations keep their current names for now, so existing installs, hooks and services are unaffected. Renaming those is a separate, migration-gated change.
 
 ## 本机可用版（2026-10-12）
 
@@ -11,7 +13,7 @@ Repository for the Jasmine Core V1 implementation and validation.
 
 The table below lists only what has actually been implemented **and** exercised;
 anything not listed is not implemented. The P0 stage verdict comes from the
-latest commit-bound Validation Run linked from the [P0-03 PR](https://github.com/mercuryLiu163/jasmine-core-v1/pull/3),
+latest commit-bound Validation Run linked from the [P0-03 PR](https://github.com/mollymogi/jasmine_trellis/pull/3),
 followed by final main-head validation after merge. A passing CI matrix alone
 does not establish the stage verdict.
 
@@ -25,7 +27,7 @@ does not establish the stage verdict.
 | Immutable idempotent Event Store, project/task/session | implemented ([P0-02](docs/p0-02-event-store.md)) |
 | Codex `UserPromptSubmit` capture entry | implemented; project-local registration is described in [P0-03](docs/p0-03-api-and-capture.md), and runtime invocation is verified by P0-T07 evidence |
 | Minimal Validation Recorder and the P0 acceptance matrix | implemented ([P0-03](docs/p0-03-api-and-capture.md)) |
-| Real-conversation Gate (P0-T07) | verdict comes from the latest commit-bound Validation Run linked from the [P0-03 PR](https://github.com/mercuryLiu163/jasmine-core-v1/pull/3) |
+| Real-conversation Gate (P0-T07) | verdict comes from the latest commit-bound Validation Run linked from the [P0-03 PR](https://github.com/mollymogi/jasmine_trellis/pull/3) |
 | Host Hook Protocol ([ADR 0017](docs/adr/0017-host-hook-protocol.md), [0018](docs/adr/0018-neutral-tool-category-and-deferred-context.md), schema 13) | implemented on branches `hosthook-h2` / `hosthook-grok` only (not merged). Real-conversation Gate run for Claude Code 2.1.287 and Codex 0.162.1 ([H3](docs/hosthook-h3-results.md): prompt/deny/inject/evidence/checkpoint/compaction pass; Bash evidence INFO only; one session each). Grok Build 1.0.52 real-conversation Gate ([H5](docs/hosthook-h5-results.md)): prompt/deny/deferred inject/evidence (with exit code)/checkpoint/compaction pass with project-level hooks; device-level registration (`--scope user`) also run on real Claude Code, Codex and Grok Build (same Gates pass; compaction not retested in that form) ([H4](docs/hosthook-h4-results.md)) |
 
 P1-01 adds versioned Authority and deterministic advisory Guard
