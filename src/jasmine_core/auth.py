@@ -42,7 +42,9 @@ SCOPES = ("adapter:report", "adapter:attest", "adapter:read", "admin", "objects:
           # attribution at all (all nine real records are unattributed): there is
           # no project fence to hide behind, so it is an explicit operator grant
           # and is refused at key issuance for an agent key.
-          "validation:read", "validation:unattributed")
+          "validation:read", "validation:unattributed",
+          # ADR 0017: Host Hook Protocol reports. Human or system actors only.
+          "hosthook:report")
 
 
 @dataclass(frozen=True)
@@ -103,6 +105,8 @@ class Auth:
                 "agent keys cannot carry validation:unattributed; unattributed evidence has no "
                 "project fence and the grant is made only by a human or system actor"
             )
+        if kind == "agent" and "hosthook:report" in scopes:
+            raise errors.ForbiddenActorKind("agent keys cannot carry hosthook:report (ADR 0017)")
         if kind != "system" and ("evidence:write" in scopes or "evidence:attest" in scopes or
                                  "fingerprint:scan" in scopes):
             raise errors.ForbiddenActorKind("only trusted system keys can capture tool Evidence or fingerprints")

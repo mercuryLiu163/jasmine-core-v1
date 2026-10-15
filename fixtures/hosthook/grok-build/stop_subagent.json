@@ -1,0 +1,13 @@
+{
+  "hookEventName": "stop",
+  "hook_event_name": "Stop",
+  "sessionId": "grok-sess-1",
+  "cwd": "/work/project",
+  "workspaceRoot": "/work/project",
+  "permissionMode": "default",
+  "timestamp": "2026-10-13T08:30:15Z",
+  "promptId": "prm-2",
+  "reason": "end_turn",
+  "subagentType": "explore",
+  "stopHookActive": false
+}

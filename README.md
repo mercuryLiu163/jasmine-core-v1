@@ -26,6 +26,7 @@ does not establish the stage verdict.
 | Codex `UserPromptSubmit` capture entry | implemented; project-local registration is described in [P0-03](docs/p0-03-api-and-capture.md), and runtime invocation is verified by P0-T07 evidence |
 | Minimal Validation Recorder and the P0 acceptance matrix | implemented ([P0-03](docs/p0-03-api-and-capture.md)) |
 | Real-conversation Gate (P0-T07) | verdict comes from the latest commit-bound Validation Run linked from the [P0-03 PR](https://github.com/mercuryLiu163/jasmine-core-v1/pull/3) |
+| Host Hook Protocol ([ADR 0017](docs/adr/0017-host-hook-protocol.md), [0018](docs/adr/0018-neutral-tool-category-and-deferred-context.md), schema 13) | implemented on branches `hosthook-h2` / `hosthook-grok` only (not merged). Real-conversation Gate run for Claude Code 2.1.287 and Codex 0.162.1 ([H3](docs/hosthook-h3-results.md): prompt/deny/inject/evidence/checkpoint/compaction pass; Bash evidence INFO only; one session each). Grok Build 1.0.52 real-conversation Gate ([H5](docs/hosthook-h5-results.md)): prompt/deny/deferred inject/evidence (with exit code)/checkpoint/compaction pass with project-level hooks; device-level registration (`--scope user`) also run on real Claude Code, Codex and Grok Build (same Gates pass; compaction not retested in that form) ([H4](docs/hosthook-h4-results.md)) |
 
 P1-01 adds versioned Authority and deterministic advisory Guard
 ([ADR 0005](docs/adr/0005-p1-authority-and-guard.md)). P1-02 adds Task/Step

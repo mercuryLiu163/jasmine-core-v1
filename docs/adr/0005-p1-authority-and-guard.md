@@ -20,7 +20,7 @@ scope 只支持 global/project/task；task 必须属于指定 project。Guard �
 
 ## 确定性 Guard
 
-matcher 仅支持非空 exact `tool`、exact `action`、canonical absolute POSIX `path_prefix`，各维度取 AND；路径只在自身或 `/` 边界下的子路径命中。拒绝未知 matcher 字段、相对/非规范路径。DENY/CONFIRM 必须是 kind=RULE，且 matcher 非空。语义文本不会参与程序匹配；不能用语义文本伪装成 DENY。所有适用规则都参与，优先级 DENY > CONFIRM > VERIFY > CONTEXT；缺少判定所需信息时返回 confirm。返回决策 `allow/deny/confirm/verify`、原因、命中 Rule ID/version、来源 Event ID、请求 SHA-256 和 `capability=ADVISORY`。CONFIRM/VERIFY 都不等于已批准或已验证。
+matcher 仅支持非空 exact `tool`、exact `action`、canonical absolute POSIX `path_prefix`（ADR 0018 增加 `tool_category`，取值为协议的中立类别），各维度取 AND；路径只在自身或 `/` 边界下的子路径命中。拒绝未知 matcher 字段、相对/非规范路径。DENY/CONFIRM 必须是 kind=RULE，且 matcher 非空。语义文本不会参与程序匹配；不能用语义文本伪装成 DENY。所有适用规则都参与，优先级 DENY > CONFIRM > VERIFY > CONTEXT；缺少判定所需信息时返回 confirm。返回决策 `allow/deny/confirm/verify`、原因、命中 Rule ID/version、来源 Event ID、请求 SHA-256 和 `capability=ADVISORY`。CONFIRM/VERIFY 都不等于已批准或已验证。
 
 `POST /v1/guard/check` 的 HTTP 200 仅表示成功计算。审计使用响应中的实际 Guard 决策：deny/confirm/verify 记为 deny，并保存安全的 Rule ID、version、来源 Event ID、请求摘要；不保存原始工具参数或路径。P1-03 的真实 PreToolUse hook 负责原生阻断验证；本 API 在其通过真实 Gate 前不宣称 ENFORCED。对工具参数含 symlink、编码或复合 shell 命令的情形，调用端必须解析成确定性 tool/action/path；未解析不能把 ALLOW 当成安全批准。
 

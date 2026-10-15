@@ -18,7 +18,9 @@ RULE_KEY = re.compile(r"^[a-z][a-z0-9_.-]{0,127}$")
 KINDS = frozenset({"RULE", "DECISION", "ACCEPTANCE"})
 SEVERITIES = frozenset({"HARD", "NORMAL"})
 ENFORCEMENTS = frozenset({"CONTEXT", "DENY", "CONFIRM", "VERIFY"})
-MATCHER_KEYS = frozenset({"tool", "action", "path_prefix"})
+MATCHER_KEYS = frozenset({"tool", "tool_category", "action", "path_prefix"})
+#: Agent-neutral tool categories (ADR 0018). `tool` stays the exact native tool name.
+TOOL_CATEGORIES = ("shell", "file.read", "file.write", "file.edit", "web", "mcp", "other")
 STATUS = frozenset({"PROPOSED", "ACTIVE", "SUPERSEDED", "RETIRED"})
 
 
@@ -68,6 +70,9 @@ def _matcher(raw: Any, enforcement: str) -> dict[str, str]:
     for key, value in raw.items():
         if not isinstance(value, str) or not value or len(value) > 512:
             raise errors.InvalidRequest(f"matcher.{key} must be nonempty text", field=f"matcher.{key}")
+        if key == "tool_category" and value not in TOOL_CATEGORIES:
+            raise errors.InvalidRequest(f"matcher.tool_category must be one of {', '.join(TOOL_CATEGORIES)}",
+                                        field="matcher.tool_category")
         result[key] = _path(value) if key == "path_prefix" else value
     return result
 
@@ -413,14 +418,17 @@ class AuthorityStore:
             return {"rule": self.get(rule_id), "event": event, "replayed": False}
 
     def guard(self, body: dict[str, Any]) -> dict[str, Any]:
-        _fields(body, {"project_id", "task_id", "tool", "action", "path"})
+        _fields(body, {"project_id", "task_id", "tool", "tool_category", "action", "path"})
         project_id = _id(body, "project_id", "prj", required=False)
         task_id = _id(body, "task_id", "tsk", required=False)
-        for key in ("tool", "action", "path"):
+        for key in ("tool", "tool_category", "action", "path"):
             if key in body and body[key] is not None and not isinstance(body[key], str):
                 raise errors.InvalidRequest(f"{key} must be text", field=key)
         path = _path(body["path"]) if body.get("path") else None
-        unresolved_context = not body.get("tool") or not body.get("action")
+        if body.get("tool_category") is not None and body["tool_category"] not in TOOL_CATEGORIES:
+            raise errors.InvalidRequest(f"tool_category must be one of {', '.join(TOOL_CATEGORIES)}",
+                                        field="tool_category")
+        unresolved_context = not (body.get("tool") or body.get("tool_category")) or not body.get("action")
         # Without project/task identity, a scoped DENY/CONFIRM/VERIFY rule
         # could be omitted. Do not describe that partial lookup as ALLOW.
         if task_id is None:
@@ -444,7 +452,7 @@ class AuthorityStore:
             matcher = rule["matcher"]
             mismatch = False
             missing = False
-            for key in ("tool", "action", "path_prefix"):
+            for key in ("tool", "tool_category", "action", "path_prefix"):
                 if key not in matcher:
                     continue
                 actual = path if key == "path_prefix" else body.get(key)

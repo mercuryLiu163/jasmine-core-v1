@@ -1,0 +1,13 @@
+{
+  "session_id": "abc123",
+  "transcript_path": "/tmp/claude/transcript.jsonl",
+  "cwd": "/work/project",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+  "tool_name": "mcp__filesystem__read_file",
+  "tool_use_id": "toolu_01ABI",
+  "tool_input": {
+    "path": "/etc/hosts"
+  }
+}

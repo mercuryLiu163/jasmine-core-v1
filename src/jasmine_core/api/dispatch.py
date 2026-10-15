@@ -73,6 +73,25 @@ def dispatch(core: Core, request: Request) -> Response:
             }
             if hits:
                 target = hits[0]["rule_id"]
+        elif (request.path == "/v1/host-hooks/events" and isinstance(response.body, dict)
+              and isinstance(response.body.get("guard"), dict)):
+            # ADR 0017: a tool.before response carries the Guard result. Record
+            # the mapped decision and rule hits, never the tool arguments.
+            guard = response.body["guard"]
+            decision = "allow" if response.body.get("decision") == "allow" else "deny"
+            hits = guard.get("matched", [])
+            audit_detail = {
+                "host_hook_event": response.body.get("event"),
+                "guard_decision": guard.get("decision"),
+                "mapped_decision": response.body.get("decision"),
+                "capability": guard.get("capability"),
+                "request_sha256": guard.get("request_sha256"),
+                "hits": [{"rule_id": hit["rule_id"], "version": hit["version"],
+                          "origin_event_id": hit["origin_event_id"]} for hit in hits[:20]],
+                "hit_count": len(hits),
+            }
+            if hits:
+                target = hits[0]["rule_id"]
     except errors.CoreError as exc:
         status = exc.status
         error_code = exc.code

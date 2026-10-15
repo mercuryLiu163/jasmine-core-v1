@@ -225,3 +225,24 @@ class OriginalWithheld(CoreError):
 
     status = 403
     code = "original_withheld"
+
+
+class HostHookProtocolUnsupported(CoreError):
+    """ADR 0017: the request names a protocol_version this Core does not speak."""
+
+    status = 400
+    code = "host_hook_protocol_unsupported"
+
+
+class HostHookDeliveryConflict(CoreError):
+    """ADR 0017: a delivery_id was reused with different content."""
+
+    status = 409
+    code = "host_hook_delivery_conflict"
+
+
+class HostHookNamespaceReserved(CoreError):
+    """ADR 0017 section 11.1: host.* events / host-hook-v1 source only via the host-hook endpoint."""
+
+    status = 403
+    code = "host_hook_namespace_reserved"

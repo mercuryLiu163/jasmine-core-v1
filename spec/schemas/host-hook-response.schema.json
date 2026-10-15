@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trellis.invalid/schemas/host-hook-response.schema.json",
+  "title": "Host Hook Protocol v1 response",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol_version", "event", "delivery_id", "decision", "reason", "inject_context", "recorded", "degraded", "trust", "replayed"],
+  "properties": {
+    "protocol_version": {"const": "1"},
+    "event": {"enum": ["session.start", "prompt.submit", "tool.before", "tool.after", "context.compact", "turn.stop", "session.end"]},
+    "delivery_id": {"type": "string"},
+    "decision": {"enum": ["allow", "deny", "ask", "none"], "description": "'none' for every event except tool.before."},
+    "reason": {"type": ["string", "null"], "description": "Present for deny and ask."},
+    "inject_context": {
+      "oneOf": [{"type": "null"},
+                {"type": "object", "additionalProperties": false, "required": ["text", "context_pack_id"],
+                 "properties": {"text": {"type": "string"}, "context_pack_id": {"type": "string", "pattern": "^ctx_"}}}]
+    },
+    "recorded": {
+      "type": "object", "additionalProperties": false, "required": ["event_ids", "evidence_ids", "checkpoint_id"],
+      "properties": {"event_ids": {"type": "array", "items": {"type": "string", "pattern": "^evt_"}},
+                     "evidence_ids": {"type": "array", "items": {"type": "string", "pattern": "^evd_"}},
+                     "checkpoint_id": {"type": ["string", "null"], "pattern": "^ckp_"}}
+    },
+    "degraded": {"type": "array", "items": {"type": "string"},
+                 "description": "Codes such as no_task_binding, context_unavailable:<code>, checkpoint_unavailable:<code>, evidence_unavailable:<code>, fingerprint_refresh_failed, prompt_not_human_attributed, path_unresolved."},
+    "guard": {
+      "type": "object", "description": "tool.before only.", "required": ["decision", "capability", "request_sha256", "matched"],
+      "properties": {"decision": {"enum": ["allow", "deny", "confirm", "verify"]}, "capability": {"const": "ADVISORY"},
+                     "request_sha256": {"type": "string"}, "matched": {"type": "array", "items": {"type": "object"}}}
+    },
+    "trust": {"enum": ["NATIVE_HOOK", "PROXY_OBSERVED", "AGENT_REPORTED"]},
+    "replayed": {"type": "boolean"}
+  }
+}

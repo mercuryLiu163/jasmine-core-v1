@@ -1,0 +1,27 @@
+{
+  "agent": "claude-code",
+  "dialect_version": "1",
+  "events": [
+    "session.start",
+    "prompt.submit",
+    "tool.before",
+    "tool.after",
+    "context.compact",
+    "turn.stop",
+    "session.end"
+  ],
+  "can_block_tool": true,
+  "can_ask": true,
+  "can_inject_context": true,
+  "inject_events": [
+    "session.start",
+    "prompt.submit"
+  ],
+  "has_turn_id": true,
+  "has_call_id": true,
+  "documentation": {
+    "url": "https://code.claude.com/docs/en/hooks",
+    "read_on": "2026-10-12",
+    "status": "constructed from docs (summarised fetch); no native verification; turn id is the documented prompt_id when present, else a dialect substitute (docs/hosthook-claude-code-dialect.md)"
+  }
+}

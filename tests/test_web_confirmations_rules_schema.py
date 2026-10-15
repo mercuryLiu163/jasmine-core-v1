@@ -275,7 +275,7 @@ class WebRulesSchema(helpers.WebHttp):
                         {"text": "historical Unicode 原始字节"}, clock.now()))
                 historical = [tuple(x) for x in connection.execute("SELECT * FROM events ORDER BY seq")]
                 migrate(connection)
-                self.assertEqual(current_version(connection), 12)
+                self.assertEqual(current_version(connection), SCHEMA_VERSION)
                 self.assertEqual([tuple(x) for x in connection.execute("SELECT * FROM events ORDER BY seq")], historical)
                 self.assertEqual([(x["name"], x["checksum"]) for x in applied_migrations(connection)][:version], before)
                 self.assertEqual(migrate(connection), [])

@@ -1,0 +1,11 @@
+{
+  "hookEventName": "user_prompt_submit",
+  "hook_event_name": "UserPromptSubmit",
+  "sessionId": "grok-sess-1",
+  "cwd": "/work/project",
+  "workspaceRoot": "/work/project",
+  "permissionMode": "default",
+  "timestamp": "2026-10-13T08:30:15Z",
+  "promptId": "prm-1",
+  "prompt": "  Please remove the temp file — 请删除\n"
+}

@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import test_web_confirmations as helpers
-from jasmine_core import auth, db, errors, ids
+from jasmine_core import SCHEMA_VERSION, auth, db, errors, ids
 from jasmine_core.canonical import canonical_json
 from jasmine_core.evidence import EvidenceStore
 from jasmine_core.web_confirmations import WebConfirmationStore, PREPARE_PATH, SUBMIT_PATH, digest
@@ -90,11 +90,11 @@ class WebIntegrity(helpers.WebHttp):
     def test_c12_real_process_crash_before_and_after_commit(self):
         child = '''
 import sys,json,os
-from jasmine_core import db,auth
+from jasmine_core import db,auth,SCHEMA_VERSION
 from jasmine_core.web_confirmations import WebConfirmationStore
 value=json.load(sys.stdin)
 conn=db.connect(value['db'])
-store=WebConfirmationStore(conn,schema_version=12)
+store=WebConfirmationStore(conn,schema_version=SCHEMA_VERSION)
 principal=auth.Auth(conn).authenticate('Bearer '+value['token'])
 if value['point']=='before':
     original=store._insert_projection
@@ -121,7 +121,7 @@ os._exit(74)
             restarted = db.connect(self.db_path)
             try:
                 principal = auth.Auth(restarted).authenticate(f"Bearer {self.human_token}")
-                store = WebConfirmationStore(restarted, schema_version=12)
+                store = WebConfirmationStore(restarted, schema_version=SCHEMA_VERSION)
                 status = store.status(prep["preparation_id"], principal)
                 self.assertEqual(status["availability"], "OPEN" if point == "before" else "CONSUMED")
                 recovered = store.submit(body, principal, "component-restarted")
@@ -159,11 +159,11 @@ os._exit(74)
             self.assertEqual(self.c.execute("SELECT count(*) FROM web_confirmation_preparations").fetchone()[0], 0)
         child = """
 import sys,json,os
-from jasmine_core import db,auth
+from jasmine_core import db,auth,SCHEMA_VERSION
 from jasmine_core.web_confirmations import WebConfirmationStore
 v=json.load(sys.stdin)
 c=db.connect(v['db'])
-s=WebConfirmationStore(c,schema_version=12)
+s=WebConfirmationStore(c,schema_version=SCHEMA_VERSION)
 p=auth.Auth(c).authenticate('Bearer '+v['token'])
 if v['point']=='before':
     original=s._insert_projection
@@ -186,7 +186,7 @@ os._exit(76)
             self.assertIn("actual prepare process crash", proc.stdout)
             restored = db.connect(self.db_path)
             try:
-                store = WebConfirmationStore(restored, schema_version=12)
+                store = WebConfirmationStore(restored, schema_version=SCHEMA_VERSION)
                 principal = auth.Auth(restored).authenticate(f"Bearer {self.human_token}")
                 if point == "before":
                     with self.assertRaises(errors.NotFound): store.status(body["event_id"], principal)
@@ -240,7 +240,7 @@ os._exit(76)
                 else:
                     damaged.execute("UPDATE web_confirmation_submissions SET source_event_id=?", (self.truth()[0]["source_event_id"],))
                 principal = auth.Auth(damaged).authenticate(f"Bearer {self.human_token}")
-                store = WebConfirmationStore(damaged, schema_version=12)
+                store = WebConfirmationStore(damaged, schema_version=SCHEMA_VERSION)
                 for action in (lambda: store.status(prep["preparation_id"], principal), lambda: store.submit(body, principal, "tamper-replay")):
                     with self.assertRaises(errors.CoreError) as raised: action()
                     self.assertEqual(raised.exception.code, "confirmation_integrity_error", case)

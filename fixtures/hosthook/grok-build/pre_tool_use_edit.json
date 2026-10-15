@@ -1,0 +1,18 @@
+{
+  "hookEventName": "pre_tool_use",
+  "hook_event_name": "PreToolUse",
+  "sessionId": "grok-sess-1",
+  "cwd": "/work/project",
+  "workspaceRoot": "/work/project",
+  "permissionMode": "default",
+  "timestamp": "2026-10-13T08:30:15Z",
+  "promptId": "prm-1",
+  "toolName": "search_replace",
+  "toolInput": {
+    "path": "src/app.py",
+    "old_string": "a",
+    "new_string": "b"
+  },
+  "toolUseId": "call-2",
+  "toolInputTruncated": false
+}

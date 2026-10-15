@@ -46,7 +46,8 @@ class MigrateCommand(unittest.TestCase):
         self.assertEqual(payload["applied"], ["m0001_baseline", "m0002_api_auth_audit",
             "m0003_authority", "m0004_task_step_state", "m0005_evidence_fingerprint",
             "m0006_codex_exec_observations", "m0007_interpretations", "m0008_resolutions",
-            "m0009_continuity", "m0010_context", "m0011_memory", "m0012_web_confirmations"])
+            "m0009_continuity", "m0010_context", "m0011_memory", "m0012_web_confirmations",
+            "m0013_host_hooks"])
         self.assertEqual(payload["schema_version"], SCHEMA_VERSION)
         self.assertTrue(self.db_path.exists())
 

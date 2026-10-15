@@ -74,6 +74,8 @@ EVENT_TYPES = frozenset({
     "memory.pinned",
     "memory.unpinned",
     "memory.job.retried",
+    # ADR 0017: Host Hook Protocol lifecycle reports (source of Task-scoped Checkpoints).
+    "host.turn_stopped", "host.compaction_reported",
 })
 
 WEB_EVENT_TYPES = frozenset({"human.confirmation_prepared", "human.confirmation_submitted"})

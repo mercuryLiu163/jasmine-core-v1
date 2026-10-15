@@ -1,0 +1,23 @@
+{
+  "hookEventName": "post_tool_use",
+  "hook_event_name": "PostToolUse",
+  "sessionId": "grok-sess-1",
+  "cwd": "/work/project",
+  "workspaceRoot": "/work/project",
+  "permissionMode": "default",
+  "timestamp": "2026-10-13T08:30:15Z",
+  "promptId": "prm-1",
+  "toolName": "run_terminal_command",
+  "toolInput": {
+    "command": "false"
+  },
+  "toolUseId": "call-5",
+  "toolInputTruncated": false,
+  "toolResultTruncated": false,
+  "toolResult": {
+    "type": "Bash",
+    "command": "false",
+    "exit_code": 1,
+    "output_for_prompt": ""
+  }
+}
